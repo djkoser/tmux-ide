@@ -27,6 +27,14 @@ test.describe("browser terminal", () => {
     await expect(page.getByTestId("terminal-transcript")).toContainText("hello-world");
   });
 
+  test("high-volume output remains responsive", async ({ page }) => {
+    await openTerminal(page);
+    await typeCommand(page, "i=1; while [ $i -le 100 ]; do echo line-$i; i=$((i+1)); done");
+
+    await expect(page.getByTestId("terminal-transcript")).toContainText("line-100");
+    await expect(page.getByTestId("terminal-frame")).toHaveAttribute("data-state", "connected");
+  });
+
   test("resize forwards", async ({ page }) => {
     await page.setViewportSize({ width: 900, height: 600 });
     const frame = await openTerminal(page);

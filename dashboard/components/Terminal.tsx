@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
-import { Terminal as XTerm, type ITheme } from "@xterm/xterm";
+import { Terminal as XTerm, type IDisposable, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
 
 function readTerminalTheme(): ITheme {
@@ -89,19 +90,59 @@ export function Terminal({
     let socket: WebSocket | null = null;
     let term: XTerm | null = null;
     let fitAddon: FitAddon | null = null;
+    let webglAddon: WebglAddon | null = null;
+    let webglContextLossDisposable: IDisposable | null = null;
     let resizeObserver: ResizeObserver | null = null;
     let initSent = false;
+    let writeRaf: number | null = null;
+    let writeQueue: Uint8Array[] = [];
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
+    let transcriptRaf: number | null = null;
+    let transcriptBuffer = "";
 
     const appendTranscript = (value: string) => {
       const clean = stripAnsi(value);
       if (!clean) return;
-      setTranscript((current) => `${current}${clean}`.slice(-12000));
+      transcriptBuffer = `${transcriptBuffer}${clean}`.slice(-12000);
+      if (transcriptRaf !== null) return;
+      transcriptRaf = requestAnimationFrame(() => {
+        transcriptRaf = null;
+        setTranscript(transcriptBuffer);
+      });
+    };
+
+    const flushWriteQueue = () => {
+      writeRaf = null;
+      if (!term || writeQueue.length === 0) return;
+
+      if (writeQueue.length === 1) {
+        term.write(writeQueue[0]!);
+        writeQueue = [];
+        return;
+      }
+
+      const totalLength = writeQueue.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+      const merged = new Uint8Array(totalLength);
+      let offset = 0;
+      for (const chunk of writeQueue) {
+        merged.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      writeQueue = [];
+      term.write(merged);
+    };
+
+    const writeChunk = (bytes: Uint8Array) => {
+      writeQueue.push(bytes);
+      if (writeRaf !== null) return;
+      writeRaf = requestAnimationFrame(flushWriteQueue);
     };
 
     async function boot() {
       try {
+        setTranscript("");
+        transcriptBuffer = "";
         if (typeof document !== "undefined" && document.fonts?.ready) {
           await document.fonts.ready;
           if (disposed) return;
@@ -125,7 +166,11 @@ export function Terminal({
           letterSpacing: 0,
           lineHeight: 1.2,
           scrollback: 5000,
-          smoothScrollDuration: 80,
+          customGlyphs: true,
+          rescaleOverlappingGlyphs: true,
+          fastScrollSensitivity: 5,
+          scrollSensitivity: 1,
+          smoothScrollDuration: 0,
           allowProposedApi: true,
           allowTransparency: false,
           drawBoldTextInBrightColors: false,
@@ -136,6 +181,21 @@ export function Terminal({
         fitAddon = new FitAddon();
         term.loadAddon(fitAddon);
         term.open(hostElement);
+        try {
+          webglAddon = new WebglAddon();
+          webglContextLossDisposable = webglAddon.onContextLoss(() => {
+            webglAddon?.dispose();
+            webglAddon = null;
+            webglContextLossDisposable?.dispose();
+            webglContextLossDisposable = null;
+          });
+          term.loadAddon(webglAddon);
+        } catch {
+          webglContextLossDisposable?.dispose();
+          webglContextLossDisposable = null;
+          webglAddon?.dispose();
+          webglAddon = null;
+        }
         fitAddon.fit();
         term.focus();
         setSize({ cols: term.cols, rows: term.rows });
@@ -215,7 +275,7 @@ export function Terminal({
 
           const bytes = await messageToBytes(event.data);
           if (bytes.byteLength === 0) return;
-          term.write(bytes);
+          writeChunk(bytes);
           appendTranscript(decoder.decode(bytes, { stream: true }));
         };
 
@@ -253,7 +313,13 @@ export function Terminal({
       disposeTerminalHandlers?.();
       socket?.close();
       resizeObserver?.disconnect();
+      if (writeRaf !== null) cancelAnimationFrame(writeRaf);
+      flushWriteQueue();
+      if (transcriptRaf !== null) cancelAnimationFrame(transcriptRaf);
+      transcriptRaf = null;
       fitAddon?.dispose();
+      webglContextLossDisposable?.dispose();
+      webglAddon?.dispose();
       term?.dispose();
       termRef.current = null;
       hostElement.replaceChildren();
