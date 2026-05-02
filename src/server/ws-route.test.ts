@@ -85,11 +85,7 @@ function jsonFrames(ws: MockWebSocket): Array<Record<string, unknown>> {
     .map((frame) => JSON.parse(frame) as Record<string, unknown>);
 }
 
-async function waitFor(
-  predicate: () => boolean,
-  label: string,
-  timeoutMs = 5000,
-): Promise<void> {
+async function waitFor(predicate: () => boolean, label: string, timeoutMs = 5000): Promise<void> {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     if (predicate()) return;
@@ -209,17 +205,12 @@ describe("handlePtyWebSocket", () => {
     ws.receive("echo ws-text-input\r");
     ws.receive(Buffer.from("echo ws-binary-input\r"), true);
 
-    await waitFor(
-      () => {
-        const output = Buffer.concat(
-          ws.sent
-            .filter((frame) => Buffer.isBuffer(frame.data))
-            .map((frame) => frame.data as Buffer),
-        ).toString("utf8");
-        return output.includes("ws-text-input") && output.includes("ws-binary-input");
-      },
-      "PTY output for text and binary input",
-    );
+    await waitFor(() => {
+      const output = Buffer.concat(
+        ws.sent.filter((frame) => Buffer.isBuffer(frame.data)).map((frame) => frame.data as Buffer),
+      ).toString("utf8");
+      return output.includes("ws-text-input") && output.includes("ws-binary-input");
+    }, "PTY output for text and binary input");
   });
 
   it("forwards PTY output as binary WebSocket frames", async () => {
@@ -232,12 +223,15 @@ describe("handlePtyWebSocket", () => {
     await waitFor(
       () =>
         ws.sent.some(
-          (frame) => Buffer.isBuffer(frame.data) && frame.data.toString("utf8").includes("ws-output"),
+          (frame) =>
+            Buffer.isBuffer(frame.data) && frame.data.toString("utf8").includes("ws-output"),
         ),
       "binary PTY output",
     );
 
-    expect(ws.sent.some((frame) => Buffer.isBuffer(frame.data) && frame.options?.binary)).toBe(true);
+    expect(ws.sent.some((frame) => Buffer.isBuffer(frame.data) && frame.options?.binary)).toBe(
+      true,
+    );
   });
 
   it("sends an exit frame and closes when the PTY exits", async () => {
