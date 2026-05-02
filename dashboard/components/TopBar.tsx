@@ -39,9 +39,9 @@ export function TopBar() {
         }`}
         aria-pressed={terminalOpen}
         aria-label="Toggle terminal mode"
-        title="Toggle terminal mode"
+        title="Toggle terminal mode (⌘J)"
       >
-        ⌘`
+        ⌘J
       </button>
       <ThemeToggle />
       <span className="text-[var(--dim)] ml-3">{time}</span>

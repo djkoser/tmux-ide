@@ -57,8 +57,16 @@ async function mockApi(page: Page) {
   });
 }
 
+const MOD_KEY = process.platform === "darwin" ? "Meta" : "Control";
+
 async function toggleTerminal(page: Page) {
-  await page.keyboard.press("Control+Backquote");
+  await page.keyboard.press(`${MOD_KEY}+KeyJ`);
+}
+
+function visibleTranscript(page: Page) {
+  return page
+    .locator('[data-terminal-slot][data-active] [data-testid="terminal-transcript"]')
+    .first();
 }
 
 async function openTerminalMode(page: Page, mode: "keybind" | "button" = "button") {
@@ -77,7 +85,7 @@ test.describe("full-screen terminal mode", () => {
     await mockApi(page);
   });
 
-  test("Mod+` toggles terminal mode", async ({ page }) => {
+  test("Mod+J toggles terminal mode", async ({ page }) => {
     await page.goto("/");
 
     await openTerminalMode(page, "keybind");
@@ -98,20 +106,33 @@ test.describe("full-screen terminal mode", () => {
     await expect(page.getByTestId("terminal-tab")).toHaveCount(2);
   });
 
-  test("terminal mode survives sidebar nav", async ({ page }) => {
-    await page.goto(`/project/${encodeURIComponent(PROJECTS[0])}`);
-    const frame = await openTerminalMode(page);
+  test("tabs are scoped per project — switching sidebar shows the other project's tabs", async ({
+    page,
+  }) => {
+    await page.goto(`/project/${encodeURIComponent(PROJECTS[0]!)}`);
 
-    await frame.click();
-    await page.keyboard.type("echo nav-survives");
+    // Open terminal mode for project A; auto-creates one tab there.
+    const frameA = await openTerminalMode(page);
+    await expect(page.getByTestId("terminal-tab")).toHaveCount(1);
+
+    await frameA.click();
+    await page.keyboard.type("echo project-a-content");
     await page.keyboard.press("Enter");
-    await expect(page.getByTestId("terminal-transcript")).toContainText("nav-survives");
+    await expect(visibleTranscript(page)).toContainText("project-a-content");
 
+    // Switch sidebar to project B. Terminal mode stays open. Project B has no
+    // tabs of its own, so a fresh tab is auto-created — and it does NOT show
+    // project A's content.
     await page.getByTestId(`sidebar-session-${PROJECTS[1]}`).click();
-
     await expect(page).toHaveURL(new RegExp(`/project/${PROJECTS[1]}`));
     await expect(page.getByTestId("full-screen-terminal")).toBeVisible();
-    await expect(page.getByTestId("terminal-frame")).toHaveAttribute("data-state", "connected");
-    await expect(page.getByTestId("terminal-transcript")).toContainText("nav-survives");
+    await expect(page.getByTestId("terminal-tab")).toHaveCount(1);
+    await expect(page.getByTestId("terminal-tab")).toContainText(PROJECTS[1]!);
+
+    // Switch back to project A — its tab + transcript are still there.
+    await page.getByTestId(`sidebar-session-${PROJECTS[0]}`).click();
+    await expect(page).toHaveURL(new RegExp(`/project/${PROJECTS[0]}`));
+    await expect(page.getByTestId("terminal-tab")).toHaveCount(1);
+    await expect(visibleTranscript(page)).toContainText("project-a-content");
   });
 });

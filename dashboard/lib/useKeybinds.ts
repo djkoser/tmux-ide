@@ -8,15 +8,14 @@ interface UseKeybindOptions {
 
 interface ParsedKeybind {
   key: string;
-  meta: boolean;
+  /** Mod = "Cmd OR Ctrl" — matches the platform-appropriate one without requiring strict detection. */
+  mod: boolean;
+  /** Strict Ctrl-only (use "Ctrl+X" in the keybind string). */
   ctrl: boolean;
+  /** Strict Cmd/Meta only (use "Cmd+X" / "Meta+X" in the keybind string). */
+  meta: boolean;
   shift: boolean;
   alt: boolean;
-}
-
-function isMac(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 }
 
 function parseKeybind(keybind: string): ParsedKeybind {
@@ -24,8 +23,9 @@ function parseKeybind(keybind: string): ParsedKeybind {
   const key = parts.pop() ?? "";
   const parsed: ParsedKeybind = {
     key: key.toLowerCase(),
-    meta: false,
+    mod: false,
     ctrl: false,
+    meta: false,
     shift: false,
     alt: false,
   };
@@ -33,8 +33,7 @@ function parseKeybind(keybind: string): ParsedKeybind {
   for (const part of parts) {
     const normalized = part.toLowerCase();
     if (normalized === "mod") {
-      if (isMac()) parsed.meta = true;
-      else parsed.ctrl = true;
+      parsed.mod = true;
     } else if (normalized === "meta" || normalized === "cmd") {
       parsed.meta = true;
     } else if (normalized === "ctrl" || normalized === "control") {
@@ -56,13 +55,15 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 function matches(event: KeyboardEvent, parsed: ParsedKeybind): boolean {
-  return (
-    event.key.toLowerCase() === parsed.key &&
-    event.metaKey === parsed.meta &&
-    event.ctrlKey === parsed.ctrl &&
-    event.shiftKey === parsed.shift &&
-    event.altKey === parsed.alt
-  );
+  if (event.key.toLowerCase() !== parsed.key) return false;
+  if (parsed.mod) {
+    // Either Cmd OR Ctrl satisfies Mod, but not neither.
+    if (!event.metaKey && !event.ctrlKey) return false;
+  } else {
+    if (event.metaKey !== parsed.meta) return false;
+    if (event.ctrlKey !== parsed.ctrl) return false;
+  }
+  return event.shiftKey === parsed.shift && event.altKey === parsed.alt;
 }
 
 export function useKeybind(key: string, handler: () => void, opts: UseKeybindOptions = {}): void {

@@ -244,12 +244,16 @@ export function Terminal({ id, className, showHeader = true }: TerminalProps) {
   }, [id]);
 
   // Re-apply terminal theme whenever next-themes flips the resolved theme.
-  // CSS vars on :root update synchronously, but xterm caches its theme — so
-  // we read the new --term-* values and push them into the live instance.
+  // CSS vars on :root update synchronously, but xterm caches its renderer's
+  // colors per cell — push the new theme AND force a full repaint so the
+  // existing buffer recolors immediately.
   useEffect(() => {
     if (!termRef.current) return;
     const apply = () => {
-      if (termRef.current) termRef.current.options.theme = readTerminalTheme();
+      const term = termRef.current;
+      if (!term) return;
+      term.options.theme = readTerminalTheme();
+      term.refresh(0, term.rows - 1);
     };
     requestAnimationFrame(apply);
   }, [resolvedTheme]);
@@ -263,7 +267,7 @@ export function Terminal({ id, className, showHeader = true }: TerminalProps) {
 
   return (
     <section
-      className={`flex min-h-0 flex-1 flex-col bg-[var(--bg)] ${className ?? ""}`}
+      className={`flex min-h-0 flex-1 flex-col bg-[var(--term-bg)] ${className ?? ""}`}
       style={{ fontFamily: "var(--font-mono)" }}
     >
       {showHeader && (
@@ -288,7 +292,7 @@ export function Terminal({ id, className, showHeader = true }: TerminalProps) {
         data-state={state}
         data-cols={size.cols}
         data-rows={size.rows}
-        className="min-h-0 flex-1 overflow-hidden bg-[var(--bg)] px-3 py-2 focus:outline-none"
+        className="min-h-0 flex-1 overflow-hidden bg-[var(--term-bg)] px-3 py-2 focus:outline-none"
         style={{ fontFamily: "var(--font-mono)" }}
       />
       <pre data-testid="terminal-transcript" className="sr-only" aria-hidden="true">

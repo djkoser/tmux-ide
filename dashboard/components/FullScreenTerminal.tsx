@@ -26,20 +26,24 @@ export function FullScreenTerminal() {
   const currentProjectName = projectFromPath(pathname);
   const {
     terminalOpen,
-    tabs,
-    activeTabId,
     toggleTerminal,
     closeTerminalMode,
     newTab,
     closeTab,
     setActiveTab,
     reorderTabs,
+    getProjectTabs,
+    getActiveTabId,
   } = useLayoutState();
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
-  const tabIds = useMemo(() => tabs.map((tab) => tab.id), [tabs]);
+  const projectTabs = getProjectTabs(currentProjectName);
+  const activeTabId = getActiveTabId(currentProjectName);
 
-  useKeybind("Mod+`", () => toggleTerminal(), { allowInput: true });
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const tabIds = useMemo(() => projectTabs.map((tab) => tab.id), [projectTabs]);
+
+  // Cmd+J / Ctrl+J — VS Code-style panel toggle (less Mac key conflict than `).
+  useKeybind("Mod+j", () => toggleTerminal(), { allowInput: true });
   useKeybind(
     "Escape",
     () => {
@@ -48,10 +52,13 @@ export function FullScreenTerminal() {
     { allowInput: true },
   );
 
+  // First time the user opens terminal mode for a project that has no tabs,
+  // create one so the panel never shows up empty.
   useEffect(() => {
-    if (!terminalOpen || tabs.length > 0) return;
+    if (!terminalOpen) return;
+    if (projectTabs.length > 0) return;
     newTab(currentProjectName);
-  }, [currentProjectName, newTab, tabs.length, terminalOpen]);
+  }, [currentProjectName, newTab, projectTabs.length, terminalOpen]);
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -73,19 +80,20 @@ export function FullScreenTerminal() {
   return (
     <section
       data-testid="full-screen-terminal"
-      className="absolute inset-0 z-20 flex min-h-0 flex-col bg-[var(--bg)]"
+      data-project={currentProjectName}
+      className="absolute inset-0 z-20 flex min-h-0 flex-col bg-[var(--term-bg)]"
       aria-label="Full-screen terminal"
     >
       <div className="flex h-8 shrink-0 items-stretch border-b border-[var(--border-weak)] bg-[var(--surface)]">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={tabIds} strategy={horizontalListSortingStrategy}>
             <div className="flex min-w-0 flex-1 overflow-x-auto">
-              {tabs.map((tab) => (
+              {projectTabs.map((tab) => (
                 <TerminalTabItem
                   key={tab.id}
                   tab={tab}
                   active={tab.id === activeTabId}
-                  onActivate={() => setActiveTab(tab.id)}
+                  onActivate={() => setActiveTab(currentProjectName, tab.id)}
                   onClose={() => closeTab(tab.id)}
                 />
               ))}

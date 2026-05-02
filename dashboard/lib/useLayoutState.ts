@@ -11,29 +11,62 @@ export interface TerminalTab {
 
 export interface LayoutState {
   terminalOpen: boolean;
-  activeTabId: string | null;
+  /**
+   * Active tab id per project. Each project keeps its own active tab so
+   * switching projects in the sidebar restores the right terminal in the
+   * full-screen mode. A missing entry means "use the first tab in this
+   * project's tab list" (resolved by getActiveTabId).
+   */
+  activeTabIdByProject: Record<string, string | null>;
   tabs: TerminalTab[];
+}
+
+export interface LayoutQueries {
+  /** Tabs filtered to a single project, in current order. */
+  getProjectTabs(projectName: string): TerminalTab[];
+  /** Active tab id for a project, falling back to the first tab in that project. */
+  getActiveTabId(projectName: string): string | null;
 }
 
 export interface LayoutActions {
   toggleTerminal(): void;
   openTerminalMode(): void;
   closeTerminalMode(): void;
-  setActiveTab(id: string): void;
+  /** Active state is scoped per-project so each project remembers its own focused tab. */
+  setActiveTab(projectName: string, id: string): void;
   newTab(projectName: string, title?: string): TerminalTab;
   closeTab(id: string): void;
   reorderTabs(orderedIds: string[]): void;
 }
 
-type PersistedLayoutState = Pick<LayoutState, "activeTabId" | "tabs">;
-type LayoutStore = LayoutState & LayoutActions;
+type PersistedLayoutState = Pick<LayoutState, "activeTabIdByProject" | "tabs">;
+type LayoutStore = LayoutState & LayoutActions & LayoutQueries;
 
 const defaults: PersistedLayoutState = {
-  activeTabId: null,
+  activeTabIdByProject: {},
   tabs: [],
 };
 
-const persist = Persist.global<PersistedLayoutState>("tmux-ide.layout", ["v1"], defaults);
+const persist = Persist.global<PersistedLayoutState>("tmux-ide.layout", ["v1", "v2"], defaults, {
+  // Migrating INTO v2: legacy `activeTabId` (single global) → `activeTabIdByProject` map.
+  v2: (prev: unknown) => {
+    if (!isRecord(prev)) return defaults;
+    const tabs = Array.isArray(prev.tabs) ? prev.tabs : [];
+    const legacyActive = typeof prev.activeTabId === "string" ? prev.activeTabId : null;
+    const activeTabIdByProject: Record<string, string | null> = {};
+    if (legacyActive) {
+      const tab = tabs.find(
+        (t): t is { id: string; projectName: string } =>
+          isRecord(t) &&
+          typeof t["id"] === "string" &&
+          t["id"] === legacyActive &&
+          typeof t["projectName"] === "string",
+      );
+      if (tab) activeTabIdByProject[tab.projectName] = legacyActive;
+    }
+    return { tabs, activeTabIdByProject };
+  },
+});
 const listeners = new Set<() => void>();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -44,6 +77,7 @@ function normalizePersisted(value: unknown): PersistedLayoutState {
   if (!isRecord(value)) return defaults;
 
   const seen = new Set<string>();
+  const projectsSeen = new Set<string>();
   const rawTabs = Array.isArray(value.tabs) ? value.tabs : [];
   const tabs = rawTabs.flatMap((tab) => {
     if (
@@ -56,21 +90,26 @@ function normalizePersisted(value: unknown): PersistedLayoutState {
       return [];
     }
     seen.add(tab["id"]);
+    projectsSeen.add(tab["projectName"]);
     return [{ id: tab["id"], title: tab["title"], projectName: tab["projectName"] }];
   });
-  const activeTabId = typeof value.activeTabId === "string" ? value.activeTabId : null;
 
-  return {
-    tabs,
-    activeTabId: activeTabId && seen.has(activeTabId) ? activeTabId : (tabs[0]?.id ?? null),
-  };
+  const activeRaw = isRecord(value.activeTabIdByProject) ? value.activeTabIdByProject : {};
+  const activeTabIdByProject: Record<string, string | null> = {};
+  for (const [project, id] of Object.entries(activeRaw)) {
+    if (typeof id === "string" && seen.has(id) && projectsSeen.has(project)) {
+      activeTabIdByProject[project] = id;
+    }
+  }
+
+  return { tabs, activeTabIdByProject };
 }
 
 function initialState(): LayoutState {
   const persisted = normalizePersisted(persist.read());
   return {
     terminalOpen: false,
-    activeTabId: persisted.activeTabId,
+    activeTabIdByProject: persisted.activeTabIdByProject,
     tabs: persisted.tabs,
   };
 }
@@ -79,7 +118,7 @@ let state = initialState();
 
 function persistState(next: LayoutState): void {
   persist.write({
-    activeTabId: next.activeTabId,
+    activeTabIdByProject: next.activeTabIdByProject,
     tabs: next.tabs,
   });
 }
@@ -108,8 +147,13 @@ function nextSeq(projectName: string, tabs: TerminalTab[]): number {
   return max + 1;
 }
 
-function activeFallthrough(tabs: TerminalTab[], removedIndex: number): string | null {
-  return tabs[removedIndex - 1]?.id ?? tabs[removedIndex]?.id ?? null;
+function projectTabs(tabs: TerminalTab[], projectName: string): TerminalTab[] {
+  return tabs.filter((tab) => tab.projectName === projectName);
+}
+
+function fallbackActive(tabs: TerminalTab[], projectName: string): string | null {
+  const first = projectTabs(tabs, projectName)[0];
+  return first ? first.id : null;
 }
 
 const actions: LayoutActions = {
@@ -124,13 +168,14 @@ const actions: LayoutActions = {
   closeTerminalMode() {
     setState((current) => ({ ...current, terminalOpen: false }), { persist: false });
   },
-  setActiveTab(id: string) {
+  setActiveTab(projectName: string, id: string) {
     setState((current) => {
-      if (!current.tabs.some((tab) => tab.id === id)) return current;
+      const tab = current.tabs.find((t) => t.id === id);
+      if (!tab || tab.projectName !== projectName) return current;
       return {
         ...current,
         terminalOpen: true,
-        activeTabId: id,
+        activeTabIdByProject: { ...current.activeTabIdByProject, [projectName]: id },
       };
     });
   },
@@ -144,24 +189,28 @@ const actions: LayoutActions = {
     setState((current) => ({
       ...current,
       terminalOpen: true,
-      activeTabId: tab.id,
+      activeTabIdByProject: { ...current.activeTabIdByProject, [projectName]: tab.id },
       tabs: [...current.tabs, tab],
     }));
     return tab;
   },
   closeTab(id: string) {
     setState((current) => {
-      const index = current.tabs.findIndex((tab) => tab.id === id);
-      if (index === -1) return current;
+      const closing = current.tabs.find((tab) => tab.id === id);
+      if (!closing) return current;
 
       const tabs = current.tabs.filter((tab) => tab.id !== id);
-      const activeTabId =
-        current.activeTabId === id ? activeFallthrough(tabs, index) : current.activeTabId;
+      const activeTabIdByProject = { ...current.activeTabIdByProject };
+      if (activeTabIdByProject[closing.projectName] === id) {
+        const fallback = fallbackActive(tabs, closing.projectName);
+        if (fallback) activeTabIdByProject[closing.projectName] = fallback;
+        else delete activeTabIdByProject[closing.projectName];
+      }
 
       return {
         ...current,
         terminalOpen: tabs.length > 0 ? current.terminalOpen : false,
-        activeTabId,
+        activeTabIdByProject,
         tabs,
       };
     });
@@ -192,9 +241,22 @@ function getSnapshot(): LayoutState {
   return state;
 }
 
+const queries: LayoutQueries = {
+  getProjectTabs(projectName: string) {
+    return projectTabs(state.tabs, projectName);
+  },
+  getActiveTabId(projectName: string) {
+    const explicit = state.activeTabIdByProject[projectName];
+    if (explicit && state.tabs.some((t) => t.id === explicit && t.projectName === projectName)) {
+      return explicit;
+    }
+    return fallbackActive(state.tabs, projectName);
+  },
+};
+
 export function useLayoutState(): LayoutStore {
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  return { ...snapshot, ...actions };
+  return { ...snapshot, ...actions, ...queries };
 }
 
 export function __resetLayoutStateForTests(next?: Partial<LayoutState>): void {
