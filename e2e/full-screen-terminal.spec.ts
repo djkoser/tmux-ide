@@ -5,7 +5,9 @@ const PROJECTS = ["tmux-ide", "docs"];
 function session(name: string) {
   return {
     name,
-    dir: `/tmp/${name}`,
+    // Point at the repo root so the bridge's tmux-ide spawn has a real
+    // cwd (and a real ide.yml). /tmp/<name> doesn't exist → ENOENT.
+    dir: process.cwd(),
     mission: null,
     stats: { totalTasks: 0, doneTasks: 0, agents: 0, activeAgents: 0 },
   };
@@ -14,7 +16,9 @@ function session(name: string) {
 function project(name: string) {
   return {
     session: name,
-    dir: `/tmp/${name}`,
+    // Point at the repo root so the bridge's tmux-ide spawn has a real
+    // cwd (and a real ide.yml). /tmp/<name> doesn't exist → ENOENT.
+    dir: process.cwd(),
     mission: null,
     goals: [],
     tasks: [],

@@ -6,7 +6,7 @@ const MOD_KEY = process.platform === "darwin" ? "Meta" : "Control";
 function session(name: string) {
   return {
     name,
-    dir: `/tmp/${name}`,
+    dir: process.cwd(),
     mission: null,
     stats: { totalTasks: 0, doneTasks: 0, agents: 0, activeAgents: 0 },
   };
@@ -15,7 +15,7 @@ function session(name: string) {
 function project(name: string) {
   return {
     session: name,
-    dir: `/tmp/${name}`,
+    dir: process.cwd(),
     mission: null,
     goals: [],
     tasks: [],

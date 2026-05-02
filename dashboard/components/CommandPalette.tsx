@@ -113,8 +113,22 @@ export function CommandPalette() {
       closeCommandPalette();
     }
 
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      // Window-level catch so Escape closes the palette regardless of which
+      // element has focus (the input's onKeyDown only fires when the input
+      // is the active element, which is fragile across re-renders).
+      event.preventDefault();
+      event.stopPropagation();
+      closeCommandPalette();
+    }
+
     document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown, { capture: true });
+    };
   }, [open]);
 
   function run(action: Action): void {
