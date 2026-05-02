@@ -1,6 +1,11 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { AgentsSegment } from "@/components/status-bar/AgentsSegment";
+import { MilestonesSegment } from "@/components/status-bar/MilestonesSegment";
+import { MissionStatusSegment } from "@/components/status-bar/MissionStatusSegment";
+import { projectNameFromPath } from "@/components/status-bar/projectPath";
+import { SkillsSegment } from "@/components/status-bar/SkillsSegment";
 import type { ProjectDetail } from "@/lib/types";
 
 interface StatusBarProps {
@@ -10,13 +15,13 @@ interface StatusBarProps {
 }
 
 function projectFromPath(pathname: string): string {
-  const match = pathname.match(/^\/project\/([^/]+)/);
-  return match ? decodeURIComponent(match[1]!) : "overview";
+  return projectNameFromPath(pathname) ?? "overview";
 }
 
 export function ShellStatusBar() {
   const pathname = usePathname();
   const project = projectFromPath(pathname);
+  const projectRoute = projectNameFromPath(pathname) !== null;
   const version = process.env.NEXT_PUBLIC_APP_VERSION ?? "dev";
 
   return (
@@ -25,6 +30,14 @@ export function ShellStatusBar() {
       className="flex h-6 shrink-0 items-center border-t border-[var(--border-weak)] bg-[var(--bg-weak)] px-3 text-[11px] tabular-nums text-[var(--dim)]"
     >
       <span className="text-[var(--accent)]">{project}</span>
+      {projectRoute && (
+        <>
+          <MissionStatusSegment />
+          <MilestonesSegment />
+          <AgentsSegment />
+          <SkillsSegment />
+        </>
+      )}
       <span className="mx-2 opacity-30">│</span>
       <span>terminal ⌘J</span>
       <span className="mx-2 opacity-30">│</span>
