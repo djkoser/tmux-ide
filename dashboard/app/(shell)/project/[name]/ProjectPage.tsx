@@ -43,12 +43,17 @@ function isTab(value: string | null): value is Tab {
   return TABS.some((t) => t.id === value);
 }
 
-export default function ProjectPage() {
+interface ProjectPageProps {
+  projectName?: string;
+}
+
+export default function ProjectPage({ projectName }: ProjectPageProps = {}) {
   const pathname = usePathname();
   const router = useRouter();
   // Extract project name from URL pathname (not useParams, which returns
   // the build-time placeholder "__fallback" in static exports)
-  const name = decodeURIComponent(pathname.replace(/^\/project\//, "").replace(/\/$/, ""));
+  const name =
+    projectName ?? decodeURIComponent(pathname.replace(/^\/project\//, "").replace(/\/$/, ""));
 
   // Tab state lives in URL search params, but read via window.location to keep
   // this page statically exportable (useSearchParams forces dynamic rendering,

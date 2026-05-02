@@ -8,11 +8,14 @@ beforeEach(() => {
     terminalOpen: false,
     activeTabIdByProject: {},
     tabs: [],
+    workspaceTabs: [],
+    activeWorkspaceTabId: null,
+    activitySection: "sessions",
   });
 });
 
 function readPersisted() {
-  const raw = window.localStorage.getItem("tmux-ide.layout.v2");
+  const raw = window.localStorage.getItem("tmux-ide.layout.v3");
   return raw ? (JSON.parse(raw) as unknown) : null;
 }
 
@@ -36,6 +39,9 @@ describe("useLayoutState", () => {
     expect(readPersisted()).toEqual({
       activeTabIdByProject: { alpha: "alpha:1" },
       tabs: [tab],
+      workspaceTabs: [],
+      activeWorkspaceTabId: null,
+      activitySection: "sessions",
     });
   });
 
@@ -155,8 +161,13 @@ describe("useLayoutState", () => {
         { id: "alpha:1", title: "alpha 1", projectName: "alpha" },
         { id: "beta:1", title: "beta 1", projectName: "beta" },
       ],
+      workspaceTabs: [
+        { id: "project:alpha", kind: "project", projectName: "alpha", title: "Alpha" },
+      ],
+      activeWorkspaceTabId: "project:alpha",
+      activitySection: "settings",
     };
-    window.localStorage.setItem("tmux-ide.layout.v2", JSON.stringify(persisted));
+    window.localStorage.setItem("tmux-ide.layout.v3", JSON.stringify(persisted));
     __resetLayoutStateForTests();
 
     const { result } = renderHook(() => useLayoutState());
@@ -165,6 +176,9 @@ describe("useLayoutState", () => {
     expect(result.current.getActiveTabId("alpha")).toBe("alpha:1");
     expect(result.current.getActiveTabId("beta")).toBe("beta:1");
     expect(result.current.tabs).toEqual(persisted.tabs);
+    expect(result.current.workspaceTabs).toEqual(persisted.workspaceTabs);
+    expect(result.current.activeWorkspaceTabId).toBe("project:alpha");
+    expect(result.current.activitySection).toBe("settings");
   });
 
   it("migrates legacy v1 single activeTabId into the per-project map", () => {
@@ -184,5 +198,137 @@ describe("useLayoutState", () => {
     expect(result.current.getActiveTabId("alpha")).toBe("alpha:1");
     // beta had no legacy active assignment, so it falls back to first beta tab.
     expect(result.current.getActiveTabId("beta")).toBe("beta:1");
+    expect(result.current.workspaceTabs).toEqual([]);
+    expect(result.current.activeWorkspaceTabId).toBeNull();
+    expect(result.current.activitySection).toBe("sessions");
+  });
+
+  it("migrates v2 layout state into v3 workspace tab defaults", () => {
+    const legacy = {
+      activeTabIdByProject: { alpha: "alpha:1" },
+      tabs: [{ id: "alpha:1", title: "alpha 1", projectName: "alpha" }],
+    };
+    window.localStorage.setItem("tmux-ide.layout.v2", JSON.stringify(legacy));
+    __resetLayoutStateForTests();
+
+    const { result } = renderHook(() => useLayoutState());
+
+    expect(result.current.tabs).toEqual(legacy.tabs);
+    expect(result.current.activeTabIdByProject).toEqual(legacy.activeTabIdByProject);
+    expect(result.current.workspaceTabs).toEqual([]);
+    expect(result.current.activeWorkspaceTabId).toBeNull();
+    expect(result.current.activitySection).toBe("sessions");
+  });
+
+  it("opens workspace tabs and deduplicates by kind and projectName", () => {
+    const { result } = renderHook(() => useLayoutState());
+
+    let alpha;
+    let duplicate;
+    let settings;
+    act(() => {
+      alpha = result.current.openWorkspaceTab("project", "alpha", "Alpha Project");
+      settings = result.current.openWorkspaceTab("settings", null);
+      duplicate = result.current.openWorkspaceTab("project", "alpha", "Ignored Title");
+    });
+
+    expect(alpha).toEqual({
+      id: "project:alpha",
+      kind: "project",
+      projectName: "alpha",
+      title: "Alpha Project",
+    });
+    expect(settings).toEqual({
+      id: "settings:",
+      kind: "settings",
+      projectName: null,
+      title: "Settings",
+    });
+    expect(duplicate).toBe(alpha);
+    expect(result.current.workspaceTabs).toEqual([alpha, settings]);
+    expect(result.current.activeWorkspaceTabId).toBe("project:alpha");
+    expect(readPersisted()).toMatchObject({
+      workspaceTabs: [alpha, settings],
+      activeWorkspaceTabId: "project:alpha",
+    });
+  });
+
+  it("sets active workspace tabs and ignores unknown ids", () => {
+    const { result } = renderHook(() => useLayoutState());
+
+    act(() => {
+      result.current.openWorkspaceTab("project", "alpha");
+      result.current.openWorkspaceTab("settings", null);
+      result.current.setActiveWorkspaceTab("project:alpha");
+    });
+
+    expect(result.current.activeWorkspaceTabId).toBe("project:alpha");
+
+    act(() => {
+      result.current.setActiveWorkspaceTab("missing");
+    });
+
+    expect(result.current.activeWorkspaceTabId).toBe("project:alpha");
+  });
+
+  it("closes workspace tabs with neighbor fallthrough", () => {
+    const { result } = renderHook(() => useLayoutState());
+
+    act(() => {
+      result.current.openWorkspaceTab("project", "alpha");
+      result.current.openWorkspaceTab("project", "beta");
+      result.current.openWorkspaceTab("settings", null);
+      result.current.setActiveWorkspaceTab("project:beta");
+      result.current.closeWorkspaceTab("project:beta");
+    });
+
+    expect(result.current.workspaceTabs.map((tab) => tab.id)).toEqual([
+      "project:alpha",
+      "settings:",
+    ]);
+    expect(result.current.activeWorkspaceTabId).toBe("project:alpha");
+
+    act(() => {
+      result.current.closeWorkspaceTab("project:alpha");
+    });
+
+    expect(result.current.activeWorkspaceTabId).toBe("settings:");
+
+    act(() => {
+      result.current.closeWorkspaceTab("settings:");
+    });
+
+    expect(result.current.workspaceTabs).toEqual([]);
+    expect(result.current.activeWorkspaceTabId).toBeNull();
+  });
+
+  it("reorders workspace tabs while ignoring unknown ids and appending omitted tabs", () => {
+    const { result } = renderHook(() => useLayoutState());
+
+    act(() => {
+      result.current.openWorkspaceTab("project", "alpha");
+      result.current.openWorkspaceTab("project", "beta");
+      result.current.openWorkspaceTab("settings", null);
+      result.current.reorderWorkspaceTabs(["settings:", "missing", "project:alpha"]);
+    });
+
+    expect(result.current.workspaceTabs.map((tab) => tab.id)).toEqual([
+      "settings:",
+      "project:alpha",
+      "project:beta",
+    ]);
+  });
+
+  it("sets and persists the activity section", () => {
+    const { result } = renderHook(() => useLayoutState());
+
+    expect(result.current.activitySection).toBe("sessions");
+
+    act(() => {
+      result.current.setActivitySection("settings");
+    });
+
+    expect(result.current.activitySection).toBe("settings");
+    expect(readPersisted()).toMatchObject({ activitySection: "settings" });
   });
 });
