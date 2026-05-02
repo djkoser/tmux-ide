@@ -100,6 +100,7 @@ const knownCommands = new Set([
   "orchestrator",
   "settings",
   "command-center",
+  "server",
   "tunnel",
   "remote",
   "help",
@@ -182,6 +183,7 @@ ${bold("Dispatch:")}
 ${bold("Orchestrator:")}
   ${cyan("tmux-ide orchestrator")} [--json]         ${dim("Show orchestrator status")}
   ${cyan("tmux-ide orch")}                          ${dim("Alias for orchestrator")}
+  ${cyan("tmux-ide server")} [--port N]             ${dim("Start v2.5 HTTP + PTY WebSocket server")}
 
 ${bold("Task Management:")}
   ${cyan("tmux-ide mission set")} "title"              ${dim("Set the project mission")}
@@ -514,6 +516,19 @@ try {
     case "command-center": {
       const { startCommandCenter } = await import("../src/command-center/index.ts");
       await startCommandCenter({ port: parseInt(values.port ?? "4000") });
+      break;
+    }
+
+    case "server": {
+      if ("bun" in process.versions) {
+        const scriptPath = resolve(__dirname, "../src/server/standalone.ts");
+        const serverArgs = ["--experimental-strip-types", scriptPath];
+        if (values.port) serverArgs.push("--port", values.port);
+        execFileSync("node", serverArgs, { stdio: "inherit" });
+      } else {
+        const { start } = await import("../src/server/index.ts");
+        await start(values.port ? parseInt(values.port, 10) : undefined);
+      }
       break;
     }
 

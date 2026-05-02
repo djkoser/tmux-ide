@@ -34,6 +34,7 @@
     "check": "pnpm run lint:workspace && pnpm run format:check && pnpm run typecheck && pnpm run test:unit && pnpm run docs:build && pnpm run pack:check",
     "postinstall": "node scripts/postinstall.js",
     "test:dashboard": "cd dashboard && pnpm test",
+    "test:e2e": "playwright test",
     "docs": "turbo run dev --filter=@tmux-ide/docs"
   },
   "keywords": [
@@ -74,6 +75,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.59.1",
     "@tsconfig/bun": "^1.0.10",
     "@types/node": "^25.5.0",
     "@typescript-eslint/eslint-plugin": "^8.57.1",
