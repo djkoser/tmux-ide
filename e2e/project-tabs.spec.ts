@@ -13,12 +13,24 @@ const stubProject = {
 
 test.describe("project shell", () => {
   test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.clear());
     await page.route("**/api/**", async (route) => {
       const url = new URL(route.request().url());
       const path = url.pathname;
 
       if (path === "/api/sessions") {
-        await route.fulfill({ json: [{ session: PROJECT, dir: "/tmp/tmux-ide" }] });
+        await route.fulfill({
+          json: {
+            sessions: [
+              {
+                name: PROJECT,
+                dir: "/tmp/tmux-ide",
+                mission: null,
+                stats: { totalTasks: 0, doneTasks: 0, agents: 0, activeAgents: 0 },
+              },
+            ],
+          },
+        });
         return;
       }
 
@@ -45,29 +57,26 @@ test.describe("project shell", () => {
     });
   });
 
-  test("kanban ↔ terminal tab navigation", async ({ page }) => {
+  test("kanban ↔ agents tab navigation", async ({ page }) => {
     await page.goto(`/project/${encodeURIComponent(PROJECT)}`);
 
-    const terminalTab = page.getByRole("button", { name: "terminal", exact: true });
+    const agentsTab = page.getByRole("button", { name: "agents", exact: true });
     const kanbanTab = page.getByRole("button", { name: "kanban", exact: true });
 
-    await expect(terminalTab).toBeVisible({ timeout: 15_000 });
+    await expect(agentsTab).toBeVisible({ timeout: 15_000 });
     await expect(kanbanTab).toBeVisible();
 
-    await terminalTab.click();
-    await expect(page).toHaveURL(/[?&]tab=terminal\b/);
-    const frame = page.getByTestId("terminal-frame");
-    await expect(frame).toHaveAttribute("data-state", "connected", { timeout: 30_000 });
+    await agentsTab.click();
+    await expect(page).toHaveURL(/[?&]tab=agents\b/);
+    await expect(page.getByText("no agents in this session")).toBeVisible();
 
     await kanbanTab.click();
-    await expect(page).not.toHaveURL(/[?&]tab=terminal\b/);
-    await expect(page.getByTestId("terminal-frame")).toHaveCount(0);
+    await expect(page).not.toHaveURL(/[?&]tab=agents\b/);
   });
 
-  test("deep link to terminal tab", async ({ page }) => {
-    await page.goto(`/project/${encodeURIComponent(PROJECT)}?tab=terminal`);
+  test("deep link to agents tab", async ({ page }) => {
+    await page.goto(`/project/${encodeURIComponent(PROJECT)}?tab=agents`);
 
-    const frame = page.getByTestId("terminal-frame");
-    await expect(frame).toHaveAttribute("data-state", "connected", { timeout: 30_000 });
+    await expect(page.getByText("no agents in this session")).toBeVisible({ timeout: 15_000 });
   });
 });

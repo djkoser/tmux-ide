@@ -27,19 +27,10 @@ import { PlansPanel } from "@/components/PlansPanel";
 import { StatusBar } from "@/components/StatusBar";
 import type { ProjectDetail } from "@/lib/types";
 
-type Tab =
-  | "kanban"
-  | "terminal"
-  | "agents"
-  | "diffs"
-  | "plans"
-  | "validation"
-  | "metrics"
-  | "activity";
+type Tab = "kanban" | "agents" | "diffs" | "plans" | "validation" | "metrics" | "activity";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "kanban", label: "kanban" },
-  { id: "terminal", label: "terminal" },
   { id: "agents", label: "agents" },
   { id: "diffs", label: "diffs" },
   { id: "plans", label: "plans" },
@@ -75,9 +66,6 @@ export default function ProjectPage() {
     if (tab === "kanban") url.searchParams.delete("tab");
     else url.searchParams.set("tab", tab);
     window.history.replaceState(null, "", url.toString());
-    // history.replaceState doesn't fire popstate, so notify TerminalPool
-    // (and any other URL-listeners) explicitly that the tab changed.
-    window.dispatchEvent(new CustomEvent("tabchange", { detail: { tab } }));
   }, []);
 
   const fetcher = useCallback(() => fetchProject(name) as Promise<ProjectDetail | null>, [name]);
@@ -286,14 +274,6 @@ export default function ProjectPage() {
           agents={project.agents}
           goals={project.goals}
           onRefresh={refresh}
-        />
-      )}
-
-      {activeTab === "terminal" && (
-        <div
-          data-testid="terminal-tab-placeholder"
-          className="flex-1 min-h-0"
-          aria-hidden="true"
         />
       )}
 

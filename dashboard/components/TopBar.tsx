@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { ThemeToggle } from "./ThemeToggle";
+import { useLayoutState } from "@/lib/useLayoutState";
 
 export function TopBar() {
   const [time, setTime] = useState("");
+  const { terminalOpen, toggleTerminal } = useLayoutState();
 
   useEffect(() => {
     function update() {
@@ -25,6 +27,22 @@ export function TopBar() {
     <div className="h-6 flex items-center px-3 bg-[var(--bg-weak)] border-b text-[11px] sticky top-0 z-30">
       <span className="text-[var(--accent)] font-medium">tmux-ide</span>
       <span className="flex-1" />
+      <button
+        type="button"
+        onClick={toggleTerminal}
+        data-testid="terminal-toggle"
+        data-active={terminalOpen ? "true" : "false"}
+        className={`mr-2 h-5 px-2 text-[10px] transition-colors ${
+          terminalOpen
+            ? "bg-[var(--surface-active)] text-[var(--accent)]"
+            : "text-[var(--dim)] hover:bg-[var(--surface-hover)] hover:text-[var(--fg)]"
+        }`}
+        aria-pressed={terminalOpen}
+        aria-label="Toggle terminal mode"
+        title="Toggle terminal mode"
+      >
+        ⌘`
+      </button>
       <ThemeToggle />
       <span className="text-[var(--dim)] ml-3">{time}</span>
     </div>

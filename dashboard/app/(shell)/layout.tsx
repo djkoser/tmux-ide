@@ -1,5 +1,5 @@
 import { Sidebar } from "@/components/Sidebar";
-import { TerminalPool } from "@/components/TerminalPool";
+import { FullScreenTerminal } from "@/components/FullScreenTerminal";
 
 export default function ShellLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -7,7 +7,7 @@ export default function ShellLayout({ children }: { children: React.ReactNode })
       <Sidebar />
       <div className="relative flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
         {children}
-        <TerminalPool />
+        <FullScreenTerminal />
       </div>
     </div>
   );
