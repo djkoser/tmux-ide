@@ -127,11 +127,11 @@ export function CommandPalette() {
   let flatIndex = 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/35 pt-[18vh]">
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-[var(--modal-overlay)] pt-[18vh]">
       <div
         ref={panelRef}
         data-testid="command-palette"
-        className="w-[min(480px,calc(100vw-32px))] overflow-hidden border border-[var(--border)] bg-[var(--surface)] shadow-2xl"
+        className="w-[min(480px,calc(100vw-32px))] overflow-hidden rounded-md border border-[var(--border)] bg-[var(--bg-strong)] shadow-2xl"
       >
         <input
           ref={inputRef}

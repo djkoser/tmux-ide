@@ -75,13 +75,17 @@ export function FullScreenTerminal() {
     reorderTabs(next);
   }
 
-  if (!terminalOpen) return null;
-
+  // Stay mounted across toggles so xterm + WebSocket state survives Cmd-J off.
+  // Visibility flips display: none — the entire subtree (TerminalManager,
+  // every Terminal, every WS) keeps running in the background.
   return (
     <section
       data-testid="full-screen-terminal"
       data-project={currentProjectName}
-      className="absolute inset-0 z-20 flex min-h-0 flex-col bg-[var(--term-bg)]"
+      data-open={terminalOpen ? "true" : "false"}
+      className="absolute inset-0 z-20 min-h-0 flex-col bg-[var(--term-bg)]"
+      style={{ display: terminalOpen ? "flex" : "none" }}
+      aria-hidden={!terminalOpen}
       aria-label="Full-screen terminal"
     >
       <div className="flex h-8 shrink-0 items-stretch border-b border-[var(--border-weak)] bg-[var(--surface)]">

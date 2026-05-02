@@ -105,7 +105,7 @@ test.describe("workspace tabs shell", () => {
 
     await page.keyboard.press(`${MOD_KEY}+KeyJ`);
 
-    await expect(page.getByTestId("full-screen-terminal")).toBeVisible();
+    await expect(page.getByTestId("full-screen-terminal")).toHaveAttribute("data-open", "true");
     await expect(page.getByTestId("terminal-frame")).toHaveAttribute("data-state", "connected", {
       timeout: 30_000,
     });

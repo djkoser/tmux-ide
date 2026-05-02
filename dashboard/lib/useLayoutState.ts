@@ -421,6 +421,24 @@ function getSnapshot(): LayoutState {
   return state;
 }
 
+// Returned during SSR AND the first client render before hydration completes.
+// Always reflects the persistence-free defaults so server-rendered HTML matches
+// the first client render — React then re-renders with getSnapshot once the
+// store subscription kicks in. Without this, localStorage-derived state on the
+// client diverges from the server's empty defaults and triggers a mismatch.
+const serverSnapshot: LayoutState = {
+  terminalOpen: false,
+  activeTabIdByProject: {},
+  tabs: [],
+  workspaceTabs: [],
+  activeWorkspaceTabId: null,
+  activitySection: "sessions",
+};
+
+function getServerSnapshot(): LayoutState {
+  return serverSnapshot;
+}
+
 const queries: LayoutQueries = {
   getProjectTabs(projectName: string) {
     return projectTabs(state.tabs, projectName);
@@ -435,7 +453,7 @@ const queries: LayoutQueries = {
 };
 
 export function useLayoutState(): LayoutStore {
-  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   return { ...snapshot, ...actions, ...queries };
 }
 

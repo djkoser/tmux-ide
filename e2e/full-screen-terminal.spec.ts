@@ -85,15 +85,23 @@ test.describe("full-screen terminal mode", () => {
     await mockApi(page);
   });
 
-  test("Mod+J toggles terminal mode", async ({ page }) => {
+  test("Mod+J toggles terminal mode (persisting state across toggles)", async ({ page }) => {
     await page.goto("/");
 
+    const section = page.getByTestId("full-screen-terminal");
+
     await openTerminalMode(page, "keybind");
-    await expect(page.getByTestId("full-screen-terminal")).toBeVisible();
+    await expect(section).toHaveAttribute("data-open", "true");
 
     await toggleTerminal(page);
-    await expect(page.getByTestId("full-screen-terminal")).toHaveCount(0);
-    await expect(page.getByTestId("terminal-frame")).toHaveCount(0);
+    // Section stays mounted with data-open="false" so xterm + WS state survives.
+    await expect(section).toHaveAttribute("data-open", "false");
+    await expect(section).toBeAttached();
+
+    // Re-open: same xterm instance, no reconnect required.
+    await toggleTerminal(page);
+    await expect(section).toHaveAttribute("data-open", "true");
+    await expect(page.getByTestId("terminal-frame")).toHaveAttribute("data-state", "connected");
   });
 
   test("newTab adds a tab", async ({ page }) => {
