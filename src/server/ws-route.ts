@@ -1,11 +1,11 @@
 import type { RawData, WebSocket } from "ws";
-import { PtyBridge, type PtyExit } from "./pty-bridge.ts";
+import { PtyBridge, type PtyExit, type PtySpawnOptions } from "./pty-bridge.ts";
 
 const WS_OPEN = 1;
 const KILL_ESCALATION_MS = 2000;
 
 export interface PtyBridgeLike {
-  spawn(cols: number, rows: number): void;
+  spawn(cols: number, rows: number, options?: PtySpawnOptions): void;
   write(bytes: Buffer): void;
   resize(cols: number, rows: number): void;
   kill(signal?: NodeJS.Signals): void;
@@ -34,6 +34,8 @@ interface InitFrame {
   type: "init";
   cols: number;
   rows: number;
+  cwd?: string;
+  cmd?: string[];
 }
 
 interface ResizeFrame {
@@ -78,7 +80,24 @@ function parseInitFrame(data: RawData | string): InitFrame {
   if (!isPositiveInteger(frame.cols) || !isPositiveInteger(frame.rows)) {
     throw new Error("init requires positive integer cols and rows");
   }
-  return { type: "init", cols: frame.cols, rows: frame.rows };
+  if (frame.cwd !== undefined && typeof frame.cwd !== "string") {
+    throw new Error("init cwd must be a string");
+  }
+  if (
+    frame.cmd !== undefined &&
+    (!Array.isArray(frame.cmd) ||
+      frame.cmd.length === 0 ||
+      !frame.cmd.every((part) => typeof part === "string"))
+  ) {
+    throw new Error("init cmd must be a non-empty string array");
+  }
+  return {
+    type: "init",
+    cols: frame.cols,
+    rows: frame.rows,
+    ...(frame.cwd !== undefined ? { cwd: frame.cwd } : {}),
+    ...(frame.cmd !== undefined ? { cmd: frame.cmd } : {}),
+  };
 }
 
 function parseResizeFrame(data: RawData | string): ResizeFrame {
@@ -162,7 +181,10 @@ export function handlePtyWebSocket(
       attachBridgeEvents(bridge);
 
       try {
-        bridge.spawn(init.cols, init.rows);
+        const spawnOptions: PtySpawnOptions = {};
+        if (init.cwd !== undefined) spawnOptions.cwd = init.cwd;
+        if (init.cmd !== undefined) spawnOptions.cmd = init.cmd;
+        bridge.spawn(init.cols, init.rows, spawnOptions);
         initialized = true;
       } catch (err) {
         closeWithError(`spawn failed: ${err instanceof Error ? err.message : String(err)}`);

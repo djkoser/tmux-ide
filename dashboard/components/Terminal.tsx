@@ -39,6 +39,8 @@ interface TerminalProps {
   id: string;
   className?: string;
   showHeader?: boolean;
+  cwd?: string;
+  cmd?: string[];
   onSessionExit?: (id: string) => void;
 }
 
@@ -62,7 +64,14 @@ async function messageToBytes(data: unknown): Promise<Uint8Array> {
   return new Uint8Array();
 }
 
-export function Terminal({ id, className, showHeader = true, onSessionExit }: TerminalProps) {
+export function Terminal({
+  id,
+  className,
+  showHeader = true,
+  cwd,
+  cmd,
+  onSessionExit,
+}: TerminalProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<XTerm | null>(null);
   const { resolvedTheme } = useTheme();
@@ -168,7 +177,15 @@ export function Terminal({ id, className, showHeader = true, onSessionExit }: Te
           if (!term || !socket) return;
           const cols = term.cols || 80;
           const rows = term.rows || 24;
-          socket.send(JSON.stringify({ type: "init", cols, rows }));
+          socket.send(
+            JSON.stringify({
+              type: "init",
+              cols,
+              rows,
+              ...(cwd ? { cwd } : {}),
+              ...(cmd ? { cmd } : {}),
+            }),
+          );
           initSent = true;
           setSize({ cols, rows });
           setState("connected");
@@ -241,7 +258,7 @@ export function Terminal({ id, className, showHeader = true, onSessionExit }: Te
       termRef.current = null;
       hostElement.replaceChildren();
     };
-  }, [id, onSessionExit]);
+  }, [cmd, cwd, id, onSessionExit]);
 
   // Re-apply terminal theme whenever next-themes flips the resolved theme.
   // CSS vars on :root update synchronously, but xterm caches its renderer's

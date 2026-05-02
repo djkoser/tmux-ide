@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { EventEmitter } from "node:events";
 import { handlePtyWebSocket } from "./ws-route.ts";
-import { PtyBridge, type PtyBridgeOptions } from "./pty-bridge.ts";
+import { PtyBridge, type PtyBridgeOptions, type PtySpawnOptions } from "./pty-bridge.ts";
 
 class MockWebSocket extends EventEmitter {
   readyState = 1;
@@ -32,13 +32,15 @@ class MockWebSocket extends EventEmitter {
 class FakeBridge extends EventEmitter {
   cols: number | null = null;
   rows: number | null = null;
+  spawnOptions: PtySpawnOptions | null = null;
   running = false;
   writes: Buffer[] = [];
   killed: NodeJS.Signals[] = [];
 
-  spawn(cols: number, rows: number): void {
+  spawn(cols: number, rows: number, options?: PtySpawnOptions): void {
     this.cols = cols;
     this.rows = rows;
+    this.spawnOptions = options ?? null;
     this.running = true;
   }
 
@@ -120,6 +122,32 @@ describe("handlePtyWebSocket", () => {
     expect(jsonFrames(ws).find((frame) => frame.type === "error")).toBeUndefined();
   });
 
+  it("passes init cwd and cmd to the bridge", async () => {
+    const ws = new MockWebSocket();
+    let bridge: FakeBridge | null = null;
+    handlePtyWebSocket(ws, "project-tab", {
+      createBridge: () => {
+        bridge = new FakeBridge();
+        return bridge;
+      },
+    });
+
+    ws.receive(
+      JSON.stringify({
+        type: "init",
+        cols: 100,
+        rows: 30,
+        cwd: "/tmp/project-dir",
+        cmd: ["tmux-ide"],
+      }),
+    );
+
+    await waitFor(() => bridge?.running === true, "fake PTY spawn");
+    expect(bridge?.cols).toBe(100);
+    expect(bridge?.rows).toBe(30);
+    expect(bridge?.spawnOptions).toEqual({ cwd: "/tmp/project-dir", cmd: ["tmux-ide"] });
+  });
+
   it("rejects invalid JSON init frames", () => {
     const ws = new MockWebSocket();
     let created = false;
@@ -146,6 +174,30 @@ describe("handlePtyWebSocket", () => {
     const [error] = jsonFrames(ws);
     expect(error?.type).toBe("error");
     expect(String(error?.message)).toContain("cols and rows");
+    expect(ws.closeCount).toBe(1);
+  });
+
+  it("rejects init frames with invalid cwd", () => {
+    const ws = new MockWebSocket();
+    handlePtyWebSocket(ws, "default");
+
+    ws.receive(JSON.stringify({ type: "init", cols: 80, rows: 24, cwd: 42 }));
+
+    const [error] = jsonFrames(ws);
+    expect(error?.type).toBe("error");
+    expect(String(error?.message)).toContain("cwd must be a string");
+    expect(ws.closeCount).toBe(1);
+  });
+
+  it("rejects init frames with invalid cmd", () => {
+    const ws = new MockWebSocket();
+    handlePtyWebSocket(ws, "default");
+
+    ws.receive(JSON.stringify({ type: "init", cols: 80, rows: 24, cmd: [] }));
+
+    const [error] = jsonFrames(ws);
+    expect(error?.type).toBe("error");
+    expect(String(error?.message)).toContain("cmd must be a non-empty string array");
     expect(ws.closeCount).toBe(1);
   });
 

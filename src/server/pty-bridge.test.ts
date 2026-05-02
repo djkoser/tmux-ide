@@ -103,74 +103,62 @@ describe("PtyBridge", () => {
     expect(bridge.running).toBe(false);
   });
 
-  it("attaches to a tmux pane when the id is session:paneId", () => {
-    const execCalls: string[][] = [];
-    const spawnCalls: string[][] = [];
-    const tail = new EventEmitter() as EventEmitter & {
-      stdout: EventEmitter;
-      stderr: EventEmitter;
+  it("spawns the requested command in the requested cwd", () => {
+    const spawnCalls: Array<{ command: string; args: string[]; options: Record<string, unknown> }> =
+      [];
+    const fakePty = new EventEmitter() as EventEmitter & {
       pid: number;
-      kill: (signal?: NodeJS.Signals) => boolean;
-      killed?: NodeJS.Signals;
+      cols: number;
+      rows: number;
+      write: (data: string | Buffer) => void;
+      resize: (cols: number, rows: number) => void;
+      kill: (signal?: NodeJS.Signals) => void;
+      onData: (listener: (data: unknown) => void) => { dispose: () => void };
+      onExit: (listener: (exit: { exitCode: number; signal?: number | null }) => void) => {
+        dispose: () => void;
+      };
     };
-    tail.stdout = new EventEmitter();
-    tail.stderr = new EventEmitter();
-    tail.pid = 12345;
-    tail.kill = (signal = "SIGTERM") => {
-      tail.killed = signal;
-      return true;
+    fakePty.pid = 12345;
+    fakePty.cols = 100;
+    fakePty.rows = 30;
+    fakePty.write = () => undefined;
+    fakePty.resize = (cols, rows) => {
+      fakePty.cols = cols;
+      fakePty.rows = rows;
+    };
+    fakePty.kill = () => undefined;
+    fakePty.onData = (listener) => {
+      fakePty.on("data", listener);
+      return { dispose: () => fakePty.off("data", listener) };
+    };
+    fakePty.onExit = (listener) => {
+      fakePty.on("exit", listener);
+      return { dispose: () => fakePty.off("exit", listener) };
     };
 
     const bridge = new PtyBridge({
-      id: "tmux-ide:%12",
-      shell: "/bin/sh",
-      tmux: {
-        execFileSync: (_cmd, args) => {
-          execCalls.push(args);
-          if (args[0] === "display-message") return "tmux-ide\t%12\n";
-          if (args[0] === "capture-pane") return "captured pane";
-          return "";
+      env: { PATH: process.env.PATH, TERM: "xterm-256color" },
+      pty: {
+        spawn: (command, args, options) => {
+          spawnCalls.push({ command, args, options: options as Record<string, unknown> });
+          return fakePty as never;
         },
-        spawn: (_cmd, args) => {
-          spawnCalls.push(args);
-          return tail as never;
-        },
-        mkdtempSync: () => "/tmp/tmux-ide-pty-test",
-        writeFileSync: () => undefined,
-        rmSync: () => undefined,
-        tmpdir: () => "/tmp",
       },
     });
     bridges.push(bridge);
 
-    let output = "";
-    bridge.on("output", (bytes) => {
-      output += bytes.toString("utf8");
-    });
-
-    bridge.spawn(100, 30);
-    tail.stdout.emit("data", Buffer.from("live output"));
-    bridge.write(Buffer.from("hello\r"));
+    bridge.spawn(100, 30, { cwd: "/tmp/project-dir", cmd: ["tmux-ide", "--flag"] });
     bridge.resize(120, 40);
-    bridge.kill("SIGTERM");
 
-    expect(bridge.running).toBe(false);
-    expect(bridge.pid).toBeNull();
-    expect(output).toContain("captured pane");
-    expect(output).toContain("live output");
-    expect(spawnCalls).toEqual([["-n", "+1", "-F", "/tmp/tmux-ide-pty-test/pane.log"]]);
-    expect(execCalls).toContainEqual(["has-session", "-t", "tmux-ide"]);
-    expect(execCalls).toContainEqual([
-      "pipe-pane",
-      "-o",
-      "-t",
-      "%12",
-      "cat >> '/tmp/tmux-ide-pty-test/pane.log'",
-    ]);
-    expect(execCalls).toContainEqual(["send-keys", "-t", "%12", "-l", "--", "hello"]);
-    expect(execCalls).toContainEqual(["send-keys", "-t", "%12", "Enter"]);
-    expect(execCalls).toContainEqual(["resize-pane", "-t", "%12", "-x", "120", "-y", "40"]);
-    expect(execCalls.at(-1)).toEqual(["pipe-pane", "-t", "%12"]);
-    expect(tail.killed).toBe("SIGTERM");
+    expect(bridge.running).toBe(true);
+    expect(bridge.pid).toBe(12345);
+    expect(bridge.cols).toBe(120);
+    expect(bridge.rows).toBe(40);
+    expect(spawnCalls).toHaveLength(1);
+    expect(spawnCalls[0]?.command).toBe("tmux-ide");
+    expect(spawnCalls[0]?.args).toEqual(["--flag"]);
+    expect(spawnCalls[0]?.options.cwd).toBe("/tmp/project-dir");
+    expect(spawnCalls[0]?.options.cols).toBe(100);
+    expect(spawnCalls[0]?.options.rows).toBe(30);
   });
 });

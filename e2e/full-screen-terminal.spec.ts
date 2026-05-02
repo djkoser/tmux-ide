@@ -111,7 +111,6 @@ test.describe("full-screen terminal mode", () => {
     await expect(page.getByTestId("terminal-tab")).toHaveCount(1);
 
     await page.getByTestId("terminal-new-tab").click();
-    await page.getByTestId("terminal-bash-option").click();
     await expect(page.getByTestId("terminal-tab")).toHaveCount(2);
   });
 

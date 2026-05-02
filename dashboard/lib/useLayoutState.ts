@@ -7,7 +7,14 @@ export interface TerminalTab {
   id: string;
   title: string;
   projectName: string;
-  paneId?: string;
+  cwd?: string;
+  cmd?: string[];
+}
+
+export interface TerminalTabOptions {
+  title?: string;
+  cwd?: string;
+  cmd?: string[];
 }
 
 export type WorkspaceTabKind = "project" | "settings";
@@ -49,8 +56,7 @@ export interface LayoutActions {
   closeTerminalMode(): void;
   /** Active state is scoped per-project so each project remembers its own focused tab. */
   setActiveTab(projectName: string, id: string): void;
-  newTab(projectName: string, title?: string): TerminalTab;
-  newPaneTab(projectName: string, paneId: string, title?: string): TerminalTab;
+  newTab(projectName: string, options?: string | TerminalTabOptions): TerminalTab;
   closeTab(id: string): void;
   reorderTabs(orderedIds: string[]): void;
   openWorkspaceTab(
@@ -80,7 +86,7 @@ const defaults: PersistedLayoutState = {
 
 const persist = Persist.global<PersistedLayoutState>(
   "tmux-ide.layout",
-  ["v1", "v2", "v3", "v4"],
+  ["v1", "v2", "v3", "v4", "v5"],
   defaults,
   {
     // Migrating INTO v2: legacy `activeTabId` (single global) → `activeTabIdByProject` map.
@@ -114,9 +120,12 @@ const persist = Persist.global<PersistedLayoutState>(
           ? prev.activitySection
           : "sessions",
     }),
-    // Migrating INTO v4: terminal pane tabs carry an optional paneId. Legacy
-    // bash tabs pass through unchanged with paneId omitted.
+    // Migrating INTO v4: terminal pane tabs carried an optional paneId. Legacy
+    // bash tabs passed through unchanged with paneId omitted.
     v4: (prev: unknown) => (isRecord(prev) ? prev : defaults),
+    // Migrating INTO v5: terminal tabs may carry cwd/cmd. Existing tabs pass
+    // through and normalize without paneId.
+    v5: (prev: unknown) => (isRecord(prev) ? prev : defaults),
   },
 );
 const listeners = new Set<() => void>();
@@ -156,7 +165,10 @@ function normalizePersisted(value: unknown): PersistedLayoutState {
         id: tab["id"],
         title: tab["title"],
         projectName: tab["projectName"],
-        ...(typeof tab["paneId"] === "string" ? { paneId: tab["paneId"] } : {}),
+        ...(typeof tab["cwd"] === "string" ? { cwd: tab["cwd"] } : {}),
+        ...(Array.isArray(tab["cmd"]) && tab["cmd"].every((part) => typeof part === "string")
+          ? { cmd: tab["cmd"] }
+          : {}),
       },
     ];
   });
@@ -254,6 +266,20 @@ function nextSeq(projectName: string, tabs: TerminalTab[]): number {
   return max + 1;
 }
 
+function normalizeTabOptions(options?: string | TerminalTabOptions): TerminalTabOptions {
+  if (typeof options === "string") return { title: options };
+  if (!options) return {};
+  return {
+    ...(typeof options.title === "string" ? { title: options.title } : {}),
+    ...(typeof options.cwd === "string" ? { cwd: options.cwd } : {}),
+    ...(Array.isArray(options.cmd) &&
+    options.cmd.length > 0 &&
+    options.cmd.every((part) => typeof part === "string")
+      ? { cmd: options.cmd }
+      : {}),
+  };
+}
+
 function projectTabs(tabs: TerminalTab[], projectName: string): TerminalTab[] {
   return tabs.filter((tab) => tab.projectName === projectName);
 }
@@ -304,38 +330,15 @@ const actions: LayoutActions = {
       };
     });
   },
-  newTab(projectName: string, title?: string) {
+  newTab(projectName: string, options?: string | TerminalTabOptions) {
     const seq = nextSeq(projectName, state.tabs);
+    const tabOptions = normalizeTabOptions(options);
     const tab = {
       id: `${projectName}:${seq}`,
-      title: title || `${projectName} ${seq}`,
+      title: tabOptions.title || `${projectName} ${seq}`,
       projectName,
-    };
-    setState((current) => ({
-      ...current,
-      terminalOpen: true,
-      activeTabIdByProject: { ...current.activeTabIdByProject, [projectName]: tab.id },
-      tabs: [...current.tabs, tab],
-    }));
-    return tab;
-  },
-  newPaneTab(projectName: string, paneId: string, title?: string) {
-    const id = `${projectName}:${paneId}`;
-    const existing = state.tabs.find((tab) => tab.id === id && tab.projectName === projectName);
-    if (existing) {
-      setState((current) => ({
-        ...current,
-        terminalOpen: true,
-        activeTabIdByProject: { ...current.activeTabIdByProject, [projectName]: existing.id },
-      }));
-      return existing;
-    }
-
-    const tab = {
-      id,
-      title: title || `${projectName} · ${paneId}`,
-      projectName,
-      paneId,
+      ...(tabOptions.cwd ? { cwd: tabOptions.cwd } : {}),
+      ...(tabOptions.cmd ? { cmd: tabOptions.cmd } : {}),
     };
     setState((current) => ({
       ...current,

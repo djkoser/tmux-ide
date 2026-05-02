@@ -41,7 +41,13 @@ export function TerminalManager({ onSessionExit }: TerminalManagerProps) {
               display: visible ? "flex" : "none",
             }}
           >
-            <Terminal id={tab.id} showHeader={false} onSessionExit={onSessionExit} />
+            <Terminal
+              id={tab.id}
+              showHeader={false}
+              cwd={tab.cwd}
+              cmd={tab.cmd}
+              onSessionExit={onSessionExit}
+            />
           </div>
         );
       })}
