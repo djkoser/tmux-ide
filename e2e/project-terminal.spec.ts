@@ -89,9 +89,7 @@ test.describe("project terminal tabs", () => {
     await mockApi(page);
   });
 
-  test("opening terminal mode for a project spawns one shell tab in the project dir", async ({
-    page,
-  }) => {
+  test("opening terminal mode for a project spawns tmux-ide via login shell", async ({ page }) => {
     const initFrames = await mockPty(page);
     await page.goto(`/project/${encodeURIComponent(PROJECT)}`);
 
@@ -100,28 +98,36 @@ test.describe("project terminal tabs", () => {
     await expect(page.getByTestId("terminal-tab")).toHaveCount(1);
     await expect(page.getByTestId("terminal-tab")).toContainText(PROJECT);
     await expect.poll(() => initFrames.length).toBe(1);
-    // No `cmd` is sent — server falls back to $SHELL -l so users land in
-    // their actual login shell (zsh, etc.). Just verify the project dir
-    // is forwarded as cwd.
-    expect(initFrames[0]).toMatchObject({ type: "init", cwd: PROJECT_DIR });
-    expect((initFrames[0] as { cmd?: string[] }).cmd).toBeUndefined();
+    // The dashboard wraps tmux-ide in a __login_shell__ sentinel so the
+    // bridge runs `$SHELL -l -c "exec tmux-ide"` and tmux inherits the
+    // user's full shell env (PATH, nvm, brew, etc.).
+    expect(initFrames[0]).toMatchObject({
+      type: "init",
+      cwd: PROJECT_DIR,
+      cmd: ["__login_shell__", "tmux-ide"],
+    });
   });
 
-  test("+ button creates a second tab in the same project dir", async ({ page }) => {
+  test("+ button spawns a plain login shell in the project dir (not tmux-ide)", async ({
+    page,
+  }) => {
     const initFrames = await mockPty(page);
     await page.goto(`/project/${encodeURIComponent(PROJECT)}`);
 
     await page.getByTestId("terminal-toggle").click();
     await expect(page.getByTestId("terminal-tab")).toHaveCount(1);
     await expect.poll(() => initFrames.length).toBe(1);
+    expect(initFrames[0]).toMatchObject({
+      cwd: PROJECT_DIR,
+      cmd: ["__login_shell__", "tmux-ide"],
+    });
 
     await page.getByTestId("terminal-new-tab").click();
 
     await expect(page.getByTestId("terminal-tab")).toHaveCount(2);
     await expect.poll(() => initFrames.length).toBe(2);
-    for (const frame of initFrames) {
-      expect(frame).toMatchObject({ cwd: PROJECT_DIR });
-      expect((frame as { cmd?: string[] }).cmd).toBeUndefined();
-    }
+    // Second tab: cwd present, no cmd → server uses $SHELL -l.
+    expect(initFrames[1]).toMatchObject({ cwd: PROJECT_DIR });
+    expect((initFrames[1] as { cmd?: string[] }).cmd).toBeUndefined();
   });
 });

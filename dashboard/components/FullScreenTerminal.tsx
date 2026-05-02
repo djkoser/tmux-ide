@@ -55,13 +55,15 @@ export function FullScreenTerminal() {
       if (!project?.dir) {
         return newTab(projectName, { title: projectName });
       }
-      // Default to the user's login shell in the project's dir. Users who
-      // want the tmux-ide CLI can run `tmux-ide` themselves from the prompt;
-      // forcing it here meant tmux's default-shell decided your shell, which
-      // routinely demoted zsh users into bash/sh and skipped .zshrc.
+      // Wrap tmux-ide in `$SHELL -l -c` so the parent login shell sources
+      // .zprofile / .zshrc / nvm / etc. before exec'ing tmux-ide, giving
+      // the CLI (and thus tmux) the user's full env. Pane shells inside
+      // tmux still use tmux's default-shell — to make those login shells
+      // too, add `set -g default-command "$SHELL -l"` to ~/.tmux.conf.
       return newTab(projectName, {
         title: projectName,
         cwd: project.dir,
+        cmd: ["__login_shell__", "tmux-ide"],
       });
     },
     [newTab, projectRouteName],
@@ -110,9 +112,19 @@ export function FullScreenTerminal() {
     };
   }, [currentProjectName, newProjectTab, newTab, projectTabs.length, setActiveTab, terminalOpen]);
 
-  const openProjectTab = useCallback(() => {
-    void newProjectTab(currentProjectName);
-  }, [currentProjectName, newProjectTab]);
+  // The "+" button opens a fresh login shell in the project's dir — NOT
+  // another tmux-ide. The first auto-created tab is tmux-ide; subsequent
+  // tabs are clean shells where you can run ad-hoc commands.
+  const openShellTab = useCallback(async () => {
+    if (!projectRouteName) return newTab(currentProjectName);
+    const project = await fetchProject(currentProjectName);
+    if (!project?.dir) return newTab(currentProjectName);
+    return newTab(currentProjectName, {
+      title: `${currentProjectName} · shell`,
+      cwd: project.dir,
+      // No cmd → bridge defaults to $SHELL -l in the project dir.
+    });
+  }, [currentProjectName, newTab, projectRouteName]);
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -162,7 +174,7 @@ export function FullScreenTerminal() {
         <button
           type="button"
           data-testid="terminal-new-tab"
-          onClick={openProjectTab}
+          onClick={() => void openShellTab()}
           className="flex h-8 w-8 shrink-0 items-center justify-center border-l border-[var(--border-weak)] text-[var(--dim)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--accent)]"
           aria-label="New terminal tab"
         >

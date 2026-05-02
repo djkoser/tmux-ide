@@ -88,8 +88,19 @@ export class PtyBridge extends EventEmitter {
     // login shell from $SHELL so .zshrc / .zprofile / etc. load. Defaulting
     // to "bash" silently downgrades zsh users to a non-zsh experience.
     const defaultShell = this.options.shell ?? process.env.SHELL ?? "bash";
-    const executable = spawnOptions.cmd?.[0] ?? defaultShell;
-    const args = spawnOptions.cmd ? spawnOptions.cmd.slice(1) : (this.options.args ?? ["-l"]);
+    let executable = spawnOptions.cmd?.[0] ?? defaultShell;
+    let args = spawnOptions.cmd ? spawnOptions.cmd.slice(1) : (this.options.args ?? ["-l"]);
+
+    // `__login_shell__` sentinel: wrap the rest of cmd in `$SHELL -l -c
+    // "exec <cmd...>"`. The user's login shell sources profile/rc files
+    // (PATH, nvm, brew, …) before exec'ing the requested command, so the
+    // spawned program inherits the fully-loaded env. Used by the dashboard
+    // to give tmux-ide the user's real shell environment.
+    if (executable === "__login_shell__" && args.length > 0) {
+      const innerCmd = args.map((part) => `'${part.replace(/'/g, "'\\''")}'`).join(" ");
+      executable = defaultShell;
+      args = ["-l", "-c", `exec ${innerCmd}`];
+    }
     const cwd = spawnOptions.cwd ?? this.options.cwd ?? process.env.HOME ?? "/";
     const env = this.options.env ?? cleanEnv();
 
