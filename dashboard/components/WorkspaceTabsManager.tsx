@@ -1,14 +1,21 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { hrefForWorkspaceTab, useWorkspaceState } from "@/lib/useWorkspaceState";
+import { usePathname } from "next/navigation";
+import { useLayoutState, type WorkspaceTab } from "@/lib/useLayoutState";
+
+function hrefForWorkspaceTab(tab: WorkspaceTab): string {
+  if (tab.kind === "settings" || !tab.projectName) return "/";
+  return `/project/${encodeURIComponent(tab.projectName)}`;
+}
 
 interface WorkspaceTabsManagerProps {
   children?: ReactNode;
 }
 
 export function WorkspaceTabsManager({ children }: WorkspaceTabsManagerProps) {
-  const { workspaceTabs, activeWorkspaceTabId } = useWorkspaceState();
+  const pathname = usePathname();
+  const { workspaceTabs, activeWorkspaceTabId } = useLayoutState();
 
   if (workspaceTabs.length === 0) {
     return (
@@ -22,10 +29,7 @@ export function WorkspaceTabsManager({ children }: WorkspaceTabsManagerProps) {
     <>
       {workspaceTabs.map((tab) => {
         const active = tab.id === activeWorkspaceTabId;
-        const routeMatches =
-          tab.kind === "project" &&
-          typeof window !== "undefined" &&
-          window.location.pathname === hrefForWorkspaceTab(tab);
+        const routeMatches = tab.kind === "project" && pathname === hrefForWorkspaceTab(tab);
 
         return (
           <section
@@ -55,4 +59,3 @@ export function WorkspaceTabsManager({ children }: WorkspaceTabsManagerProps) {
     </>
   );
 }
-

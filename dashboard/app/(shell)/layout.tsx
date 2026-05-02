@@ -1,14 +1,27 @@
+import { ActivityBar } from "@/components/ActivityBar";
 import { Sidebar } from "@/components/Sidebar";
 import { FullScreenTerminal } from "@/components/FullScreenTerminal";
+import { ShellStatusBar } from "@/components/StatusBar";
+import { WorkspaceTabsBar } from "@/components/WorkspaceTabsBar";
+import { WorkspaceTabsManager } from "@/components/WorkspaceTabsManager";
+import { WorkspaceUrlSync } from "@/components/WorkspaceUrlSync";
 
 export default function ShellLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-[calc(100vh-1.5rem)] min-h-0">
-      <Sidebar />
-      <div className="relative flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
-        {children}
-        <FullScreenTerminal />
+    <div className="flex h-[calc(100vh-1.5rem)] min-h-0 flex-col">
+      <WorkspaceUrlSync />
+      <div className="flex min-h-0 flex-1">
+        <ActivityBar />
+        <Sidebar />
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <WorkspaceTabsBar />
+          <div className="relative min-h-0 flex-1">
+            <WorkspaceTabsManager>{children}</WorkspaceTabsManager>
+          </div>
+          <FullScreenTerminal />
+        </div>
       </div>
+      <ShellStatusBar />
     </div>
   );
 }

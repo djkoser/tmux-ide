@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import type { ProjectDetail } from "@/lib/types";
 
 interface StatusBarProps {
@@ -9,74 +9,32 @@ interface StatusBarProps {
   stale?: boolean;
 }
 
-export function StatusBar({ project, lastUpdate, stale = false }: StatusBarProps) {
-  const [now, setNow] = useState(Date.now());
-  const [flash, setFlash] = useState(false);
-  const prevUpdateRef = useRef(lastUpdate);
+function projectFromPath(pathname: string): string {
+  const match = pathname.match(/^\/project\/([^/]+)/);
+  return match ? decodeURIComponent(match[1]!) : "overview";
+}
 
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  // Flash the dot when data refreshes
-  useEffect(() => {
-    if (lastUpdate && lastUpdate !== prevUpdateRef.current) {
-      prevUpdateRef.current = lastUpdate;
-      setFlash(true);
-      const id = setTimeout(() => setFlash(false), 300);
-      return () => clearTimeout(id);
-    }
-  }, [lastUpdate]);
-
-  const doneTasks = project.tasks.filter((t) => t.status === "done").length;
-  const activeAgents = project.agents.filter((a) => a.isBusy).length;
-
-  const ago = lastUpdate ? Math.max(0, Math.floor((now - lastUpdate) / 1000)) : 0;
-
-  const time = new Date(now).toLocaleTimeString("en-US", {
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+export function ShellStatusBar() {
+  const pathname = usePathname();
+  const project = projectFromPath(pathname);
+  const version = process.env.NEXT_PUBLIC_APP_VERSION ?? "dev";
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 h-6 bg-[var(--bg-weak)] border-t flex items-center px-3 text-[11px] z-20">
-      {/* Left: session name */}
-      <span className="text-[var(--accent)] font-medium">{project.session}</span>
-
-      {/* Center: stats */}
-      <span className="mx-2 text-[var(--dim)] opacity-30">│</span>
-      <span className="text-[var(--dim)]">
-        <span style={{ color: activeAgents > 0 ? "var(--yellow)" : undefined }}>
-          {activeAgents}
-        </span>
-        /{project.agents.length} agents
-      </span>
-      <span className="mx-2 text-[var(--dim)] opacity-30">│</span>
-      <span className="text-[var(--dim)]">
-        <span style={{ color: doneTasks > 0 ? "var(--green)" : undefined }}>{doneTasks}</span>/
-        {project.tasks.length} tasks
-      </span>
-      <span className="mx-2 text-[var(--dim)] opacity-30">│</span>
-      <span className="text-[var(--dim)]">updated {ago}s ago</span>
-
+    <footer
+      data-testid="status-bar"
+      className="flex h-6 shrink-0 items-center border-t border-[var(--border-weak)] bg-[var(--bg-weak)] px-3 text-[11px] tabular-nums text-[var(--dim)]"
+    >
+      <span className="text-[var(--accent)]">{project}</span>
+      <span className="mx-2 opacity-30">│</span>
+      <span>terminal ⌘J</span>
+      <span className="mx-2 opacity-30">│</span>
+      <span>theme ⌘⇧T</span>
       <span className="flex-1" />
-
-      {/* Right: live indicator + clock */}
-      <span
-        className="transition-opacity duration-300"
-        style={{
-          color: stale ? "var(--red)" : "var(--green)",
-          opacity: flash ? 1 : 0.6,
-        }}
-      >
-        ●
-      </span>
-      <span className="text-[var(--dim)] ml-1.5">{stale ? "stale" : "live"}</span>
-      <span className="mx-2 text-[var(--dim)] opacity-30">│</span>
-      <span className="text-[var(--dim)]">{time}</span>
-    </div>
+      <span>tmux-ide {version}</span>
+    </footer>
   );
+}
+
+export function StatusBar(_props: StatusBarProps) {
+  return null;
 }
