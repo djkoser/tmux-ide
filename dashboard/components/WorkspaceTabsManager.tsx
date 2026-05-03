@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { NotificationsView } from "@/components/views/NotificationsView";
+import { SettingsView } from "@/components/views/SettingsView";
 import { useLayoutState, type WorkspaceTab } from "@/lib/useLayoutState";
 
 function hrefForWorkspaceTab(tab: WorkspaceTab): string {
@@ -43,12 +44,7 @@ export function WorkspaceTabsManager({ children }: WorkspaceTabsManagerProps) {
             {tab.kind === "notifications" ? (
               <NotificationsView />
             ) : tab.kind === "settings" ? (
-              <div className="flex h-full flex-1 flex-col">
-                <div className="flex h-7 shrink-0 items-center border-b border-[var(--border)] bg-[var(--surface)] px-4 text-[var(--accent)]">
-                  Settings
-                </div>
-                <div className="flex-1 p-4 text-[var(--dim)]">settings workspace</div>
-              </div>
+              <SettingsView />
             ) : routeMatches ? (
               children
             ) : (

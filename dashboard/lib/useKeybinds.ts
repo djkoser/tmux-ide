@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import type { Action } from "./actions";
 import { runAction } from "./actions";
+import { getEffectiveKeybind } from "./useSettings";
 
 interface UseKeybindOptions {
   allowInput?: boolean;
@@ -86,9 +87,12 @@ export function useKeybind(key: string, handler: () => void, opts: UseKeybindOpt
 }
 
 export function registerKeybindFromAction(action: Action): () => void {
-  if (typeof window === "undefined" || !action.keybind) return () => undefined;
+  if (typeof window === "undefined") return () => undefined;
 
-  const parsed = parseKeybind(action.keybind);
+  const keybind = getEffectiveKeybind(action.id, action.keybind);
+  if (!keybind || keybind === "none") return () => undefined;
+
+  const parsed = parseKeybind(keybind);
   const onKeydown = (event: KeyboardEvent) => {
     if (event.defaultPrevented) return;
     if (isEditableTarget(document.activeElement)) return;

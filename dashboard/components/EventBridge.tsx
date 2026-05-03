@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 import { API_BASE } from "@/lib/api";
+import { playSound } from "@/lib/sounds";
+import { getSettingsSnapshot } from "@/lib/useSettings";
 import { useNotifications } from "@/lib/useNotifications";
 import { useToasts, type ToastInput } from "@/lib/useToasts";
 
@@ -117,13 +119,23 @@ export function EventBridge() {
       if (!toast) return;
 
       pushToast(toast);
-      pushNotification({
-        id: stableId,
-        kind: toast.kind,
-        title: toast.title,
-        ...(toast.body ? { body: toast.body } : {}),
-        ...(toast.scope ? { scope: toast.scope } : {}),
-      });
+      if (getSettingsSnapshot().general.showNotifications) {
+        pushNotification({
+          id: stableId,
+          kind: toast.kind,
+          title: toast.title,
+          ...(toast.body ? { body: toast.body } : {}),
+          ...(toast.scope ? { scope: toast.scope } : {}),
+        });
+      }
+
+      if (payload.type === "completion" || payload.type === "mission_complete") {
+        playSound("complete");
+      } else if (payload.type === "error" || payload.type === "validation_failed") {
+        playSound("error");
+      } else if (payload.type === "stall") {
+        playSound("idle");
+      }
     }
 
     source.addEventListener("orchestrator_event", handleMessage as EventListener);

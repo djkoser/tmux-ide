@@ -47,11 +47,14 @@ export function registerCoreActions({
     }),
     registerAction({
       id: "switch-to-settings",
-      label: "Switch to settings",
-      description: "Show settings in the sidebar",
+      label: "Open settings",
+      description: "Open the Settings workspace",
       keywords: ["activity", "settings", "sidebar"],
       category: "Activity",
-      run: () => layout.setActivitySection("settings"),
+      run: () => {
+        layout.openWorkspaceTab("settings", null, "Settings");
+        layout.setActivitySection("settings");
+      },
     }),
     registerAction({
       id: "switch-to-skills",

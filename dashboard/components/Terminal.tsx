@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useTheme } from "next-themes";
 import { Terminal as XTerm, type IDisposable, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { getSettingsSnapshot, useSettings } from "@/lib/useSettings";
 import "@xterm/xterm/css/xterm.css";
 
 function readTerminalTheme(): ITheme {
@@ -75,7 +75,8 @@ export function Terminal({
 }: TerminalProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<XTerm | null>(null);
-  const { resolvedTheme } = useTheme();
+  const fitAddonRef = useRef<FitAddon | null>(null);
+  const { themeId, terminal: terminalSettings } = useSettings();
   const [state, setState] = useState<ConnectionState>("loading");
   const [message, setMessage] = useState("loading renderer");
   const [size, setSize] = useState<TerminalSize>({ cols: 80, rows: 24 });
@@ -153,19 +154,21 @@ export function Terminal({
           computed.getPropertyValue("--font-mono").trim() ||
           'ui-monospace, SFMono-Regular, "JetBrains Mono", "Menlo", monospace';
 
+        const initialSettings = getSettingsSnapshot().terminal;
+
         term = new XTerm({
           cols: 80,
           rows: 24,
-          cursorBlink: true,
+          cursorBlink: initialSettings.cursorBlink,
           cursorStyle: "block",
           cursorInactiveStyle: "outline",
           fontFamily,
-          fontSize: 13,
+          fontSize: initialSettings.fontSize,
           fontWeight: 400,
           fontWeightBold: 600,
           letterSpacing: 0,
           lineHeight: 1.2,
-          scrollback: 5000,
+          scrollback: initialSettings.scrollback,
           customGlyphs: true,
           rescaleOverlappingGlyphs: true,
           fastScrollSensitivity: 5,
@@ -179,6 +182,7 @@ export function Terminal({
         termRef.current = term;
 
         fitAddon = new FitAddon();
+        fitAddonRef.current = fitAddon;
         term.loadAddon(fitAddon);
         term.open(hostElement);
         try {
@@ -318,6 +322,7 @@ export function Terminal({
       if (transcriptRaf !== null) cancelAnimationFrame(transcriptRaf);
       transcriptRaf = null;
       fitAddon?.dispose();
+      fitAddonRef.current = null;
       webglContextLossDisposable?.dispose();
       webglAddon?.dispose();
       term?.dispose();
@@ -326,7 +331,7 @@ export function Terminal({
     };
   }, [cmd, cwd, id, onSessionExit]);
 
-  // Re-apply terminal theme whenever next-themes flips the resolved theme.
+  // Re-apply terminal theme whenever the persisted dashboard theme changes.
   // CSS vars on :root update synchronously, but xterm caches its renderer's
   // colors per cell — push the new theme AND force a full repaint so the
   // existing buffer recolors immediately.
@@ -339,7 +344,16 @@ export function Terminal({
       term.refresh(0, term.rows - 1);
     };
     requestAnimationFrame(apply);
-  }, [resolvedTheme]);
+  }, [themeId]);
+
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    term.options.fontSize = terminalSettings.fontSize;
+    term.options.scrollback = terminalSettings.scrollback;
+    term.options.cursorBlink = terminalSettings.cursorBlink;
+    requestAnimationFrame(() => fitAddonRef.current?.fit());
+  }, [terminalSettings.cursorBlink, terminalSettings.fontSize, terminalSettings.scrollback]);
 
   const dotClass =
     state === "connected"

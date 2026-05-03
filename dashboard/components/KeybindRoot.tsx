@@ -7,6 +7,7 @@ import { useActions } from "@/lib/actions";
 import { registerCoreActions } from "@/lib/registerCoreActions";
 import { registerKeybindFromAction } from "@/lib/useKeybinds";
 import { useLayoutState } from "@/lib/useLayoutState";
+import { useSettings } from "@/lib/useSettings";
 
 function projectFromPath(pathname: string): string {
   const match = pathname.match(/^\/project\/([^/]+)/);
@@ -18,29 +19,38 @@ export function KeybindRoot() {
   const currentProject = projectFromPath(pathname);
   const { toggleTerminal, setActivitySection, newTab, closeTab, openWorkspaceTab } =
     useLayoutState();
-  const { resolvedTheme, setTheme } = useTheme();
+  const { setTheme } = useTheme();
+  const { themeId, setThemeId, keybinds } = useSettings();
   const actions = useActions();
 
   useEffect(() => {
     return registerCoreActions({
       currentProject,
       layout: { toggleTerminal, setActivitySection, newTab, closeTab, openWorkspaceTab },
-      toggleTheme: () => setTheme(resolvedTheme === "dark" ? "light" : "dark"),
+      toggleTheme: () => {
+        const nextTheme = themeId === "light" ? "dark" : "light";
+        setThemeId(nextTheme);
+        setTheme(nextTheme);
+      },
     });
   }, [
     closeTab,
     currentProject,
     newTab,
     openWorkspaceTab,
-    resolvedTheme,
     setActivitySection,
     setTheme,
+    setThemeId,
+    themeId,
     toggleTerminal,
   ]);
 
   const keybindSignature = useMemo(
-    () => actions.map((action) => `${action.id}:${action.keybind ?? ""}`).join("|"),
-    [actions],
+    () =>
+      actions
+        .map((action) => `${action.id}:${keybinds[action.id] ?? action.keybind ?? ""}`)
+        .join("|"),
+    [actions, keybinds],
   );
 
   useEffect(() => {
