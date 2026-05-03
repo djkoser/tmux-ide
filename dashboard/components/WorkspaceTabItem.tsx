@@ -22,6 +22,8 @@ export function WorkspaceTabItem({ tab, active, onActivate, onClose }: Workspace
     opacity: isDragging ? 0.65 : 1,
   };
 
+  const icon = tab.kind === "settings" ? "⚙" : tab.kind === "notifications" ? "!" : "▦";
+
   return (
     <div
       ref={setNodeRef}
@@ -43,7 +45,7 @@ export function WorkspaceTabItem({ tab, active, onActivate, onClose }: Workspace
       {...attributes}
       {...listeners}
     >
-      <span className="text-[var(--dimmer)]">{tab.kind === "settings" ? "⚙" : "▦"}</span>
+      <span className="text-[var(--dimmer)]">{icon}</span>
       <span className="truncate">{tab.title}</span>
       <button
         type="button"

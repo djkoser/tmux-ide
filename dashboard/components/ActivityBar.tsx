@@ -24,6 +24,21 @@ export function ActivityBar() {
 
       <button
         type="button"
+        data-testid="activity-section-skills"
+        data-active={activitySection === "skills" ? "true" : "false"}
+        onClick={() => setActivitySection("skills")}
+        className={`flex h-10 items-center justify-center text-[15px] transition-colors ${
+          activitySection === "skills"
+            ? "text-[var(--accent)]"
+            : "text-[var(--dim)] hover:bg-[var(--surface-hover)] hover:text-[var(--fg)]"
+        }`}
+        aria-label="Skills"
+      >
+        S
+      </button>
+
+      <button
+        type="button"
         data-testid="activity-section-settings"
         data-active={activitySection === "settings" ? "true" : "false"}
         onClick={() => {

@@ -2,10 +2,11 @@
 
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
+import { NotificationsView } from "@/components/views/NotificationsView";
 import { useLayoutState, type WorkspaceTab } from "@/lib/useLayoutState";
 
 function hrefForWorkspaceTab(tab: WorkspaceTab): string {
-  if (tab.kind === "settings" || !tab.projectName) return "/";
+  if (tab.kind === "settings" || tab.kind === "notifications" || !tab.projectName) return "/";
   return `/project/${encodeURIComponent(tab.projectName)}`;
 }
 
@@ -39,7 +40,9 @@ export function WorkspaceTabsManager({ children }: WorkspaceTabsManagerProps) {
             className="absolute inset-0 min-h-0"
             style={{ display: active ? "flex" : "none" }}
           >
-            {tab.kind === "settings" ? (
+            {tab.kind === "notifications" ? (
+              <NotificationsView />
+            ) : tab.kind === "settings" ? (
               <div className="flex h-full flex-1 flex-col">
                 <div className="flex h-7 shrink-0 items-center border-b border-[var(--border)] bg-[var(--surface)] px-4 text-[var(--accent)]">
                   Settings

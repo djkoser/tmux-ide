@@ -3,15 +3,19 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { fetchSessions } from "@/lib/api";
+import { fetchSessions, fetchSkills, injectIntoProject, type SkillData } from "@/lib/api";
 import { useLayoutState } from "@/lib/useLayoutState";
+import { useToasts } from "@/lib/useToasts";
 import type { SessionOverview } from "@/lib/types";
 
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [sessions, setSessions] = useState<SessionOverview[]>([]);
+  const [skills, setSkills] = useState<SkillData[]>([]);
   const [error, setError] = useState(false);
+  const [skillsError, setSkillsError] = useState(false);
+  const { push } = useToasts();
   const {
     activitySection,
     activeWorkspaceTabId,
@@ -46,6 +50,44 @@ export function Sidebar() {
   const onOverview = pathname === "/" || pathname === "";
   const activeWorkspaceTab = workspaceTabs.find((tab) => tab.id === activeWorkspaceTabId);
   const settingsActive = activeWorkspaceTab?.kind === "settings";
+
+  useEffect(() => {
+    if (activitySection !== "skills" || !activeProject) {
+      setSkills([]);
+      setSkillsError(false);
+      return;
+    }
+
+    const projectName = activeProject;
+    let active = true;
+    async function loadSkills() {
+      try {
+        const data = await fetchSkills(projectName);
+        if (!active) return;
+        setSkills(data);
+        setSkillsError(false);
+      } catch {
+        if (active) setSkillsError(true);
+      }
+    }
+
+    void loadSkills();
+    return () => {
+      active = false;
+    };
+  }, [activeProject, activitySection]);
+
+  async function injectSkill(skill: SkillData) {
+    if (!activeProject) return;
+    const ok = await injectIntoProject(activeProject, `<load skill: ${skill.name}>`, {
+      sendEnter: false,
+    });
+    push({
+      kind: ok ? "success" : "error",
+      title: ok ? "Sent to agent" : "Failed to inject",
+      body: skill.name,
+    });
+  }
 
   return (
     <aside
@@ -87,6 +129,46 @@ export function Sidebar() {
           >
             Settings
           </button>
+        </>
+      ) : activitySection === "skills" ? (
+        <>
+          <div className="px-3 pt-3 pb-1.5 text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]">
+            skills
+          </div>
+
+          {!activeProject && (
+            <div className="px-3 py-2 text-[var(--dim)] text-[11px]">
+              open a project to load skills
+            </div>
+          )}
+
+          {activeProject && skillsError && (
+            <div className="px-3 py-2 text-[var(--red)] text-[11px]">skills unavailable</div>
+          )}
+
+          {activeProject && !skillsError && skills.length === 0 && (
+            <div className="px-3 py-2 text-[var(--dim)] text-[11px]">no skills</div>
+          )}
+
+          <nav className="flex-1 overflow-y-auto pb-2">
+            {skills.map((skill) => (
+              <button
+                key={skill.name}
+                type="button"
+                data-testid={`sidebar-skill-${skill.name}`}
+                onClick={() => void injectSkill(skill)}
+                className="block w-full border-l-2 border-transparent px-3 py-2 text-left text-[var(--fg-secondary)] transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] hover:text-[var(--fg)]"
+                title={skill.description}
+              >
+                <span className="block truncate text-[12px]">{skill.name}</span>
+                {skill.specialties[0] && (
+                  <span className="mt-1 inline-block max-w-full truncate border border-[var(--border)] px-1 text-[10px] text-[var(--cyan)]">
+                    {skill.specialties[0]}
+                  </span>
+                )}
+              </button>
+            ))}
+          </nav>
         </>
       ) : (
         <>

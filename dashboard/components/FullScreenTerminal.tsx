@@ -11,6 +11,7 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
+import { ContextBar } from "@/components/ContextBar";
 import { TerminalManager } from "@/components/TerminalManager";
 import { TerminalTabItem } from "@/components/TerminalTabItem";
 import { fetchProject } from "@/lib/api";
@@ -154,6 +155,7 @@ export function FullScreenTerminal() {
       aria-hidden={!terminalOpen}
       aria-label="Full-screen terminal"
     >
+      <ContextBar />
       <div className="flex h-8 shrink-0 items-stretch border-b border-[var(--border-weak)] bg-[var(--surface)]">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={tabIds} strategy={horizontalListSortingStrategy}>

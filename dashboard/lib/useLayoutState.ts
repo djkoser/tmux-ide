@@ -17,7 +17,7 @@ export interface TerminalTabOptions {
   cmd?: string[];
 }
 
-export type WorkspaceTabKind = "project" | "settings";
+export type WorkspaceTabKind = "project" | "settings" | "notifications";
 
 export interface WorkspaceTab {
   id: string;
@@ -26,7 +26,7 @@ export interface WorkspaceTab {
   title: string;
 }
 
-export type ActivitySection = "sessions" | "settings";
+export type ActivitySection = "sessions" | "settings" | "skills";
 
 export interface LayoutState {
   terminalOpen: boolean;
@@ -86,7 +86,7 @@ const defaults: PersistedLayoutState = {
 
 const persist = Persist.global<PersistedLayoutState>(
   "tmux-ide.layout",
-  ["v1", "v2", "v3", "v4", "v5"],
+  ["v1", "v2", "v3", "v4", "v5", "v6"],
   defaults,
   {
     // Migrating INTO v2: legacy `activeTabId` (single global) → `activeTabIdByProject` map.
@@ -126,6 +126,9 @@ const persist = Persist.global<PersistedLayoutState>(
     // Migrating INTO v5: terminal tabs may carry cwd/cmd. Existing tabs pass
     // through and normalize without paneId.
     v5: (prev: unknown) => (isRecord(prev) ? prev : defaults),
+    // Migrating INTO v6: workspace tabs add notifications and activity adds
+    // skills. Existing project/settings tabs pass through unchanged.
+    v6: (prev: unknown) => (isRecord(prev) ? prev : defaults),
   },
 );
 const listeners = new Set<() => void>();
@@ -135,11 +138,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isWorkspaceTabKind(value: unknown): value is WorkspaceTabKind {
-  return value === "project" || value === "settings";
+  return value === "project" || value === "settings" || value === "notifications";
 }
 
 function isActivitySection(value: unknown): value is ActivitySection {
-  return value === "sessions" || value === "settings";
+  return value === "sessions" || value === "settings" || value === "skills";
 }
 
 function normalizePersisted(value: unknown): PersistedLayoutState {
@@ -300,6 +303,7 @@ function workspaceTabTitle(
 ): string {
   if (title) return title;
   if (kind === "settings") return "Settings";
+  if (kind === "notifications") return "Notifications";
   return projectName || "Project";
 }
 

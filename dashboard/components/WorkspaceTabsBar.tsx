@@ -15,8 +15,14 @@ import { WorkspaceTabItem } from "@/components/WorkspaceTabItem";
 import { useLayoutState, type WorkspaceTab } from "@/lib/useLayoutState";
 
 function hrefForWorkspaceTab(tab: WorkspaceTab | null | undefined): string {
-  if (!tab || tab.kind === "settings" || !tab.projectName) return "/";
+  if (!tab || tab.kind === "settings" || tab.kind === "notifications" || !tab.projectName) {
+    return "/";
+  }
   return `/project/${encodeURIComponent(tab.projectName)}`;
+}
+
+function activityForTab(tab: WorkspaceTab | null | undefined): "sessions" | "settings" {
+  return tab?.kind === "settings" ? "settings" : "sessions";
 }
 
 export function WorkspaceTabsBar() {
@@ -37,7 +43,7 @@ export function WorkspaceTabsBar() {
     const tab = workspaceTabs.find((candidate) => candidate.id === id);
     if (!tab) return;
     setActiveWorkspaceTab(id);
-    setActivitySection(tab.kind === "settings" ? "settings" : "sessions");
+    setActivitySection(activityForTab(tab));
     router.push(hrefForWorkspaceTab(tab));
   }
 
@@ -51,7 +57,7 @@ export function WorkspaceTabsBar() {
     closeWorkspaceTab(id);
 
     if (closingActive) {
-      if (nextTab) setActivitySection(nextTab.kind === "settings" ? "settings" : "sessions");
+      if (nextTab) setActivitySection(activityForTab(nextTab));
       router.push(hrefForWorkspaceTab(nextTab));
     }
   }

@@ -8,7 +8,7 @@ interface RegisterCoreActionsInput {
   currentProject: string;
   layout: Pick<
     LayoutActions,
-    "toggleTerminal" | "setActivitySection" | "newTab" | "closeTab"
+    "toggleTerminal" | "setActivitySection" | "newTab" | "closeTab" | "openWorkspaceTab"
   >;
   toggleTheme(): void;
 }
@@ -52,6 +52,26 @@ export function registerCoreActions({
       keywords: ["activity", "settings", "sidebar"],
       category: "Activity",
       run: () => layout.setActivitySection("settings"),
+    }),
+    registerAction({
+      id: "switch-to-skills",
+      label: "Switch to skills",
+      description: "Show project skills in the sidebar",
+      keywords: ["activity", "skills", "sidebar"],
+      category: "Activity",
+      run: () => layout.setActivitySection("skills"),
+    }),
+    registerAction({
+      id: "open-notifications",
+      label: "Open notifications",
+      description: "Show event history notifications",
+      keywords: ["notifications", "events", "history"],
+      keybind: "Mod+Shift+n",
+      category: "View",
+      run: () => {
+        layout.openWorkspaceTab("notifications", null, "Notifications");
+        layout.setActivitySection("sessions");
+      },
     }),
     registerAction({
       id: "toggle-theme",

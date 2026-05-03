@@ -16,20 +16,22 @@ function projectFromPath(pathname: string): string {
 export function KeybindRoot() {
   const pathname = usePathname();
   const currentProject = projectFromPath(pathname);
-  const { toggleTerminal, setActivitySection, newTab, closeTab } = useLayoutState();
+  const { toggleTerminal, setActivitySection, newTab, closeTab, openWorkspaceTab } =
+    useLayoutState();
   const { resolvedTheme, setTheme } = useTheme();
   const actions = useActions();
 
   useEffect(() => {
     return registerCoreActions({
       currentProject,
-      layout: { toggleTerminal, setActivitySection, newTab, closeTab },
+      layout: { toggleTerminal, setActivitySection, newTab, closeTab, openWorkspaceTab },
       toggleTheme: () => setTheme(resolvedTheme === "dark" ? "light" : "dark"),
     });
   }, [
     closeTab,
     currentProject,
     newTab,
+    openWorkspaceTab,
     resolvedTheme,
     setActivitySection,
     setTheme,
