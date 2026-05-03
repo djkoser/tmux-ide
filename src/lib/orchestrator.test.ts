@@ -32,6 +32,7 @@ import {
   dispatchPlanning,
   buildPlanningPrompt,
   handleMissionComplete,
+  getHealth,
 } from "./orchestrator.ts";
 import { readEvents } from "./event-log.ts";
 import { loadResearchState, saveResearchState } from "./research.ts";
@@ -512,6 +513,25 @@ describe("isIdleForDispatch", () => {
 });
 
 describe("claim locking", () => {
+  it("concurrent ticks against the same idle pane dispatch only once", () => {
+    const task = makeTask();
+    saveTask(tmpDir, task);
+
+    const pane = makePane({ id: "%1", title: "Agent 1", currentCommand: "zsh" });
+    const panes: PaneInfo[] = [pane];
+    mockPanes = panes;
+
+    const config = makeOrchestratorConfig(tmpDir, { masterPane: null });
+    const state = makeOrchestratorState();
+
+    dispatch(config, state, [task], panes);
+    dispatch(config, state, [makeTask()], panes);
+
+    const sendCalls = tmuxCalls.filter((c) => c.args.includes("send-keys"));
+    expect(sendCalls.length).toBe(2);
+    expect(loadTask(tmpDir, "001")?.status).toBe("in-progress");
+  });
+
   it("prevents double-dispatch of same task across two calls", () => {
     const task = makeTask();
     saveTask(tmpDir, task);
@@ -574,6 +594,142 @@ describe("claim locking", () => {
 
     // Claim should be released so the task can be retried
     expect(!state.claimedTasks.has("001")).toBeTruthy();
+  });
+});
+
+describe("orchestrator hardening", () => {
+  it("completion processed twice emits one completion and one credit", () => {
+    const config = makeOrchestratorConfig(tmpDir);
+    const state = makeOrchestratorState({
+      previousTasks: new Map([["001", "in-progress"]]),
+      claimedTasks: new Set(["001"]),
+      taskClaimTimes: new Map([["001", Date.now() - 1000]]),
+    });
+
+    const task = makeTask({
+      status: "done",
+      assignee: "Agent 1",
+    }) as ReturnType<typeof makeTask> & { dispatchId?: string };
+    task.dispatchId = "001:test";
+
+    const panes: PaneInfo[] = [makePane({ id: "%0", title: "Master" })];
+
+    detectCompletions(config, state, [task], panes);
+    detectCompletions(config, state, [task], panes);
+
+    const completions = readEvents(tmpDir).filter((event) => event.type === "completion");
+    expect(completions.length).toBe(1);
+    expect(state.totalCompleted).toBe(1);
+  });
+
+  it("dispatching to a vanished pane fails gracefully without mutating the task", () => {
+    const task = makeTask();
+    saveTask(tmpDir, task);
+
+    const pane = makePane({ id: "%1", title: "Agent 1", currentCommand: "zsh" });
+    mockPanes = [];
+
+    const config = makeOrchestratorConfig(tmpDir, { masterPane: null });
+    const state = makeOrchestratorState();
+
+    dispatch(config, state, [task], [pane]);
+
+    const loaded = loadTask(tmpDir, "001")!;
+    expect(loaded.status).toBe("todo");
+    expect(loaded.assignee).toBe(null);
+    expect(readEvents(tmpDir).some((event) => event.type === "task.failed")).toBeTruthy();
+  });
+
+  it("stall recovery nudges once within cooldown", () => {
+    const pane = makePane({ id: "%1", index: 0, title: "Agent 1" });
+    const task = makeTask({ status: "in-progress", assignee: agentIdentifier(pane) });
+    const config = makeOrchestratorConfig(tmpDir, { stallTimeout: 1000 });
+    const state = makeOrchestratorState({
+      lastActivity: new Map([["%1", Date.now() - 5000]]),
+    });
+
+    detectStalls(config, state, [task], [pane]);
+    const firstCount = tmuxCalls.filter((c) => c.args.includes("send-keys")).length;
+    detectStalls(config, state, [task], [pane]);
+    const secondCount = tmuxCalls.filter((c) => c.args.includes("send-keys")).length;
+
+    expect(firstCount).toBeGreaterThan(0);
+    expect(secondCount).toBe(firstCount);
+    expect(readEvents(tmpDir).filter((event) => event.type === "agent.stalled").length).toBe(1);
+  });
+
+  it("reconciliation marks an orphan in-progress task for retry", () => {
+    const pane = makePane({ id: "%1", title: "Agent 1" });
+    const task = makeTask({ status: "in-progress", assignee: agentIdentifier(pane) });
+    saveTask(tmpDir, task);
+
+    const config = makeOrchestratorConfig(tmpDir);
+    const state = makeOrchestratorState();
+
+    reconcile(config, state, [task], [pane]);
+
+    const loaded = loadTask(tmpDir, "001")!;
+    expect(loaded.status).toBe("todo");
+    expect(loaded.retryCount).toBe(1);
+    expect(
+      readEvents(tmpDir).some((event) => event.type === "orchestrator.reconciled"),
+    ).toBeTruthy();
+  });
+
+  it("dry-run emits dispatch decisions without writes or tmux send-keys", () => {
+    const task = makeTask();
+    saveTask(tmpDir, task);
+
+    const pane = makePane({ id: "%1", title: "Agent 1", currentCommand: "zsh" });
+    const panes: PaneInfo[] = [pane];
+    mockPanes = panes;
+
+    const config = makeOrchestratorConfig(tmpDir, { masterPane: null, dryRun: true });
+    const state = makeOrchestratorState();
+
+    dispatch(config, state, [task], panes);
+
+    const loaded = loadTask(tmpDir, "001")!;
+    expect(loaded.status).toBe("todo");
+    expect(loaded.assignee).toBe(null);
+    expect(tmuxCalls.filter((c) => c.args.includes("send-keys")).length).toBe(0);
+    expect(readEvents(tmpDir).some((event) => event.type === "task.dispatched")).toBeTruthy();
+  });
+
+  it("reports health counters from orchestrator state", () => {
+    const state = makeOrchestratorState({
+      ticking: true,
+      lastTickMs: 12,
+      inflightDispatches: new Map([
+        [
+          "001",
+          {
+            taskId: "001",
+            dispatchId: "001:test",
+            agentPane: "%1",
+            agentName: "Agent 1",
+            at: "2026-01-01T00:00:00Z",
+          },
+        ],
+      ]),
+      idleAgents: 2,
+      queuedDispatches: 3,
+      totalDispatched: 4,
+      totalCompleted: 1,
+      totalFailed: 1,
+    });
+
+    expect(getHealth(state)).toEqual({
+      ticking: true,
+      lastTickMs: 12,
+      inflight: 1,
+      idleAgents: 2,
+      queuedDispatches: 3,
+      lastError: null,
+      totalDispatched: 4,
+      totalCompleted: 1,
+      totalFailed: 1,
+    });
   });
 });
 

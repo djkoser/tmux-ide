@@ -22,6 +22,7 @@
  * @module orchestrator
  */
 import { execSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import {
   existsSync,
   readFileSync,
@@ -40,6 +41,7 @@ import {
   saveMission,
   loadGoal,
   loadGoals,
+  loadTask,
   loadTasks,
   saveTask,
   saveGoal,
@@ -77,6 +79,10 @@ import {
   type ResearchState,
 } from "./research.ts";
 
+// TODO[Agent 2 K2]: .tasks/dispatch/*.md and orchestrator-state.json are
+// still written directly in this module; route those through task-store or
+// a dedicated persistence layer so all .tasks writes share cache invalidation.
+
 export interface OrchestratorConfig {
   session: string;
   dir: string;
@@ -91,6 +97,7 @@ export interface OrchestratorConfig {
   paneSpecialties: Map<string, string[]>;
   services: Record<string, { command: string; port?: number; healthcheck?: string }>;
   research?: ResearchConfigShape;
+  dryRun?: boolean;
 }
 
 export interface OrchestratorState {
@@ -98,6 +105,129 @@ export interface OrchestratorState {
   previousTasks: Map<string, string>;
   claimedTasks: Set<string>;
   taskClaimTimes: Map<string, number>;
+  inflightDispatches: Map<string, DispatchRecord>;
+  completedDispatches: Set<string>;
+  stallNudges: Map<string, number>;
+  totalDispatched: number;
+  totalCompleted: number;
+  totalFailed: number;
+  lastTickMs: number;
+  ticking: boolean;
+  idleAgents: number;
+  queuedDispatches: number;
+  lastError: { message: string; at: string } | null;
+  lastReconcileMs: number;
+}
+
+export interface DispatchRecord {
+  taskId: string;
+  dispatchId: string;
+  agentPane: string;
+  agentName: string;
+  at: string;
+}
+
+export interface OrchestratorHealth {
+  ticking: boolean;
+  lastTickMs: number;
+  inflight: number;
+  idleAgents: number;
+  queuedDispatches: number;
+  lastError: { message: string; at: string } | null;
+  totalDispatched: number;
+  totalCompleted: number;
+  totalFailed: number;
+}
+
+type DispatchTask = Task & {
+  dispatchId?: string | null;
+  dispatchAt?: string | null;
+  dispatchAgentPane?: string | null;
+  completedDispatchId?: string | null;
+};
+
+const STALL_NUDGE_COOLDOWN_MS = 30_000;
+const RECONCILE_INTERVAL_MS = 60_000;
+
+const healthRegistry = new Map<string, () => OrchestratorHealth>();
+
+function taskDispatchId(task: Task): string | null {
+  return (task as DispatchTask).dispatchId ?? null;
+}
+
+function taskCompletedDispatchId(task: Task): string | null {
+  return (task as DispatchTask).completedDispatchId ?? null;
+}
+
+function setTaskDispatch(task: Task, record: DispatchRecord): void {
+  const dispatchTask = task as DispatchTask;
+  dispatchTask.dispatchId = record.dispatchId;
+  dispatchTask.dispatchAt = record.at;
+  dispatchTask.dispatchAgentPane = record.agentPane;
+}
+
+function clearTaskDispatch(task: Task): void {
+  const dispatchTask = task as DispatchTask;
+  dispatchTask.dispatchId = null;
+  dispatchTask.dispatchAt = null;
+  dispatchTask.dispatchAgentPane = null;
+}
+
+function makeDispatchId(taskId: string): string {
+  return `${taskId}:${Date.now()}:${randomUUID()}`;
+}
+
+export function getHealth(state: OrchestratorState): OrchestratorHealth {
+  return {
+    ticking: state.ticking,
+    lastTickMs: state.lastTickMs,
+    inflight: state.inflightDispatches.size,
+    idleAgents: state.idleAgents,
+    queuedDispatches: state.queuedDispatches,
+    lastError: state.lastError,
+    totalDispatched: state.totalDispatched,
+    totalCompleted: state.totalCompleted,
+    totalFailed: state.totalFailed,
+  };
+}
+
+export function getOrchestratorHealth(session: string): OrchestratorHealth | null {
+  return healthRegistry.get(session)?.() ?? null;
+}
+
+function emitTaskEvent(
+  dir: string,
+  type:
+    | "task.dispatched"
+    | "task.claimed"
+    | "task.completed"
+    | "task.failed"
+    | "task.retried"
+    | "agent.stalled"
+    | "agent.recovered",
+  input: {
+    taskId: string;
+    agentPane?: string | null;
+    agent?: string | null;
+    dispatchId?: string | null;
+    reason?: string;
+    details?: Record<string, unknown>;
+    message: string;
+  },
+): void {
+  const at = new Date().toISOString();
+  appendEvent(dir, {
+    timestamp: at,
+    type,
+    taskId: input.taskId,
+    agent: input.agent ?? undefined,
+    agentPane: input.agentPane ?? undefined,
+    dispatchId: input.dispatchId ?? undefined,
+    at,
+    reason: input.reason,
+    ...(input.details ?? {}),
+    message: input.message,
+  });
 }
 
 export function runHook(command: string, cwd: string): { ok: true } | { ok: false; error: string } {
@@ -857,6 +987,119 @@ export function handleMissionComplete(
   });
 }
 
+function isRetryEligible(task: Task, now: number): boolean {
+  if (!task.nextRetryAt || task.retryCount >= (task.maxRetries ?? 5)) return false;
+  const retryTime = new Date(task.nextRetryAt).getTime();
+  return retryTime <= now;
+}
+
+function claimTaskForDispatch(
+  config: OrchestratorConfig,
+  state: OrchestratorState,
+  candidate: Task,
+  agent: PaneInfo,
+  dispatchId: string,
+): { task: Task; record: DispatchRecord } | null {
+  if (state.claimedTasks.has(candidate.id)) return null;
+
+  if (config.dryRun) {
+    const nowMs = Date.now();
+    if (candidate.status !== "todo" && !isRetryEligible(candidate, nowMs)) return null;
+    const agentName = agentIdentifier(agent);
+    const at = new Date(nowMs).toISOString();
+    const record: DispatchRecord = {
+      taskId: candidate.id,
+      dispatchId,
+      agentPane: agent.id,
+      agentName,
+      at,
+    };
+    const dryTask: Task = {
+      ...candidate,
+      status: "in-progress",
+      assignee: agentName,
+      nextRetryAt: null,
+      updated: at,
+    };
+    setTaskDispatch(dryTask, record);
+    emitTaskEvent(config.dir, "task.claimed", {
+      taskId: dryTask.id,
+      agentPane: agent.id,
+      agent: agentName,
+      dispatchId,
+      message: `Dry-run claim for "${dryTask.title}" by ${agentName}`,
+    });
+    return { task: dryTask, record };
+  }
+
+  const latest = loadTask(config.dir, candidate.id);
+  if (!latest) return null;
+  const nowMs = Date.now();
+  if (latest.status !== "todo" && !isRetryEligible(latest, nowMs)) return null;
+  if (state.claimedTasks.has(latest.id)) return null;
+
+  const agentName = agentIdentifier(agent);
+  const at = new Date(nowMs).toISOString();
+  const record: DispatchRecord = {
+    taskId: latest.id,
+    dispatchId,
+    agentPane: agent.id,
+    agentName,
+    at,
+  };
+
+  latest.status = "in-progress";
+  latest.assignee = agentName;
+  latest.nextRetryAt = null;
+  latest.updated = at;
+  setTaskDispatch(latest, record);
+
+  saveTask(config.dir, latest);
+  state.claimedTasks.add(latest.id);
+  state.inflightDispatches.set(latest.id, record);
+  state.taskClaimTimes.set(latest.id, nowMs);
+
+  emitTaskEvent(config.dir, "task.claimed", {
+    taskId: latest.id,
+    agentPane: agent.id,
+    agent: agentName,
+    dispatchId,
+    message: config.dryRun
+      ? `Dry-run claim for "${latest.title}" by ${agentName}`
+      : `Claimed "${latest.title}" for ${agentName}`,
+  });
+
+  return { task: latest, record };
+}
+
+function rollbackDispatchClaim(
+  config: OrchestratorConfig,
+  state: OrchestratorState,
+  task: Task,
+  dispatchId: string,
+  reason: string,
+): void {
+  if (!config.dryRun) {
+    const latest = loadTask(config.dir, task.id) ?? task;
+    if (latest.status === "in-progress" && latest.id === task.id) {
+      latest.status = "todo";
+      latest.assignee = null;
+      latest.updated = new Date().toISOString();
+      clearTaskDispatch(latest);
+      saveTask(config.dir, latest);
+    }
+  }
+  state.claimedTasks.delete(task.id);
+  state.inflightDispatches.delete(task.id);
+  state.taskClaimTimes.delete(task.id);
+  emitTaskEvent(config.dir, "task.failed", {
+    taskId: task.id,
+    dispatchId,
+    reason,
+    message: `Dispatch for "${task.title}" failed: ${reason}`,
+  });
+}
+
 export function dispatch(
   config: OrchestratorConfig,
   state: OrchestratorState,
@@ -891,6 +1134,7 @@ export function dispatch(
     if (hasActiveTask) return false;
     return true;
   });
+  state.idleAgents = idleAgents.length;
 
   // Concurrency control: don't exceed max concurrent agents
   const maxConcurrent = config.maxConcurrentAgents ?? 10;
@@ -935,6 +1179,7 @@ export function dispatch(
       return false;
     })
     .sort((a, b) => a.priority - b.priority);
+  state.queuedDispatches = todoTasks.length;
 
   const assignedAgents = new Set<string>();
   let dispatched = 0;
@@ -943,89 +1188,89 @@ export function dispatch(
     const agent = findBestAgent(config, idleAgents, task, assignedAgents);
     if (!agent) continue; // no suitable agent — skip (specialist task waits)
 
+    const dispatchId = makeDispatchId(task.id);
+
     // Verify the target pane still exists before dispatch
     const currentPanes = listSessionPanes(config.session);
     if (!currentPanes.find((p) => p.id === agent.id)) {
-      // Agent pane vanished — skip
-      continue;
-    }
-
-    const agentName = agentIdentifier(agent);
-
-    // Persist task as in-progress FIRST — prevents double-dispatch on crash
-    task.status = "in-progress";
-    task.assignee = agentName;
-    task.nextRetryAt = null; // Clear retry schedule on dispatch
-    task.updated = new Date().toISOString();
-    saveTask(config.dir, task);
-
-    // Claim lock: prevent double-dispatch across poll ticks
-    state.claimedTasks.add(task.id);
-
-    // Run before_run hook in project directory — abort dispatch for this task on failure
-    if (config.beforeRun) {
-      const result = runHook(config.beforeRun, config.dir);
-      if (!result.ok) {
-        task.status = "todo";
-        task.assignee = null;
-        task.updated = new Date().toISOString();
-        saveTask(config.dir, task);
-        state.claimedTasks.delete(task.id);
-        continue;
-      }
-    }
-
-    // Record claim time for cost tracking
-    state.taskClaimTimes.set(task.id, Date.now());
-
-    // Write the full prompt to a dispatch file and send a short command
-    // telling the agent to read it. This avoids the paste preview problem
-    // entirely — short commands (<200 chars) never trigger it.
-    const prompt = buildTaskPrompt(config.dir, task, config);
-    const dispatchDir = join(config.dir, ".tasks", "dispatch");
-    if (!existsSync(dispatchDir)) mkdirSync(dispatchDir, { recursive: true });
-    // Validate task ID to prevent path traversal
-    if (!/^\d{3,}$/.test(task.id)) {
-      task.status = "todo";
-      task.assignee = null;
-      task.updated = new Date().toISOString();
-      saveTask(config.dir, task);
-      state.claimedTasks.delete(task.id);
-      continue;
-    }
-    const dispatchFile = join(dispatchDir, `${task.id}.md`);
-    writeFileSync(dispatchFile, prompt);
-
-    const shortCmd = `tmux-ide dispatch ${task.id}`;
-    const sent = sendCommand(config.session, agent.id, shortCmd);
-
-    if (!sent) {
-      // Roll back: reset task to todo, remove claim
-      task.status = "todo";
-      task.assignee = null;
-      task.updated = new Date().toISOString();
-      saveTask(config.dir, task);
-      state.claimedTasks.delete(task.id);
-      state.taskClaimTimes.delete(task.id);
-
-      appendEvent(config.dir, {
-        timestamp: new Date().toISOString(),
-        type: "error",
+      emitTaskEvent(config.dir, "task.failed", {
         taskId: task.id,
-        agent: agent.title,
-        message: `Failed to send command to ${agent.title} for task "${task.title}" — rolled back`,
+        agentPane: agent.id,
+        agent: agentIdentifier(agent),
+        dispatchId,
+        reason: "pane vanished before dispatch",
+        message: `Skipped dispatch for "${task.title}" because pane ${agent.id} no longer exists`,
       });
       continue;
     }
 
-    // Log dispatch event
+    const claimed = claimTaskForDispatch(config, state, task, agent, dispatchId);
+    if (!claimed) continue;
+    const { task: claimedTask, record } = claimed;
+
+    // Run before_run hook in project directory — abort dispatch for this task on failure
+    if (config.beforeRun && !config.dryRun) {
+      const result = runHook(config.beforeRun, config.dir);
+      if (!result.ok) {
+        rollbackDispatchClaim(config, state, claimedTask, dispatchId, result.error);
+        continue;
+      }
+    }
+
+    // Write the full prompt to a dispatch file and send a short command
+    // telling the agent to read it. This avoids the paste preview problem
+    // entirely — short commands (<200 chars) never trigger it.
+    const prompt = buildTaskPrompt(config.dir, claimedTask, config);
+    const dispatchDir = join(config.dir, ".tasks", "dispatch");
+    if (!config.dryRun && !existsSync(dispatchDir)) mkdirSync(dispatchDir, { recursive: true });
+    // Validate task ID to prevent path traversal
+    if (!/^\d{3,}$/.test(claimedTask.id)) {
+      rollbackDispatchClaim(config, state, claimedTask, dispatchId, "invalid task id");
+      continue;
+    }
+    const dispatchFile = join(dispatchDir, `${claimedTask.id}.md`);
+    if (!config.dryRun) writeFileSync(dispatchFile, prompt);
+
+    const shortCmd = `tmux-ide dispatch ${claimedTask.id}`;
+    const sent = config.dryRun ? true : sendCommand(config.session, agent.id, shortCmd);
+
+    if (!sent) {
+      rollbackDispatchClaim(config, state, claimedTask, dispatchId, "tmux send failed");
+
+      appendEvent(config.dir, {
+        timestamp: new Date().toISOString(),
+        type: "error",
+        taskId: claimedTask.id,
+        agent: agent.title,
+        dispatchId,
+        message: `Failed to send command to ${agent.title} for task "${claimedTask.title}" — rolled back`,
+      });
+      continue;
+    }
+
+    emitTaskEvent(config.dir, "task.dispatched", {
+      taskId: claimedTask.id,
+      agentPane: record.agentPane,
+      agent: record.agentName,
+      dispatchId,
+      details: { dryRun: config.dryRun === true },
+      message: config.dryRun
+        ? `Dry-run dispatch "${claimedTask.title}" to ${agent.title}`
+        : `Dispatched "${claimedTask.title}" to ${agent.title}`,
+    });
+
     appendEvent(config.dir, {
       timestamp: new Date().toISOString(),
       type: "dispatch",
-      taskId: task.id,
+      taskId: claimedTask.id,
       agent: agent.title,
-      message: `Dispatched "${task.title}" to ${agent.title}`,
+      dispatchId,
+      message: config.dryRun
+        ? `Dry-run dispatch "${claimedTask.title}" to ${agent.title}`
+        : `Dispatched "${claimedTask.title}" to ${agent.title}`,
     });
+
+    state.totalDispatched++;
 
     // Track agent assignment to prevent double-assignment
     assignedAgents.add(agent.id);
@@ -1239,6 +1484,9 @@ export function detectStalls(
     const elapsed = now - lastSeen;
 
     if (elapsed > config.stallTimeout) {
+      const lastNudge = state.stallNudges.get(task.id) ?? 0;
+      if (now - lastNudge < STALL_NUDGE_COOLDOWN_MS) continue;
+      const dispatchId = taskDispatchId(task) ?? taskCompletedDispatchId(task);
       sendCommand(
         config.session,
         agentPane.id,
@@ -1246,11 +1494,22 @@ export function detectStalls(
           `If done, run: tmux-ide task done ${task.id} --proof "describe what you did". ` +
           `If stuck, run: tmux-ide task update ${task.id} --status review`,
       );
+      state.stallNudges.set(task.id, now);
+      emitTaskEvent(config.dir, "agent.stalled", {
+        taskId: task.id,
+        agentPane: agentPane.id,
+        agent: task.assignee,
+        dispatchId,
+        details: { elapsedMs: elapsed },
+        message: `Stall detected: "${task.title}" (${Math.floor(elapsed / 60000)}m)`,
+      });
       appendEvent(config.dir, {
         timestamp: new Date().toISOString(),
         type: "stall",
         taskId: task.id,
         agent: task.assignee!,
+        dispatchId: dispatchId ?? undefined,
+        agentPane: agentPane.id,
         message: `Stall detected: "${task.title}" (${Math.floor(elapsed / 60000)}m)`,
       });
       state.lastActivity.set(agentPane.id, now);
@@ -1270,6 +1529,10 @@ export function detectCompletions(
 
     // Task was explicitly marked as review while in-progress — treat as failure, schedule retry
     if (prev === "in-progress" && task.status === "review" && task.lastError) {
+      const dispatchId = taskDispatchId(task);
+      const retryKey = `${task.id}:retry:${dispatchId ?? "legacy"}:${task.retryCount}`;
+      if (state.completedDispatches.has(retryKey)) continue;
+      state.completedDispatches.add(retryKey);
       state.taskClaimTimes.delete(task.id);
       const retried = scheduleRetry(config.dir, state, task, task.lastError);
 
@@ -1294,6 +1557,22 @@ export function detectCompletions(
     }
 
     if (prev === "in-progress" && task.status === "done") {
+      const dispatchId = taskDispatchId(task) ?? taskCompletedDispatchId(task);
+      const inflight = state.inflightDispatches.get(task.id);
+      if (inflight && dispatchId && inflight.dispatchId !== dispatchId) {
+        appendEvent(config.dir, {
+          timestamp: new Date().toISOString(),
+          type: "error",
+          taskId: task.id,
+          dispatchId,
+          message: `Ignored stale completion for "${task.title}" from dispatch ${dispatchId}`,
+        });
+        continue;
+      }
+      const completionKey = `${task.id}:${dispatchId ?? "legacy"}`;
+      if (state.completedDispatches.has(completionKey)) continue;
+      state.completedDispatches.add(completionKey);
+
       // Record elapsed time for cost tracking
       const claimTime = state.taskClaimTimes.get(task.id);
       const elapsedMs = claimTime ? Date.now() - claimTime : undefined;
@@ -1304,12 +1583,33 @@ export function detectCompletions(
 
       // Clear claim lock
       state.claimedTasks.delete(task.id);
+      state.inflightDispatches.delete(task.id);
+      state.stallNudges.delete(task.id);
+      state.totalCompleted++;
+      (task as DispatchTask).completedDispatchId = dispatchId;
+      clearTaskDispatch(task);
+      const latest = loadTask(config.dir, task.id);
+      if (latest?.status === "done") {
+        (latest as DispatchTask).completedDispatchId = dispatchId;
+        clearTaskDispatch(latest);
+        saveTask(config.dir, latest);
+      }
+
+      emitTaskEvent(config.dir, "task.completed", {
+        taskId: task.id,
+        agentPane: inflight?.agentPane ?? null,
+        agent: task.assignee,
+        dispatchId,
+        details: { durationMs: elapsedMs },
+        message: `Completed "${task.title}" by ${task.assignee ?? "unknown"}${task.salientSummary ? ` — ${task.salientSummary}` : ""}`,
+      });
 
       appendEvent(config.dir, {
         timestamp: new Date().toISOString(),
         type: "completion",
         taskId: task.id,
         agent: task.assignee ?? undefined,
+        dispatchId: dispatchId ?? undefined,
         durationMs: elapsedMs,
         message: `Completed "${task.title}" by ${task.assignee ?? "unknown"}${task.salientSummary ? ` — ${task.salientSummary}` : ""}`,
       } as OrchestratorEvent & { durationMs?: number });
@@ -1422,6 +1722,7 @@ export function scheduleRetry(
   reason: string,
 ): boolean {
   const maxRetries = task.maxRetries ?? 5;
+  const dispatchId = taskDispatchId(task);
 
   if (task.retryCount >= maxRetries) {
     // Max retries exceeded — mark for review
@@ -1429,13 +1730,27 @@ export function scheduleRetry(
     task.lastError = reason;
     task.assignee = null;
     task.updated = new Date().toISOString();
+    clearTaskDispatch(task);
     saveTask(dir, task);
     state.claimedTasks.delete(task.id);
+    state.inflightDispatches.delete(task.id);
+    state.taskClaimTimes.delete(task.id);
+    state.stallNudges.delete(task.id);
+    state.totalFailed++;
+
+    emitTaskEvent(dir, "task.failed", {
+      taskId: task.id,
+      dispatchId,
+      reason,
+      details: { maxRetries },
+      message: `Max retries (${maxRetries}) exceeded for "${task.title}": ${reason}`,
+    });
 
     appendEvent(dir, {
       timestamp: new Date().toISOString(),
       type: "error",
       taskId: task.id,
+      dispatchId: dispatchId ?? undefined,
       message: `Max retries (${maxRetries}) exceeded for "${task.title}": ${reason}`,
     });
 
@@ -1452,13 +1767,26 @@ export function scheduleRetry(
   task.status = "todo";
   task.assignee = null;
   task.updated = new Date().toISOString();
+  clearTaskDispatch(task);
   saveTask(dir, task);
   state.claimedTasks.delete(task.id);
+  state.inflightDispatches.delete(task.id);
+  state.taskClaimTimes.delete(task.id);
+  state.stallNudges.delete(task.id);
+
+  emitTaskEvent(dir, "task.retried", {
+    taskId: task.id,
+    dispatchId,
+    reason,
+    details: { attempt: task.retryCount, maxRetries, nextRetryAt, backoffMs },
+    message: `Retry ${task.retryCount}/${maxRetries} scheduled for "${task.title}" in ${backoffMs / 1000}s: ${reason}`,
+  });
 
   appendEvent(dir, {
     timestamp: new Date().toISOString(),
     type: "retry",
     taskId: task.id,
+    dispatchId: dispatchId ?? undefined,
     message: `Retry ${task.retryCount}/${maxRetries} scheduled for "${task.title}" in ${backoffMs / 1000}s: ${reason}`,
   });
 
@@ -1472,8 +1800,62 @@ export function reconcile(
   panes: PaneInfo[],
 ): void {
   const agentIds = new Set(panes.map((p) => agentIdentifier(p)));
+  const taskIds = new Set(tasks.map((task) => task.id));
+  let orphans = 0;
+  let dropped = 0;
+
+  for (const [taskId] of state.inflightDispatches) {
+    if (!taskIds.has(taskId)) {
+      state.inflightDispatches.delete(taskId);
+      state.claimedTasks.delete(taskId);
+      state.taskClaimTimes.delete(taskId);
+      state.stallNudges.delete(taskId);
+      dropped++;
+    }
+  }
 
   for (const task of tasks.filter((t) => t.status === "in-progress" && t.assignee)) {
+    const dispatchId = taskDispatchId(task);
+    const inflight = state.inflightDispatches.get(task.id);
+
+    if (!dispatchId) {
+      orphans++;
+      const agent = task.assignee;
+      const agentMissing = agent ? !agentIds.has(agent) : false;
+      const reason = agentMissing
+        ? `Agent "${agent}" vanished (pane closed or crashed); task also lacked dispatchId`
+        : `Task "${task.title}" is in-progress without dispatchId`;
+      scheduleRetry(config.dir, state, task, reason);
+      appendEvent(config.dir, {
+        timestamp: new Date().toISOString(),
+        type: "reconcile",
+        taskId: task.id,
+        agent: agent ?? undefined,
+        message: agentMissing
+          ? `Agent "${agent}" vanished, scheduled retry for "${task.title}"`
+          : `Orphaned task "${task.title}" missing dispatchId, scheduled retry`,
+      });
+      continue;
+    }
+
+    if (!inflight) {
+      const assignee = task.assignee;
+      if (!assignee) continue;
+      const pane = panes.find((p) => agentIdentifier(p) === assignee);
+      if (pane) {
+        state.inflightDispatches.set(task.id, {
+          taskId: task.id,
+          dispatchId,
+          agentPane: pane.id,
+          agentName: assignee,
+          at: (task as DispatchTask).dispatchAt ?? task.updated,
+        });
+        state.claimedTasks.add(task.id);
+      } else {
+        orphans++;
+      }
+    }
+
     // Check if the assigned agent's pane still exists
     if (!agentIds.has(task.assignee!)) {
       const agent = task.assignee!;
@@ -1487,9 +1869,22 @@ export function reconcile(
         type: "reconcile",
         taskId: task.id,
         agent,
+        dispatchId,
         message: `Agent "${agent}" vanished, scheduled retry for "${task.title}"`,
       });
     }
+  }
+
+  if (orphans > 0 || dropped > 0) {
+    const at = new Date().toISOString();
+    appendEvent(config.dir, {
+      timestamp: at,
+      type: "orchestrator.reconciled",
+      at,
+      orphans,
+      dropped,
+      message: `Orchestrator reconciled drift: ${orphans} orphan(s), ${dropped} dropped dispatch(es)`,
+    });
   }
 }
 
@@ -1499,6 +1894,9 @@ interface PersistedState {
   claimedTasks: string[];
   taskClaimTimes: Record<string, number>;
   lastActivity?: Record<string, number>;
+  inflightDispatches?: DispatchRecord[];
+  completedDispatches?: string[];
+  stallNudges?: Record<string, number>;
 }
 
 function stateFilePath(dir: string): string {
@@ -1512,6 +1910,9 @@ export function saveOrchestratorState(dir: string, state: OrchestratorState): vo
     claimedTasks: [...state.claimedTasks],
     taskClaimTimes: Object.fromEntries(state.taskClaimTimes),
     lastActivity: Object.fromEntries(state.lastActivity),
+    inflightDispatches: [...state.inflightDispatches.values()],
+    completedDispatches: [...state.completedDispatches],
+    stallNudges: Object.fromEntries(state.stallNudges),
   };
   // Atomic write: write to temp file, then rename
   const filePath = stateFilePath(dir);
@@ -1538,6 +1939,19 @@ export function loadOrchestratorState(dir: string, state: OrchestratorState): vo
         state.lastActivity.set(id, time);
       }
     }
+    if (Array.isArray(data.inflightDispatches)) {
+      for (const record of data.inflightDispatches) {
+        state.inflightDispatches.set(record.taskId, record);
+      }
+    }
+    if (Array.isArray(data.completedDispatches)) {
+      for (const id of data.completedDispatches) state.completedDispatches.add(id);
+    }
+    if (data.stallNudges && typeof data.stallNudges === "object") {
+      for (const [id, time] of Object.entries(data.stallNudges)) {
+        state.stallNudges.set(id, time);
+      }
+    }
   } catch {
     // Corrupted state file — start fresh
   }
@@ -1556,6 +1970,9 @@ export function syncClaims(dir: string, state: OrchestratorState): void {
   for (const id of state.claimedTasks) {
     if (!inProgressIds.has(id)) {
       state.claimedTasks.delete(id);
+      state.inflightDispatches.delete(id);
+      state.taskClaimTimes.delete(id);
+      state.stallNudges.delete(id);
     }
   }
   // Add missing claims
@@ -1572,6 +1989,7 @@ export function gracefulShutdown(config: OrchestratorConfig, state: Orchestrator
       task.assignee = null;
       task.status = "todo";
       task.updated = new Date().toISOString();
+      clearTaskDispatch(task);
       saveTask(config.dir, task);
     }
   }
@@ -1606,6 +2024,7 @@ export function reloadConfig(
       | "beforeRun"
       | "afterRun"
       | "research"
+      | "dryRun"
     >
   >,
 ): void {
@@ -1617,17 +2036,33 @@ export function reloadConfig(
   if (patch.beforeRun !== undefined) target.beforeRun = patch.beforeRun;
   if (patch.afterRun !== undefined) target.afterRun = patch.afterRun;
   if (patch.research !== undefined) target.research = patch.research;
+  if (patch.dryRun !== undefined) target.dryRun = patch.dryRun;
 }
 
 export function createOrchestrator(initialConfig: OrchestratorConfig): () => void {
   // Mutable config — reloadConfig updates fields between ticks
-  const config: OrchestratorConfig = { ...initialConfig };
+  const config: OrchestratorConfig = {
+    ...initialConfig,
+    dryRun: initialConfig.dryRun ?? process.env.TMUX_IDE_ORCHESTRATOR_DRY_RUN === "1",
+  };
 
   const state: OrchestratorState = {
     lastActivity: new Map(),
     previousTasks: new Map(),
     claimedTasks: new Set(),
     taskClaimTimes: new Map(),
+    inflightDispatches: new Map(),
+    completedDispatches: new Set(),
+    stallNudges: new Map(),
+    totalDispatched: 0,
+    totalCompleted: 0,
+    totalFailed: 0,
+    lastTickMs: 0,
+    ticking: false,
+    idleAgents: 0,
+    queuedDispatches: 0,
+    lastError: null,
+    lastReconcileMs: 0,
   };
   const researchState = loadResearchState(config.dir);
 
@@ -1650,90 +2085,110 @@ export function createOrchestrator(initialConfig: OrchestratorConfig): () => voi
   });
 
   let tickCount = 0;
+  healthRegistry.set(config.session, () => getHealth(state));
 
   function tick(): void {
-    tickCount++;
-    let tasks = loadTasks(config.dir);
-    const panes = listSessionPanes(config.session);
+    const started = Date.now();
+    state.ticking = true;
+    try {
+      tickCount++;
+      let tasks = loadTasks(config.dir);
+      const panes = listSessionPanes(config.session);
 
-    // 1. Reconcile: detect crashed agents, unassign their tasks
-    reconcile(config, state, tasks, panes);
-
-    // 2. Auto-dispatch: assign tasks or goals to idle agents
-    if (config.autoDispatch) {
-      if (config.dispatchMode === "goals") {
-        const goals = loadGoals(config.dir);
-        dispatchGoals(config, state, goals, tasks, panes);
-      } else if (config.dispatchMode === "missions") {
-        // Mission lifecycle: planning → active → complete
-        const mission = loadMission(config.dir);
-        if (mission?.status === "planning" && mission.milestones.length === 0) {
-          dispatchPlanning(config, state, panes);
-        } else if (mission?.status === "active") {
-          dispatch(config, state, tasks, panes);
-        }
-      } else {
-        dispatch(config, state, tasks, panes);
-      }
-    }
-
-    // 3. Detect stalls: nudge agents that haven't produced output
-    detectStalls(config, state, tasks, panes, researchState);
-
-    // 4. Detect completions: notify master, run hooks, cleanup
-    detectCompletions(config, state, tasks, panes, researchState);
-    tasks = loadTasks(config.dir);
-
-    if (config.dispatchMode === "missions" && config.research?.enabled) {
-      const triggers = evaluateTriggers(
-        config,
-        state,
-        researchState,
-        tasks,
-        readEvents(config.dir),
-      );
-      if (triggers.length > 0) {
-        dispatchResearch(config, state, researchState, tasks, panes, triggers[0]);
+      // 1. Reconcile: detect crashed agents, unassign their tasks
+      if (state.lastReconcileMs === 0 || started - state.lastReconcileMs >= RECONCILE_INTERVAL_MS) {
+        reconcile(config, state, tasks, panes);
+        state.lastReconcileMs = started;
         tasks = loadTasks(config.dir);
       }
-    }
 
-    // 5. Milestone completion + validation flow + mission completion
-    if (config.dispatchMode === "missions") {
-      checkMilestoneCompletion(config, state, tasks, panes);
-      checkValidationResults(config, tasks);
-
-      // Check if mission is complete: all milestones done
-      const mission = loadMission(config.dir);
-      if (mission?.status === "active" && mission.milestones.length > 0) {
-        const allMilestonesDone = mission.milestones.every((m) => m.status === "done");
-        if (allMilestonesDone) {
-          handleMissionComplete(config, mission, panes);
+      // 2. Auto-dispatch: assign tasks or goals to idle agents
+      if (config.autoDispatch) {
+        if (config.dispatchMode === "goals") {
+          const goals = loadGoals(config.dir);
+          dispatchGoals(config, state, goals, tasks, panes);
+        } else if (config.dispatchMode === "missions") {
+          // Mission lifecycle: planning → active → complete
+          const mission = loadMission(config.dir);
+          if (mission?.status === "planning" && mission.milestones.length === 0) {
+            dispatchPlanning(config, state, panes);
+          } else if (mission?.status === "active") {
+            dispatch(config, state, tasks, panes);
+          }
+        } else {
+          dispatch(config, state, tasks, panes);
         }
       }
-    }
 
-    // Agent heartbeat every 6th tick (~30s at default 5s poll)
-    if (tickCount % 6 === 0) {
-      const agentPanes = panes.filter((p) => {
-        if (p.role === "lead") return false;
-        return isAgentPane(p);
-      });
-      if (agentPanes.length > 0) {
-        const statuses = agentPanes
-          .map((p) => `${agentIdentifier(p)}=${isAgentBusy(p) ? "busy" : "idle"}`)
-          .join(", ");
-        appendEvent(config.dir, {
-          timestamp: new Date().toISOString(),
-          type: "agent_heartbeat",
-          message: `agents: ${statuses}`,
-        });
+      // 3. Detect stalls: nudge agents that haven't produced output
+      detectStalls(config, state, tasks, panes, researchState);
+
+      // 4. Detect completions: notify master, run hooks, cleanup
+      detectCompletions(config, state, tasks, panes, researchState);
+      tasks = loadTasks(config.dir);
+
+      if (config.dispatchMode === "missions" && config.research?.enabled) {
+        const triggers = evaluateTriggers(
+          config,
+          state,
+          researchState,
+          tasks,
+          readEvents(config.dir),
+        );
+        if (triggers.length > 0) {
+          dispatchResearch(config, state, researchState, tasks, panes, triggers[0]);
+          tasks = loadTasks(config.dir);
+        }
       }
-    }
 
-    // Update previous state
-    for (const task of tasks) {
-      state.previousTasks.set(task.id, task.status);
+      // 5. Milestone completion + validation flow + mission completion
+      if (config.dispatchMode === "missions") {
+        checkMilestoneCompletion(config, state, tasks, panes);
+        checkValidationResults(config, tasks);
+
+        // Check if mission is complete: all milestones done
+        const mission = loadMission(config.dir);
+        if (mission?.status === "active" && mission.milestones.length > 0) {
+          const allMilestonesDone = mission.milestones.every((m) => m.status === "done");
+          if (allMilestonesDone) {
+            handleMissionComplete(config, mission, panes);
+          }
+        }
+      }
+
+      // Agent heartbeat every 6th tick (~30s at default 5s poll)
+      if (tickCount % 6 === 0) {
+        const agentPanes = panes.filter((p) => {
+          if (p.role === "lead") return false;
+          return isAgentPane(p);
+        });
+        if (agentPanes.length > 0) {
+          const statuses = agentPanes
+            .map((p) => `${agentIdentifier(p)}=${isAgentBusy(p) ? "busy" : "idle"}`)
+            .join(", ");
+          appendEvent(config.dir, {
+            timestamp: new Date().toISOString(),
+            type: "agent_heartbeat",
+            message: `agents: ${statuses}`,
+          });
+        }
+      }
+
+      // Update previous state
+      for (const task of tasks) {
+        state.previousTasks.set(task.id, task.status);
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      state.lastError = { message, at: new Date().toISOString() };
+      appendEvent(config.dir, {
+        timestamp: state.lastError.at,
+        type: "error",
+        message: `Orchestrator tick failed: ${message}`,
+      });
+    } finally {
+      state.lastTickMs = Date.now() - started;
+      state.ticking = false;
     }
   }
 
@@ -1763,6 +2218,9 @@ export function createOrchestrator(initialConfig: OrchestratorConfig): () => voi
             beforeRun: (orch.before_run as string | undefined) ?? config.beforeRun,
             afterRun: (orch.after_run as string | undefined) ?? config.afterRun,
             research: (orch.research as ResearchConfigShape | undefined) ?? config.research,
+            dryRun:
+              (orch.dry_run as boolean | undefined) ??
+              (process.env.TMUX_IDE_ORCHESTRATOR_DRY_RUN === "1" ? true : config.dryRun),
           });
 
           // Restart interval if pollInterval changed
@@ -1781,6 +2239,7 @@ export function createOrchestrator(initialConfig: OrchestratorConfig): () => voi
   function onSignal() {
     clearInterval(interval);
     if (watcher) watcher.close();
+    healthRegistry.delete(config.session);
     gracefulShutdown(config, state);
     saveResearchState(config.dir, researchState);
     process.exit(0);
@@ -1792,6 +2251,7 @@ export function createOrchestrator(initialConfig: OrchestratorConfig): () => voi
   return () => {
     clearInterval(interval);
     if (watcher) watcher.close();
+    healthRegistry.delete(config.session);
     saveResearchState(config.dir, researchState);
     process.removeListener("SIGTERM", onSignal);
     process.removeListener("SIGINT", onSignal);

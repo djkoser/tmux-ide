@@ -133,6 +133,18 @@ export function makeOrchestratorState(
     previousTasks: new Map(),
     claimedTasks: new Set(),
     taskClaimTimes: new Map(),
+    inflightDispatches: new Map(),
+    completedDispatches: new Set(),
+    stallNudges: new Map(),
+    totalDispatched: 0,
+    totalCompleted: 0,
+    totalFailed: 0,
+    lastTickMs: 0,
+    ticking: false,
+    idleAgents: 0,
+    queuedDispatches: 0,
+    lastError: null,
+    lastReconcileMs: 0,
     ...overrides,
   };
 }

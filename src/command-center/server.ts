@@ -83,6 +83,7 @@ import { RemoteRegistry } from "../lib/hq/registry.ts";
 import { RegistrationPayloadSchema } from "../lib/hq/types.ts";
 import { dispatchResearch, loadResearchState } from "../lib/research.ts";
 import { serveDashboard } from "./static.ts";
+import { getOrchestratorHealth } from "../lib/orchestrator.ts";
 
 export interface CreateAppOptions {
   authService?: AuthService;
@@ -1022,6 +1023,18 @@ export function createApp(options: CreateAppOptions = {}): Hono {
           previousTasks: new Map(),
           claimedTasks: new Set(),
           taskClaimTimes: new Map(),
+          inflightDispatches: new Map(),
+          completedDispatches: new Set(),
+          stallNudges: new Map(),
+          totalDispatched: 0,
+          totalCompleted: 0,
+          totalFailed: 0,
+          lastTickMs: 0,
+          ticking: false,
+          idleAgents: 0,
+          queuedDispatches: 0,
+          lastError: null,
+          lastReconcileMs: 0,
         },
         researchState,
         tasks,
@@ -1165,6 +1178,46 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     });
 
     return c.json({ events: withRelative });
+  });
+
+  app.get("/api/project/:name/orchestrator/health", (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    const live = getOrchestratorHealth(name);
+    if (live) return c.json(live);
+
+    const tasks = loadTasks(session.dir);
+    const panes: ReturnType<typeof listSessionPanes> = (() => {
+      try {
+        return listSessionPanes(name);
+      } catch {
+        return [];
+      }
+    })();
+    const inProgress = tasks.filter((task) => task.status === "in-progress");
+    const busyAssignees = new Set(inProgress.map((task) => task.assignee).filter(Boolean));
+    const idleAgents = panes.filter((pane) => {
+      if (pane.role === "lead") return false;
+      const agentName = pane.name ?? pane.title;
+      return !busyAssignees.has(agentName);
+    }).length;
+
+    return c.json({
+      ticking: false,
+      lastTickMs: 0,
+      inflight: inProgress.length,
+      idleAgents,
+      queuedDispatches: tasks.filter((task) => task.status === "todo").length,
+      lastError: null,
+      totalDispatched: 0,
+      totalCompleted: tasks.filter((task) => task.status === "done").length,
+      totalFailed: tasks.filter((task) => task.status === "review").length,
+    });
   });
 
   // --- Remote command execution endpoints ---

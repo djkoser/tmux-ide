@@ -19,6 +19,14 @@ export type EventType =
   | "completion"
   | "retry"
   | "reconcile"
+  | "task.dispatched"
+  | "task.claimed"
+  | "task.completed"
+  | "task.failed"
+  | "task.retried"
+  | "agent.stalled"
+  | "agent.recovered"
+  | "orchestrator.reconciled"
   | "error"
   | "task_created"
   | "status_change"
@@ -44,6 +52,7 @@ export interface OrchestratorEvent {
   taskId?: string;
   agent?: string;
   message: string;
+  [key: string]: unknown;
 }
 
 export type StructuredEvent = z.infer<typeof StructuredEventSchemaZ>;
