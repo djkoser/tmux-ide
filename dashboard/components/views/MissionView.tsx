@@ -1,16 +1,10 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import {
-  fetchMilestones,
-  fetchMission,
-  fetchProject,
-  type MilestoneData,
-  type MissionDetail,
-} from "@/lib/api";
+import type { MilestoneData } from "@/lib/api";
 import type { Goal, Task } from "@/lib/types";
-import { usePolling } from "@/lib/usePolling";
+import { useSessionStream } from "@/lib/useSessionStream";
 import { useToasts } from "@/lib/useToasts";
 import { ProgressBar } from "@/components/ProgressBar";
 
@@ -162,15 +156,9 @@ function GoalCard({ goal, done, total }: { goal: Goal; done: number; total: numb
 }
 
 export function MissionView({ sessionName }: MissionViewProps) {
-  const missionFetcher = useCallback(() => fetchMission(sessionName), [sessionName]);
-  const { data: mission, loading: loadingMission } = usePolling<MissionDetail | null>(
-    missionFetcher,
-    5000,
-  );
-  const projectFetcher = useCallback(() => fetchProject(sessionName), [sessionName]);
-  const { data: project } = usePolling(projectFetcher, 5000);
-  const milestoneFetcher = useCallback(() => fetchMilestones(sessionName), [sessionName]);
-  const { data: fetchedMilestones } = usePolling<MilestoneData[]>(milestoneFetcher, 5000);
+  const { snapshot } = useSessionStream(sessionName);
+  const mission = snapshot?.mission ?? null;
+  const project = snapshot?.project ?? null;
   const { push } = useToasts();
 
   const goals = useMemo(() => {
@@ -190,12 +178,10 @@ export function MissionView({ sessionName }: MissionViewProps) {
     return map;
   }, [project?.tasks]);
 
-  const milestones = useMemo(() => {
-    const rows = fetchedMilestones?.length
-      ? fetchedMilestones
-      : (mission?.mission.milestones ?? []);
-    return [...rows].sort((a, b) => a.order - b.order);
-  }, [fetchedMilestones, mission?.mission]);
+  const milestoneRows = snapshot?.milestones.length
+    ? snapshot.milestones
+    : (mission?.mission.milestones ?? []);
+  const milestones = [...milestoneRows].sort((a, b) => a.order - b.order);
 
   function showComingSoon() {
     push({ kind: "info", title: "Coming soon", durationMs: 1600 });
@@ -208,7 +194,7 @@ export function MissionView({ sessionName }: MissionViewProps) {
     window.dispatchEvent(new PopStateEvent("popstate"));
   }
 
-  if (loadingMission && mission === undefined) {
+  if (!snapshot) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center bg-[var(--bg)] text-[var(--dim)]">
         Loading mission...

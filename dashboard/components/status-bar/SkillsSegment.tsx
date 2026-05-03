@@ -1,23 +1,14 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { usePathname } from "next/navigation";
-import { fetchSkills, type SkillData } from "@/lib/api";
-import { usePolling } from "@/lib/usePolling";
+import { useState } from "react";
+import type { SessionSnapshot } from "@/lib/useSessionStream";
 import { StatusPopover } from "./StatusPopover";
-import { projectNameFromPath } from "./projectPath";
 
-export function SkillsSegment() {
-  const pathname = usePathname();
-  const project = projectNameFromPath(pathname);
+export function SkillsSegment({ snapshot }: { snapshot: SessionSnapshot | null }) {
   const [open, setOpen] = useState(false);
-  const fetcher = useCallback(
-    () => (project ? fetchSkills(project) : Promise.resolve([])),
-    [project],
-  );
-  const { data } = usePolling<SkillData[]>(fetcher, 10000);
+  const data = snapshot?.skills ?? [];
 
-  if (!project || !data) return null;
+  if (!snapshot) return null;
 
   return (
     <>

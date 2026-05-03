@@ -98,9 +98,9 @@ function KpiCard({
 
 export function ValidationView({ sessionName }: ValidationViewProps) {
   const validationFetcher = useCallback(() => fetchValidation(sessionName), [sessionName]);
-  const { data: validation } = usePolling(validationFetcher, 3000);
+  const { data: validation } = usePolling(validationFetcher, 10000);
   const coverageFetcher = useCallback(() => fetchCoverage(sessionName), [sessionName]);
-  const { data: coverage } = usePolling(coverageFetcher, 5000);
+  const { data: coverage } = usePolling(coverageFetcher, 10000);
 
   const [filter, setFilter] = useState<StatusKey | "all">("all");
 

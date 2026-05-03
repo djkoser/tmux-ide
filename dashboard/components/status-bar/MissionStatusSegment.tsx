@@ -1,11 +1,9 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { usePathname } from "next/navigation";
-import { fetchMission, type MissionDetail } from "@/lib/api";
-import { usePolling } from "@/lib/usePolling";
+import { useState } from "react";
+import type { MissionDetail } from "@/lib/api";
+import type { SessionSnapshot } from "@/lib/useSessionStream";
 import { StatusPopover } from "./StatusPopover";
-import { projectNameFromPath } from "./projectPath";
 
 function statusColor(status: string): string {
   if (status === "complete") return "var(--green)";
@@ -19,17 +17,11 @@ function validationText(summary: MissionDetail["validationSummary"]): string {
   return `${summary.passing}/${summary.total} passing${failing}`;
 }
 
-export function MissionStatusSegment() {
-  const pathname = usePathname();
-  const project = projectNameFromPath(pathname);
+export function MissionStatusSegment({ snapshot }: { snapshot: SessionSnapshot | null }) {
   const [open, setOpen] = useState(false);
-  const fetcher = useCallback(
-    () => (project ? fetchMission(project) : Promise.resolve(null)),
-    [project],
-  );
-  const { data } = usePolling<MissionDetail | null>(fetcher, 5000);
+  const data = snapshot?.mission ?? null;
 
-  if (!project || !data) return null;
+  if (!data) return null;
 
   const label = `${data.mission.title} - ${data.mission.status}`;
 

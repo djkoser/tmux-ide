@@ -6,6 +6,7 @@ import { MilestonesSegment } from "@/components/status-bar/MilestonesSegment";
 import { MissionStatusSegment } from "@/components/status-bar/MissionStatusSegment";
 import { projectNameFromPath } from "@/components/status-bar/projectPath";
 import { SkillsSegment } from "@/components/status-bar/SkillsSegment";
+import { useSessionStream } from "@/lib/useSessionStream";
 import type { ProjectDetail } from "@/lib/types";
 
 interface StatusBarProps {
@@ -21,7 +22,9 @@ function projectFromPath(pathname: string): string {
 export function ShellStatusBar() {
   const pathname = usePathname();
   const project = projectFromPath(pathname);
-  const projectRoute = projectNameFromPath(pathname) !== null;
+  const projectName = projectNameFromPath(pathname);
+  const projectRoute = projectName !== null;
+  const { snapshot } = useSessionStream(projectName);
   const version = process.env.NEXT_PUBLIC_APP_VERSION ?? "dev";
 
   return (
@@ -32,13 +35,13 @@ export function ShellStatusBar() {
       <span className="truncate text-[var(--accent)]">{project}</span>
       {projectRoute && (
         <>
-          <MissionStatusSegment />
+          <MissionStatusSegment snapshot={snapshot} />
           <span className="hidden md:contents">
-            <MilestonesSegment />
+            <MilestonesSegment snapshot={snapshot} />
           </span>
-          <AgentsSegment />
+          <AgentsSegment snapshot={snapshot} />
           <span className="hidden md:contents">
-            <SkillsSegment />
+            <SkillsSegment snapshot={snapshot} />
           </span>
         </>
       )}

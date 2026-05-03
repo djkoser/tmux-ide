@@ -181,6 +181,96 @@ test.describe("project views", () => {
     await expect(page.getByText("Collapse project chrome")).toBeVisible();
   });
 
+  test("mission view reflects project stream snapshots without waiting for polling", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      type Listener = (event: MessageEvent<string>) => void;
+      class MockEventSource {
+        static instances: MockEventSource[] = [];
+        readonly url: string;
+        onopen: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        private listeners = new Map<string, Set<Listener>>();
+
+        constructor(url: string) {
+          this.url = url;
+          MockEventSource.instances.push(this);
+        }
+
+        addEventListener(type: string, listener: EventListener): void {
+          const listeners = this.listeners.get(type) ?? new Set<Listener>();
+          listeners.add(listener as Listener);
+          this.listeners.set(type, listeners);
+        }
+
+        removeEventListener(type: string, listener: EventListener): void {
+          this.listeners.get(type)?.delete(listener as Listener);
+        }
+
+        close(): void {
+          this.listeners.clear();
+        }
+
+        emit(type: string, payload: unknown): void {
+          const event = { data: JSON.stringify(payload) } as MessageEvent<string>;
+          for (const listener of this.listeners.get(type) ?? []) listener(event);
+        }
+      }
+
+      const state = window as typeof window & { __projectStreams?: MockEventSource[] };
+      state.__projectStreams = MockEventSource.instances;
+      window.EventSource = MockEventSource as unknown as typeof EventSource;
+    });
+
+    await page.goto(`/project/${encodeURIComponent(PROJECT)}`);
+    await page.getByRole("button", { name: "mission", exact: true }).click();
+    await expect(page.getByText("No active mission")).toBeVisible({ timeout: 15_000 });
+
+    await page.evaluate(
+      ({ project }) => {
+        type Stream = {
+          onopen: (() => void) | null;
+          emit(type: string, payload: unknown): void;
+        };
+        const state = window as typeof window & { __projectStreams?: Stream[] };
+        for (const source of state.__projectStreams ?? []) {
+          source.onopen?.();
+          source.emit("snapshot", {
+            project,
+            mission: {
+              mission: {
+                title: "Live stream mission",
+                description: "Updated over SSE",
+                status: "active",
+                branch: null,
+                milestones: [],
+              },
+              validationSummary: {
+                total: 0,
+                passing: 0,
+                failing: 0,
+                pending: 0,
+                blocked: 0,
+              },
+            },
+            milestones: [],
+            goals: project.goals,
+            tasks: project.tasks,
+            skills: [],
+            agents: project.agents,
+            events: [],
+          });
+        }
+      },
+      { project: stubProject },
+    );
+
+    await expect(page.getByRole("heading", { name: "Live stream mission" })).toBeVisible({
+      timeout: 500,
+    });
+  });
+
   test("metrics cards stay inside the metrics container", async ({ page }) => {
     await page.goto(`/project/${encodeURIComponent(PROJECT)}`);
     await page.getByRole("button", { name: "metrics", exact: true }).click();

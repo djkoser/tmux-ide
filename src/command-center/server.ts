@@ -86,7 +86,7 @@ import { RemoteRegistry } from "../lib/hq/registry.ts";
 import { RegistrationPayloadSchema } from "../lib/hq/types.ts";
 import { dispatchResearch, loadResearchState } from "../lib/research.ts";
 import { serveDashboard } from "./static.ts";
-import { getOrchestratorHealth } from "../lib/orchestrator.ts";
+import { getOrchestratorHealth, getPaneContentHashMetrics } from "../lib/orchestrator.ts";
 
 export interface CreateAppOptions {
   authService?: AuthService;
@@ -1446,6 +1446,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
       reconcile: metrics.reconcile,
       sse: getSseMetrics(),
       writes: metrics.writes,
+      paneContentHash: getPaneContentHashMetrics(),
     });
   });
 

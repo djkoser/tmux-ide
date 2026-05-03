@@ -246,6 +246,25 @@ const SHELL_COMMANDS = new Set(["zsh", "bash", "sh", "fish"]);
 const AGENT_PREFIXES = ["claude", "codex"];
 const SPINNERS = /^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏⠂⠒⠢⠆⠐⠠⠄◐◓◑◒✳|/\\-] /;
 const VERSION_PATTERN = /^\d+\.\d+/;
+const paneContentCache = new Map<string, { statusKey: string; hash: string; atPrompt: boolean }>();
+let paneContentHashHits = 0;
+let paneContentHashMisses = 0;
+
+function hashString(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16);
+}
+
+export function getPaneContentHashMetrics(): {
+  paneContentHashHits: number;
+  paneContentHashMisses: number;
+} {
+  return { paneContentHashHits, paneContentHashMisses };
+}
 
 // Strip spinner/status prefix from pane title to get stable name
 export function normalizePaneTitle(title: string): string {
@@ -304,9 +323,19 @@ export function isAgentBusy(pane: PaneInfo): boolean {
  * This is more reliable than title-based spinner detection since pane titles
  * can show stale spinners after the agent finishes.
  */
-function isAtAgentPrompt(paneId: string): boolean {
-  const lastLine = captureLastLine(paneId);
-  return lastLine.includes("❯");
+function isAtAgentPrompt(pane: PaneInfo): boolean {
+  const statusKey = `${pane.currentCommand}\u0000${pane.title}`;
+  const lastLine = captureLastLine(pane.id);
+  const hash = hashString(lastLine);
+  const cached = paneContentCache.get(pane.id);
+  if (cached && cached.statusKey === statusKey && cached.hash === hash) {
+    paneContentHashHits += 1;
+    return cached.atPrompt;
+  }
+  paneContentHashMisses += 1;
+  const atPrompt = lastLine.includes("❯");
+  paneContentCache.set(pane.id, { statusKey, hash, atPrompt });
+  return atPrompt;
 }
 
 export function isIdleForDispatch(pane: PaneInfo): boolean {
@@ -317,7 +346,7 @@ export function isIdleForDispatch(pane: PaneInfo): boolean {
   if (isAgentPane(pane)) {
     if (!isAgentBusy(pane)) return true;
     // Spinner may be stale — check if agent is actually at the prompt
-    return isAtAgentPrompt(pane.id);
+    return isAtAgentPrompt(pane);
   }
   return false;
 }

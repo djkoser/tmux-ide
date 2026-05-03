@@ -271,7 +271,7 @@ function Toc({ toc, activeId }: { toc: TocItem[]; activeId: string }) {
 
 export function PlansView({ sessionName }: PlansViewProps) {
   const fetcher = useCallback(() => fetchPlans(sessionName), [sessionName]);
-  const { data: plans, loading, refresh } = usePolling<PlanSummary[]>(fetcher, 5000);
+  const { data: plans, loading, refresh } = usePolling<PlanSummary[]>(fetcher, 10000);
   const { push } = useToasts();
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [planData, setPlanData] = useState<PlanData>({ content: "", authorship: null });

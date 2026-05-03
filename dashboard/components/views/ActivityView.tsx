@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fetchEvents, type EventData } from "@/lib/api";
-import { usePolling } from "@/lib/usePolling";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { EventData } from "@/lib/api";
+import { useSessionStream } from "@/lib/useSessionStream";
 
 interface ActivityViewProps {
   sessionName: string;
 }
+
+const EMPTY_EVENTS: EventData[] = [];
 
 type KpiFilter = "all" | "hour" | "day" | "agents" | "types";
 
@@ -118,8 +120,8 @@ function EventTypePill({ type }: { type: string }) {
 }
 
 export function ActivityView({ sessionName }: ActivityViewProps) {
-  const eventsFetcher = useCallback(() => fetchEvents(sessionName), [sessionName]);
-  const { data: events } = usePolling<EventData[]>(eventsFetcher, 3000);
+  const { snapshot } = useSessionStream(sessionName);
+  const events = snapshot?.events ?? EMPTY_EVENTS;
   const [kpiFilter, setKpiFilter] = useState<KpiFilter>("all");
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");

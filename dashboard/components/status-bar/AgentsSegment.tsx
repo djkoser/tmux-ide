@@ -1,26 +1,16 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { usePathname } from "next/navigation";
-import { fetchProject } from "@/lib/api";
-import type { ProjectDetail } from "@/lib/types";
-import { usePolling } from "@/lib/usePolling";
+import { useState } from "react";
+import type { SessionSnapshot } from "@/lib/useSessionStream";
 import { StatusPopover } from "./StatusPopover";
-import { projectNameFromPath } from "./projectPath";
 
-export function AgentsSegment() {
-  const pathname = usePathname();
-  const project = projectNameFromPath(pathname);
+export function AgentsSegment({ snapshot }: { snapshot: SessionSnapshot | null }) {
   const [open, setOpen] = useState(false);
-  const fetcher = useCallback(
-    () => (project ? fetchProject(project) : Promise.resolve(null)),
-    [project],
-  );
-  const { data } = usePolling<ProjectDetail | null>(fetcher, 2000);
+  const agents = snapshot?.agents ?? [];
 
-  if (!project || !data || data.agents.length === 0) return null;
+  if (agents.length === 0) return null;
 
-  const busy = data.agents.filter((agent) => agent.isBusy).length;
+  const busy = agents.filter((agent) => agent.isBusy).length;
 
   return (
     <>
@@ -33,13 +23,13 @@ export function AgentsSegment() {
           className="inline-flex items-center gap-1 text-left text-[var(--dim)] transition-colors hover:text-[var(--fg)]"
         >
           <span className="text-[var(--green)]">{busy}</span>
-          <span>/{data.agents.length} agents</span>
+          <span>/{agents.length} agents</span>
         </button>
         <StatusPopover open={open} onClose={() => setOpen(false)}>
           <div className="space-y-2">
             <div className="text-[var(--accent)]">agents</div>
             <div className="space-y-1.5">
-              {data.agents.map((agent) => (
+              {agents.map((agent) => (
                 <div
                   key={agent.paneId}
                   className="grid grid-cols-[auto_1fr_auto] items-center gap-2"
