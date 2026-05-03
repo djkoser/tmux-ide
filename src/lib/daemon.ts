@@ -14,6 +14,7 @@ import { join } from "node:path";
 import { createServer, type Server } from "node:http";
 import { createRequire } from "node:module";
 import { computePortPanes, computeAgentStates } from "./session-monitor.ts";
+import { getTaskStoreHealth, reconcileTaskStore, startTaskStoreWatcher } from "./task-store.ts";
 
 // Anchor bare-specifier resolution to this file so dependencies like
 // @hono/node-server resolve from tmux-ide's own node_modules regardless
@@ -123,6 +124,7 @@ function listPanes(): MonitorPane[] {
 
 let stopOrchestrator: (() => void) | null = null;
 let httpServer: Server | null = null;
+let stopTaskStoreWatcher: (() => Promise<void>) | null = null;
 
 // ---------------------------------------------------------------------------
 // Monitor loop
@@ -314,6 +316,11 @@ async function startCommandCenter(): Promise<void> {
       return c.json({ ok: true, session, uptime: process.uptime() });
     });
 
+    app.get("/api/daemon/health", (c: { json: (body: unknown, status?: number) => Response }) => {
+      const health = getTaskStoreHealth();
+      return c.json({ ...health, ok: health.ok, session });
+    });
+
     const listener = getRequestListener(app.fetch);
     const server = createServer(listener);
 
@@ -419,6 +426,11 @@ async function startCommandCenter(): Promise<void> {
 
 void startCommandCenter();
 void startOrchestrator();
+stopTaskStoreWatcher = startTaskStoreWatcher(process.cwd());
+const reconcileInterval = setInterval(() => {
+  reconcileTaskStore(process.cwd());
+}, 30_000);
+reconcileTaskStore(process.cwd());
 
 // Start the monitor loop last — tick() uses execFileSync (lsof, ps) which
 // can block the event loop for seconds if the system is under load.
@@ -431,7 +443,9 @@ tick();
 
 function shutdown(): void {
   clearInterval(monitorInterval);
+  clearInterval(reconcileInterval);
   if (stopOrchestrator) stopOrchestrator();
+  if (stopTaskStoreWatcher) void stopTaskStoreWatcher();
   if (httpServer) httpServer.close();
   process.exit(0);
 }

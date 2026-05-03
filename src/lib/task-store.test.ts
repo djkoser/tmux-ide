@@ -1,0 +1,139 @@
+import { describe, it, beforeEach, afterEach, expect } from "bun:test";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  ensureTasksDir,
+  invalidateAllTaskStore,
+  loadTask,
+  loadTasks,
+  saveTask,
+  startTaskStoreWatcher,
+  validateTaskStoreFile,
+  type Task,
+  TaskStoreValidationError,
+} from "./task-store.ts";
+
+let tmpDir: string;
+
+function makeTask(overrides: Partial<Task> = {}): Task {
+  const now = "2026-05-02T00:00:00.000Z";
+  return {
+    id: "001",
+    title: "Task 001",
+    description: "Test task",
+    goal: null,
+    status: "todo",
+    assignee: null,
+    priority: 1,
+    created: now,
+    updated: now,
+    tags: [],
+    proof: null,
+    retryCount: 0,
+    maxRetries: 5,
+    lastError: null,
+    nextRetryAt: null,
+    depends_on: [],
+    milestone: null,
+    specialty: null,
+    fulfills: [],
+    discoveredIssues: [],
+    salientSummary: null,
+    ...overrides,
+  };
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+beforeEach(() => {
+  tmpDir = mkdtempSync(join(tmpdir(), "tmux-ide-task-store-test-"));
+  invalidateAllTaskStore();
+});
+
+afterEach(() => {
+  invalidateAllTaskStore();
+  rmSync(tmpDir, { recursive: true, force: true });
+});
+
+describe("task-store", () => {
+  it("keeps concurrent task writers from losing files", async () => {
+    ensureTasksDir(tmpDir);
+    await Promise.all(
+      Array.from({ length: 20 }, (_, index) =>
+        Promise.resolve().then(() => {
+          const id = String(index + 1).padStart(3, "0");
+          saveTask(tmpDir, makeTask({ id, title: `Task ${id}` }));
+        }),
+      ),
+    );
+
+    expect(loadTasks(tmpDir).map((task) => task.id)).toHaveLength(20);
+    expect(loadTasks(tmpDir).map((task) => task.id)).toContain("020");
+    expect(existsSync(join(tmpDir, ".tasks", "tasks", "020-task-020.json"))).toBeTruthy();
+  });
+
+  it("throws a clear validation error for invalid task files", () => {
+    ensureTasksDir(tmpDir);
+    const file = join(tmpDir, ".tasks", "tasks", "001-bad.json");
+    writeFileSync(
+      file,
+      JSON.stringify({ _version: 1, id: "001", title: "Bad", status: "later" }, null, 2),
+    );
+
+    expect(() => validateTaskStoreFile(file, "task")).toThrow(TaskStoreValidationError);
+    try {
+      validateTaskStoreFile(file, "task");
+    } catch (err) {
+      expect((err as Error).message).toContain(file);
+      expect((err as Error).message).toContain("task schema validation failed");
+      expect((err as Error).message).toContain("status");
+    }
+  });
+
+  it("invalidates cached task reads after external filesystem changes", async () => {
+    ensureTasksDir(tmpDir);
+    const task = makeTask({ title: "Before external edit" });
+    saveTask(tmpDir, task);
+
+    const stopWatcher = startTaskStoreWatcher(tmpDir);
+    try {
+      expect(loadTask(tmpDir, "001")?.title).toBe("Before external edit");
+      await wait(240);
+      const file = join(tmpDir, ".tasks", "tasks", "001-before-external-edit.json");
+      writeFileSync(
+        file,
+        JSON.stringify({ _version: 1, ...makeTask({ title: "After external edit" }) }, null, 2) +
+          "\n",
+      );
+
+      await wait(220);
+      expect(loadTask(tmpDir, "001")?.title).toBe("After external edit");
+    } finally {
+      await stopWatcher();
+    }
+  });
+
+  it("applies legacy proof.note migration on read", () => {
+    ensureTasksDir(tmpDir);
+    const file = join(tmpDir, ".tasks", "tasks", "001-legacy-proof.json");
+    writeFileSync(
+      file,
+      JSON.stringify(
+        {
+          _version: 1,
+          ...makeTask({ title: "Legacy proof", proof: null }),
+          proof: { note: "done manually" },
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+
+    const loaded = loadTask(tmpDir, "001");
+    expect(loaded?.proof?.notes).toBe("done manually");
+    expect(readFileSync(file, "utf-8")).toContain('"note"');
+  });
+});

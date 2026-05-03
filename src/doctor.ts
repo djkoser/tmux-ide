@@ -3,6 +3,11 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { readConfig } from "./lib/yaml-io.ts";
 import { loadSkills } from "./lib/skill-registry.ts";
+import {
+  validateTasksTree,
+  type TaskStoreIntegrityReport,
+  type TaskStoreIssue,
+} from "./lib/task-store.ts";
 
 interface CheckResult {
   label: string;
@@ -24,7 +29,15 @@ function check(
   }
 }
 
-export async function doctor({ json }: { json?: boolean } = {}): Promise<void> {
+export async function doctor({
+  json,
+  tasks,
+  fix,
+}: {
+  json?: boolean;
+  tasks?: boolean;
+  fix?: boolean;
+} = {}): Promise<void> {
   const checks: CheckResult[] = [];
 
   checks.push(
@@ -150,10 +163,24 @@ export async function doctor({ json }: { json?: boolean } = {}): Promise<void> {
     ),
   );
 
+  let taskReport: TaskStoreIntegrityReport | null = null;
+  if (tasks) {
+    taskReport = validateTasksTree(resolve("."), { fix });
+    checks.push({
+      label: "task integrity",
+      pass: taskReport.ok,
+      detail:
+        taskReport.issues.length === 0
+          ? "clean"
+          : `${taskReport.issues.length} issue(s)${fix ? ", safe fixes applied where possible" : ""}`,
+      optional: false,
+    });
+  }
+
   const allPass = checks.every((c) => c.pass || c.optional);
 
   if (json) {
-    console.log(JSON.stringify({ ok: allPass, checks }, null, 2));
+    console.log(JSON.stringify({ ok: allPass, checks, tasks: taskReport }, null, 2));
     return;
   }
 
@@ -163,5 +190,19 @@ export async function doctor({ json }: { json?: boolean } = {}): Promise<void> {
     console.log(`${color}${icon}\x1b[0m ${c.label} — ${c.detail}`);
   }
 
+  if (taskReport && taskReport.issues.length > 0) {
+    console.log("");
+    console.log("Task integrity issues:");
+    for (const issue of taskReport.issues) {
+      console.log(formatTaskIssue(issue));
+    }
+  }
+
   if (!allPass) process.exitCode = 1;
+}
+
+function formatTaskIssue(issue: TaskStoreIssue): string {
+  const file = issue.file ? `${issue.file}: ` : "";
+  const fixed = issue.fixed ? " (fixed)" : "";
+  return `  - ${file}${issue.message}${fixed}`;
 }

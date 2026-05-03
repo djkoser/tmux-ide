@@ -27,6 +27,8 @@ const { positionals, values } = parseArgs({
   strict: false,
   options: {
     json: { type: "boolean" },
+    tasks: { type: "boolean" },
+    fix: { type: "boolean" },
     row: { type: "string" },
     pane: { type: "string" },
     title: { type: "string" },
@@ -235,7 +237,7 @@ try {
       break;
 
     case "doctor":
-      await doctor({ json });
+      await doctor({ json, tasks: values.tasks, fix: values.fix });
       break;
 
     case "status":

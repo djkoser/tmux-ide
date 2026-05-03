@@ -1,29 +1,28 @@
-import { resolve, join } from "node:path";
-import { slugify } from "./slugify.ts";
+import { EventEmitter } from "node:events";
+import { createHash } from "node:crypto";
 import {
+  existsSync,
+  mkdirSync,
   readdirSync,
   readFileSync,
-  writeFileSync,
-  mkdirSync,
-  existsSync,
-  unlinkSync,
   renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
 } from "node:fs";
+import { basename, dirname, join, relative, resolve } from "node:path";
+import { watch, type FSWatcher } from "chokidar";
+import { z } from "zod";
+import { slugify } from "./slugify.ts";
+import { GoalSchemaZ, MissionSchemaZ, TaskSchemaZ } from "../schemas/domain.ts";
 import type { ProofSchema } from "../types.ts";
 
 const TASKS_DIR = ".tasks";
 const SCHEMA_VERSION = 1;
-
-/**
- * Write JSON data to a file atomically.
- * Writes to a temp file first, then renames (atomic on POSIX).
- * This prevents data loss if the process crashes mid-write.
- */
-function atomicWriteJSON(filePath: string, data: unknown): void {
-  const tmpPath = filePath + ".tmp";
-  writeFileSync(tmpPath, JSON.stringify(data, null, 2) + "\n");
-  renameSync(tmpPath, filePath);
-}
+const OWN_WRITE_SUPPRESSION_MS = 200;
+const WATCH_DEBOUNCE_MS = 75;
+const RECONCILE_LOG_PREFIX = "[task-store]";
+const ASSERTION_ID_PATTERN = /\*\*((?:VAL|ASSERT)[A-Z0-9_-]+)\*\*/g;
 
 export interface Milestone {
   id: string;
@@ -83,6 +82,98 @@ export interface Task {
   salientSummary: string | null;
 }
 
+type SchemaName = "mission" | "goal" | "task";
+type StoreValue = Mission | Goal | Task;
+
+const schemas: Record<SchemaName, z.ZodType<StoreValue>> = {
+  mission: MissionSchemaZ,
+  goal: GoalSchemaZ,
+  task: TaskSchemaZ,
+};
+
+interface CacheEntry<T extends StoreValue = StoreValue> {
+  filePath: string;
+  schemaName: SchemaName;
+  value: T;
+  hash: string;
+}
+
+interface MigrationResult {
+  raw: unknown;
+  migrations: string[];
+}
+
+export interface TaskStoreIssue {
+  type:
+    | "schema"
+    | "orphan-goal"
+    | "orphan-dependency"
+    | "missing-proof"
+    | "unclaimed-assertion"
+    | "stale-lock"
+    | "drift";
+  file?: string;
+  message: string;
+  taskId?: string;
+  fixed?: boolean;
+}
+
+export interface TaskStoreIntegrityReport {
+  ok: boolean;
+  issues: TaskStoreIssue[];
+}
+
+export interface TaskStoreHealth {
+  ok: boolean;
+  uptimeMs: number;
+  lastReconcileMs: number;
+  cacheSize: number;
+  driftCount: number;
+  watcherActive: boolean;
+  writeQueueDepth: number;
+}
+
+export class TaskStoreValidationError extends Error {
+  readonly filePath: string;
+  readonly schemaName: SchemaName;
+  readonly summary: string;
+
+  constructor(filePath: string, schemaName: SchemaName, summary: string) {
+    super(`${filePath}: ${schemaName} schema validation failed: ${summary}`);
+    this.name = "TaskStoreValidationError";
+    this.filePath = filePath;
+    this.schemaName = schemaName;
+    this.summary = summary;
+  }
+}
+
+function hashContent(content: string): string {
+  return createHash("sha256").update(content).digest("hex");
+}
+
+function serializeJson(data: unknown): string {
+  return JSON.stringify(data, null, 2) + "\n";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function zodSummary(error: z.ZodError): string {
+  return error.issues
+    .slice(0, 5)
+    .map((issue) => {
+      const path = issue.path.length > 0 ? issue.path.join(".") : "(root)";
+      return `${path}: ${issue.message}`;
+    })
+    .join("; ");
+}
+
+function readVersion(raw: unknown): number {
+  if (!isRecord(raw)) return 0;
+  return typeof raw._version === "number" ? raw._version : 0;
+}
+
 export function normalizeMission(raw: Record<string, unknown>): Mission {
   const epoch = "1970-01-01T00:00:00.000Z";
   return {
@@ -90,7 +181,7 @@ export function normalizeMission(raw: Record<string, unknown>): Mission {
     description: (raw.description as string) ?? "",
     status: (raw.status as Mission["status"]) ?? "active",
     branch: (raw.branch as string | null) ?? null,
-    milestones: Array.isArray(raw.milestones) ? (raw.milestones as Milestone[]) : [],
+    milestones: Array.isArray(raw.milestones) ? (raw.milestones as Mission["milestones"]) : [],
     created: (raw.created as string) ?? epoch,
     updated: (raw.updated as string) ?? epoch,
   };
@@ -101,11 +192,11 @@ export function normalizeGoal(raw: Record<string, unknown>): Goal {
   const rest = { ...raw };
   delete rest._version;
   return {
-    ...(rest as Omit<Goal, "assignee" | "specialty" | "created" | "updated">),
+    ...(rest as Omit<Goal, "assignee" | "specialty" | "created" | "updated" | "milestone">),
     created: (raw.created as string) ?? epoch,
     updated: (raw.updated as string) ?? epoch,
-    assignee: (raw.assignee as string) ?? null,
-    specialty: (raw.specialty as string) ?? null,
+    assignee: (raw.assignee as string | null) ?? null,
+    specialty: (raw.specialty as string | null) ?? null,
     milestone: (raw.milestone as string | null) ?? null,
   } as Goal;
 }
@@ -118,13 +209,6 @@ export function normalizeTask(raw: Record<string, unknown>): Task {
     nextRetryAt: null,
     depends_on: [] as string[],
   };
-
-  // Migrate proof.note → proof.notes
-  const proof = raw.proof as Record<string, unknown> | null | undefined;
-  if (proof && "note" in proof && !("notes" in proof)) {
-    proof.notes = proof.note;
-    delete proof.note;
-  }
 
   const rest = { ...raw };
   delete rest._version;
@@ -147,6 +231,337 @@ export function normalizeTask(raw: Record<string, unknown>): Task {
   } as Task;
 }
 
+export function migrateOnRead(raw: unknown, schemaName: SchemaName): MigrationResult {
+  if (!isRecord(raw)) return { raw, migrations: [] };
+
+  const version = readVersion(raw);
+  const migrations: string[] = [];
+  let next: Record<string, unknown> = { ...raw };
+
+  if (schemaName === "task") {
+    const proof = next.proof;
+    if (isRecord(proof) && "note" in proof && !("notes" in proof)) {
+      next = {
+        ...next,
+        proof: {
+          ...proof,
+          notes: proof.note,
+        },
+      };
+      delete (next.proof as Record<string, unknown>).note;
+      migrations.push("proof.note -> proof.notes");
+    }
+  }
+
+  if (version < SCHEMA_VERSION) {
+    if (schemaName === "mission")
+      next = normalizeMission(next) as unknown as Record<string, unknown>;
+    if (schemaName === "goal") next = normalizeGoal(next) as unknown as Record<string, unknown>;
+    if (schemaName === "task") next = normalizeTask(next) as unknown as Record<string, unknown>;
+    migrations.push(`v${version} -> v${SCHEMA_VERSION}`);
+  }
+
+  return { raw: next, migrations };
+}
+
+function cacheableFiles(dir: string): { filePath: string; schemaName: SchemaName }[] {
+  const root = getTasksRoot(dir);
+  const files: { filePath: string; schemaName: SchemaName }[] = [];
+  const mission = join(root, "mission.json");
+  if (existsSync(mission)) files.push({ filePath: mission, schemaName: "mission" });
+
+  for (const [subdir, schemaName] of [
+    ["goals", "goal"],
+    ["tasks", "task"],
+  ] as const) {
+    const directory = join(root, subdir);
+    if (!existsSync(directory)) continue;
+    for (const file of readdirSync(directory)
+      .filter((f) => f.endsWith(".json"))
+      .sort()) {
+      files.push({ filePath: join(directory, file), schemaName });
+    }
+  }
+
+  return files;
+}
+
+function walkFiles(root: string): string[] {
+  if (!existsSync(root)) return [];
+  const out: string[] = [];
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) out.push(...walkFiles(path));
+    else out.push(path);
+  }
+  return out;
+}
+
+function parseAssertionIds(contract: string): string[] {
+  const ids = new Set<string>();
+  let match: RegExpExecArray | null;
+  while ((match = ASSERTION_ID_PATTERN.exec(contract)) !== null) {
+    ids.add(match[1]!);
+  }
+  return [...ids];
+}
+
+function findFileById(directory: string, id: string): string | null {
+  if (!existsSync(directory)) return null;
+  const files = readdirSync(directory).filter((f) => f.endsWith(".json"));
+  for (const file of files) {
+    if (file.startsWith(id + "-") || file === id + ".json") {
+      return join(directory, file);
+    }
+  }
+  return null;
+}
+
+export class TaskStore extends EventEmitter {
+  private cache = new Map<string, CacheEntry>();
+  private ownWriteTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private invalidateTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private watcher: FSWatcher | null = null;
+  private watchedRoot: string | null = null;
+  private startedAt = Date.now();
+  private lastReconcileMs = 0;
+  private driftCount = 0;
+  private activeWrites = 0;
+
+  read<T extends StoreValue>(filePath: string, schemaName: SchemaName): T {
+    const absolute = resolve(filePath);
+    const cached = this.cache.get(absolute);
+    if (cached) return cached.value as T;
+
+    const content = readFileSync(absolute, "utf-8");
+    const parsed = this.parseContent<T>(absolute, schemaName, content);
+    this.seedCache(absolute, schemaName, parsed, content);
+    return parsed;
+  }
+
+  safeRead<T extends StoreValue>(filePath: string, schemaName: SchemaName): T | null {
+    try {
+      return this.read<T>(filePath, schemaName);
+    } catch (err) {
+      console.warn("[task-store] %s", (err as Error).message);
+      return null;
+    }
+  }
+
+  writeAtomic<T extends StoreValue>(filePath: string, schemaName: SchemaName, value: T): void {
+    const absolute = resolve(filePath);
+    const body = { _version: SCHEMA_VERSION, ...value };
+    const content = serializeJson(body);
+    const parsed = this.parseContent<T>(absolute, schemaName, content);
+    const tmpPath = `${absolute}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
+
+    mkdirSync(dirname(absolute), { recursive: true });
+    this.activeWrites++;
+    try {
+      writeFileSync(tmpPath, content);
+      this.markOwnWrite(absolute);
+      renameSync(tmpPath, absolute);
+      this.seedCache(absolute, schemaName, parsed, content);
+      this.emit("change", { path: absolute, schemaName, source: "write" });
+    } finally {
+      this.activeWrites--;
+      if (existsSync(tmpPath)) {
+        try {
+          unlinkSync(tmpPath);
+        } catch {
+          // best-effort temp cleanup
+        }
+      }
+    }
+  }
+
+  unlink(filePath: string): void {
+    const absolute = resolve(filePath);
+    this.markOwnWrite(absolute);
+    unlinkSync(absolute);
+    this.invalidate(absolute, "delete");
+  }
+
+  invalidate(filePath: string, source = "external"): void {
+    const absolute = resolve(filePath);
+    const had = this.cache.delete(absolute);
+    if (had) this.emit("change", { path: absolute, source });
+  }
+
+  invalidateAll(): void {
+    if (this.cache.size === 0) return;
+    this.cache.clear();
+    this.emit("change", { path: null, source: "invalidate-all" });
+  }
+
+  getCacheSize(): number {
+    return this.cache.size;
+  }
+
+  getHealth(): TaskStoreHealth {
+    return {
+      ok: this.driftCount === 0,
+      uptimeMs: Date.now() - this.startedAt,
+      lastReconcileMs: this.lastReconcileMs,
+      cacheSize: this.cache.size,
+      driftCount: this.driftCount,
+      watcherActive: this.watcher !== null,
+      writeQueueDepth: this.activeWrites,
+    };
+  }
+
+  startWatcher(dir: string): () => Promise<void> {
+    const root = getTasksRoot(dir);
+    if (this.watcher && this.watchedRoot === root) {
+      return async () => this.stopWatcher();
+    }
+
+    void this.stopWatcher();
+    ensureTasksDir(dir);
+    this.watchedRoot = root;
+    this.watcher = watch(root, {
+      ignoreInitial: true,
+      persistent: true,
+      awaitWriteFinish: {
+        stabilityThreshold: 50,
+        pollInterval: 10,
+      },
+    });
+
+    const invalidateFromWatch = (path: string) => {
+      const absolute = resolve(path);
+      if (this.isOwnWrite(absolute)) return;
+
+      const existing = this.invalidateTimers.get(absolute);
+      if (existing) clearTimeout(existing);
+
+      const timer = setTimeout(() => {
+        this.invalidateTimers.delete(absolute);
+        this.invalidate(absolute, "watcher");
+      }, WATCH_DEBOUNCE_MS);
+      this.invalidateTimers.set(absolute, timer);
+    };
+
+    this.watcher.on("add", invalidateFromWatch);
+    this.watcher.on("change", invalidateFromWatch);
+    this.watcher.on("unlink", invalidateFromWatch);
+    this.watcher.on("unlinkDir", invalidateFromWatch);
+    this.watcher.on("error", (err) => {
+      console.warn("[task-store] watcher error: %s", (err as Error).message);
+    });
+
+    return async () => this.stopWatcher();
+  }
+
+  async stopWatcher(): Promise<void> {
+    for (const timer of this.invalidateTimers.values()) clearTimeout(timer);
+    this.invalidateTimers.clear();
+    if (!this.watcher) return;
+    const watcher = this.watcher;
+    this.watcher = null;
+    this.watchedRoot = null;
+    await watcher.close();
+  }
+
+  reconcile(dir: string): number {
+    const root = getTasksRoot(dir);
+    const diskFiles = cacheableFiles(dir);
+    const diskPaths = new Set(diskFiles.map((f) => resolve(f.filePath)));
+    let drift = 0;
+
+    for (const { filePath } of diskFiles) {
+      const absolute = resolve(filePath);
+      const cached = this.cache.get(absolute);
+      if (!cached) {
+        drift++;
+        continue;
+      }
+      const hash = hashContent(readFileSync(absolute, "utf-8"));
+      if (hash !== cached.hash) drift++;
+    }
+
+    for (const [filePath] of this.cache) {
+      if (!filePath.startsWith(root)) continue;
+      if (!diskPaths.has(filePath)) {
+        drift++;
+      }
+    }
+
+    this.lastReconcileMs = Date.now();
+    this.driftCount = drift;
+    if (drift > 0) {
+      console.warn("%s reconcile detected %d cache drift issue(s)", RECONCILE_LOG_PREFIX, drift);
+      this.emit("change", { path: root, source: "reconcile", drift });
+    }
+    return drift;
+  }
+
+  validateFile(filePath: string, schemaName: SchemaName): StoreValue {
+    const absolute = resolve(filePath);
+    const content = readFileSync(absolute, "utf-8");
+    return this.parseContent(absolute, schemaName, content);
+  }
+
+  private parseContent<T extends StoreValue>(
+    filePath: string,
+    schemaName: SchemaName,
+    content: string,
+  ): T {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(content);
+    } catch (err) {
+      throw new TaskStoreValidationError(
+        filePath,
+        schemaName,
+        `invalid JSON: ${(err as Error).message}`,
+      );
+    }
+
+    const migrated = migrateOnRead(raw, schemaName);
+    for (const migration of migrated.migrations) {
+      console.warn("[task-store] migrated %s (%s): %s", filePath, schemaName, migration);
+    }
+
+    const result = schemas[schemaName].safeParse(migrated.raw);
+    if (!result.success) {
+      throw new TaskStoreValidationError(filePath, schemaName, zodSummary(result.error));
+    }
+    return result.data as T;
+  }
+
+  private seedCache<T extends StoreValue>(
+    filePath: string,
+    schemaName: SchemaName,
+    value: T,
+    content: string,
+  ): void {
+    const absolute = resolve(filePath);
+    this.cache.set(absolute, {
+      filePath: absolute,
+      schemaName,
+      value,
+      hash: hashContent(content),
+    });
+  }
+
+  private markOwnWrite(filePath: string): void {
+    const absolute = resolve(filePath);
+    const existing = this.ownWriteTimers.get(absolute);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      this.ownWriteTimers.delete(absolute);
+    }, OWN_WRITE_SUPPRESSION_MS);
+    this.ownWriteTimers.set(absolute, timer);
+  }
+
+  private isOwnWrite(filePath: string): boolean {
+    return this.ownWriteTimers.has(resolve(filePath));
+  }
+}
+
+export const taskStore = new TaskStore();
+
 export function getTasksRoot(dir: string): string {
   return resolve(dir, TASKS_DIR);
 }
@@ -160,44 +575,53 @@ export function ensureTasksDir(dir: string): void {
   if (!existsSync(tasksDir)) mkdirSync(tasksDir);
 }
 
+export function startTaskStoreWatcher(dir: string): () => Promise<void> {
+  return taskStore.startWatcher(dir);
+}
+
+export function reconcileTaskStore(dir: string): number {
+  return taskStore.reconcile(dir);
+}
+
+export function getTaskStoreHealth(): TaskStoreHealth {
+  return taskStore.getHealth();
+}
+
+export function invalidateTaskStore(path: string): void {
+  taskStore.invalidate(path);
+}
+
+export function invalidateAllTaskStore(): void {
+  taskStore.invalidateAll();
+}
+
+export function validateTaskStoreFile(filePath: string, schemaName: SchemaName): StoreValue {
+  return taskStore.validateFile(filePath, schemaName);
+}
+
 // --- Mission ---
 
 export function loadMission(dir: string): Mission | null {
   const path = join(getTasksRoot(dir), "mission.json");
   if (!existsSync(path)) return null;
-  try {
-    return normalizeMission(JSON.parse(readFileSync(path, "utf-8")));
-  } catch (err) {
-    console.error("[task-store] Failed to parse mission.json: %s", (err as Error).message);
-    return null;
-  }
+  return taskStore.safeRead<Mission>(path, "mission");
 }
 
 export function saveMission(dir: string, mission: Mission): void {
   ensureTasksDir(dir);
-  atomicWriteJSON(join(getTasksRoot(dir), "mission.json"), {
-    _version: SCHEMA_VERSION,
-    ...mission,
-  });
+  taskStore.writeAtomic(
+    join(getTasksRoot(dir), "mission.json"),
+    "mission",
+    normalizeMission(mission as unknown as Record<string, unknown>),
+  );
 }
 
 export function clearMission(dir: string): void {
   const path = join(getTasksRoot(dir), "mission.json");
-  if (existsSync(path)) unlinkSync(path);
+  if (existsSync(path)) taskStore.unlink(path);
 }
 
 // --- Goals ---
-
-function findFileById(directory: string, id: string): string | null {
-  if (!existsSync(directory)) return null;
-  const files = readdirSync(directory).filter((f) => f.endsWith(".json"));
-  for (const file of files) {
-    if (file.startsWith(id + "-") || file === id + ".json") {
-      return join(directory, file);
-    }
-  }
-  return null;
-}
 
 export function nextGoalId(dir: string): string {
   const goalsDir = join(getTasksRoot(dir), "goals");
@@ -214,43 +638,31 @@ export function loadGoals(dir: string): Goal[] {
   return readdirSync(goalsDir)
     .filter((f) => f.endsWith(".json"))
     .sort()
-    .map((f) => {
-      try {
-        return normalizeGoal(JSON.parse(readFileSync(join(goalsDir, f), "utf-8")));
-      } catch (err) {
-        console.error("[task-store] Failed to parse %s: %s", f, (err as Error).message);
-        return null;
-      }
-    })
+    .map((f) => taskStore.safeRead<Goal>(join(goalsDir, f), "goal"))
     .filter((g): g is Goal => g !== null);
 }
 
 export function loadGoal(dir: string, id: string): Goal | null {
   const file = findFileById(join(getTasksRoot(dir), "goals"), id);
   if (!file) return null;
-  try {
-    return normalizeGoal(JSON.parse(readFileSync(file, "utf-8")));
-  } catch (err) {
-    console.error("[task-store] Failed to parse goal %s: %s", id, (err as Error).message);
-    return null;
-  }
+  return taskStore.safeRead<Goal>(file, "goal");
 }
 
 export function saveGoal(dir: string, goal: Goal): void {
   ensureTasksDir(dir);
+  const normalized = normalizeGoal(goal as unknown as Record<string, unknown>);
   const goalsDir = join(getTasksRoot(dir), "goals");
-  const existing = findFileById(goalsDir, goal.id);
-  const filename = `${goal.id}-${slugify(goal.title, 50)}.json`;
+  const existing = findFileById(goalsDir, normalized.id);
+  const filename = `${normalized.id}-${slugify(normalized.title, 50)}.json`;
   const newPath = join(goalsDir, filename);
-  // Write new file atomically first, then remove old file if slug changed
-  atomicWriteJSON(newPath, { _version: SCHEMA_VERSION, ...goal });
-  if (existing && existing !== newPath) unlinkSync(existing);
+  taskStore.writeAtomic(newPath, "goal", normalized);
+  if (existing && existing !== newPath) taskStore.unlink(existing);
 }
 
 export function deleteGoal(dir: string, id: string): boolean {
   const file = findFileById(join(getTasksRoot(dir), "goals"), id);
   if (!file) return false;
-  unlinkSync(file);
+  taskStore.unlink(file);
   return true;
 }
 
@@ -271,43 +683,31 @@ export function loadTasks(dir: string): Task[] {
   return readdirSync(tasksDir)
     .filter((f) => f.endsWith(".json"))
     .sort()
-    .map((f) => {
-      try {
-        return normalizeTask(JSON.parse(readFileSync(join(tasksDir, f), "utf-8")));
-      } catch (err) {
-        console.error("[task-store] Failed to parse %s: %s", f, (err as Error).message);
-        return null;
-      }
-    })
+    .map((f) => taskStore.safeRead<Task>(join(tasksDir, f), "task"))
     .filter((t): t is Task => t !== null);
 }
 
 export function loadTask(dir: string, id: string): Task | null {
   const file = findFileById(join(getTasksRoot(dir), "tasks"), id);
   if (!file) return null;
-  try {
-    return normalizeTask(JSON.parse(readFileSync(file, "utf-8")));
-  } catch (err) {
-    console.error("[task-store] Failed to parse task %s: %s", id, (err as Error).message);
-    return null;
-  }
+  return taskStore.safeRead<Task>(file, "task");
 }
 
 export function saveTask(dir: string, task: Task): void {
   ensureTasksDir(dir);
+  const normalized = normalizeTask(task as unknown as Record<string, unknown>);
   const tasksDir = join(getTasksRoot(dir), "tasks");
-  const existing = findFileById(tasksDir, task.id);
-  const filename = `${task.id}-${slugify(task.title, 50)}.json`;
+  const existing = findFileById(tasksDir, normalized.id);
+  const filename = `${normalized.id}-${slugify(normalized.title, 50)}.json`;
   const newPath = join(tasksDir, filename);
-  // Write new file atomically first, then remove old file if slug changed
-  atomicWriteJSON(newPath, { _version: SCHEMA_VERSION, ...task });
-  if (existing && existing !== newPath) unlinkSync(existing);
+  taskStore.writeAtomic(newPath, "task", normalized);
+  if (existing && existing !== newPath) taskStore.unlink(existing);
 }
 
 export function deleteTask(dir: string, id: string): boolean {
   const file = findFileById(join(getTasksRoot(dir), "tasks"), id);
   if (!file) return false;
-  unlinkSync(file);
+  taskStore.unlink(file);
   return true;
 }
 
@@ -315,21 +715,14 @@ export function loadTasksForGoal(dir: string, goalId: string): Task[] {
   return loadTasks(dir).filter((t) => t.goal === goalId);
 }
 
-/**
- * Detect dependency cycles. Builds the full dependency graph, applies
- * the proposed change (taskId → newDeps), then runs DFS from taskId.
- * Returns the cycle path if found, null otherwise.
- */
 export function detectCycle(dir: string, taskId: string, newDeps: string[]): string[] | null {
   const tasks = loadTasks(dir);
   const depMap = new Map<string, string[]>();
   for (const t of tasks) {
     depMap.set(t.id, [...t.depends_on]);
   }
-  // Apply proposed change
   depMap.set(taskId, newDeps);
 
-  // DFS from taskId following depends_on edges
   const visited = new Set<string>();
   const path: string[] = [];
 
@@ -349,4 +742,121 @@ export function detectCycle(dir: string, taskId: string, newDeps: string[]): str
   }
 
   return dfs(taskId);
+}
+
+function schemaForCacheablePath(filePath: string): SchemaName | null {
+  const parts = filePath.split(/[\\/]/);
+  if (basename(filePath) === "mission.json") return "mission";
+  if (parts.includes("goals") && filePath.endsWith(".json")) return "goal";
+  if (parts.includes("tasks") && filePath.endsWith(".json")) return "task";
+  return null;
+}
+
+export function validateTasksTree(
+  dir: string,
+  options: { fix?: boolean } = {},
+): TaskStoreIntegrityReport {
+  const root = getTasksRoot(dir);
+  const issues: TaskStoreIssue[] = [];
+  const files = walkFiles(root);
+
+  for (const file of files.filter((path) => path.endsWith(".json"))) {
+    const schemaName = schemaForCacheablePath(file);
+    if (!schemaName) continue;
+    try {
+      taskStore.validateFile(file, schemaName);
+    } catch (err) {
+      issues.push({
+        type: "schema",
+        file: relative(dir, file),
+        message: (err as Error).message,
+      });
+    }
+  }
+
+  const goals = loadGoals(dir);
+  const goalIds = new Set(goals.map((goal) => goal.id));
+  const tasks = loadTasks(dir);
+  const taskIds = new Set(tasks.map((task) => task.id));
+
+  for (const task of tasks) {
+    const file = findFileById(join(root, "tasks"), task.id) ?? undefined;
+    if (task.goal && !goalIds.has(task.goal)) {
+      const issue: TaskStoreIssue = {
+        type: "orphan-goal",
+        file: file ? relative(dir, file) : undefined,
+        taskId: task.id,
+        message: `Task ${task.id} references missing goal ${task.goal}`,
+      };
+      if (options.fix) {
+        task.goal = null;
+        task.updated = new Date().toISOString();
+        saveTask(dir, task);
+        issue.fixed = true;
+      }
+      issues.push(issue);
+    }
+
+    for (const dep of task.depends_on) {
+      if (!taskIds.has(dep)) {
+        issues.push({
+          type: "orphan-dependency",
+          file: file ? relative(dir, file) : undefined,
+          taskId: task.id,
+          message: `Task ${task.id} depends on missing task ${dep}`,
+        });
+      }
+    }
+
+    if (task.status === "done" && !task.proof) {
+      issues.push({
+        type: "missing-proof",
+        file: file ? relative(dir, file) : undefined,
+        taskId: task.id,
+        message: `Task ${task.id} is done but has no proof`,
+      });
+    }
+  }
+
+  const contractPath = join(root, "validation-contract.md");
+  if (existsSync(contractPath)) {
+    const assertionIds = parseAssertionIds(readFileSync(contractPath, "utf-8"));
+    const claimed = new Set(tasks.flatMap((task) => task.fulfills));
+    for (const assertionId of assertionIds) {
+      if (!claimed.has(assertionId)) {
+        issues.push({
+          type: "unclaimed-assertion",
+          file: relative(dir, contractPath),
+          message: `Validation assertion ${assertionId} is claimed by no task`,
+        });
+      }
+    }
+  }
+
+  const now = Date.now();
+  for (const file of files.filter((path) => path.endsWith(".lock"))) {
+    try {
+      const ageMs = now - statSync(file).mtimeMs;
+      if (ageMs > 5 * 60 * 1000) {
+        issues.push({
+          type: "stale-lock",
+          file: relative(dir, file),
+          message: `Stale lock file older than 5m: ${relative(dir, file)}`,
+        });
+      }
+    } catch {
+      // skip unreadable lock files
+    }
+  }
+
+  const drift = taskStore.reconcile(dir);
+  if (drift > 0) {
+    issues.push({
+      type: "drift",
+      file: relative(dir, root),
+      message: `Task-store cache drift detected: ${drift} issue(s)`,
+    });
+  }
+
+  return { ok: issues.every((issue) => issue.fixed), issues };
 }
