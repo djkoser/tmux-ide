@@ -7,6 +7,7 @@ import type { AgentDetail, Goal, Task } from "@/lib/types";
 import { useToasts } from "@/lib/useToasts";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { SaveIndicator } from "./SaveIndicator";
+import { EmptyState, SectionHeader, StatusPill, SurfaceCard, type StatusPillVariant } from "./ui";
 
 interface TaskDetailPanelProps {
   task: Task;
@@ -18,15 +19,15 @@ interface TaskDetailPanelProps {
   onUpdated: () => void;
 }
 
-const STATUS_COLORS: Record<Task["status"], string> = {
-  "in-progress": "var(--yellow)",
-  todo: "var(--dim)",
-  review: "var(--magenta)",
-  done: "var(--green)",
-};
-
 function statusLabel(status: Task["status"]): string {
   return status === "in-progress" ? "DOING" : status.toUpperCase();
+}
+
+function taskStatusVariant(status: Task["status"]): StatusPillVariant {
+  if (status === "done") return "done";
+  if (status === "in-progress") return "active";
+  if (status === "review") return "info";
+  return "pending";
 }
 
 function formatProof(proof: Task["proof"]): string {
@@ -238,14 +239,12 @@ export function TaskDetailPanel({
         <header className="flex shrink-0 items-start gap-3 border-b border-[var(--border)] bg-[var(--surface)] p-4">
           <div className="min-w-0 flex-1">
             <div className="mb-2 flex items-center gap-2">
-              <span
-                data-testid="task-panel-status"
-                className="rounded-sm border border-[var(--border)] px-1.5 py-0.5 text-[10px]"
-                style={{ color: STATUS_COLORS[status] }}
-              >
-                {statusLabel(status)}
-              </span>
-              <span className="text-[11px] text-[var(--dim)]">task {task.id}</span>
+              <StatusPill
+                variant={taskStatusVariant(status)}
+                label={statusLabel(status)}
+                testId="task-panel-status"
+              />
+              <span className="text-[11px] tabular-nums text-[var(--dim)]">task {task.id}</span>
               {saveState === "dirty" && (
                 <span className="text-[10px] text-[var(--dimmer)]">unsaved</span>
               )}
@@ -271,9 +270,7 @@ export function TaskDetailPanel({
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <section>
-            <div className="mb-2 text-[10px] uppercase tracking-[0.08em] text-[var(--dimmer)]">
-              description
-            </div>
+            <SectionHeader label="description" />
             <div className="min-h-52 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--bg-strong)]">
               <MarkdownEditor
                 key={task.id}
@@ -289,7 +286,7 @@ export function TaskDetailPanel({
               <div className="mb-1 text-[10px] uppercase tracking-[0.08em] text-[var(--dimmer)]">
                 assignee
               </div>
-              <div className="rounded-sm border border-[var(--border)] px-2 py-1 text-[var(--fg-secondary)]">
+              <div className="rounded-md border border-[var(--border)] px-2 py-1 text-[var(--fg-secondary)]">
                 {task.assignee || "unassigned"}
               </div>
             </div>
@@ -303,14 +300,14 @@ export function TaskDetailPanel({
                 max={5}
                 value={priority}
                 onChange={(event) => setPriority(Number(event.target.value))}
-                className="h-7 w-full rounded-sm border border-[var(--border)] bg-[var(--surface)] px-2 text-[var(--fg)] outline-none focus:border-[var(--accent)]"
+                className="h-7 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 tabular-nums text-[var(--fg)] outline-none focus:border-[var(--accent)]"
               />
             </label>
             <div>
               <div className="mb-1 text-[10px] uppercase tracking-[0.08em] text-[var(--dimmer)]">
                 goal
               </div>
-              <div className="rounded-sm border border-[var(--border)] px-2 py-1 text-[var(--fg-secondary)]">
+              <div className="rounded-md border border-[var(--border)] px-2 py-1 text-[var(--fg-secondary)]">
                 {goal?.title || task.goal || "none"}
               </div>
             </div>
@@ -318,7 +315,7 @@ export function TaskDetailPanel({
               <div className="mb-1 text-[10px] uppercase tracking-[0.08em] text-[var(--dimmer)]">
                 milestone
               </div>
-              <div className="rounded-sm border border-[var(--border)] px-2 py-1 text-[var(--magenta)]">
+              <div className="rounded-md border border-[var(--border)] px-2 py-1 text-[var(--magenta)]">
                 {task.milestone || "none"}
               </div>
             </div>
@@ -329,7 +326,7 @@ export function TaskDetailPanel({
               {task.tags.map((tag) => (
                 <span
                   key={tag}
-                  className="rounded-sm border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5 text-[10px] text-[var(--fg-secondary)]"
+                  className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5 text-[10px] text-[var(--fg-secondary)]"
                 >
                   #{tag}
                 </span>
@@ -338,21 +335,17 @@ export function TaskDetailPanel({
           )}
 
           <section className="mt-5">
-            <div className="mb-2 text-[10px] uppercase tracking-[0.08em] text-[var(--dimmer)]">
-              proof
-            </div>
+            <SectionHeader label="proof" />
             <pre className="max-h-48 overflow-auto rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-[11px] text-[var(--fg-secondary)]">
               {formatProof(task.proof)}
             </pre>
           </section>
 
           <section className="mt-5">
-            <div className="mb-2 text-[10px] uppercase tracking-[0.08em] text-[var(--dimmer)]">
-              dispatch history
-            </div>
-            <div className="space-y-2">
+            <SectionHeader label="dispatch history" />
+            <SurfaceCard className="space-y-2">
               {taskEvents.length === 0 ? (
-                <div className="text-[11px] text-[var(--dim)]">No events for this task</div>
+                <EmptyState title="No events for this task" />
               ) : (
                 taskEvents.map((event) => (
                   <div
@@ -362,19 +355,19 @@ export function TaskDetailPanel({
                     <span className="mt-1 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
                     <div>
                       <div className="text-[var(--fg-secondary)]">{eventText(event)}</div>
-                      <div className="text-[var(--dimmer)]">{event.relative}</div>
+                      <div className="tabular-nums text-[var(--dimmer)]">{event.relative}</div>
                     </div>
                   </div>
                 ))
               )}
-            </div>
+            </SurfaceCard>
           </section>
 
           <section data-testid="task-panel-actions" className="mt-5 flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => void markDone()}
-              className="inline-flex items-center gap-1.5 rounded-sm border border-[var(--green)] px-2 py-1 text-[11px] text-[var(--green)] transition-colors motion-safe:transition-transform motion-safe:duration-75 motion-safe:active:scale-[0.98] hover:bg-[var(--surface-hover)]"
+              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--green)] px-2 py-1 text-[11px] text-[var(--green)] transition-colors motion-safe:transition-transform motion-safe:duration-75 motion-safe:active:scale-[0.98] hover:bg-[var(--surface-hover)]"
             >
               <CheckCircle2 aria-hidden="true" size={13} />
               Mark done
@@ -382,7 +375,7 @@ export function TaskDetailPanel({
             <button
               type="button"
               onClick={redispatch}
-              className="inline-flex items-center gap-1.5 rounded-sm border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--fg-secondary)] transition-colors motion-safe:transition-transform motion-safe:duration-75 motion-safe:active:scale-[0.98] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--fg-secondary)] transition-colors motion-safe:transition-transform motion-safe:duration-75 motion-safe:active:scale-[0.98] hover:border-[var(--accent)] hover:text-[var(--accent)]"
             >
               <RotateCw aria-hidden="true" size={13} />
               Re-dispatch
@@ -390,7 +383,7 @@ export function TaskDetailPanel({
             <button
               type="button"
               onClick={() => void sendToAgent()}
-              className="inline-flex items-center gap-1.5 rounded-sm border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--fg-secondary)] transition-colors motion-safe:transition-transform motion-safe:duration-75 motion-safe:active:scale-[0.98] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--fg-secondary)] transition-colors motion-safe:transition-transform motion-safe:duration-75 motion-safe:active:scale-[0.98] hover:border-[var(--accent)] hover:text-[var(--accent)]"
             >
               <Send aria-hidden="true" size={13} />
               Send to active agent
@@ -400,7 +393,7 @@ export function TaskDetailPanel({
                 <button
                   type="button"
                   onClick={() => void deleteTask()}
-                  className="inline-flex items-center gap-1.5 rounded-sm border border-[var(--red)] bg-[var(--red)] px-2 py-1 text-[11px] text-[var(--bg)] motion-safe:transition-transform motion-safe:duration-75 motion-safe:active:scale-[0.98]"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-[var(--red)] bg-[var(--red)] px-2 py-1 text-[11px] text-[var(--bg)] motion-safe:transition-transform motion-safe:duration-75 motion-safe:active:scale-[0.98]"
                 >
                   <Trash2 aria-hidden="true" size={13} />
                   Confirm delete
@@ -408,7 +401,7 @@ export function TaskDetailPanel({
                 <button
                   type="button"
                   onClick={() => setConfirmDelete(false)}
-                  className="rounded-sm border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--dim)] motion-safe:transition-transform motion-safe:duration-75 motion-safe:active:scale-[0.98]"
+                  className="rounded-md border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--dim)] motion-safe:transition-transform motion-safe:duration-75 motion-safe:active:scale-[0.98]"
                 >
                   Cancel
                 </button>
@@ -417,7 +410,7 @@ export function TaskDetailPanel({
               <button
                 type="button"
                 onClick={() => setConfirmDelete(true)}
-                className="inline-flex items-center gap-1.5 rounded-sm border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--red)] transition-colors motion-safe:transition-transform motion-safe:duration-75 motion-safe:active:scale-[0.98] hover:border-[var(--red)]"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--red)] transition-colors motion-safe:transition-transform motion-safe:duration-75 motion-safe:active:scale-[0.98] hover:border-[var(--red)]"
               >
                 <Trash2 aria-hidden="true" size={13} />
                 Delete
@@ -427,14 +420,12 @@ export function TaskDetailPanel({
 
           {agents.length > 0 && (
             <section className="mt-5">
-              <div className="mb-2 text-[10px] uppercase tracking-[0.08em] text-[var(--dimmer)]">
-                agents
-              </div>
+              <SectionHeader label="agents" />
               <div className="flex flex-wrap gap-1">
                 {agents.map((agent) => (
                   <span
                     key={agent.paneId}
-                    className="rounded-sm border border-[var(--border)] px-1.5 py-0.5 text-[10px] text-[var(--fg-secondary)]"
+                    className="rounded-md border border-[var(--border)] px-1.5 py-0.5 text-[10px] text-[var(--fg-secondary)]"
                   >
                     {agent.paneTitle}
                   </span>

@@ -3,6 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { EventData } from "@/lib/api";
 import { useSessionStream } from "@/lib/useSessionStream";
+import {
+  EmptyState,
+  KpiCard,
+  SectionHeader,
+  StatusPill,
+  type StatusPillVariant,
+} from "@/components/ui";
 
 interface ActivityViewProps {
   sessionName: string;
@@ -73,50 +80,13 @@ function dayLabel(key: string): string {
   return day.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-function KpiCard({
-  label,
-  value,
-  active,
-  color,
-  onClick,
-}: {
-  label: string;
-  value: number;
-  active: boolean;
-  color?: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      data-testid="activity-kpi"
-      onClick={onClick}
-      className={`flex min-w-0 flex-col items-start rounded-md border px-3 py-2 text-left transition-colors ${
-        active
-          ? "border-[var(--accent)] bg-[var(--surface-active)]"
-          : "border-[var(--border-weak)] bg-[var(--bg-strong)] hover:bg-[var(--surface-hover)]"
-      }`}
-    >
-      <span className="truncate text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]">
-        {label}
-      </span>
-      <span className="text-lg tabular-nums" style={{ color: color ?? "var(--fg)" }}>
-        {value}
-      </span>
-    </button>
-  );
-}
-
-function EventTypePill({ type }: { type: string }) {
-  const meta = EVENT_META[type] ?? { ...DEFAULT_META, label: type.replaceAll("_", " ") };
-  return (
-    <span
-      className="inline-flex h-5 items-center rounded-sm px-1.5 text-[10px] uppercase tracking-[0.05em]"
-      style={{ color: meta.color, background: meta.bg }}
-    >
-      {meta.label}
-    </span>
-  );
+function eventVariant(type: string): StatusPillVariant {
+  if (type === "completion") return "success";
+  if (type === "error") return "error";
+  if (type === "stall" || type === "retry") return "warning";
+  if (type === "dispatch") return "active";
+  if (type === "reconcile") return "info";
+  return "pending";
 }
 
 export function ActivityView({ sessionName }: ActivityViewProps) {
@@ -204,13 +174,17 @@ export function ActivityView({ sessionName }: ActivityViewProps) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--bg)]">
-      <div className="space-y-3 border-b border-[var(--border)] bg-[var(--bg)] p-4">
+    <div
+      data-testid="activity-view"
+      className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--bg)]"
+    >
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 space-y-5 overflow-auto p-4">
         <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-5">
           <KpiCard
             label="total events"
             value={stats.total}
             active={kpiFilter === "all"}
+            testId="activity-kpi"
             onClick={() => setKpiFilter("all")}
           />
           <KpiCard
@@ -218,6 +192,7 @@ export function ActivityView({ sessionName }: ActivityViewProps) {
             value={stats.hour}
             active={kpiFilter === "hour"}
             color="var(--accent)"
+            testId="activity-kpi"
             onClick={() => setKpiFilter("hour")}
           />
           <KpiCard
@@ -225,6 +200,7 @@ export function ActivityView({ sessionName }: ActivityViewProps) {
             value={stats.day}
             active={kpiFilter === "day"}
             color="var(--cyan)"
+            testId="activity-kpi"
             onClick={() => setKpiFilter("day")}
           />
           <KpiCard
@@ -232,6 +208,7 @@ export function ActivityView({ sessionName }: ActivityViewProps) {
             value={stats.agents}
             active={kpiFilter === "agents"}
             color="var(--green)"
+            testId="activity-kpi"
             onClick={() => setKpiFilter("agents")}
           />
           <KpiCard
@@ -239,6 +216,7 @@ export function ActivityView({ sessionName }: ActivityViewProps) {
             value={stats.types}
             active={kpiFilter === "types"}
             color="var(--yellow)"
+            testId="activity-kpi"
             onClick={() => setKpiFilter("types")}
           />
         </div>
@@ -276,7 +254,7 @@ export function ActivityView({ sessionName }: ActivityViewProps) {
                 type="button"
                 data-testid="activity-filter"
                 onClick={() => toggleType(type)}
-                className={`h-7 rounded-sm border px-2 text-[11px] transition-colors ${
+                className={`h-7 rounded-md border px-2 text-[11px] transition-colors ${
                   active
                     ? "border-[var(--accent)] bg-[var(--surface-active)]"
                     : "border-[var(--border-weak)] bg-[var(--bg-strong)] hover:bg-[var(--surface-hover)]"
@@ -295,39 +273,37 @@ export function ActivityView({ sessionName }: ActivityViewProps) {
                 setSelectedTypes(new Set());
                 setQuery("");
               }}
-              className="h-7 rounded-sm border border-[var(--border-weak)] px-2 text-[11px] text-[var(--dim)] hover:text-[var(--fg)]"
+              className="h-7 rounded-md border border-[var(--border-weak)] px-2 text-[11px] text-[var(--dim)] hover:text-[var(--fg)]"
             >
               clear
             </button>
           )}
         </div>
-      </div>
-
-      <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto p-4">
         {groups.length === 0 ? (
-          <div className="flex h-full items-center justify-center">
-            <div className="rounded-md border border-dashed border-[var(--border-weak)] bg-[var(--bg-strong)] px-6 py-5 text-center">
-              <div className="text-[13px] text-[var(--fg)]">No activity yet</div>
-              <div className="mt-1 text-[11px] text-[var(--dim)]">
-                New dispatches, completions, retries, and errors will appear here.
-              </div>
-            </div>
-          </div>
+          <EmptyState
+            title="No activity yet"
+            body="New dispatches, completions, retries, and errors will appear here."
+          />
         ) : (
           <div className="space-y-4">
             {groups.map((group) => (
               <section key={group.key}>
-                <div className="sticky top-0 z-10 mb-2 flex items-center gap-2 border-b border-[var(--border-weak)] bg-[var(--bg)] py-1">
-                  <span className="text-[11px] uppercase tracking-[0.08em] text-[var(--accent)]">
-                    {group.label}
-                  </span>
-                  <span className="text-[10px] tabular-nums text-[var(--dim)]">
-                    {group.rows.length}
-                  </span>
-                </div>
+                <SectionHeader
+                  label={group.label}
+                  rightSlot={
+                    <span className="text-[10px] tabular-nums text-[var(--dim)]">
+                      {group.rows.length}
+                    </span>
+                  }
+                  className="sticky top-0 z-10 bg-[var(--bg)] py-1"
+                />
                 <div className="divide-y divide-[var(--border-weak)] overflow-hidden rounded-md border border-[var(--border-weak)] bg-[var(--bg-strong)]">
                   {group.rows.map((event, index) => {
                     const meta = EVENT_META[event.type] ?? DEFAULT_META;
+                    const label = (EVENT_META[event.type]?.label ?? event.type).replaceAll(
+                      "_",
+                      " ",
+                    );
                     return (
                       <div
                         key={`${event.timestamp}-${event.type}-${index}`}
@@ -341,14 +317,18 @@ export function ActivityView({ sessionName }: ActivityViewProps) {
                         />
                         <div className="min-w-0">
                           <div className="flex min-w-0 items-center gap-2">
-                            <EventTypePill type={event.type} />
+                            <StatusPill
+                              variant={eventVariant(event.type)}
+                              label={label}
+                              dot={false}
+                            />
                             <span className="truncate text-[12px] text-[var(--fg)]">
                               {formatMessage(event)}
                             </span>
                           </div>
                           <div className="mt-1 flex min-w-0 items-center gap-2 text-[10px] text-[var(--dim)]">
                             {event.agent && (
-                              <span className="rounded-sm bg-[var(--surface)] px-1.5 py-0.5 text-[var(--cyan)]">
+                              <span className="rounded-md bg-[var(--surface)] px-1.5 py-0.5 text-[var(--cyan)]">
                                 @{event.agent}
                               </span>
                             )}

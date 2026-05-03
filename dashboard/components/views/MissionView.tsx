@@ -7,6 +7,16 @@ import type { Goal, Task } from "@/lib/types";
 import { useSessionStream } from "@/lib/useSessionStream";
 import { useToasts } from "@/lib/useToasts";
 import { ProgressBar } from "@/components/ProgressBar";
+import {
+  EmptyState,
+  KpiCard,
+  SectionHeader,
+  SkeletonCard,
+  SkeletonText,
+  StatusPill,
+  SurfaceCard,
+  type StatusPillVariant,
+} from "@/components/ui";
 
 interface MissionViewProps {
   sessionName: string;
@@ -34,14 +44,11 @@ const GOAL_STATUS_META: Record<GoalStatus, { label: string; color: string; bg: s
   done: { label: "done", color: "var(--green)", bg: "rgba(155, 205, 151, 0.1)" },
 };
 
-const MILESTONE_META: Record<
-  MilestoneData["status"],
-  { label: string; color: string; bg: string }
-> = {
-  locked: { label: "pending", color: "var(--dim)", bg: "var(--surface)" },
-  active: { label: "active", color: "var(--accent)", bg: "rgba(91, 192, 222, 0.1)" },
-  validating: { label: "validating", color: "var(--yellow)", bg: "rgba(252, 213, 58, 0.1)" },
-  done: { label: "done", color: "var(--green)", bg: "rgba(155, 205, 151, 0.1)" },
+const MILESTONE_META: Record<MilestoneData["status"], { label: string; color: string }> = {
+  locked: { label: "pending", color: "var(--dim)" },
+  active: { label: "active", color: "var(--accent)" },
+  validating: { label: "validating", color: "var(--yellow)" },
+  done: { label: "done", color: "var(--green)" },
 };
 
 function isMissionStatus(value: string): value is MissionStatus {
@@ -72,39 +79,25 @@ function percent(done: number, total: number): number {
   return Math.round((done / total) * 100);
 }
 
-function StatusPill({ label, color, bg }: { label: string; color: string; bg: string }) {
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-sm px-1.5 py-0.5 text-[10px] uppercase tracking-[0.05em]"
-      style={{ color, background: bg }}
-    >
-      <span
-        className="inline-block h-1.5 w-1.5 rounded-full"
-        style={{ background: color }}
-        aria-hidden="true"
-      />
-      {label}
-    </span>
-  );
+function missionVariant(status: MissionStatus): StatusPillVariant {
+  if (status === "complete") return "done";
+  if (status === "validating") return "warning";
+  if (status === "active") return "active";
+  if (status === "planning") return "pending";
+  return status;
 }
 
-function KpiCard({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: number | string;
-  color?: string;
-}) {
-  return (
-    <div className="rounded-md border border-[var(--border-weak)] bg-[var(--bg-strong)] px-3 py-2">
-      <div className="text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]">{label}</div>
-      <div className="text-lg tabular-nums" style={{ color: color ?? "var(--fg)" }}>
-        {value}
-      </div>
-    </div>
-  );
+function goalVariant(status: GoalStatus): StatusPillVariant {
+  if (status === "done") return "done";
+  if (status === "in-progress") return "active";
+  return "pending";
+}
+
+function milestoneVariant(status: MilestoneData["status"]): StatusPillVariant {
+  if (status === "done") return "done";
+  if (status === "active") return "active";
+  if (status === "validating") return "warning";
+  return "pending";
 }
 
 function GoalCard({ goal, done, total }: { goal: Goal; done: number; total: number }) {
@@ -114,12 +107,9 @@ function GoalCard({ goal, done, total }: { goal: Goal; done: number; total: numb
   const showToggle = acceptance.length > 160;
 
   return (
-    <article
-      data-testid="mission-goal-card"
-      className="rounded-md border border-[var(--border-weak)] bg-[var(--bg-strong)] p-3"
-    >
+    <SurfaceCard testId="mission-goal-card">
       <div className="flex items-start gap-3">
-        <span className="shrink-0 rounded-sm border border-[var(--border)] px-1.5 py-0.5 text-[10px] text-[var(--fg-secondary)]">
+        <span className="shrink-0 rounded-md border border-[var(--border)] px-1.5 py-0.5 text-[10px] tabular-nums text-[var(--fg-secondary)]">
           P{goal.priority}
         </span>
         <div className="min-w-0 flex-1">
@@ -127,7 +117,7 @@ function GoalCard({ goal, done, total }: { goal: Goal; done: number; total: numb
             <h3 className="min-w-0 truncate text-[13px] font-medium text-[var(--fg)]">
               {goal.title}
             </h3>
-            <StatusPill label={meta.label} color={meta.color} bg={meta.bg} />
+            <StatusPill variant={goalVariant(goal.status)} label={meta.label} />
           </div>
           {acceptance && (
             <button
@@ -151,7 +141,7 @@ function GoalCard({ goal, done, total }: { goal: Goal; done: number; total: numb
           </div>
         </div>
       </div>
-    </article>
+    </SurfaceCard>
   );
 }
 
@@ -196,8 +186,16 @@ export function MissionView({ sessionName }: MissionViewProps) {
 
   if (!snapshot) {
     return (
-      <div className="flex min-h-0 flex-1 items-center justify-center bg-[var(--bg)] text-[var(--dim)]">
-        Loading mission...
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--bg)]">
+        <div className="flex-1 space-y-5 overflow-auto p-4">
+          <SkeletonCard />
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-5">
+            {Array.from({ length: 5 }, (_, index) => (
+              <SkeletonCard key={index} />
+            ))}
+          </div>
+          <SkeletonText lines={5} />
+        </div>
       </div>
     );
   }
@@ -208,18 +206,17 @@ export function MissionView({ sessionName }: MissionViewProps) {
         data-testid="mission-view"
         className="flex min-h-0 flex-1 items-center justify-center bg-[var(--bg)] p-8 text-center"
       >
-        <div
-          data-testid="mission-header"
-          className="max-w-md rounded-md border border-[var(--border-weak)] bg-[var(--bg-strong)] p-5"
-        >
-          <div className="text-[14px] font-medium text-[var(--fg)]">No active mission</div>
-          <div className="mt-2 text-[11px] leading-5 text-[var(--dim)]">
-            Set a mission to connect goals, milestones, and validation into one project narrative.
-          </div>
-          <code className="mt-3 inline-flex rounded-sm bg-[var(--surface)] px-2 py-1 text-[11px] text-[var(--fg-secondary)]">
-            tmux-ide mission set &lt;title&gt;
-          </code>
-        </div>
+        <SurfaceCard testId="mission-header" padded="md" className="max-w-md p-5">
+          <EmptyState
+            title="No active mission"
+            body="Set a mission to connect goals, milestones, and validation into one project narrative."
+            action={
+              <code className="inline-flex rounded-md bg-[var(--surface)] px-2 py-1 text-[11px] text-[var(--fg-secondary)]">
+                tmux-ide mission set &lt;title&gt;
+              </code>
+            }
+          />
+        </SurfaceCard>
       </div>
     );
   }
@@ -245,9 +242,9 @@ export function MissionView({ sessionName }: MissionViewProps) {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="mb-2 flex flex-wrap items-center gap-2">
-                <StatusPill label={statusMeta.label} color={statusMeta.color} bg={statusMeta.bg} />
+                <StatusPill variant={missionVariant(status)} label={statusMeta.label} />
                 {mission.mission.branch && (
-                  <span className="rounded-sm border border-[var(--border)] px-1.5 py-0.5 text-[10px] text-[var(--fg-secondary)]">
+                  <span className="rounded-md border border-[var(--border)] px-1.5 py-0.5 text-[10px] text-[var(--fg-secondary)]">
                     {mission.mission.branch}
                   </span>
                 )}
@@ -263,7 +260,7 @@ export function MissionView({ sessionName }: MissionViewProps) {
             <button
               type="button"
               onClick={showComingSoon}
-              className="rounded-sm border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+              className="rounded-md border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
             >
               Edit mission
             </button>
@@ -296,7 +293,7 @@ export function MissionView({ sessionName }: MissionViewProps) {
             <button
               type="button"
               onClick={openValidation}
-              className="ml-auto rounded-sm border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+              className="ml-auto rounded-md border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
             >
               View validation
             </button>
@@ -304,10 +301,12 @@ export function MissionView({ sessionName }: MissionViewProps) {
         </section>
 
         <section data-testid="mission-goals">
-          <header className="mb-2 flex items-center justify-between">
-            <h2 className="text-[12px] uppercase tracking-[0.08em] text-[var(--accent)]">goals</h2>
-            <span className="text-[11px] tabular-nums text-[var(--dim)]">{goals.length}</span>
-          </header>
+          <SectionHeader
+            label="goals"
+            rightSlot={
+              <span className="text-[11px] tabular-nums text-[var(--dim)]">{goals.length}</span>
+            }
+          />
           {goals.length > 0 ? (
             <div className="grid gap-2 lg:grid-cols-2">
               {goals.map((goal) => {
@@ -317,22 +316,23 @@ export function MissionView({ sessionName }: MissionViewProps) {
               })}
             </div>
           ) : (
-            <div className="rounded-md border border-[var(--border-weak)] bg-[var(--bg-strong)] p-4 text-[11px] text-[var(--dim)]">
-              No goals have been created for this mission.
-            </div>
+            <EmptyState
+              title="No goals have been created for this mission."
+              className="rounded-md border border-[var(--border-weak)] bg-[var(--bg-strong)]"
+            />
           )}
         </section>
 
         {milestones.length > 0 && (
           <section data-testid="mission-milestones">
-            <header className="mb-2 flex items-center justify-between">
-              <h2 className="text-[12px] uppercase tracking-[0.08em] text-[var(--accent)]">
-                milestones
-              </h2>
-              <span className="text-[11px] tabular-nums text-[var(--dim)]">
-                {milestones.length}
-              </span>
-            </header>
+            <SectionHeader
+              label="milestones"
+              rightSlot={
+                <span className="text-[11px] tabular-nums text-[var(--dim)]">
+                  {milestones.length}
+                </span>
+              }
+            />
             <div className="grid gap-2 xl:grid-cols-4 md:grid-cols-2">
               {milestones.map((milestone) => {
                 const meta = MILESTONE_META[milestone.status];
@@ -354,7 +354,7 @@ export function MissionView({ sessionName }: MissionViewProps) {
                           {milestone.title}
                         </h3>
                       </div>
-                      <StatusPill label={meta.label} color={meta.color} bg={meta.bg} />
+                      <StatusPill variant={milestoneVariant(milestone.status)} label={meta.label} />
                     </div>
                     {milestone.description && (
                       <p className="mb-3 line-clamp-2 text-[11px] leading-5 text-[var(--fg-secondary)]">

@@ -4,6 +4,14 @@ import { useCallback, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { fetchCoverage, fetchValidation, type ValidationData } from "@/lib/api";
 import { usePolling } from "@/lib/usePolling";
+import {
+  EmptyState,
+  KpiCard,
+  SectionHeader,
+  SkeletonCard,
+  SkeletonText,
+  StatusPill,
+} from "@/components/ui";
 
 interface ValidationViewProps {
   sessionName: string;
@@ -13,11 +21,11 @@ type StatusKey = "passing" | "failing" | "pending" | "blocked";
 
 const STATUS_ORDER: StatusKey[] = ["failing", "blocked", "pending", "passing"];
 
-const STATUS_META: Record<StatusKey, { label: string; color: string; bg: string }> = {
-  failing: { label: "failing", color: "var(--red)", bg: "rgba(252, 83, 58, 0.1)" },
-  blocked: { label: "blocked", color: "var(--yellow)", bg: "rgba(252, 213, 58, 0.1)" },
-  pending: { label: "pending", color: "var(--dim)", bg: "var(--surface)" },
-  passing: { label: "passing", color: "var(--green)", bg: "rgba(155, 205, 151, 0.1)" },
+const STATUS_META: Record<StatusKey, { label: string; color: string }> = {
+  failing: { label: "failing", color: "var(--red)" },
+  blocked: { label: "blocked", color: "var(--yellow)" },
+  pending: { label: "pending", color: "var(--dim)" },
+  passing: { label: "passing", color: "var(--green)" },
 };
 
 function isStatusKey(value: string): value is StatusKey {
@@ -25,7 +33,7 @@ function isStatusKey(value: string): value is StatusKey {
 }
 
 function formatRelative(iso: string | null | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const ms = Date.now() - new Date(iso).getTime();
   if (Number.isNaN(ms)) return iso;
   if (ms < 60_000) return `${Math.floor(ms / 1000)}s ago`;
@@ -45,67 +53,29 @@ function buckets(validation: ValidationData | null) {
   return { ...initial, total };
 }
 
-function StatusPill({ status }: { status: string }) {
-  const meta = isStatusKey(status) ? STATUS_META[status] : null;
-  const color = meta?.color ?? "var(--dim)";
-  const bg = meta?.bg ?? "var(--surface)";
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-sm px-1.5 py-0.5 text-[10px] uppercase tracking-[0.05em]"
-      style={{ color, background: bg }}
-    >
-      <span
-        className="inline-block h-1.5 w-1.5 rounded-full"
-        style={{ background: color }}
-        aria-hidden="true"
-      />
-      {meta?.label ?? status}
-    </span>
-  );
-}
-
-function KpiCard({
-  label,
-  value,
-  color,
-  active,
-  onClick,
-}: {
-  label: string;
-  value: number | string;
-  color?: string;
-  active?: boolean;
-  onClick?: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={!onClick}
-      className={`flex flex-col items-start rounded-md border px-3 py-2 text-left transition-colors ${
-        active
-          ? "border-[var(--accent)] bg-[var(--surface-active)]"
-          : "border-[var(--border-weak)] bg-[var(--bg-strong)] hover:bg-[var(--surface-hover)]"
-      } ${onClick ? "cursor-pointer" : "cursor-default"}`}
-    >
-      <span className="text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]">{label}</span>
-      <span className="text-lg tabular-nums" style={{ color: color ?? "var(--fg)" }}>
-        {value}
-      </span>
-    </button>
-  );
-}
-
 export function ValidationView({ sessionName }: ValidationViewProps) {
   const validationFetcher = useCallback(() => fetchValidation(sessionName), [sessionName]);
-  const { data: validation } = usePolling(validationFetcher, 10000);
+  const { data: validation, loading } = usePolling(validationFetcher, 10000);
   const coverageFetcher = useCallback(() => fetchCoverage(sessionName), [sessionName]);
   const { data: coverage } = usePolling(coverageFetcher, 10000);
-
   const [filter, setFilter] = useState<StatusKey | "all">("all");
 
   const stats = useMemo(() => buckets(validation), [validation]);
   const passingPct = stats.total === 0 ? 0 : Math.round((stats.passing / stats.total) * 100);
+  const coverageGaps = useMemo(() => {
+    const rows: Array<{ type: string; message: string; file?: string }> = [];
+    for (const item of coverage?.unclaimed ?? []) {
+      rows.push({ type: "unclaimed", message: item });
+    }
+    for (const [key, files] of Object.entries(coverage?.duplicates ?? {})) {
+      rows.push({
+        type: "duplicate",
+        message: key,
+        file: files.join(", "),
+      });
+    }
+    return rows;
+  }, [coverage]);
 
   const assertionRows = useMemo(() => {
     if (!validation?.state) return [];
@@ -124,23 +94,44 @@ export function ValidationView({ sessionName }: ValidationViewProps) {
     return filter === "all" ? ordered : ordered.filter((row) => row.status === filter);
   }, [validation, filter]);
 
-  if (!validation) {
+  if (!validation && loading) {
     return (
-      <div className="flex flex-1 min-h-0 flex-col items-center justify-center bg-[var(--bg)] p-8 text-center text-[var(--dim)]">
-        <div className="text-[13px]">No validation contract found</div>
-        <div className="mt-1 max-w-sm text-[11px]">
-          Add a{" "}
-          <code className="rounded-sm bg-[var(--surface)] px-1">.tasks/validation-contract.md</code>{" "}
-          file to this project to start tracking assertions.
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--bg)]">
+        <div className="flex-1 space-y-5 overflow-auto p-4">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-5">
+            {Array.from({ length: 5 }, (_, index) => (
+              <SkeletonCard key={index} />
+            ))}
+          </div>
+          <SkeletonText lines={6} />
         </div>
       </div>
     );
   }
 
+  if (!validation) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--bg)]">
+        <EmptyState
+          title="No validation contract found"
+          body={
+            <>
+              Add a{" "}
+              <code className="rounded-md bg-[var(--surface)] px-1">
+                .tasks/validation-contract.md
+              </code>{" "}
+              file to this project to start tracking assertions.
+            </>
+          }
+          className="flex-1"
+        />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-1 min-h-0 flex-col bg-[var(--bg)] overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--bg)]">
       <div className="flex-1 space-y-5 overflow-auto p-4">
-        {/* KPI strip + progress bar */}
         <section className="space-y-2">
           <div className="grid grid-cols-1 gap-2 md:grid-cols-5">
             <KpiCard
@@ -149,34 +140,16 @@ export function ValidationView({ sessionName }: ValidationViewProps) {
               active={filter === "all"}
               onClick={() => setFilter("all")}
             />
-            <KpiCard
-              label="passing"
-              value={stats.passing}
-              color={STATUS_META.passing.color}
-              active={filter === "passing"}
-              onClick={() => setFilter("passing")}
-            />
-            <KpiCard
-              label="failing"
-              value={stats.failing}
-              color={STATUS_META.failing.color}
-              active={filter === "failing"}
-              onClick={() => setFilter("failing")}
-            />
-            <KpiCard
-              label="pending"
-              value={stats.pending}
-              color={STATUS_META.pending.color}
-              active={filter === "pending"}
-              onClick={() => setFilter("pending")}
-            />
-            <KpiCard
-              label="blocked"
-              value={stats.blocked}
-              color={STATUS_META.blocked.color}
-              active={filter === "blocked"}
-              onClick={() => setFilter("blocked")}
-            />
+            {[...STATUS_ORDER].reverse().map((status) => (
+              <KpiCard
+                key={status}
+                label={STATUS_META[status].label}
+                value={stats[status]}
+                color={STATUS_META[status].color}
+                active={filter === status}
+                onClick={() => setFilter(status)}
+              />
+            ))}
           </div>
 
           <div
@@ -189,13 +162,7 @@ export function ValidationView({ sessionName }: ValidationViewProps) {
             <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--border-weak)]">
               <div
                 className="absolute inset-y-0 left-0 transition-[width] duration-200"
-                style={{
-                  width: `${passingPct}%`,
-                  background:
-                    stats.failing > 0
-                      ? `linear-gradient(to right, ${STATUS_META.passing.color} 0%, ${STATUS_META.passing.color} 100%)`
-                      : STATUS_META.passing.color,
-                }}
+                style={{ width: `${passingPct}%`, background: STATUS_META.passing.color }}
               />
             </div>
             <span className="text-[11px] tabular-nums text-[var(--fg-secondary)]">
@@ -204,7 +171,7 @@ export function ValidationView({ sessionName }: ValidationViewProps) {
             {validation.state?.lastVerified && (
               <>
                 <span className="text-[var(--dimmer)]">·</span>
-                <span className="text-[11px] text-[var(--dim)]">
+                <span className="text-[11px] tabular-nums text-[var(--dim)]">
                   verified {formatRelative(validation.state.lastVerified)}
                 </span>
               </>
@@ -212,22 +179,25 @@ export function ValidationView({ sessionName }: ValidationViewProps) {
           </div>
         </section>
 
-        {/* Assertions */}
         {assertionRows.length > 0 ? (
           <section>
-            <header className="mb-2 flex items-center justify-between">
-              <h3 className="text-[12px] uppercase tracking-[0.08em] text-[var(--accent)]">
-                assertions
-                {filter !== "all" && (
-                  <span className="ml-2 text-[var(--dim)] normal-case tracking-normal">
-                    · filtering {STATUS_META[filter].label}
-                  </span>
-                )}
-              </h3>
-              <span className="text-[11px] tabular-nums text-[var(--dim)]">
-                {assertionRows.length} shown
-              </span>
-            </header>
+            <SectionHeader
+              label={
+                <>
+                  assertions
+                  {filter !== "all" && (
+                    <span className="ml-2 text-[var(--dim)] normal-case tracking-normal">
+                      - filtering {STATUS_META[filter].label}
+                    </span>
+                  )}
+                </>
+              }
+              rightSlot={
+                <span className="text-[11px] tabular-nums text-[var(--dim)]">
+                  {assertionRows.length} shown
+                </span>
+              }
+            />
             <div className="divide-y divide-[var(--border-weak)] overflow-hidden rounded-md border border-[var(--border-weak)] bg-[var(--bg-strong)]">
               {assertionRows.map((row) => (
                 <div
@@ -239,7 +209,10 @@ export function ValidationView({ sessionName }: ValidationViewProps) {
                   <code className="w-32 shrink-0 truncate text-[12px] text-[var(--fg)]">
                     {row.id}
                   </code>
-                  <StatusPill status={row.status} />
+                  <StatusPill
+                    variant={isStatusKey(row.status) ? row.status : "pending"}
+                    label={isStatusKey(row.status) ? STATUS_META[row.status].label : row.status}
+                  />
                   <div className="min-w-0 flex-1">
                     {row.evidence && (
                       <div className="truncate text-[12px] text-[var(--fg-secondary)]">
@@ -258,77 +231,53 @@ export function ValidationView({ sessionName }: ValidationViewProps) {
           </section>
         ) : (
           filter !== "all" && (
-            <div className="rounded-md border border-dashed border-[var(--border-weak)] bg-[var(--bg-strong)] p-4 text-center text-[12px] text-[var(--dim)]">
-              No assertions in <strong>{STATUS_META[filter].label}</strong>.
-            </div>
+            <EmptyState
+              title={
+                <>
+                  No assertions in <strong>{STATUS_META[filter].label}</strong>.
+                </>
+              }
+              className="rounded-md border border-dashed border-[var(--border-weak)] bg-[var(--bg-strong)]"
+            />
           )
         )}
 
-        {/* Coverage warnings */}
-        {coverage &&
-          (coverage.unclaimed.length > 0 || Object.keys(coverage.duplicates).length > 0) && (
-            <section className="space-y-2">
-              <h3 className="text-[12px] uppercase tracking-[0.08em] text-[var(--accent)]">
-                coverage
-              </h3>
-              {coverage.unclaimed.length > 0 && (
-                <div
-                  className="rounded-md border-l-2 border-[var(--yellow)] bg-[var(--bg-strong)] px-3 py-2"
-                  data-testid="coverage-unclaimed"
-                >
-                  <div className="mb-1 text-[11px] uppercase tracking-[0.05em] text-[var(--yellow)]">
-                    {coverage.unclaimed.length} unclaimed assertion
-                    {coverage.unclaimed.length === 1 ? "" : "s"}
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {coverage.unclaimed.map((id) => (
-                      <code
-                        key={id}
-                        className="rounded-sm bg-[var(--surface)] px-1.5 py-0.5 text-[11px] text-[var(--fg-secondary)]"
-                      >
-                        {id}
-                      </code>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {Object.keys(coverage.duplicates).length > 0 && (
-                <div
-                  className="rounded-md border-l-2 border-[var(--cyan)] bg-[var(--bg-strong)] px-3 py-2"
-                  data-testid="coverage-duplicates"
-                >
-                  <div className="mb-1 text-[11px] uppercase tracking-[0.05em] text-[var(--cyan)]">
-                    duplicate claims
-                  </div>
-                  <div className="space-y-0.5">
-                    {Object.entries(coverage.duplicates).map(([id, taskIds]) => (
-                      <div key={id} className="text-[11px] text-[var(--fg-secondary)]">
-                        <code className="text-[var(--fg)]">{id}</code>
-                        <span className="text-[var(--dim)]"> ← claimed by </span>
-                        {taskIds.map((tid, i) => (
-                          <span key={tid}>
-                            <code className="text-[var(--cyan)]">{tid}</code>
-                            {i < taskIds.length - 1 && (
-                              <span className="text-[var(--dim)]">, </span>
-                            )}
-                          </span>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </section>
-          )}
-
-        {/* Contract markdown */}
         {validation.contract && (
           <section>
-            <h3 className="mb-2 text-[12px] uppercase tracking-[0.08em] text-[var(--accent)]">
-              contract
-            </h3>
+            <SectionHeader label="contract" />
             <div className="plan-content rounded-md border border-[var(--border-weak)] bg-[var(--bg-strong)] p-4">
               <ReactMarkdown>{validation.contract}</ReactMarkdown>
+            </div>
+          </section>
+        )}
+
+        {coverageGaps.length > 0 && (
+          <section>
+            <SectionHeader
+              label="coverage gaps"
+              rightSlot={
+                <span className="text-[11px] tabular-nums text-[var(--yellow)]">
+                  {coverageGaps.length}
+                </span>
+              }
+            />
+            <div className="space-y-2">
+              {coverageGaps.map((gap, index) => (
+                <div
+                  key={`${gap.type}-${index}`}
+                  className="rounded-md border border-[var(--border-weak)] bg-[var(--bg-strong)] px-3 py-2 text-[12px]"
+                >
+                  <div className="mb-1 text-[10px] uppercase tracking-[0.08em] text-[var(--yellow)]">
+                    {gap.type.replaceAll("_", " ")}
+                  </div>
+                  <div className="text-[var(--fg-secondary)]">{gap.message}</div>
+                  {gap.file && (
+                    <code className="mt-1 inline-flex rounded-md bg-[var(--surface)] px-1.5 py-0.5 text-[11px] text-[var(--fg-secondary)]">
+                      {gap.file}
+                    </code>
+                  )}
+                </div>
+              ))}
             </div>
           </section>
         )}

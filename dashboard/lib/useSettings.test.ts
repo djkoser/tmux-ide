@@ -29,9 +29,10 @@ describe("useSettings", () => {
       fontSize: 18,
       scrollback: 50000,
       cursorBlink: false,
+      renderer: "auto",
     });
     expect(readPersisted()).toMatchObject({
-      terminal: { fontSize: 18, scrollback: 50000, cursorBlink: false },
+      terminal: { fontSize: 18, scrollback: 50000, cursorBlink: false, renderer: "auto" },
     });
   });
 

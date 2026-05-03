@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import { fetchSkill, injectIntoProject, type SkillData } from "@/lib/api";
 import { usePolling } from "@/lib/usePolling";
 import { useToasts } from "@/lib/useToasts";
+import { EmptyState, SkeletonText, StatusPill, SurfaceCard } from "@/components/ui";
 
 interface SkillViewProps {
   sessionName: string;
@@ -13,16 +14,14 @@ interface SkillViewProps {
 
 export function SkillView({ sessionName, skillName }: SkillViewProps) {
   const fetcher = useCallback(() => fetchSkill(sessionName, skillName), [sessionName, skillName]);
-  const { data: skill } = usePolling<SkillData | null>(fetcher, 10_000);
+  const { data: skill, loading } = usePolling<SkillData | null>(fetcher, 10_000);
   const { push } = useToasts();
 
   const sendToAgent = useCallback(async () => {
     if (!skill) return;
-    const ok = await injectIntoProject(
-      sessionName,
-      `Load skill: ${skill.name}\n\n${skill.body}`,
-      { sendEnter: true },
-    );
+    const ok = await injectIntoProject(sessionName, `Load skill: ${skill.name}\n\n${skill.body}`, {
+      sendEnter: true,
+    });
     push({
       kind: ok ? "success" : "error",
       title: ok ? "Sent skill to agent" : "Failed to send skill",
@@ -31,37 +30,45 @@ export function SkillView({ sessionName, skillName }: SkillViewProps) {
     });
   }, [push, sessionName, skill]);
 
+  if (!skill && loading) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--bg)]">
+        <div className="flex-1 space-y-5 overflow-auto p-4">
+          <SurfaceCard>
+            <SkeletonText lines={4} />
+          </SurfaceCard>
+          <SurfaceCard>
+            <SkeletonText lines={8} />
+          </SurfaceCard>
+        </div>
+      </div>
+    );
+  }
+
   if (!skill) {
     return (
-      <div className="flex flex-1 min-h-0 flex-col items-center justify-center bg-[var(--bg)] p-8 text-center text-[var(--dim)]">
-        <div className="text-[13px]">Skill not found</div>
-        <div className="mt-1 text-[11px]">
-          Looking for <code className="rounded-sm bg-[var(--surface)] px-1">{skillName}</code> in{" "}
-          <code className="rounded-sm bg-[var(--surface)] px-1">{sessionName}</code>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--bg)]">
+        <div className="flex-1 space-y-5 overflow-auto p-4">
+          <EmptyState
+            title="Skill not found"
+            body={`Looking for ${skillName} in ${sessionName}.`}
+          />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-1 min-h-0 flex-col bg-[var(--bg)] overflow-hidden">
-      <div className="flex-1 space-y-4 overflow-auto p-4">
-        {/* Header card */}
-        <header
-          data-testid="skill-header"
-          className="rounded-md border border-[var(--border-weak)] bg-[var(--bg-strong)] p-4"
-        >
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--bg)]">
+      <div className="flex-1 space-y-5 overflow-auto p-4">
+        <SurfaceCard testId="skill-header">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <h1 className="truncate text-[18px] tracking-[-0.01em] text-[var(--fg)]">
                   {skill.name}
                 </h1>
-                {skill.role && (
-                  <span className="rounded-sm bg-[var(--surface)] px-1.5 py-0.5 text-[10px] uppercase tracking-[0.05em] text-[var(--cyan)]">
-                    {skill.role}
-                  </span>
-                )}
+                {skill.role && <StatusPill variant="info" label={skill.role} dot={false} />}
               </div>
               {skill.description && (
                 <p className="mt-1 text-[12px] text-[var(--fg-secondary)]">{skill.description}</p>
@@ -71,7 +78,7 @@ export function SkillView({ sessionName, skillName }: SkillViewProps) {
                   {skill.specialties.map((spec) => (
                     <span
                       key={spec}
-                      className="rounded-sm border border-[var(--border-weak)] bg-[var(--surface)] px-1.5 py-0.5 text-[10px] text-[var(--fg-secondary)]"
+                      className="rounded-md border border-[var(--border-weak)] bg-[var(--surface)] px-1.5 py-0.5 text-[10px] text-[var(--fg-secondary)]"
                     >
                       {spec}
                     </span>
@@ -88,15 +95,11 @@ export function SkillView({ sessionName, skillName }: SkillViewProps) {
               Send to agent
             </button>
           </div>
-        </header>
+        </SurfaceCard>
 
-        {/* Body markdown */}
-        <section
-          data-testid="skill-body"
-          className="plan-content rounded-md border border-[var(--border-weak)] bg-[var(--bg-strong)] p-4"
-        >
+        <SurfaceCard testId="skill-body" className="plan-content">
           <ReactMarkdown>{skill.body || "_(empty skill)_"}</ReactMarkdown>
-        </section>
+        </SurfaceCard>
       </div>
     </div>
   );

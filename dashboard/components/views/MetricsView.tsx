@@ -4,6 +4,14 @@ import { useCallback } from "react";
 import { fetchMetrics, type MetricsData } from "@/lib/api";
 import { usePolling } from "@/lib/usePolling";
 import { ProgressBar } from "@/components/ProgressBar";
+import {
+  KpiCard,
+  SectionHeader,
+  SkeletonCard,
+  StatusPill,
+  SurfaceCard,
+  type StatusPillVariant,
+} from "@/components/ui";
 
 interface MetricsViewProps {
   sessionName: string;
@@ -21,27 +29,12 @@ function fmtPct(n: number): string {
   return `${Math.round(n * 100)}%`;
 }
 
-function KpiCard({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div
-      data-testid="kpi-card"
-      className="min-w-0 border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2"
-      style={{ boxShadow: "var(--surface-elevated-shadow)" }}
-    >
-      <div className="truncate text-[11px] text-[var(--dim)]">{label}</div>
-      <div className="truncate text-lg" style={{ color: color ?? "var(--fg)" }}>
-        {value}
-      </div>
-    </div>
-  );
+function milestoneVariant(status: string): StatusPillVariant {
+  if (status === "done") return "done";
+  if (status === "active") return "active";
+  if (status === "validating") return "warning";
+  return "pending";
 }
-
-const MILESTONE_STATUS_COLORS: Record<string, string> = {
-  done: "var(--green)",
-  active: "var(--accent)",
-  validating: "var(--yellow)",
-  locked: "var(--dim)",
-};
 
 export function MetricsView({ sessionName }: MetricsViewProps) {
   const metricsFetcher = useCallback(() => fetchMetrics(sessionName), [sessionName]);
@@ -51,9 +44,16 @@ export function MetricsView({ sessionName }: MetricsViewProps) {
     return (
       <div
         data-testid="metrics-view"
-        className="flex flex-1 min-h-0 flex-col bg-[var(--bg)] p-4 text-[var(--dim)] overflow-hidden"
+        className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--bg)]"
       >
-        loading metrics...
+        <div className="flex-1 space-y-5 overflow-auto p-4">
+          <div className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-4">
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </div>
+        </div>
       </div>
     );
   }
@@ -68,7 +68,7 @@ export function MetricsView({ sessionName }: MetricsViewProps) {
       data-testid="metrics-view"
       className="flex flex-1 min-h-0 flex-col bg-[var(--bg)] overflow-hidden"
     >
-      <div className="flex-1 min-w-0 space-y-4 overflow-y-auto overflow-x-hidden p-4">
+      <div className="min-w-0 flex-1 space-y-5 overflow-auto p-4">
         <div className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-4">
           <KpiCard label="session duration" value={fmtDuration(metrics.session.durationMs)} />
           <KpiCard
@@ -90,28 +90,30 @@ export function MetricsView({ sessionName }: MetricsViewProps) {
 
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-[var(--dim)]">
           <span>
-            tasks: <span className="text-[var(--fg)]">{metrics.tasks.completed}</span>/
+            tasks: <span className="tabular-nums text-[var(--fg)]">{metrics.tasks.completed}</span>/
             {metrics.tasks.total} done
           </span>
           {metrics.tasks.failed > 0 && (
             <span>
-              failed: <span className="text-[var(--red)]">{metrics.tasks.failed}</span>
+              failed: <span className="tabular-nums text-[var(--red)]">{metrics.tasks.failed}</span>
             </span>
           )}
           {metrics.tasks.avgDurationMs > 0 && (
-            <span>avg: {fmtDuration(metrics.tasks.avgDurationMs)}</span>
+            <span className="tabular-nums">avg: {fmtDuration(metrics.tasks.avgDurationMs)}</span>
           )}
           {metrics.tasks.medianDurationMs > 0 && (
-            <span>median: {fmtDuration(metrics.tasks.medianDurationMs)}</span>
+            <span className="tabular-nums">
+              median: {fmtDuration(metrics.tasks.medianDurationMs)}
+            </span>
           )}
           {metrics.tasks.p90DurationMs > 0 && (
-            <span>p90: {fmtDuration(metrics.tasks.p90DurationMs)}</span>
+            <span className="tabular-nums">p90: {fmtDuration(metrics.tasks.p90DurationMs)}</span>
           )}
         </div>
 
         {metrics.tasks.byMilestone.length > 0 && (
           <div className="min-w-0">
-            <h3 className="mb-1 text-[var(--accent)]">milestones</h3>
+            <SectionHeader label="milestones" />
             <div className="space-y-px">
               {metrics.tasks.byMilestone.map((milestone) => {
                 const pct =
@@ -121,33 +123,24 @@ export function MetricsView({ sessionName }: MetricsViewProps) {
                 return (
                   <div
                     key={milestone.id}
-                    className="flex items-center gap-2 bg-[var(--surface)] px-2 py-0.5"
+                    className="flex items-center gap-2 rounded-md bg-[var(--surface)] px-2 py-0.5"
                   >
-                    <span
-                      style={{
-                        color: MILESTONE_STATUS_COLORS[milestone.status] ?? "var(--dim)",
-                      }}
-                      className="w-6 shrink-0"
-                    >
+                    <span className="w-6 shrink-0 tabular-nums text-[var(--fg-secondary)]">
                       {milestone.id}
                     </span>
                     <span className="w-32 shrink-0 truncate text-[var(--fg)]">
                       {milestone.title}
                     </span>
-                    <span
-                      style={{
-                        color: MILESTONE_STATUS_COLORS[milestone.status] ?? "var(--dim)",
-                      }}
-                      className="w-20 shrink-0"
-                    >
-                      {milestone.status}
-                    </span>
+                    <StatusPill
+                      variant={milestoneVariant(milestone.status)}
+                      label={milestone.status}
+                    />
                     <ProgressBar percent={pct} width={8} />
-                    <span className="shrink-0 text-[11px] text-[var(--dim)]">
+                    <span className="shrink-0 text-[11px] tabular-nums text-[var(--dim)]">
                       {milestone.completedCount}/{milestone.taskCount}
                     </span>
                     {milestone.durationMs > 0 && (
-                      <span className="text-[11px] text-[var(--dim)]">
+                      <span className="text-[11px] tabular-nums text-[var(--dim)]">
                         {fmtDuration(milestone.durationMs)}
                       </span>
                     )}
@@ -160,21 +153,21 @@ export function MetricsView({ sessionName }: MetricsViewProps) {
 
         {metrics.agents.length > 0 && (
           <div className="min-w-0">
-            <h3 className="mb-1 text-[var(--accent)]">agents</h3>
+            <SectionHeader label="agents" />
             <div className="space-y-px">
               {[...metrics.agents]
                 .sort((a, b) => b.utilization - a.utilization)
                 .map((agent) => (
                   <div
                     key={agent.name}
-                    className="flex items-center gap-2 bg-[var(--surface)] px-2 py-0.5 text-[12px]"
+                    className="flex items-center gap-2 rounded-md bg-[var(--surface)] px-2 py-0.5 text-[12px]"
                   >
                     <span className="w-28 shrink-0 truncate text-[var(--fg)]">{agent.name}</span>
-                    <span className="w-16 shrink-0 text-[var(--dim)]">
+                    <span className="w-16 shrink-0 tabular-nums text-[var(--dim)]">
                       {agent.taskCount} tasks
                     </span>
                     <span
-                      className="w-14 shrink-0"
+                      className="w-14 shrink-0 tabular-nums"
                       style={{
                         color: agent.utilization >= 0.5 ? "var(--green)" : "var(--dim)",
                       }}
@@ -182,7 +175,7 @@ export function MetricsView({ sessionName }: MetricsViewProps) {
                       {fmtPct(agent.utilization)}
                     </span>
                     {agent.retryCount > 0 && (
-                      <span className="shrink-0 text-[var(--red)]">
+                      <span className="shrink-0 tabular-nums text-[var(--red)]">
                         {agent.retryCount} retries
                       </span>
                     )}
@@ -198,12 +191,12 @@ export function MetricsView({ sessionName }: MetricsViewProps) {
         )}
 
         {metrics.mission.title && (
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12px]">
+          <SurfaceCard className="flex flex-wrap gap-x-3 gap-y-1 text-[12px]">
             <span className="text-[var(--dim)]">
               mission: <span className="text-[var(--fg)]">{metrics.mission.title}</span> [
               {metrics.mission.status}]
             </span>
-            <span className="text-[var(--dim)]">
+            <span className="tabular-nums text-[var(--dim)]">
               milestones: {metrics.mission.milestonesCompleted}
             </span>
             <span className="text-[var(--dim)]">
@@ -212,21 +205,21 @@ export function MetricsView({ sessionName }: MetricsViewProps) {
                 {fmtPct(metrics.mission.validationPassRate)}
               </span>
             </span>
-            <span className="text-[var(--dim)]">
+            <span className="tabular-nums text-[var(--dim)]">
               wall clock: {fmtDuration(metrics.mission.wallClockMs)}
             </span>
-          </div>
+          </SurfaceCard>
         )}
 
         {metrics.timeline.length > 0 && (
           <div className="min-w-0">
-            <h3 className="mb-1 text-[var(--accent)]">timeline</h3>
+            <SectionHeader label="timeline" />
             <div data-testid="metrics-timeline" className="max-h-48 overflow-auto">
               <div className="space-y-px">
                 {metrics.timeline.slice(-20).map((entry, index) => (
                   <div
                     key={`${entry.timestamp}-${index}`}
-                    className="flex w-max min-w-full items-center gap-3 bg-[var(--surface)] px-2 py-0.5 text-[11px] text-[var(--dim)]"
+                    className="flex w-max min-w-full items-center gap-3 rounded-md bg-[var(--surface)] px-2 py-0.5 text-[11px] tabular-nums text-[var(--dim)]"
                   >
                     <span className="w-20 shrink-0">
                       {new Date(entry.timestamp).toLocaleTimeString()}
