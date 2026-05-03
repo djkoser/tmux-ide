@@ -14,7 +14,13 @@ import { join } from "node:path";
 import { createServer, type Server } from "node:http";
 import { createRequire } from "node:module";
 import { computePortPanes, computeAgentStates } from "./session-monitor.ts";
-import { getTaskStoreHealth, reconcileTaskStore, startTaskStoreWatcher } from "./task-store.ts";
+import {
+  getTaskStoreHealth,
+  reconcileTaskStore,
+  replayTaskStoreWal,
+  startTaskStoreWatcher,
+} from "./task-store.ts";
+import { shutdownPtyBridges } from "../server/ws-route.ts";
 
 // Anchor bare-specifier resolution to this file so dependencies like
 // @hono/node-server resolve from tmux-ide's own node_modules regardless
@@ -425,6 +431,7 @@ async function startCommandCenter(): Promise<void> {
 }
 
 void startCommandCenter();
+replayTaskStoreWal(process.cwd());
 void startOrchestrator();
 stopTaskStoreWatcher = startTaskStoreWatcher(process.cwd());
 const reconcileInterval = setInterval(() => {
@@ -444,6 +451,7 @@ tick();
 function shutdown(): void {
   clearInterval(monitorInterval);
   clearInterval(reconcileInterval);
+  shutdownPtyBridges();
   if (stopOrchestrator) stopOrchestrator();
   if (stopTaskStoreWatcher) void stopTaskStoreWatcher();
   if (httpServer) httpServer.close();

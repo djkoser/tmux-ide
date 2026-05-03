@@ -1,14 +1,16 @@
 import {
   appendFileSync,
-  copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
-  renameSync,
+  readdirSync,
+  rmSync,
   statSync,
   unlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { EventEmitter } from "node:events";
+import { gzipSync, gunzipSync } from "node:zlib";
 import { join } from "node:path";
 import { StructuredEventSchemaZ } from "../schemas/domain.ts";
 import type { z } from "zod";
@@ -150,35 +152,78 @@ export function formatEventMessage(event: StructuredEvent): string {
   }
 }
 
-const MAX_LOG_SIZE = 1048576; // 1MB
+const EVENT_LOG_FILE = "_events.jsonl";
+const LEGACY_EVENT_LOG_FILE = "events.log";
+const MAX_LOG_SIZE = 10 * 1024 * 1024;
+const RETENTION_DAYS = 30;
 let _rotating = false;
+
+function eventLogMaxBytes(): number {
+  const parsed = Number.parseInt(process.env.TMUX_IDE_EVENT_LOG_MAX_BYTES ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : MAX_LOG_SIZE;
+}
+
+function dateKey(ms = Date.now()): string {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+function currentLogPath(dir: string): string {
+  return join(dir, ".tasks", EVENT_LOG_FILE);
+}
+
+function rotatedLogPath(tasksDir: string, date: string): string {
+  return join(tasksDir, `_events-${date}.jsonl.gz`);
+}
+
+function rotateEventLogIfNeeded(dir: string): void {
+  if (_rotating) return;
+  const tasksDir = join(dir, ".tasks");
+  const logPath = currentLogPath(dir);
+  if (!existsSync(logPath)) return;
+
+  try {
+    const stat = statSync(logPath);
+    const tooLarge = stat.size >= eventLogMaxBytes();
+    const staleDay = dateKey(stat.mtimeMs) !== dateKey();
+    if (!tooLarge && !staleDay) return;
+
+    _rotating = true;
+    const rotateDate = dateKey(stat.mtimeMs);
+    const rotatedPath = rotatedLogPath(tasksDir, rotateDate);
+    const content = readFileSync(logPath);
+    const existing = existsSync(rotatedPath) ? gunzipSync(readFileSync(rotatedPath)) : Buffer.alloc(0);
+    const separator = existing.byteLength > 0 && !existing.toString("utf-8").endsWith("\n") ? "\n" : "";
+    writeFileSync(rotatedPath, gzipSync(Buffer.concat([existing, Buffer.from(separator), content])));
+    unlinkSync(logPath);
+  } catch {
+    // rotation is best-effort; continue writing to current file
+  } finally {
+    _rotating = false;
+  }
+}
+
+export function pruneEventLogs(dir: string, now = Date.now()): void {
+  const tasksDir = join(dir, ".tasks");
+  if (!existsSync(tasksDir)) return;
+  const cutoff = now - RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  for (const file of readdirSync(tasksDir)) {
+    const match = file.match(/^_events-(\d{4}-\d{2}-\d{2})\.jsonl\.gz$/);
+    if (!match) continue;
+    const timestamp = Date.parse(`${match[1]}T00:00:00.000Z`);
+    if (Number.isFinite(timestamp) && timestamp < cutoff) {
+      rmSync(join(tasksDir, file), { force: true });
+    }
+  }
+}
 
 export function appendEvent(dir: string, event: OrchestratorEvent | StructuredEvent): void {
   const tasksDir = join(dir, ".tasks");
   if (!existsSync(tasksDir)) {
     mkdirSync(tasksDir, { recursive: true });
   }
-  const logPath = join(tasksDir, "events.log");
-
-  // Rotate if file exceeds 1MB (atomic: copy to temp, rename temp to .1, remove old)
-  // Guard with _rotating flag to prevent concurrent rotation from interleaved calls
-  if (!_rotating && existsSync(logPath)) {
-    try {
-      const size = statSync(logPath).size;
-      if (size > MAX_LOG_SIZE) {
-        _rotating = true;
-        const rotatedPath = logPath + ".1";
-        const tmpRotated = rotatedPath + ".tmp";
-        copyFileSync(logPath, tmpRotated);
-        renameSync(tmpRotated, rotatedPath);
-        unlinkSync(logPath);
-      }
-    } catch {
-      // stat/copy/rename failure — continue writing to current file
-    } finally {
-      _rotating = false;
-    }
-  }
+  rotateEventLogIfNeeded(dir);
+  pruneEventLogs(dir);
+  const logPath = currentLogPath(dir);
 
   const line = JSON.stringify(event) + "\n";
   const writeEvent = () => {
@@ -199,17 +244,32 @@ export function appendEvent(dir: string, event: OrchestratorEvent | StructuredEv
 }
 
 export function readEvents(dir: string): OrchestratorEvent[] {
-  const logPath = join(dir, ".tasks", "events.log");
-  const rotatedPath = logPath + ".1";
+  const tasksDir = join(dir, ".tasks");
+  const logPath = currentLogPath(dir);
+  const legacyPath = join(tasksDir, LEGACY_EVENT_LOG_FILE);
+  const legacyRotatedPath = legacyPath + ".1";
 
-  // Collect lines from rotated file first (older events), then current
   let lines: string[] = [];
-  if (existsSync(rotatedPath)) {
-    const raw = readFileSync(rotatedPath, "utf-8").trim();
-    if (raw) lines = raw.split("\n");
+  if (existsSync(tasksDir)) {
+    const rotations = readdirSync(tasksDir)
+      .filter((file) => /^_events-\d{4}-\d{2}-\d{2}\.jsonl\.gz$/.test(file))
+      .sort()
+      .slice(-1);
+    for (const file of rotations) {
+      const raw = gunzipSync(readFileSync(join(tasksDir, file))).toString("utf-8").trim();
+      if (raw) lines = lines.concat(raw.split("\n"));
+    }
   }
   if (existsSync(logPath)) {
     const raw = readFileSync(logPath, "utf-8").trim();
+    if (raw) lines = lines.concat(raw.split("\n"));
+  }
+  if (existsSync(legacyRotatedPath)) {
+    const raw = readFileSync(legacyRotatedPath, "utf-8").trim();
+    if (raw) lines = lines.concat(raw.split("\n"));
+  }
+  if (existsSync(legacyPath)) {
+    const raw = readFileSync(legacyPath, "utf-8").trim();
     if (raw) lines = lines.concat(raw.split("\n"));
   }
   if (lines.length === 0) return [];

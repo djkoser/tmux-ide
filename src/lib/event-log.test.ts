@@ -1,8 +1,18 @@
 import { describe, it, beforeEach, afterEach, expect } from "bun:test";
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync, statSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { appendEvent, readEvents, type OrchestratorEvent } from "./event-log.ts";
+import { gzipSync, gunzipSync } from "node:zlib";
+import { appendEvent, pruneEventLogs, readEvents, type OrchestratorEvent } from "./event-log.ts";
 
 let tmpDir: string;
 
@@ -11,11 +21,12 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  delete process.env.TMUX_IDE_EVENT_LOG_MAX_BYTES;
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
 describe("appendEvent", () => {
-  it("creates .tasks/ and events.log if they don't exist", () => {
+  it("creates .tasks/ and _events.jsonl if they don't exist", () => {
     appendEvent(tmpDir, {
       timestamp: "2026-01-01T00:00:00Z",
       type: "dispatch",
@@ -24,7 +35,7 @@ describe("appendEvent", () => {
       message: "Dispatched task 001 to Agent 1",
     });
 
-    expect(existsSync(join(tmpDir, ".tasks", "events.log"))).toBeTruthy();
+    expect(existsSync(join(tmpDir, ".tasks", "_events.jsonl"))).toBeTruthy();
   });
 
   it("appends events as JSON lines", () => {
@@ -87,7 +98,7 @@ describe("readEvents", () => {
   it("skips corrupted lines and returns valid events", () => {
     const tasksDir = join(tmpDir, ".tasks");
     mkdirSync(tasksDir, { recursive: true });
-    const logPath = join(tasksDir, "events.log");
+    const logPath = join(tasksDir, "_events.jsonl");
     const validEvent = JSON.stringify({
       timestamp: "2026-01-01T00:00:00Z",
       type: "dispatch",
@@ -117,8 +128,8 @@ describe("readEvents", () => {
       message: "new event",
     });
 
-    writeFileSync(join(tasksDir, "events.log.1"), oldEvent + "\n");
-    writeFileSync(join(tasksDir, "events.log"), newEvent + "\n");
+    writeFileSync(join(tasksDir, "_events-2026-01-01.jsonl.gz"), gzipSync(oldEvent + "\n"));
+    writeFileSync(join(tasksDir, "_events.jsonl"), newEvent + "\n");
 
     const events = readEvents(tmpDir);
     expect(events.length).toBe(2);
@@ -128,12 +139,12 @@ describe("readEvents", () => {
 });
 
 describe("log rotation", () => {
-  it("rotates events.log when it exceeds 1MB", () => {
+  it("rotates _events.jsonl when it exceeds the size cap", () => {
+    process.env.TMUX_IDE_EVENT_LOG_MAX_BYTES = "2048";
     const tasksDir = join(tmpDir, ".tasks");
     mkdirSync(tasksDir, { recursive: true });
-    const logPath = join(tasksDir, "events.log");
+    const logPath = join(tasksDir, "_events.jsonl");
 
-    // Write a file just over 1MB directly
     const event = JSON.stringify({
       timestamp: "2026-01-01T00:00:00Z",
       type: "dispatch",
@@ -141,10 +152,10 @@ describe("log rotation", () => {
       message: "x".repeat(200),
     });
     const lineSize = Buffer.byteLength(event + "\n");
-    const linesNeeded = Math.ceil(1048577 / lineSize);
+    const linesNeeded = Math.ceil(2049 / lineSize);
     writeFileSync(logPath, (event + "\n").repeat(linesNeeded));
 
-    expect(statSync(logPath).size > 1048576).toBeTruthy();
+    expect(statSync(logPath).size > 2048).toBeTruthy();
 
     // Next appendEvent should trigger rotation
     appendEvent(tmpDir, {
@@ -154,13 +165,12 @@ describe("log rotation", () => {
       message: "trigger rotation",
     });
 
-    // events.log should now be small (just the new event)
+    // _events.jsonl should now be small (just the new event)
     expect(statSync(logPath).size < 1024).toBeTruthy();
 
-    // Rotated file should exist with the old content
-    const rotatedPath = join(tasksDir, "events.log.1");
+    const rotatedPath = join(tasksDir, `_events-${new Date().toISOString().slice(0, 10)}.jsonl.gz`);
     expect(existsSync(rotatedPath)).toBeTruthy();
-    expect(statSync(rotatedPath).size > 1048576).toBeTruthy();
+    expect(gunzipSync(readFileSync(rotatedPath)).byteLength > 2048).toBeTruthy();
 
     // readEvents should return events from both files
     const events = readEvents(tmpDir);
@@ -168,7 +178,8 @@ describe("log rotation", () => {
     expect(events[events.length - 1]!.message).toBe("trigger rotation");
   });
 
-  it("does not rotate when file is under 1MB", () => {
+  it("does not rotate when file is under the cap", () => {
+    process.env.TMUX_IDE_EVENT_LOG_MAX_BYTES = "2048";
     appendEvent(tmpDir, {
       timestamp: "2026-01-01T00:00:00Z",
       type: "dispatch",
@@ -180,10 +191,24 @@ describe("log rotation", () => {
       message: "another small event",
     });
 
-    const rotatedPath = join(tmpDir, ".tasks", "events.log.1");
-    expect(!existsSync(rotatedPath)).toBeTruthy();
+    const rotations = readdirSync(join(tmpDir, ".tasks")).filter((file) =>
+      file.startsWith("_events-"),
+    );
+    expect(rotations).toEqual([]);
 
     const events = readEvents(tmpDir);
     expect(events.length).toBe(2);
+  });
+
+  it("prunes rotated logs older than 30 days", () => {
+    const tasksDir = join(tmpDir, ".tasks");
+    mkdirSync(tasksDir, { recursive: true });
+    writeFileSync(join(tasksDir, "_events-2026-01-01.jsonl.gz"), gzipSync(""));
+    writeFileSync(join(tasksDir, "_events-2026-02-01.jsonl.gz"), gzipSync(""));
+
+    pruneEventLogs(tmpDir, Date.parse("2026-02-05T00:00:00.000Z"));
+
+    expect(existsSync(join(tasksDir, "_events-2026-01-01.jsonl.gz"))).toBe(false);
+    expect(existsSync(join(tasksDir, "_events-2026-02-01.jsonl.gz"))).toBe(true);
   });
 });

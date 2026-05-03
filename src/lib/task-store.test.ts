@@ -1,9 +1,11 @@
 import { describe, it, beforeEach, afterEach, expect } from "bun:test";
+import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   ensureTasksDir,
+  getTaskStoreWalPath,
   invalidateAllTaskStore,
   loadTasksByAgentPane,
   loadTasksByMilestone,
@@ -14,6 +16,7 @@ import {
   saveTask,
   deleteTask,
   getTaskStoreMetrics,
+  replayTaskStoreWal,
   startTaskStoreWatcher,
   validateTaskStoreFile,
   type Task,
@@ -52,6 +55,10 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function sha256(content: string): string {
+  return createHash("sha256").update(content).digest("hex");
 }
 
 beforeEach(() => {
@@ -230,5 +237,74 @@ describe("task-store", () => {
     } finally {
       await stopWatcher();
     }
+  });
+
+  it("appends WAL write and commit entries around task writes", () => {
+    saveTask(tmpDir, makeTask({ id: "001", title: "Wal Task" }));
+
+    const wal = readFileSync(getTaskStoreWalPath(tmpDir), "utf-8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { op: string; path: string; hash?: string });
+
+    expect(wal.map((entry) => entry.op)).toEqual(["write", "commit"]);
+    expect(wal[0]!.path).toContain("001-wal-task.json");
+    expect(typeof wal[0]!.hash).toBe("string");
+  });
+
+  it("replays a half-done WAL rename and truncates the log", () => {
+    ensureTasksDir(tmpDir);
+    const finalPath = join(tmpDir, ".tasks", "tasks", "001-replayed.json");
+    const tempPath = `${finalPath}.tmp`;
+    const body = JSON.stringify({ _version: 1, ...makeTask({ title: "Replayed" }) }, null, 2) + "\n";
+    writeFileSync(tempPath, body);
+    writeFileSync(
+      getTaskStoreWalPath(tmpDir),
+      JSON.stringify({
+        ts: "2026-05-03T00:00:00.000Z",
+        op: "write",
+        path: finalPath,
+      }) + "\n",
+    );
+
+    const result = replayTaskStoreWal(tmpDir);
+
+    expect(result.replayed).toBe(1);
+    expect(existsSync(finalPath)).toBe(true);
+    expect(existsSync(tempPath)).toBe(false);
+    expect(readFileSync(getTaskStoreWalPath(tmpDir), "utf-8")).toBe("");
+  });
+
+  it("treats WAL writes already renamed before commit as applied", () => {
+    ensureTasksDir(tmpDir);
+    const finalPath = join(tmpDir, ".tasks", "tasks", "001-renamed.json");
+    const body = JSON.stringify({ _version: 1, ...makeTask({ title: "Renamed" }) }, null, 2) + "\n";
+    writeFileSync(finalPath, body);
+    writeFileSync(
+      getTaskStoreWalPath(tmpDir),
+      JSON.stringify({
+        ts: "2026-05-03T00:00:00.000Z",
+        op: "write",
+        path: finalPath,
+        hash: sha256(body),
+      }) + "\n",
+    );
+
+    const result = replayTaskStoreWal(tmpDir);
+
+    expect(result.replayed).toBe(1);
+    expect(result.skipped).toBe(0);
+    expect(loadTask(tmpDir, "001")?.title).toBe("Renamed");
+    expect(readFileSync(getTaskStoreWalPath(tmpDir), "utf-8")).toBe("");
+  });
+
+  it("skips corrupted WAL lines during replay", () => {
+    ensureTasksDir(tmpDir);
+    writeFileSync(getTaskStoreWalPath(tmpDir), "not-json\n");
+
+    const result = replayTaskStoreWal(tmpDir);
+
+    expect(result.skipped).toBe(1);
+    expect(readFileSync(getTaskStoreWalPath(tmpDir), "utf-8")).toBe("");
   });
 });

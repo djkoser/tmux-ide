@@ -23,6 +23,7 @@
     "test": "bun test",
     "test:unit": "bun test src/ --ignore 'src/integration.test.ts'",
     "test:integration": "bun test src/integration.test.ts",
+    "test:stress": "bun scripts/stress-test.ts",
     "lint": "eslint bin scripts src",
     "lint:workspace": "turbo run lint",
     "format": "prettier --write .",

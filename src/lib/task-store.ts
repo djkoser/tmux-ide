@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import { createHash } from "node:crypto";
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -24,6 +25,7 @@ const DEFAULT_CACHE_SIZE = 500;
 const DEFAULT_WATCH_DEBOUNCE_MS = 100;
 const RECONCILE_LOG_PREFIX = "[task-store]";
 const ASSERTION_ID_PATTERN = /\*\*((?:VAL|ASSERT)[A-Z0-9_-]+)\*\*/g;
+const WAL_FILE = "_wal.jsonl";
 
 export interface Milestone {
   id: string;
@@ -113,6 +115,13 @@ interface MigrationResult {
   migrations: string[];
 }
 
+interface WalEntry {
+  ts: string;
+  op: "write" | "delete" | "commit";
+  path: string;
+  hash?: string;
+}
+
 export interface TaskStoreIssue {
   type:
     | "schema"
@@ -189,6 +198,28 @@ export class TaskStoreValidationError extends Error {
 
 function hashContent(content: string): string {
   return createHash("sha256").update(content).digest("hex");
+}
+
+function walPathForDir(dir: string): string {
+  return join(getTasksRoot(dir), WAL_FILE);
+}
+
+function walPathForFile(filePath: string): string {
+  const absolute = resolve(filePath);
+  const parts = absolute.split(/[\\/]/);
+  const index = parts.lastIndexOf(TASKS_DIR);
+  const root = index >= 0 ? parts.slice(0, index + 1).join("/") : dirname(absolute);
+  return join(root, WAL_FILE);
+}
+
+function appendWalEntry(filePath: string, entry: Omit<WalEntry, "ts" | "path">): void {
+  const absolute = resolve(filePath);
+  const walPath = walPathForFile(absolute);
+  mkdirSync(dirname(walPath), { recursive: true });
+  appendFileSync(
+    walPath,
+    JSON.stringify({ ts: new Date().toISOString(), path: absolute, ...entry }) + "\n",
+  );
 }
 
 function serializeJson(data: unknown): string {
@@ -464,15 +495,17 @@ export class TaskStore extends EventEmitter {
     const body = { _version: SCHEMA_VERSION, ...value };
     const content = serializeJson(body);
     const parsed = this.parseContent<T>(absolute, schemaName, content);
-    const tmpPath = `${absolute}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
+    const tmpPath = `${absolute}.tmp`;
 
     mkdirSync(dirname(absolute), { recursive: true });
     this.activeWrites++;
     const started = Date.now();
     try {
+      appendWalEntry(absolute, { op: "write", hash: hashContent(content) });
       writeFileSync(tmpPath, content);
       this.markOwnWrite(absolute);
       renameSync(tmpPath, absolute);
+      appendWalEntry(absolute, { op: "commit" });
       this.seedCache(absolute, schemaName, parsed, content);
       this.emit("change", {
         path: absolute,
@@ -499,8 +532,11 @@ export class TaskStore extends EventEmitter {
     const cached = this.cache.get(absolute);
     const schemaName = cached?.schemaName ?? schemaForCacheablePath(absolute) ?? undefined;
     const id = cached ? getStoreValueId(cached.value) : undefined;
+    const hash = existsSync(absolute) ? hashContent(readFileSync(absolute, "utf-8")) : undefined;
+    appendWalEntry(absolute, { op: "delete", hash });
     this.markOwnWrite(absolute);
     unlinkSync(absolute);
+    appendWalEntry(absolute, { op: "commit" });
     this.removeFromCache(absolute);
     this.emit("change", { path: absolute, schemaName, source: "delete", op: "delete", id });
   }
@@ -852,6 +888,79 @@ export function ensureTasksDir(dir: string): void {
   if (!existsSync(tasksDir)) mkdirSync(tasksDir);
 }
 
+export function getTaskStoreWalPath(dir: string): string {
+  return walPathForDir(dir);
+}
+
+export function replayTaskStoreWal(dir: string): { replayed: number; skipped: number } {
+  ensureTasksDir(dir);
+  const walPath = walPathForDir(dir);
+  if (!existsSync(walPath)) return { replayed: 0, skipped: 0 };
+
+  const pending = new Map<string, WalEntry>();
+  let skipped = 0;
+  const raw = readFileSync(walPath, "utf-8");
+  for (const line of raw.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const parsed = JSON.parse(line) as WalEntry;
+      if (
+        !parsed ||
+        typeof parsed.path !== "string" ||
+        !["write", "delete", "commit"].includes(parsed.op)
+      ) {
+        skipped++;
+        continue;
+      }
+      const absolute = resolve(parsed.path);
+      if (parsed.op === "commit") {
+        pending.delete(absolute);
+      } else {
+        pending.set(absolute, { ...parsed, path: absolute });
+      }
+    } catch {
+      skipped++;
+    }
+  }
+
+  let replayed = 0;
+  for (const entry of pending.values()) {
+    try {
+      if (entry.op === "write") {
+        const tmpPath = `${entry.path}.tmp`;
+        if (!existsSync(tmpPath)) {
+          if (
+            entry.hash &&
+            existsSync(entry.path) &&
+            hashContent(readFileSync(entry.path, "utf-8")) === entry.hash
+          ) {
+            replayed++;
+            continue;
+          }
+          skipped++;
+          continue;
+        }
+        if (entry.hash && hashContent(readFileSync(tmpPath, "utf-8")) !== entry.hash) {
+          skipped++;
+          continue;
+        }
+        renameSync(tmpPath, entry.path);
+        replayed++;
+      } else if (entry.op === "delete") {
+        if (existsSync(entry.path)) unlinkSync(entry.path);
+        replayed++;
+      }
+    } catch (err) {
+      skipped++;
+      console.warn("[task-store] WAL replay skipped %s: %s", entry.path, (err as Error).message);
+    }
+  }
+
+  writeFileSync(walPath, "");
+  taskStore.invalidateAll();
+  return { replayed, skipped };
+}
+
 export function startTaskStoreWatcher(dir: string): () => Promise<void> {
   return taskStore.startWatcher(dir);
 }
@@ -993,23 +1102,19 @@ export function deleteTask(dir: string, id: string): boolean {
 }
 
 export function loadTasksForGoal(dir: string, goalId: string): Task[] {
-  loadTasks(dir);
-  return taskStore.getTasksByGoal(goalId);
+  return loadTasks(dir).filter((task) => task.goal === goalId);
 }
 
 export function loadTasksByStatus(dir: string, status: Task["status"]): Task[] {
-  loadTasks(dir);
-  return taskStore.getTasksByStatus(status);
+  return loadTasks(dir).filter((task) => task.status === status);
 }
 
 export function loadTasksByAgentPane(dir: string, agentPane: string): Task[] {
-  loadTasks(dir);
-  return taskStore.getTasksByAgentPane(agentPane);
+  return loadTasks(dir).filter((task) => task.assignee === agentPane);
 }
 
 export function loadTasksByMilestone(dir: string, milestoneId: string): Task[] {
-  loadTasks(dir);
-  return taskStore.getTasksByMilestone(milestoneId);
+  return loadTasks(dir).filter((task) => task.milestone === milestoneId);
 }
 
 export function detectCycle(dir: string, taskId: string, newDeps: string[]): string[] | null {
