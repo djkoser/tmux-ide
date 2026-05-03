@@ -1,6 +1,19 @@
 import type { SessionOverview, ProjectDetail, Task, Mark, AuthorshipStats } from "./types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
+function resolveApiBase(): string {
+  // Explicit env wins — useful for dev pointing at a remote daemon.
+  const explicit = process.env.NEXT_PUBLIC_API_URL;
+  if (explicit) return explicit;
+  // SSR / build time — fetches won't run; safe to return "".
+  if (typeof window === "undefined") return "";
+  // Default: command-center is exposed on port 6060 of whatever hostname
+  // the dashboard was loaded from. Works for localhost, Tailscale MagicDNS,
+  // direct tailnet IP, etc. — no per-host env config required.
+  const port = process.env.NEXT_PUBLIC_API_PORT ?? "6060";
+  return `${window.location.protocol}//${window.location.hostname}:${port}`;
+}
+
+const API_BASE = resolveApiBase();
 
 export async function fetchSessions(): Promise<SessionOverview[]> {
   const res = await fetch(`${API_BASE}/api/sessions`, { cache: "no-store" });
