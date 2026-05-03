@@ -14,6 +14,7 @@ import {
   type PlanSummary,
 } from "@/lib/api";
 import type { Task } from "@/lib/types";
+import { Persist } from "@/lib/persist";
 import { usePolling } from "@/lib/usePolling";
 import { useToasts } from "@/lib/useToasts";
 import { AuthorshipBar } from "@/components/AuthorshipBar";
@@ -36,17 +37,26 @@ const STATUS_COLORS: Record<PlanStatus, string> = {
 };
 
 const STATUS_ORDER: PlanStatus[] = ["pending", "in-progress", "done"];
+const PLAN_RAIL_STATUSES: PlanStatus[] = ["in-progress", "pending", "done", "archived"];
 const highlightCache = new Map<string, string>();
+type PlanSort = "recent" | "status" | "title" | "owner";
+type PlanRailCollapseState = Record<string, Partial<Record<PlanStatus, boolean>>>;
+const planRailPersist = Persist.global<PlanRailCollapseState>("tmux-ide.plans.rail", ["v1"], {});
 
 function activePlanKey(project: string): string {
   return `tmux-ide.plans.active.${project}`;
 }
 
-function formatDate(value: string | number | null | undefined): string {
-  if (!value) return "";
+function formatRelativeTime(value: string | number | null | undefined): string {
+  if (!value) return "not updated";
   const date = typeof value === "number" ? new Date(value) : new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const time = date.getTime();
+  if (Number.isNaN(time)) return String(value);
+  const ms = Date.now() - time;
+  if (ms < 60_000) return `${Math.max(0, Math.floor(ms / 1000))}s ago`;
+  if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m ago`;
+  if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h ago`;
+  return `${Math.floor(ms / 86_400_000)}d ago`;
 }
 
 function planFilename(plan: PlanSummary): string {
@@ -56,6 +66,23 @@ function planFilename(plan: PlanSummary): string {
 function statusPill(status: PlanStatus): string {
   if (status === "in-progress") return "in progress";
   return status;
+}
+
+function planOwner(plan: PlanSummary): string {
+  return plan.owner?.trim() || "unowned";
+}
+
+function planTags(plan: PlanSummary): string[] {
+  const tags = (plan as PlanSummary & { tags?: unknown }).tags;
+  if (!Array.isArray(tags)) return [];
+  return tags.filter((tag): tag is string => typeof tag === "string" && tag.length > 0);
+}
+
+function planTimestamp(plan: PlanSummary): number {
+  const raw = plan.updated ?? plan.completed;
+  if (!raw) return 0;
+  const time = new Date(raw).getTime();
+  return Number.isNaN(time) ? 0 : time;
 }
 
 function chip(value: ReactNode, key: string) {
@@ -251,6 +278,9 @@ export function PlansView({ sessionName }: PlansViewProps) {
   const [loadingPlan, setLoadingPlan] = useState(false);
   const [tasksById, setTasksById] = useState(new Map<string, Task>());
   const [activeHeading, setActiveHeading] = useState("");
+  const [planQuery, setPlanQuery] = useState("");
+  const [planSort, setPlanSort] = useState<PlanSort>("recent");
+  const [collapsedGroups, setCollapsedGroups] = useState<Partial<Record<PlanStatus, boolean>>>({});
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const loadedFileRef = useRef<string | null>(null);
 
@@ -262,6 +292,39 @@ export function PlansView({ sessionName }: PlansViewProps) {
   const status = parsed.frontmatter.status ?? selectedPlan?.status ?? "pending";
   const title = parsed.frontmatter.title ?? selectedPlan?.title ?? selectedPlan?.name ?? "Plan";
   const selectedUpdated = selectedPlan?.updated ?? selectedPlan?.completed ?? null;
+  const visiblePlans = useMemo(() => {
+    const query = planQuery.trim().toLowerCase();
+    const filtered = (plans ?? []).filter((plan) => {
+      if (!query) return true;
+      const searchable = [plan.name, plan.title, plan.status, plan.owner ?? "", ...planTags(plan)]
+        .join(" ")
+        .toLowerCase();
+      return searchable.includes(query);
+    });
+
+    return [...filtered].sort((a, b) => {
+      if (planSort === "recent") return planTimestamp(b) - planTimestamp(a);
+      if (planSort === "status") {
+        return (
+          PLAN_RAIL_STATUSES.indexOf(a.status) - PLAN_RAIL_STATUSES.indexOf(b.status) ||
+          a.title.localeCompare(b.title)
+        );
+      }
+      if (planSort === "owner") {
+        return planOwner(a).localeCompare(planOwner(b)) || a.title.localeCompare(b.title);
+      }
+      return a.title.localeCompare(b.title);
+    });
+  }, [planQuery, planSort, plans]);
+
+  const planGroups = useMemo(
+    () =>
+      PLAN_RAIL_STATUSES.map((railStatus) => ({
+        status: railStatus,
+        plans: visiblePlans.filter((plan) => plan.status === railStatus),
+      })),
+    [visiblePlans],
+  );
 
   useEffect(() => {
     if (!plans || plans.length === 0 || selectedFile) return;
@@ -315,6 +378,10 @@ export function PlansView({ sessionName }: PlansViewProps) {
   }, [selectedFile, selectedUpdated, sessionName]);
 
   useEffect(() => {
+    setCollapsedGroups(planRailPersist.read()[sessionName] ?? {});
+  }, [sessionName]);
+
+  useEffect(() => {
     const root = scrollRef.current;
     if (!root || parsed.toc.length === 0) return;
     const observer = new IntersectionObserver(
@@ -349,6 +416,19 @@ export function PlansView({ sessionName }: PlansViewProps) {
     }
   }
 
+  function togglePlanGroup(groupStatus: PlanStatus) {
+    setCollapsedGroups((current) => {
+      const next = { ...current, [groupStatus]: !current[groupStatus] };
+      const stored = planRailPersist.read();
+      planRailPersist.write({ ...stored, [sessionName]: next });
+      return next;
+    });
+  }
+
+  function createPlanStub() {
+    push({ kind: "info", title: "Coming soon", durationMs: 1600 });
+  }
+
   function openTaskView() {
     const url = new URL(window.location.href);
     url.searchParams.delete("tab");
@@ -375,42 +455,122 @@ export function PlansView({ sessionName }: PlansViewProps) {
   return (
     <div data-testid="plans-view" className="flex min-h-0 flex-1 bg-[var(--bg)]">
       <aside className="flex w-[280px] shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg-weak)]">
-        <div className="flex h-8 items-center border-b border-[var(--border)] px-3 text-[11px] text-[var(--dim)]">
-          plans
-          <span className="ml-auto">{plans.length}</span>
+        <div className="border-b border-[var(--border)] p-3">
+          <div className="mb-2 flex items-center gap-2 text-[11px] text-[var(--dim)]">
+            plans
+            <span className="ml-auto tabular-nums">
+              {visiblePlans.length}/{plans.length}
+            </span>
+          </div>
+          <input
+            data-testid="plan-list-search"
+            value={planQuery}
+            onChange={(event) => setPlanQuery(event.target.value)}
+            placeholder="search plans"
+            className="mb-2 h-8 w-full rounded-sm border border-[var(--border)] bg-[var(--bg-strong)] px-2 text-[12px] text-[var(--fg)] outline-none placeholder:text-[var(--dimmer)] focus:border-[var(--accent)]"
+          />
+          <select
+            data-testid="plan-list-sort"
+            value={planSort}
+            onChange={(event) => setPlanSort(event.target.value as PlanSort)}
+            className="h-8 w-full rounded-sm border border-[var(--border)] bg-[var(--bg-strong)] px-2 text-[12px] text-[var(--fg-secondary)] outline-none focus:border-[var(--accent)]"
+          >
+            <option value="recent">recently updated</option>
+            <option value="status">status</option>
+            <option value="title">title</option>
+            <option value="owner">owner</option>
+          </select>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {plans.map((plan) => {
-            const file = planFilename(plan);
-            const selected = file === selectedFile;
+
+        <div data-testid="plan-list" className="min-h-0 flex-1 overflow-y-auto">
+          {planGroups.map((group) => {
+            const collapsed = Boolean(collapsedGroups[group.status]);
             return (
-              <button
-                key={file}
-                type="button"
-                onClick={() => setSelectedFile(file)}
-                className={`w-full border-b border-[var(--border-weak)] px-3 py-2 text-left transition-colors ${
-                  selected ? "bg-[var(--surface-active)]" : "hover:bg-[var(--surface-hover)]"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--fg)]">
-                    {plan.title || plan.name}
-                  </span>
-                  <span
-                    className="shrink-0 text-[10px]"
-                    style={{ color: STATUS_COLORS[plan.status] }}
-                  >
-                    {statusPill(plan.status)}
-                  </span>
-                </div>
-                <div className="mt-1 flex items-center gap-2 text-[10px] text-[var(--dimmer)]">
-                  <span className="truncate">{plan.name}</span>
-                  {plan.completed && <span>{formatDate(plan.completed)}</span>}
-                  {plan.owner && <span className="truncate">@{plan.owner}</span>}
-                </div>
-              </button>
+              <section key={group.status} className="border-b border-[var(--border-weak)]">
+                <button
+                  type="button"
+                  onClick={() => togglePlanGroup(group.status)}
+                  aria-expanded={!collapsed}
+                  className="flex h-8 w-full items-center gap-2 px-3 text-left text-[10px] uppercase tracking-[0.08em] text-[var(--dim)] hover:text-[var(--fg)]"
+                >
+                  <span className="w-3 text-[var(--dimmer)]">{collapsed ? "+" : "-"}</span>
+                  <span>{statusPill(group.status)}</span>
+                  <span className="ml-auto tabular-nums">{group.plans.length}</span>
+                </button>
+
+                {!collapsed && (
+                  <div>
+                    {group.plans.map((plan) => {
+                      const file = planFilename(plan);
+                      const selected = file === selectedFile;
+                      const tags = planTags(plan);
+                      return (
+                        <button
+                          key={file}
+                          type="button"
+                          data-testid="plan-list-item"
+                          onClick={() => setSelectedFile(file)}
+                          className={`w-full px-3 py-2 text-left transition-colors ${
+                            selected
+                              ? "bg-[var(--surface-active)]"
+                              : "hover:bg-[var(--surface-hover)]"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="h-1.5 w-1.5 shrink-0 rounded-full"
+                              style={{ background: STATUS_COLORS[plan.status] }}
+                              aria-hidden="true"
+                            />
+                            <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--fg)]">
+                              {plan.title || plan.name}
+                            </span>
+                            <span
+                              className="shrink-0 rounded-sm px-1.5 py-0.5 text-[10px]"
+                              style={{
+                                color: STATUS_COLORS[plan.status],
+                                background: "var(--surface)",
+                              }}
+                            >
+                              {statusPill(plan.status)}
+                            </span>
+                          </div>
+                          <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[10px] text-[var(--dimmer)]">
+                            <span className="truncate">@{planOwner(plan)}</span>
+                            <span>·</span>
+                            <span className="shrink-0">
+                              {formatRelativeTime(plan.updated ?? plan.completed)}
+                            </span>
+                            {tags.slice(0, 2).map((tag) => (
+                              <span
+                                key={tag}
+                                className="min-w-0 max-w-20 truncate rounded-sm bg-[var(--surface)] px-1 text-[var(--fg-secondary)]"
+                              >
+                                #{tag}
+                              </span>
+                            ))}
+                          </div>
+                        </button>
+                      );
+                    })}
+                    {group.plans.length === 0 && (
+                      <div className="px-3 pb-3 text-[10px] text-[var(--dimmer)]">none</div>
+                    )}
+                  </div>
+                )}
+              </section>
             );
           })}
+        </div>
+
+        <div className="border-t border-[var(--border)] p-3">
+          <button
+            type="button"
+            onClick={createPlanStub}
+            className="h-8 w-full rounded-sm border border-[var(--border)] bg-[var(--bg-strong)] text-[11px] text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+          >
+            New plan
+          </button>
         </div>
       </aside>
 

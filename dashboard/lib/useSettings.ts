@@ -28,7 +28,14 @@ export interface Settings {
   };
   general: {
     defaultActivity: ActivitySection;
-    defaultProjectTab: "kanban" | "agents" | "diffs" | "plans" | "validation" | "metrics" | "activity";
+    defaultProjectTab:
+      | "kanban"
+      | "mission"
+      | "diffs"
+      | "plans"
+      | "validation"
+      | "metrics"
+      | "activity";
     showNotifications: boolean;
   };
   keybinds: Record<string, string>;
@@ -82,7 +89,7 @@ function isActivitySection(value: unknown): value is ActivitySection {
 function isProjectTab(value: unknown): value is Settings["general"]["defaultProjectTab"] {
   return (
     value === "kanban" ||
-    value === "agents" ||
+    value === "mission" ||
     value === "diffs" ||
     value === "plans" ||
     value === "validation" ||
@@ -107,7 +114,12 @@ function normalizeSettings(value: unknown): Settings {
     themeId: isThemeId(value.themeId) ? value.themeId : defaultSettings.themeId,
     terminal: {
       fontSize: clampNumber(terminal.fontSize, defaultSettings.terminal.fontSize, 10, 20),
-      scrollback: clampNumber(terminal.scrollback, defaultSettings.terminal.scrollback, 1000, 50000),
+      scrollback: clampNumber(
+        terminal.scrollback,
+        defaultSettings.terminal.scrollback,
+        1000,
+        50000,
+      ),
       cursorBlink:
         typeof terminal.cursorBlink === "boolean"
           ? terminal.cursorBlink
@@ -131,10 +143,9 @@ function normalizeSettings(value: unknown): Settings {
       defaultActivity: isActivitySection(general.defaultActivity)
         ? general.defaultActivity
         : defaultSettings.general.defaultActivity,
-      defaultProjectTab:
-        isProjectTab(general.defaultProjectTab)
-          ? general.defaultProjectTab
-          : defaultSettings.general.defaultProjectTab,
+      defaultProjectTab: isProjectTab(general.defaultProjectTab)
+        ? general.defaultProjectTab
+        : defaultSettings.general.defaultProjectTab,
       showNotifications:
         typeof general.showNotifications === "boolean"
           ? general.showNotifications

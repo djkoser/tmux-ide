@@ -57,26 +57,26 @@ test.describe("project shell", () => {
     });
   });
 
-  test("kanban ↔ agents tab navigation", async ({ page }) => {
+  test("kanban ↔ mission tab navigation", async ({ page }) => {
     await page.goto(`/project/${encodeURIComponent(PROJECT)}`);
 
-    const agentsTab = page.getByRole("button", { name: "agents", exact: true });
+    const missionTab = page.getByRole("button", { name: "mission", exact: true });
     const kanbanTab = page.getByRole("button", { name: "kanban", exact: true });
 
-    await expect(agentsTab).toBeVisible({ timeout: 15_000 });
+    await expect(missionTab).toBeVisible({ timeout: 15_000 });
     await expect(kanbanTab).toBeVisible();
 
-    await agentsTab.click();
-    await expect(page).toHaveURL(/[?&]tab=agents\b/);
-    await expect(page.getByText("no agents in this session")).toBeVisible();
+    await missionTab.click();
+    await expect(page).toHaveURL(/[?&]tab=mission\b/);
+    await expect(page.getByText("No active mission")).toBeVisible();
 
     await kanbanTab.click();
-    await expect(page).not.toHaveURL(/[?&]tab=agents\b/);
+    await expect(page).not.toHaveURL(/[?&]tab=mission\b/);
   });
 
-  test("deep link to agents tab", async ({ page }) => {
-    await page.goto(`/project/${encodeURIComponent(PROJECT)}?tab=agents`);
+  test("deep link to mission tab", async ({ page }) => {
+    await page.goto(`/project/${encodeURIComponent(PROJECT)}?tab=mission`);
 
-    await expect(page.getByText("no agents in this session")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("No active mission")).toBeVisible({ timeout: 15_000 });
   });
 });

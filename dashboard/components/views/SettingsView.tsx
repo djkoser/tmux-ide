@@ -161,7 +161,10 @@ export function SettingsView() {
         {active === "general" && (
           <section data-testid="settings-section-general" className="max-w-3xl">
             <h2 className="mb-3 text-[15px] text-[var(--accent)]">General</h2>
-            <SettingRow title="Default activity" description="Sidebar mode selected for new windows.">
+            <SettingRow
+              title="Default activity"
+              description="Sidebar mode selected for new windows."
+            >
               <select
                 value={settings.general.defaultActivity}
                 onChange={(event) =>
@@ -187,7 +190,7 @@ export function SettingsView() {
                 }
                 className="border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[12px]"
               >
-                {["kanban", "agents", "diffs", "plans", "validation", "metrics", "activity"].map(
+                {["kanban", "mission", "diffs", "plans", "validation", "metrics", "activity"].map(
                   (tab) => (
                     <option key={tab} value={tab}>
                       {tab}
@@ -196,7 +199,10 @@ export function SettingsView() {
                 )}
               </select>
             </SettingRow>
-            <SettingRow title="Show notifications" description="Store event bridge history locally.">
+            <SettingRow
+              title="Show notifications"
+              description="Store event bridge history locally."
+            >
               <Toggle
                 checked={settings.general.showNotifications}
                 onChange={(value) => settings.setGeneral({ showNotifications: value })}
@@ -352,10 +358,16 @@ export function SettingsView() {
             <div className="space-y-2 text-[12px] text-[var(--fg-secondary)]">
               <div>tmux-ide {process.env.NEXT_PUBLIC_APP_VERSION ?? "dev"}</div>
               <div>Build date: {process.env.NEXT_PUBLIC_BUILD_DATE ?? "local"}</div>
-              <a className="block text-[var(--cyan)] hover:underline" href="https://github.com/wavyrai/tmux-ide">
+              <a
+                className="block text-[var(--cyan)] hover:underline"
+                href="https://github.com/wavyrai/tmux-ide"
+              >
                 GitHub repository
               </a>
-              <a className="block text-[var(--cyan)] hover:underline" href="https://github.com/wavyrai/tmux-ide/tree/main/docs">
+              <a
+                className="block text-[var(--cyan)] hover:underline"
+                href="https://github.com/wavyrai/tmux-ide/tree/main/docs"
+              >
                 Documentation
               </a>
             </div>

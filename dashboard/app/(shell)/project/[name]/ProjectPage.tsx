@@ -2,16 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import {
-  PROJECT_TABS,
-  ProjectViewTabs,
-  type ProjectTab,
-} from "@/components/ProjectViewTabs";
+import { PROJECT_TABS, ProjectViewTabs, type ProjectTab } from "@/components/ProjectViewTabs";
 import { ActivityView } from "@/components/views/ActivityView";
-import { AgentsView } from "@/components/views/AgentsView";
 import { DiffsView } from "@/components/views/DiffsView";
 import { KanbanView } from "@/components/views/KanbanView";
 import { MetricsView } from "@/components/views/MetricsView";
+import { MissionView } from "@/components/views/MissionView";
 import { PlansView } from "@/components/views/PlansView";
 import { ValidationView } from "@/components/views/ValidationView";
 
@@ -30,8 +26,14 @@ export default function ProjectPage({ projectName }: ProjectPageProps = {}) {
   const [activeTab, setActiveTabState] = useState<ProjectTab>("kanban");
 
   useEffect(() => {
-    const tabParam = new URLSearchParams(window.location.search).get("tab");
-    if (isTab(tabParam)) setActiveTabState(tabParam);
+    function syncTabFromUrl() {
+      const tabParam = new URLSearchParams(window.location.search).get("tab");
+      setActiveTabState(isTab(tabParam) ? tabParam : "kanban");
+    }
+
+    syncTabFromUrl();
+    window.addEventListener("popstate", syncTabFromUrl);
+    return () => window.removeEventListener("popstate", syncTabFromUrl);
   }, []);
 
   const setActiveTab = useCallback((tab: ProjectTab) => {
@@ -46,7 +48,7 @@ export default function ProjectPage({ projectName }: ProjectPageProps = {}) {
     <div className="flex flex-1 min-h-0 flex-col bg-[var(--bg)]">
       <ProjectViewTabs active={activeTab} onChange={setActiveTab} />
       {activeTab === "kanban" && <KanbanView sessionName={name} />}
-      {activeTab === "agents" && <AgentsView sessionName={name} />}
+      {activeTab === "mission" && <MissionView sessionName={name} />}
       {activeTab === "diffs" && <DiffsView sessionName={name} />}
       {activeTab === "plans" && <PlansView sessionName={name} />}
       {activeTab === "validation" && <ValidationView sessionName={name} />}

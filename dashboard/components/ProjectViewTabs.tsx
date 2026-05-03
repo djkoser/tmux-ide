@@ -2,7 +2,7 @@
 
 export type ProjectTab =
   | "kanban"
-  | "agents"
+  | "mission"
   | "diffs"
   | "plans"
   | "validation"
@@ -11,7 +11,7 @@ export type ProjectTab =
 
 export const PROJECT_TABS: { id: ProjectTab; label: string }[] = [
   { id: "kanban", label: "kanban" },
-  { id: "agents", label: "agents" },
+  { id: "mission", label: "mission" },
   { id: "diffs", label: "diffs" },
   { id: "plans", label: "plans" },
   { id: "validation", label: "validation" },
