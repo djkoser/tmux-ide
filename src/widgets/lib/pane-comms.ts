@@ -141,12 +141,16 @@ export function sendText(session: string, paneId: string, text: string): void {
   tmux("send-keys", "-t", paneId, "-l", "--", text);
 }
 
-export function sendLiteralToPane(session: string, paneId: string, text: string): void {
-  tmux("send-keys", "-t", `${session}:${paneId}`, "-l", "--", text);
+// tmux pane ids (e.g. %10) are GLOBAL — they don't take a session prefix.
+// `tmux send-keys -t <session>:<%paneId>` makes tmux interpret the
+// session prefix and then look up `%paneId` as a window inside that
+// session, which fails ("can't find window: %10"). Pass the bare pane id.
+export function sendLiteralToPane(_session: string, paneId: string, text: string): void {
+  tmux("send-keys", "-t", paneId, "-l", "--", text);
 }
 
-export function sendEnterToPane(session: string, paneId: string): void {
-  tmux("send-keys", "-t", `${session}:${paneId}`, "Enter");
+export function sendEnterToPane(_session: string, paneId: string): void {
+  tmux("send-keys", "-t", paneId, "Enter");
 }
 
 function sleepMs(ms: number): void {

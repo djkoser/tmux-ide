@@ -36,7 +36,7 @@ export function ToastStack() {
           key={toast.id}
           data-testid="toast"
           data-kind={toast.kind}
-          className="relative overflow-hidden border border-[var(--border)] bg-[var(--surface)] px-3 py-2 pr-9 shadow-xl"
+          className="relative overflow-hidden rounded-md border border-[var(--border)] bg-[var(--bg-strong)] px-3 py-2 pr-9 shadow-2xl"
         >
           <div
             className="absolute bottom-0 left-0 top-0 w-1"
