@@ -1,5 +1,6 @@
 "use client";
 
+import { Milestone } from "lucide-react";
 import { useState } from "react";
 import type { MilestoneData } from "@/lib/api";
 import type { SessionSnapshot } from "@/lib/useSessionStream";
@@ -37,10 +38,11 @@ export function MilestonesSegment({ snapshot }: { snapshot: SessionSnapshot | nu
           type="button"
           data-testid="status-segment-milestones"
           onClick={() => setOpen((value) => !value)}
-          className={`inline-flex items-center gap-1.5 text-left transition-colors hover:text-[var(--fg)] ${
+          className={`inline-flex items-center gap-1.5 text-left transition-colors motion-safe:active:scale-[0.98] hover:text-[var(--fg)] ${
             active ? "text-[var(--dim)]" : "text-[var(--dim)] opacity-70"
           }`}
         >
+          <Milestone aria-hidden="true" size={12} />
           {active && (
             <span
               aria-hidden="true"

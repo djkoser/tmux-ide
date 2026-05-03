@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { Folder } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { NotificationsView } from "@/components/views/NotificationsView";
 import { SettingsView } from "@/components/views/SettingsView";
@@ -28,8 +29,9 @@ export function WorkspaceTabsManager({ children }: WorkspaceTabsManagerProps) {
 
   if (workspaceTabs.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center text-[var(--dim)]">
-        select a session from the sidebar
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-[var(--dim)]">
+        <Folder aria-hidden="true" size={28} strokeWidth={1.5} />
+        <span>select a session from the sidebar</span>
       </div>
     );
   }
@@ -45,7 +47,9 @@ export function WorkspaceTabsManager({ children }: WorkspaceTabsManagerProps) {
             key={tab.id}
             data-testid="workspace-tab-panel"
             data-active={active ? "true" : "false"}
-            className="absolute inset-0 min-h-0"
+            className={`absolute inset-0 min-h-0 ${
+              active ? "motion-safe:animate-[workspace-panel-fade_150ms_ease-out]" : ""
+            }`}
             style={{ display: active ? "flex" : "none" }}
           >
             {tab.kind === "notifications" ? (

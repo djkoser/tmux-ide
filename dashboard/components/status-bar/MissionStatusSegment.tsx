@@ -1,5 +1,6 @@
 "use client";
 
+import { Target } from "lucide-react";
 import { useState } from "react";
 import type { MissionDetail } from "@/lib/api";
 import type { SessionSnapshot } from "@/lib/useSessionStream";
@@ -33,9 +34,10 @@ export function MissionStatusSegment({ snapshot }: { snapshot: SessionSnapshot |
           type="button"
           data-testid="status-segment-mission"
           onClick={() => setOpen((value) => !value)}
-          className="inline-flex max-w-64 items-center gap-1.5 truncate text-left text-[var(--dim)] transition-colors hover:text-[var(--fg)]"
+          className="inline-flex max-w-64 items-center gap-1.5 truncate text-left text-[var(--dim)] transition-colors motion-safe:active:scale-[0.98] hover:text-[var(--fg)]"
           title={label}
         >
+          <Target aria-hidden="true" size={12} className="shrink-0" />
           <span
             aria-hidden="true"
             className="h-1.5 w-1.5 shrink-0 rounded-full"

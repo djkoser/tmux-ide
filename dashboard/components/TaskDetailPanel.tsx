@@ -1,10 +1,12 @@
 "use client";
 
+import { CheckCircle2, RotateCw, Send, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { deleteTaskApi, injectIntoProject, updateTask, type EventData } from "@/lib/api";
 import type { AgentDetail, Goal, Task } from "@/lib/types";
 import { useToasts } from "@/lib/useToasts";
 import { MarkdownEditor } from "./MarkdownEditor";
+import { SaveIndicator } from "./SaveIndicator";
 
 interface TaskDetailPanelProps {
   task: Task;
@@ -36,6 +38,13 @@ function formatProof(proof: Task["proof"]): string {
 function eventText(event: EventData): string {
   if (event.message) return event.message;
   return `${event.type}${event.agent ? ` by ${event.agent}` : ""}`;
+}
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
 }
 
 export function TaskDetailPanel({
@@ -91,6 +100,10 @@ export function TaskDetailPanel({
   }, [task.id, task.title, task.description, task.priority, task.status]);
 
   const requestClose = useCallback(() => {
+    if (prefersReducedMotion()) {
+      onClose();
+      return;
+    }
     setClosing(true);
     window.setTimeout(onClose, 200);
   }, [onClose]);
@@ -154,6 +167,12 @@ export function TaskDetailPanel({
     return () => clearTimeout(timer);
   }, [description, dirty, onUpdated, priority, push, sessionName, task.id, task.title, title]);
 
+  useEffect(() => {
+    if (saveState !== "saved") return;
+    const timer = window.setTimeout(() => setSaveState("idle"), 1200);
+    return () => window.clearTimeout(timer);
+  }, [saveState]);
+
   async function markDone() {
     const updated = await updateTask(sessionName, task.id, { status: "done" });
     if (!updated) {
@@ -198,16 +217,8 @@ export function TaskDetailPanel({
     requestClose();
   }
 
-  const saveText =
-    saveState === "dirty"
-      ? "unsaved"
-      : saveState === "saving"
-        ? "saving..."
-        : saveState === "saved"
-          ? "saved"
-          : saveState === "error"
-            ? "save failed"
-            : "";
+  const saveIndicatorState =
+    saveState === "saving" || saveState === "saved" || saveState === "error" ? saveState : "idle";
 
   return (
     <div data-testid="task-detail-panel" className="fixed inset-0 z-50">
@@ -215,12 +226,12 @@ export function TaskDetailPanel({
         type="button"
         aria-label="Close task panel"
         onClick={requestClose}
-        className={`absolute inset-0 bg-[var(--modal-overlay)] transition-opacity duration-200 motion-reduce:transition-none ${
+        className={`absolute inset-0 bg-[var(--modal-overlay)] motion-safe:transition-opacity motion-safe:duration-200 ${
           closing ? "opacity-0" : "opacity-100"
         }`}
       />
       <aside
-        className={`absolute right-0 top-0 flex h-full w-full max-w-[480px] flex-col border-l border-[var(--border)] bg-[var(--bg)] shadow-2xl transition-transform duration-200 ease-out motion-reduce:transition-none ${
+        className={`absolute right-0 top-0 flex h-full w-full max-w-[480px] flex-col border-l border-[var(--border)] bg-[var(--bg)] shadow-2xl motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-out ${
           closing ? "translate-x-full" : "translate-x-0"
         }`}
       >
@@ -235,7 +246,10 @@ export function TaskDetailPanel({
                 {statusLabel(status)}
               </span>
               <span className="text-[11px] text-[var(--dim)]">task {task.id}</span>
-              {saveText && <span className="text-[10px] text-[var(--dimmer)]">{saveText}</span>}
+              {saveState === "dirty" && (
+                <span className="text-[10px] text-[var(--dimmer)]">unsaved</span>
+              )}
+              <SaveIndicator state={saveIndicatorState} />
             </div>
             <input
               data-testid="task-panel-edit-title"
@@ -248,10 +262,10 @@ export function TaskDetailPanel({
           <button
             type="button"
             onClick={requestClose}
-            className="text-[20px] leading-none text-[var(--dim)] transition-colors hover:text-[var(--fg)]"
+            className="inline-flex h-6 w-6 items-center justify-center text-[var(--dim)] transition-colors motion-safe:active:scale-[0.95] hover:text-[var(--fg)]"
             aria-label="Close"
           >
-            x
+            <X aria-hidden="true" size={16} />
           </button>
         </header>
 
@@ -360,22 +374,25 @@ export function TaskDetailPanel({
             <button
               type="button"
               onClick={() => void markDone()}
-              className="rounded-sm border border-[var(--green)] px-2 py-1 text-[11px] text-[var(--green)] transition-colors hover:bg-[var(--surface-hover)]"
+              className="inline-flex items-center gap-1.5 rounded-sm border border-[var(--green)] px-2 py-1 text-[11px] text-[var(--green)] transition-colors motion-safe:transition-transform motion-safe:duration-75 motion-safe:active:scale-[0.98] hover:bg-[var(--surface-hover)]"
             >
+              <CheckCircle2 aria-hidden="true" size={13} />
               Mark done
             </button>
             <button
               type="button"
               onClick={redispatch}
-              className="rounded-sm border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--fg-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
+              className="inline-flex items-center gap-1.5 rounded-sm border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--fg-secondary)] transition-colors motion-safe:transition-transform motion-safe:duration-75 motion-safe:active:scale-[0.98] hover:border-[var(--accent)] hover:text-[var(--accent)]"
             >
+              <RotateCw aria-hidden="true" size={13} />
               Re-dispatch
             </button>
             <button
               type="button"
               onClick={() => void sendToAgent()}
-              className="rounded-sm border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--fg-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
+              className="inline-flex items-center gap-1.5 rounded-sm border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--fg-secondary)] transition-colors motion-safe:transition-transform motion-safe:duration-75 motion-safe:active:scale-[0.98] hover:border-[var(--accent)] hover:text-[var(--accent)]"
             >
+              <Send aria-hidden="true" size={13} />
               Send to active agent
             </button>
             {confirmDelete ? (
@@ -383,14 +400,15 @@ export function TaskDetailPanel({
                 <button
                   type="button"
                   onClick={() => void deleteTask()}
-                  className="rounded-sm border border-[var(--red)] bg-[var(--red)] px-2 py-1 text-[11px] text-[var(--bg)]"
+                  className="inline-flex items-center gap-1.5 rounded-sm border border-[var(--red)] bg-[var(--red)] px-2 py-1 text-[11px] text-[var(--bg)] motion-safe:transition-transform motion-safe:duration-75 motion-safe:active:scale-[0.98]"
                 >
+                  <Trash2 aria-hidden="true" size={13} />
                   Confirm delete
                 </button>
                 <button
                   type="button"
                   onClick={() => setConfirmDelete(false)}
-                  className="rounded-sm border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--dim)]"
+                  className="rounded-sm border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--dim)] motion-safe:transition-transform motion-safe:duration-75 motion-safe:active:scale-[0.98]"
                 >
                   Cancel
                 </button>
@@ -399,8 +417,9 @@ export function TaskDetailPanel({
               <button
                 type="button"
                 onClick={() => setConfirmDelete(true)}
-                className="rounded-sm border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--red)] transition-colors hover:border-[var(--red)]"
+                className="inline-flex items-center gap-1.5 rounded-sm border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--red)] transition-colors motion-safe:transition-transform motion-safe:duration-75 motion-safe:active:scale-[0.98] hover:border-[var(--red)]"
               >
+                <Trash2 aria-hidden="true" size={13} />
                 Delete
               </button>
             )}

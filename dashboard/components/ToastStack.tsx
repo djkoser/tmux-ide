@@ -1,5 +1,6 @@
 "use client";
 
+import { AlertTriangle, CheckCircle2, Info, X, XCircle, type LucideIcon } from "lucide-react";
 import { useEffect } from "react";
 import { useToasts, type Toast, type ToastInput } from "@/lib/useToasts";
 
@@ -14,6 +15,13 @@ const stripeByKind: Record<Toast["kind"], string> = {
   success: "var(--green)",
   error: "var(--red)",
   warning: "var(--yellow)",
+};
+
+const iconByKind: Record<Toast["kind"], { Icon: LucideIcon; color: string }> = {
+  info: { Icon: Info, color: "var(--cyan)" },
+  success: { Icon: CheckCircle2, color: "var(--green)" },
+  error: { Icon: XCircle, color: "var(--red)" },
+  warning: { Icon: AlertTriangle, color: "var(--yellow)" },
 };
 
 export function ToastStack() {
@@ -32,45 +40,55 @@ export function ToastStack() {
       className="fixed bottom-10 left-1/2 z-50 flex w-[min(360px,calc(100vw-32px))] -translate-x-1/2 flex-col gap-2 md:left-auto md:right-4 md:translate-x-0"
     >
       {toasts.map((toast) => (
-        <div
-          key={toast.id}
-          data-testid="toast"
-          data-kind={toast.kind}
-          className="relative overflow-hidden rounded-md border border-[var(--border)] bg-[var(--bg-strong)] px-3 py-2 pr-9 shadow-2xl"
-        >
-          <div
-            className="absolute bottom-0 left-0 top-0 w-1"
-            style={{ backgroundColor: stripeByKind[toast.kind] }}
-            aria-hidden="true"
-          />
-          <div className="min-w-0">
-            <div className="truncate text-[13px] text-[var(--fg)]">{toast.title}</div>
-            {toast.body && (
-              <div className="mt-0.5 text-[12px] leading-5 text-[var(--dim)]">{toast.body}</div>
-            )}
-            {toast.actionLabel && toast.onAction && (
-              <button
-                type="button"
-                onClick={() => {
-                  toast.onAction?.();
-                  dismiss(toast.id);
-                }}
-                className="mt-2 text-[12px] text-[var(--accent)] hover:underline"
-              >
-                {toast.actionLabel}
-              </button>
-            )}
-          </div>
-          <button
-            type="button"
-            aria-label={`Dismiss ${toast.title}`}
-            onClick={() => dismiss(toast.id)}
-            className="absolute right-2 top-2 text-[var(--dim)] transition-colors hover:text-[var(--fg)]"
-          >
-            ×
-          </button>
-        </div>
+        <ToastCard key={toast.id} toast={toast} dismiss={dismiss} />
       ))}
+    </div>
+  );
+}
+
+function ToastCard({ toast, dismiss }: { toast: Toast; dismiss: (id: string) => void }) {
+  const { Icon, color } = iconByKind[toast.kind];
+
+  return (
+    <div
+      data-testid="toast"
+      data-kind={toast.kind}
+      className="relative overflow-hidden rounded-md border border-[var(--border)] bg-[var(--bg-strong)] px-3 py-2 pr-9 shadow-2xl motion-safe:animate-[toast-in_150ms_var(--ease-out-fluid)]"
+    >
+      <div
+        className="absolute bottom-0 left-0 top-0 w-1"
+        style={{ backgroundColor: stripeByKind[toast.kind] }}
+        aria-hidden="true"
+      />
+      <div className="grid min-w-0 grid-cols-[auto_1fr] gap-2">
+        <Icon aria-hidden="true" size={16} className="mt-0.5" style={{ color }} />
+        <div className="min-w-0">
+          <div className="truncate text-[13px] text-[var(--fg)]">{toast.title}</div>
+          {toast.body && (
+            <div className="mt-0.5 text-[12px] leading-5 text-[var(--dim)]">{toast.body}</div>
+          )}
+          {toast.actionLabel && toast.onAction && (
+            <button
+              type="button"
+              onClick={() => {
+                toast.onAction?.();
+                dismiss(toast.id);
+              }}
+              className="mt-2 text-[12px] text-[var(--accent)] motion-safe:active:scale-[0.98] hover:underline"
+            >
+              {toast.actionLabel}
+            </button>
+          )}
+        </div>
+      </div>
+      <button
+        type="button"
+        aria-label={`Dismiss ${toast.title}`}
+        onClick={() => dismiss(toast.id)}
+        className="absolute right-2 top-2 text-[var(--dim)] transition-colors motion-safe:active:scale-[0.95] hover:text-[var(--fg)]"
+      >
+        <X aria-hidden="true" size={14} />
+      </button>
     </div>
   );
 }

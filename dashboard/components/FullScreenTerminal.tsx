@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { Plus, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import {
   DndContext,
@@ -150,7 +151,7 @@ export function FullScreenTerminal() {
       data-testid="full-screen-terminal"
       data-project={currentProjectName}
       data-open={terminalOpen ? "true" : "false"}
-      className="absolute inset-0 z-20 min-h-0 flex-col bg-[var(--term-bg)]"
+      className="absolute inset-0 z-20 min-h-0 flex-col bg-[var(--term-bg)] motion-safe:animate-[terminal-panel-in_150ms_var(--ease-out-fluid)]"
       style={{ display: terminalOpen ? "flex" : "none" }}
       aria-hidden={!terminalOpen}
       aria-label="Full-screen terminal"
@@ -179,19 +180,19 @@ export function FullScreenTerminal() {
           type="button"
           data-testid="terminal-new-tab"
           onClick={() => void openShellTab()}
-          className="flex h-8 w-8 shrink-0 items-center justify-center border-l border-[var(--border-weak)] text-[var(--dim)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--accent)]"
+          className="flex h-8 w-8 shrink-0 items-center justify-center border-l border-[var(--border-weak)] text-[var(--dim)] transition-colors motion-safe:active:scale-[0.95] hover:bg-[var(--surface-hover)] hover:text-[var(--accent)]"
           aria-label="New terminal tab"
         >
-          +
+          <Plus aria-hidden="true" size={15} />
         </button>
         <button
           type="button"
           data-testid="terminal-close-mode"
           onClick={closeTerminalMode}
-          className="flex h-8 w-8 shrink-0 items-center justify-center border-l border-[var(--border-weak)] text-[var(--dim)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--red)]"
+          className="flex h-8 w-8 shrink-0 items-center justify-center border-l border-[var(--border-weak)] text-[var(--dim)] transition-colors motion-safe:active:scale-[0.95] hover:bg-[var(--surface-hover)] hover:text-[var(--red)]"
           aria-label="Close terminal mode"
         >
-          ×
+          <X aria-hidden="true" size={15} />
         </button>
       </div>
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { Folder, Settings, Sparkles } from "lucide-react";
 import { useLayoutState } from "@/lib/useLayoutState";
 
 interface ActivityBarProps {
@@ -40,7 +41,7 @@ export function ActivityBar({
         }`}
         aria-label="Sessions"
       >
-        ▦
+        <Folder aria-hidden="true" size={18} strokeWidth={1.8} />
       </button>
 
       <button
@@ -60,7 +61,7 @@ export function ActivityBar({
         }`}
         aria-label="Skills"
       >
-        S
+        <Sparkles aria-hidden="true" size={18} strokeWidth={1.8} />
       </button>
 
       <button
@@ -81,7 +82,7 @@ export function ActivityBar({
         }`}
         aria-label="Settings"
       >
-        ⚙
+        <Settings aria-hidden="true" size={18} strokeWidth={1.8} />
       </button>
     </nav>
   );

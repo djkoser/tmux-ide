@@ -36,7 +36,7 @@ export function StatusPopover({ open, onClose, children }: StatusPopoverProps) {
     <div
       ref={ref}
       data-testid="status-popover"
-      className="absolute bottom-full left-0 z-40 mb-1 max-h-72 min-w-64 max-w-[min(28rem,calc(100vw-2rem))] overflow-auto rounded-md border border-[var(--border)] bg-[var(--bg-strong)] p-2 text-[11px] text-[var(--fg)] shadow-2xl"
+      className="absolute bottom-full left-0 z-40 mb-1 max-h-72 min-w-64 max-w-[min(28rem,calc(100vw-2rem))] overflow-auto rounded-md border border-[var(--border)] bg-[var(--bg-strong)] p-2 text-[11px] text-[var(--fg)] shadow-2xl motion-safe:animate-[palette-in_150ms_var(--ease-out-fluid)]"
     >
       {children}
     </div>

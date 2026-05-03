@@ -1,5 +1,6 @@
 "use client";
 
+import { Palette, Terminal } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { AgentsSegment } from "@/components/status-bar/AgentsSegment";
 import { MilestonesSegment } from "@/components/status-bar/MilestonesSegment";
@@ -46,9 +47,15 @@ export function ShellStatusBar() {
         </>
       )}
       <span className="mx-1 opacity-30 md:mx-2">│</span>
-      <span className="hidden sm:inline">terminal ⌘J</span>
+      <span className="hidden items-center gap-1 sm:inline-flex">
+        <Terminal aria-hidden="true" size={12} />
+        terminal ⌘J
+      </span>
       <span className="mx-1 hidden opacity-30 sm:inline md:mx-2">│</span>
-      <span className="hidden sm:inline">theme ⌘⇧T</span>
+      <span className="hidden items-center gap-1 sm:inline-flex">
+        <Palette aria-hidden="true" size={12} />
+        theme ⌘⇧T
+      </span>
       <span className="flex-1" />
       <span className="shrink-0">tmux-ide {version}</span>
     </footer>

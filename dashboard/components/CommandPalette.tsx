@@ -1,5 +1,6 @@
 "use client";
 
+import { Command, Eye, LayoutGrid, Search, Terminal, type LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { runAction, useActions, type Action } from "@/lib/actions";
 
@@ -65,6 +66,16 @@ function formatKeybind(keybind: string): string {
       return part.length === 1 ? part.toUpperCase() : part;
     })
     .join("");
+}
+
+function iconForAction(action: Action): LucideIcon | null {
+  const category = `${action.scope?.category ?? ""} ${action.category ?? ""}`.toLowerCase();
+  const section = action.scope?.section ?? "";
+  if (category.includes("activity")) return LayoutGrid;
+  if (category.includes("terminal") || section === "terminal") return Terminal;
+  if (category.includes("view")) return Eye;
+  if (category.includes("general")) return Command;
+  return null;
 }
 
 export function CommandPalette() {
@@ -145,38 +156,41 @@ export function CommandPalette() {
       <div
         ref={panelRef}
         data-testid="command-palette"
-        className="w-full max-w-[480px] overflow-hidden rounded-md border border-[var(--border)] bg-[var(--bg-strong)] shadow-2xl"
+        className="w-full max-w-[480px] overflow-hidden rounded-md border border-[var(--border)] bg-[var(--bg-strong)] shadow-2xl motion-safe:animate-[palette-in_150ms_var(--ease-out-fluid)]"
       >
-        <input
-          ref={inputRef}
-          data-testid="palette-input"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.preventDefault();
-              closeCommandPalette();
-              return;
-            }
-            if (event.key === "ArrowDown") {
-              event.preventDefault();
-              setActiveIndex((current) => Math.min(matches.length - 1, current + 1));
-              return;
-            }
-            if (event.key === "ArrowUp") {
-              event.preventDefault();
-              setActiveIndex((current) => Math.max(0, current - 1));
-              return;
-            }
-            if (event.key === "Enter") {
-              event.preventDefault();
-              const action = matches[activeIndex];
-              if (action) run(action);
-            }
-          }}
-          placeholder="Type a command..."
-          className="h-11 w-full border-b border-[var(--border-weak)] bg-[var(--bg)] px-3 text-[13px] text-[var(--fg)] outline-none placeholder:text-[var(--dim)]"
-        />
+        <div className="flex h-11 items-center gap-2 border-b border-[var(--border-weak)] bg-[var(--bg)] px-3">
+          <Search aria-hidden="true" size={15} className="shrink-0 text-[var(--dim)]" />
+          <input
+            ref={inputRef}
+            data-testid="palette-input"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                closeCommandPalette();
+                return;
+              }
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                setActiveIndex((current) => Math.min(matches.length - 1, current + 1));
+                return;
+              }
+              if (event.key === "ArrowUp") {
+                event.preventDefault();
+                setActiveIndex((current) => Math.max(0, current - 1));
+                return;
+              }
+              if (event.key === "Enter") {
+                event.preventDefault();
+                const action = matches[activeIndex];
+                if (action) run(action);
+              }
+            }}
+            placeholder="Type a command..."
+            className="h-full min-w-0 flex-1 bg-transparent text-[13px] text-[var(--fg)] outline-none placeholder:text-[var(--dim)]"
+          />
+        </div>
 
         <div className="max-h-72 overflow-y-auto py-1">
           {grouped.map(([group, groupActions]) => (
@@ -188,6 +202,7 @@ export function CommandPalette() {
                 const index = flatIndex;
                 flatIndex += 1;
                 const active = index === activeIndex;
+                const Icon = iconForAction(action);
 
                 return (
                   <button
@@ -197,12 +212,19 @@ export function CommandPalette() {
                     data-active={active ? "true" : "false"}
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => run(action)}
-                    className={`flex w-full items-start gap-3 px-3 py-2 text-left transition-colors ${
+                    className={`flex w-full items-start gap-3 px-3 py-2 text-left transition-colors motion-safe:active:scale-[0.98] ${
                       active
                         ? "bg-[var(--surface-active)] text-[var(--accent)]"
                         : "text-[var(--fg)] hover:bg-[var(--surface-hover)]"
                     }`}
                   >
+                    {Icon && (
+                      <Icon
+                        aria-hidden="true"
+                        size={15}
+                        className="mt-0.5 shrink-0 text-[var(--dim)]"
+                      />
+                    )}
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[13px]">{action.label}</span>
                       {action.description && (

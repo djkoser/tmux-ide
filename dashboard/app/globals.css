@@ -17,6 +17,7 @@
     "Berkeley Mono", ui-monospace, SFMono-Regular, "JetBrains Mono", "IBM Plex Mono", "Menlo",
     "Consolas", monospace;
   --ease-out-fluid: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Dark theme (default) */
@@ -560,5 +561,45 @@
   }
   to {
     transform: translateX(0);
+  }
+}
+
+@keyframes palette-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.25rem) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.25rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes workspace-panel-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes terminal-panel-in {
+  from {
+    opacity: 0.94;
+  }
+  to {
+    opacity: 1;
   }
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { Users } from "lucide-react";
 import { useState } from "react";
 import type { SessionSnapshot } from "@/lib/useSessionStream";
 import { StatusPopover } from "./StatusPopover";
@@ -20,8 +21,9 @@ export function AgentsSegment({ snapshot }: { snapshot: SessionSnapshot | null }
           type="button"
           data-testid="status-segment-agents"
           onClick={() => setOpen((value) => !value)}
-          className="inline-flex items-center gap-1 text-left text-[var(--dim)] transition-colors hover:text-[var(--fg)]"
+          className="inline-flex items-center gap-1 text-left text-[var(--dim)] transition-colors motion-safe:active:scale-[0.98] hover:text-[var(--fg)]"
         >
+          <Users aria-hidden="true" size={12} />
           <span className="text-[var(--green)]">{busy}</span>
           <span>/{agents.length} agents</span>
         </button>

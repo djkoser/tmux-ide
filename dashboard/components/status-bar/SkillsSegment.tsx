@@ -1,5 +1,6 @@
 "use client";
 
+import { Sparkles } from "lucide-react";
 import { useState } from "react";
 import type { SessionSnapshot } from "@/lib/useSessionStream";
 import { StatusPopover } from "./StatusPopover";
@@ -18,9 +19,10 @@ export function SkillsSegment({ snapshot }: { snapshot: SessionSnapshot | null }
           type="button"
           data-testid="status-segment-skills"
           onClick={() => setOpen((value) => !value)}
-          className="inline-flex items-center text-left text-[var(--dim)] transition-colors hover:text-[var(--fg)]"
+          className="inline-flex items-center gap-1 text-left text-[var(--dim)] transition-colors motion-safe:active:scale-[0.98] hover:text-[var(--fg)]"
         >
-          {data.length > 0 ? `${data.length} skills` : "—"}
+          <Sparkles aria-hidden="true" size={12} />
+          {data.length > 0 ? `${data.length} skills` : "none"}
         </button>
         <StatusPopover open={open} onClose={() => setOpen(false)}>
           <div className="space-y-2">
