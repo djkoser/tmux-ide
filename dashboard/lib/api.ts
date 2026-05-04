@@ -424,6 +424,113 @@ export async function fetchMission(name: string): Promise<MissionDetail | null> 
   return data as MissionDetail;
 }
 
+export async function planComplete(name: string): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(
+    `${API_BASE}/api/project/${encodeURIComponent(name)}/mission/plan-complete`,
+    { method: "POST" },
+  );
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const data = (await res.json()) as { error?: string };
+      if (data?.error) message = data.error;
+    } catch {
+      // ignore
+    }
+    return { ok: false, error: message };
+  }
+  return { ok: true };
+}
+
+export async function setMission(
+  name: string,
+  fields: { title: string; description?: string; branch?: string | null; status?: string },
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/mission`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fields),
+  });
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const data = (await res.json()) as { error?: string };
+      if (data?.error) message = data.error;
+    } catch {
+      // ignore
+    }
+    return { ok: false, error: message };
+  }
+  return { ok: true };
+}
+
+export async function clearMission(name: string): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/mission`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const data = (await res.json()) as { error?: string };
+      if (data?.error) message = data.error;
+    } catch {
+      // ignore
+    }
+    return { ok: false, error: message };
+  }
+  return { ok: true };
+}
+
+export async function createMilestone(
+  name: string,
+  fields: { title: string; description?: string; sequence: number },
+): Promise<{ ok: boolean; milestone?: MilestoneData; error?: string }> {
+  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/milestones`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fields),
+  });
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const data = (await res.json()) as { error?: string };
+      if (data?.error) message = data.error;
+    } catch {
+      // ignore
+    }
+    return { ok: false, error: message };
+  }
+  const data = (await res.json()) as { ok: boolean; milestone: MilestoneData };
+  return { ok: true, milestone: data.milestone };
+}
+
+export async function updateMilestone(
+  name: string,
+  milestoneId: string,
+  fields: { title?: string; description?: string; status?: MilestoneData["status"] },
+): Promise<{ ok: boolean; milestone?: MilestoneData; error?: string }> {
+  const res = await fetch(
+    `${API_BASE}/api/project/${encodeURIComponent(name)}/milestones/${encodeURIComponent(milestoneId)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fields),
+    },
+  );
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const data = (await res.json()) as { error?: string };
+      if (data?.error) message = data.error;
+    } catch {
+      // ignore
+    }
+    return { ok: false, error: message };
+  }
+  const data = (await res.json()) as { ok: boolean; milestone: MilestoneData };
+  return { ok: true, milestone: data.milestone };
+}
+
 // --- Metrics ---
 
 export interface AgentMetricsData {

@@ -87,10 +87,30 @@ describe("MissionTreeNavigator", () => {
   it("collapses a milestone when clicked", async () => {
     render(<MissionTreeNavigator sessionName="alpha" />);
     const milestoneButton = screen.getByTestId("navigator-milestone-M1");
-    expect(screen.queryByTestId("navigator-goal-01")).toBeTruthy();
+    expect(milestoneButton.getAttribute("aria-expanded")).toBe("true");
     await act(async () => {
       fireEvent.click(milestoneButton);
     });
-    expect(screen.queryByTestId("navigator-goal-01")).toBeNull();
+    expect(milestoneButton.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("filters the tree via the search input", async () => {
+    render(<MissionTreeNavigator sessionName="alpha" />);
+    const search = screen.getByTestId("mission-tree-search") as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(search, { target: { value: "no-such-thing" } });
+    });
+    expect(search.value).toBe("no-such-thing");
+    expect(screen.getByText("no matches")).toBeTruthy();
+  });
+
+  it("invokes onTaskClick when a task row is selected", async () => {
+    const onTaskClick = vi.fn();
+    render(<MissionTreeNavigator sessionName="alpha" onTaskClick={onTaskClick} />);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("navigator-task-001"));
+    });
+    expect(onTaskClick).toHaveBeenCalled();
+    expect(onTaskClick.mock.calls[0]![0].id).toBe("001");
   });
 });
