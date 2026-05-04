@@ -874,6 +874,11 @@ export class TaskStore extends EventEmitter {
 }
 
 export const taskStore = new TaskStore();
+// Each project-stream SSE connection registers one "change" listener.
+// Disable Node's 10-listener warning — listeners are removed on stream
+// close in command-center/server.ts, so we're bounded by active SSE
+// clients (which can legitimately be many across tabs / projects).
+taskStore.setMaxListeners(0);
 
 export function getTasksRoot(dir: string): string {
   return resolve(dir, TASKS_DIR);

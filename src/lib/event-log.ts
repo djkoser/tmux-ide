@@ -62,6 +62,11 @@ export type StructuredEvent = z.infer<typeof StructuredEventSchemaZ>;
 
 let _webhooks: WebhookConfig[] = [];
 export const eventLogEmitter = new EventEmitter();
+// Each project-stream SSE connection adds one listener. The dashboard
+// can easily mount 10+ concurrent streams across tabs. Disable Node's
+// default 10-listener warning — listeners are removed on stream close
+// in command-center/server.ts, so this is bounded by active clients.
+eventLogEmitter.setMaxListeners(0);
 
 /** Configure webhook URLs for event delivery. Call once at startup. */
 export function setWebhookConfig(webhooks: WebhookConfig[]): void {

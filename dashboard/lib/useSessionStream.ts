@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   API_BASE,
   fetchEvents,
@@ -94,125 +94,183 @@ function relativeEvent(event: EventData): EventData {
   return { ...event, relative };
 }
 
+/**
+ * Per-session shared subscription.
+ *
+ * One EventSource per session, regardless of how many components in the tree
+ * call `useSessionStream(name)`. Each call adds a subscriber to the shared
+ * channel and listens to its broadcast state. The last unsubscribe closes
+ * the underlying connection. This avoids exhausting the browser's per-origin
+ * HTTP/1.1 connection limit (6 streams) when a single project page mounts
+ * AppSidebar + KanbanView + MissionView + StatusBar + ActivityView, all
+ * each previously opening their own SSE.
+ */
+interface Channel {
+  state: StreamState;
+  source: EventSource | null;
+  reconnect: ReturnType<typeof setTimeout> | null;
+  backoff: number;
+  closed: boolean;
+  subscribers: Set<(s: StreamState) => void>;
+  refetching: boolean;
+}
+
+const channels = new Map<string, Channel>();
+
+function setChannelState(channel: Channel, next: StreamState | ((prev: StreamState) => StreamState)) {
+  const resolved = typeof next === "function" ? next(channel.state) : next;
+  if (resolved === channel.state) return;
+  channel.state = resolved;
+  for (const listener of channel.subscribers) listener(resolved);
+}
+
+async function refreshChannelSnapshot(channel: Channel, sessionName: string): Promise<void> {
+  if (channel.refetching) return;
+  channel.refetching = true;
+  try {
+    const snapshot = await fetchSnapshot(sessionName);
+    setChannelState(channel, (current) => ({ ...current, snapshot, lastEventAt: Date.now() }));
+  } catch {
+    // Keep current snapshot; reconnect path retries independently.
+  } finally {
+    channel.refetching = false;
+  }
+}
+
+function connectChannel(channel: Channel, sessionName: string): void {
+  if (channel.closed) return;
+  if (typeof EventSource === "undefined") return;
+  const source = new EventSource(
+    `${API_BASE}/api/project/${encodeURIComponent(sessionName)}/stream`,
+  );
+  channel.source = source;
+
+  source.onopen = () => {
+    channel.backoff = 1000;
+    setChannelState(channel, (current) => ({
+      ...current,
+      connected: true,
+      lastEventAt: Date.now(),
+    }));
+  };
+
+  source.addEventListener("snapshot", (event) => {
+    const payload = parseEvent<Partial<SessionSnapshot>>(event as MessageEvent<string>);
+    if (!payload) return;
+    setChannelState(channel, {
+      snapshot: normalizeSnapshot(payload),
+      connected: true,
+      lastEventAt: Date.now(),
+    });
+  });
+
+  for (const eventName of [
+    "task.changed",
+    "mission.changed",
+    "goal.changed",
+    "milestone.changed",
+    "agent.changed",
+  ]) {
+    source.addEventListener(eventName, () => void refreshChannelSnapshot(channel, sessionName));
+  }
+
+  source.addEventListener("event.appended", (event) => {
+    const payload = parseEvent<EventData>(event as MessageEvent<string>);
+    if (!payload) return;
+    setChannelState(channel, (current) => {
+      const snapshot = current.snapshot;
+      if (!snapshot) return { ...current, lastEventAt: Date.now() };
+      const nextEvent = relativeEvent(payload);
+      const seen = new Set(
+        snapshot.events.map((item) => `${item.timestamp}:${item.type}:${item.taskId ?? ""}`),
+      );
+      const key = `${nextEvent.timestamp}:${nextEvent.type}:${nextEvent.taskId ?? ""}`;
+      if (seen.has(key)) return { ...current, lastEventAt: Date.now() };
+      return {
+        ...current,
+        lastEventAt: Date.now(),
+        snapshot: {
+          ...snapshot,
+          events: [nextEvent, ...snapshot.events].slice(0, 200),
+        },
+      };
+    });
+  });
+
+  source.addEventListener("ping", () => {
+    setChannelState(channel, (current) => ({
+      ...current,
+      connected: true,
+      lastEventAt: Date.now(),
+    }));
+  });
+
+  source.onerror = () => {
+    source.close();
+    if (channel.source !== source) return;
+    channel.source = null;
+    setChannelState(channel, (current) => ({ ...current, connected: false }));
+    if (channel.closed) return;
+    const delay = channel.backoff;
+    channel.backoff = Math.min(delay * 2, 30_000);
+    channel.reconnect = setTimeout(() => connectChannel(channel, sessionName), delay);
+  };
+}
+
+function teardownChannel(channel: Channel): void {
+  channel.closed = true;
+  if (channel.reconnect) {
+    clearTimeout(channel.reconnect);
+    channel.reconnect = null;
+  }
+  channel.source?.close();
+  channel.source = null;
+}
+
+function acquireChannel(sessionName: string, listener: (s: StreamState) => void): () => void {
+  let channel = channels.get(sessionName);
+  if (!channel) {
+    channel = {
+      state: INITIAL_STATE,
+      source: null,
+      reconnect: null,
+      backoff: 1000,
+      closed: false,
+      subscribers: new Set(),
+      refetching: false,
+    };
+    channels.set(sessionName, channel);
+    void refreshChannelSnapshot(channel, sessionName);
+    connectChannel(channel, sessionName);
+  }
+  channel.subscribers.add(listener);
+  // Push current state immediately so late subscribers don't render INITIAL.
+  listener(channel.state);
+  return () => {
+    const ch = channels.get(sessionName);
+    if (!ch) return;
+    ch.subscribers.delete(listener);
+    if (ch.subscribers.size === 0) {
+      teardownChannel(ch);
+      channels.delete(sessionName);
+    }
+  };
+}
+
 export function useSessionStream(sessionName: string | null): StreamState {
   const [state, setState] = useState<StreamState>(INITIAL_STATE);
-  const sourceRef = useRef<EventSource | null>(null);
-  const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const backoffRef = useRef(1000);
-  const refetchingRef = useRef(false);
-  const closedRef = useRef(false);
-
-  const refreshSnapshot = useCallback(async () => {
-    if (!sessionName || refetchingRef.current) return;
-    refetchingRef.current = true;
-    try {
-      const snapshot = await fetchSnapshot(sessionName);
-      setState((current) => ({ ...current, snapshot, lastEventAt: Date.now() }));
-    } catch {
-      // Keep the current snapshot; the EventSource reconnect path will retry independently.
-    } finally {
-      refetchingRef.current = false;
-    }
-  }, [sessionName]);
 
   useEffect(() => {
-    if (reconnectRef.current) {
-      clearTimeout(reconnectRef.current);
-      reconnectRef.current = null;
+    if (!sessionName) {
+      setState(INITIAL_STATE);
+      return;
     }
-    sourceRef.current?.close();
-    sourceRef.current = null;
-    closedRef.current = false;
-    backoffRef.current = 1000;
-    setState(INITIAL_STATE);
-
-    if (!sessionName) return;
-    void refreshSnapshot();
-    if (typeof EventSource === "undefined") return;
-
-    function connect() {
-      if (closedRef.current || !sessionName) return;
-      const source = new EventSource(
-        `${API_BASE}/api/project/${encodeURIComponent(sessionName)}/stream`,
-      );
-      sourceRef.current = source;
-
-      source.onopen = () => {
-        backoffRef.current = 1000;
-        setState((current) => ({ ...current, connected: true, lastEventAt: Date.now() }));
-      };
-
-      source.addEventListener("snapshot", (event) => {
-        const payload = parseEvent<Partial<SessionSnapshot>>(event as MessageEvent<string>);
-        if (!payload) return;
-        setState({
-          snapshot: normalizeSnapshot(payload),
-          connected: true,
-          lastEventAt: Date.now(),
-        });
-      });
-
-      for (const eventName of [
-        "task.changed",
-        "mission.changed",
-        "goal.changed",
-        "milestone.changed",
-        "agent.changed",
-      ]) {
-        source.addEventListener(eventName, () => void refreshSnapshot());
-      }
-
-      source.addEventListener("event.appended", (event) => {
-        const payload = parseEvent<EventData>(event as MessageEvent<string>);
-        if (!payload) return;
-        setState((current) => {
-          const snapshot = current.snapshot;
-          if (!snapshot) return { ...current, lastEventAt: Date.now() };
-          const nextEvent = relativeEvent(payload);
-          const seen = new Set(
-            snapshot.events.map((item) => `${item.timestamp}:${item.type}:${item.taskId ?? ""}`),
-          );
-          const key = `${nextEvent.timestamp}:${nextEvent.type}:${nextEvent.taskId ?? ""}`;
-          if (seen.has(key)) return { ...current, lastEventAt: Date.now() };
-          return {
-            ...current,
-            lastEventAt: Date.now(),
-            snapshot: {
-              ...snapshot,
-              events: [nextEvent, ...snapshot.events].slice(0, 200),
-            },
-          };
-        });
-      });
-
-      source.addEventListener("ping", () => {
-        setState((current) => ({ ...current, connected: true, lastEventAt: Date.now() }));
-      });
-
-      source.onerror = () => {
-        source.close();
-        if (sourceRef.current !== source) return;
-        sourceRef.current = null;
-        setState((current) => ({ ...current, connected: false }));
-        if (closedRef.current) return;
-        const delay = backoffRef.current;
-        backoffRef.current = Math.min(delay * 2, 30_000);
-        reconnectRef.current = setTimeout(connect, delay);
-      };
-    }
-
-    connect();
-
+    const release = acquireChannel(sessionName, (next) => setState(next));
     return () => {
-      closedRef.current = true;
-      if (reconnectRef.current) {
-        clearTimeout(reconnectRef.current);
-        reconnectRef.current = null;
-      }
-      sourceRef.current?.close();
-      sourceRef.current = null;
+      release();
+      setState(INITIAL_STATE);
     };
-  }, [refreshSnapshot, sessionName]);
+  }, [sessionName]);
 
   return state;
 }
