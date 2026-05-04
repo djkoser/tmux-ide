@@ -5,8 +5,11 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import {
   fetchProjectTemplates,
   initProject,
-  probeProject,
+  inspectDirectory,
+  onboardProject,
   registerProject,
+  type OnboardProjectInput,
+  type ProjectInspect,
   type ProjectTemplate,
   type RegisteredProject,
 } from "@/lib/api";
@@ -44,6 +47,7 @@ import {
   type InitJobState,
 } from "./AddProjectDialog.logic";
 import { DirectoryBrowser } from "./DirectoryBrowser";
+import { OnboardingWizard } from "./OnboardingWizard";
 
 /**
  * Three-tab dialog for adding a project to the registry.
@@ -148,7 +152,7 @@ function OpenExistingTab() {
   const baseDir = settings.general.addProjectBaseDirectory ?? "";
   const [rawDir, setRawDir] = useState(baseDir);
   const [probing, setProbing] = useState(false);
-  const [probed, setProbed] = useState<RegisteredProject | null>(null);
+  const [inspect, setInspect] = useState<ProjectInspect | null>(null);
   const [probeError, setProbeError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -158,31 +162,38 @@ function OpenExistingTab() {
   const probeAt = useCallback(async (path: string) => {
     setProbing(true);
     setProbeError(null);
-    setProbed(null);
+    setInspect(null);
     try {
-      const project = await probeProject(path);
-      setProbed(project);
+      const project = await inspectDirectory(path);
+      setInspect(project);
     } catch (error) {
-      setProbed(null);
-      setProbeError(error instanceof Error ? error.message : "Probe failed");
+      setInspect(null);
+      setProbeError(error instanceof Error ? error.message : "Inspect failed");
     } finally {
       setProbing(false);
     }
   }, []);
 
-  const onSubmit = useCallback(async () => {
-    if (!probed) return;
-    setSubmitting(true);
-    try {
-      const project = await registerProject(probed.dir, probed.name);
+  const finishWith = useCallback(
+    (project: RegisteredProject, label: string) => {
       void refreshProjects();
       push({
         kind: "success",
-        title: "Project added",
+        title: label,
         body: project.name,
       });
       closeAddProjectDialog();
       setNavigation({ type: "sessions", sessionName: project.name });
+    },
+    [push],
+  );
+
+  const onSubmit = useCallback(async () => {
+    if (!inspect || !inspect.hasIdeYml) return;
+    setSubmitting(true);
+    try {
+      const project = await registerProject(inspect.dir, inspect.name);
+      finishWith(project, "Project added");
     } catch (error) {
       push({
         kind: "error",
@@ -192,11 +203,41 @@ function OpenExistingTab() {
     } finally {
       setSubmitting(false);
     }
-  }, [probed, push]);
+  }, [finishWith, inspect, push]);
+
+  const onOnboardSubmit = useCallback(
+    async (input: OnboardProjectInput) => {
+      setSubmitting(true);
+      try {
+        const project = await onboardProject(input);
+        finishWith(project, "Project initialized");
+      } catch (error) {
+        push({
+          kind: "error",
+          title: "Failed to onboard project",
+          body: error instanceof Error ? error.message : "Unknown error",
+        });
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [finishWith, push],
+  );
+
+  const probedRegistered: RegisteredProject | null = inspect
+    ? {
+        name: inspect.name,
+        dir: inspect.dir,
+        hasIdeYml: inspect.hasIdeYml,
+        gitOrigin: inspect.gitOrigin,
+        gitBranch: inspect.gitBranch,
+        registeredAt: "",
+      }
+    : null;
 
   const submitState = deriveOpenTabSubmit({
     dir,
-    probed,
+    probed: probedRegistered,
     probing,
     existing: projects,
   });
@@ -207,7 +248,7 @@ function OpenExistingTab() {
         value={rawDir}
         onChange={(next) => {
           setRawDir(next);
-          setProbed(null);
+          setInspect(null);
           setProbeError(null);
         }}
         onSelect={(next) => {
@@ -221,7 +262,7 @@ function OpenExistingTab() {
         <Banner tone="warn">{dirValidation.reason}</Banner>
       )}
 
-      {probing && <Banner tone="info">Probing…</Banner>}
+      {probing && <Banner tone="info">Inspecting…</Banner>}
 
       {probeError && (
         <Banner tone="error" testId="add-project-probe-error">
@@ -229,29 +270,35 @@ function OpenExistingTab() {
         </Banner>
       )}
 
-      {probed && !probed.hasIdeYml && (
-        <Banner tone="warn">
-          No <code>ide.yml</code> in this directory. Switch to <strong>Initialize</strong> to create
-          one.
-        </Banner>
+      {inspect && inspect.hasIdeYml && probedRegistered && (
+        <ProjectPreview project={probedRegistered} />
       )}
 
-      {probed && probed.hasIdeYml && <ProjectPreview project={probed} />}
+      {inspect && !inspect.hasIdeYml && (
+        <OnboardingWizard
+          inspect={inspect}
+          submitting={submitting}
+          onCancel={closeAddProjectDialog}
+          onSubmit={onOnboardSubmit}
+        />
+      )}
 
-      <div className="flex justify-end gap-2 pt-2">
-        <Button variant="ghost" onClick={closeAddProjectDialog}>
-          Cancel
-        </Button>
-        <Button
-          data-testid="add-project-submit"
-          onClick={onSubmit}
-          isPending={submitting}
-          disabled={!submitState.canSubmit || submitting}
-          title={submitState.reason ?? undefined}
-        >
-          Add project
-        </Button>
-      </div>
+      {(!inspect || inspect.hasIdeYml) && (
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="ghost" onClick={closeAddProjectDialog}>
+            Cancel
+          </Button>
+          <Button
+            data-testid="add-project-submit"
+            onClick={onSubmit}
+            isPending={submitting}
+            disabled={!submitState.canSubmit || submitting}
+            title={submitState.reason ?? undefined}
+          >
+            Add project
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

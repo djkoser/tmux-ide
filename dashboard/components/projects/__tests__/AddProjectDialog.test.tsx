@@ -10,6 +10,43 @@ const PROJECT = {
   registeredAt: "2026-05-01T00:00:00Z",
 };
 
+const PROJECT_FRESH = {
+  name: "freshproj",
+  dir: "/repos/freshproj",
+  hasIdeYml: false,
+  gitOrigin: null,
+  gitBranch: null,
+  registeredAt: "2026-05-01T00:00:00Z",
+};
+
+const INSPECT_ALPHA = {
+  name: "alpha",
+  dir: "/repos/alpha",
+  hasIdeYml: true,
+  gitOrigin: "git@github.com:owner/alpha.git",
+  gitBranch: "main",
+  detected: {
+    packageManager: "pnpm" as const,
+    frameworks: ["next"],
+    devCommand: "pnpm dev",
+    testCommand: "pnpm test",
+  },
+};
+
+const INSPECT_FRESH = {
+  name: "freshproj",
+  dir: "/repos/freshproj",
+  hasIdeYml: false,
+  gitOrigin: null,
+  gitBranch: null,
+  detected: {
+    packageManager: "pnpm" as const,
+    frameworks: ["next"],
+    devCommand: "pnpm dev",
+    testCommand: "pnpm test",
+  },
+};
+
 const HOME_LISTING = {
   path: "/Users/test",
   parentPath: "/Users",
@@ -36,7 +73,11 @@ vi.mock("@/lib/api", () => ({
     { id: "node", label: "Node.js", description: "Plain Node" },
   ]),
   initProject: vi.fn(async () => ({ jobId: "job-123" })),
-  probeProject: vi.fn(async () => PROJECT),
+  inspectDirectory: vi.fn(async (path: string) => {
+    if (path === "/repos/freshproj") return INSPECT_FRESH;
+    return INSPECT_ALPHA;
+  }),
+  onboardProject: vi.fn(async () => PROJECT_FRESH),
   registerProject: vi.fn(async () => PROJECT),
   fetchFilesystem: vi.fn(async (path?: string) => {
     // Walking into a child returns an "empty" listing rooted at that path so
@@ -117,8 +158,8 @@ describe("AddProjectDialog", () => {
     await waitFor(() => expect(screen.getByTestId("directory-browser-entry-alpha")).toBeTruthy());
   });
 
-  it("probes when the user commits via the browser select", async () => {
-    const { probeProject } = await import("@/lib/api");
+  it("inspects when the user commits via the browser select", async () => {
+    const { inspectDirectory } = await import("@/lib/api");
     await renderDialog();
     await waitFor(() => expect(screen.getByTestId("directory-browser-entry-alpha")).toBeTruthy());
 
@@ -132,7 +173,7 @@ describe("AddProjectDialog", () => {
     fireEvent.click(screen.getByTestId("directory-browser-select"));
 
     await waitFor(() => {
-      expect(probeProject).toHaveBeenCalledWith("/repos/alpha");
+      expect(inspectDirectory).toHaveBeenCalledWith("/repos/alpha");
     });
     await waitFor(() => {
       expect(screen.getByText(/git@github.com:owner\/alpha\.git/)).toBeTruthy();
@@ -175,6 +216,54 @@ describe("AddProjectDialog", () => {
     await renderDialog();
     fireEvent.click(screen.getByTestId("add-project-tab-init"));
     await waitFor(() => expect(screen.getByTestId("directory-browser")).toBeTruthy());
+  });
+
+  it("renders the onboarding wizard when the picked dir has no ide.yml", async () => {
+    await renderDialog();
+    await waitFor(() =>
+      expect(screen.getByTestId("directory-browser-entry-freshproj")).toBeTruthy(),
+    );
+
+    fireEvent.click(screen.getByTestId("directory-browser-entry-freshproj"));
+    await waitFor(() => {
+      expect(screen.getByTestId("directory-browser-path").getAttribute("title")).toBe(
+        "/repos/freshproj",
+      );
+    });
+    fireEvent.click(screen.getByTestId("directory-browser-select"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("onboarding-wizard")).toBeTruthy();
+    });
+    expect(screen.getByTestId("onboarding-name")).toBeTruthy();
+  });
+
+  it("calls onboardProject when wizard submit is clicked", async () => {
+    const { onboardProject } = await import("@/lib/api");
+    await renderDialog();
+    await waitFor(() =>
+      expect(screen.getByTestId("directory-browser-entry-freshproj")).toBeTruthy(),
+    );
+
+    fireEvent.click(screen.getByTestId("directory-browser-entry-freshproj"));
+    await waitFor(() => {
+      expect(screen.getByTestId("directory-browser-path").getAttribute("title")).toBe(
+        "/repos/freshproj",
+      );
+    });
+    fireEvent.click(screen.getByTestId("directory-browser-select"));
+
+    const submit = await screen.findByTestId("onboarding-submit");
+    fireEvent.click(submit);
+
+    await waitFor(() => {
+      expect(onboardProject).toHaveBeenCalled();
+    });
+    const call = (onboardProject as unknown as { mock: { calls: unknown[][] } }).mock.calls[0]!;
+    expect(call[0]).toMatchObject({
+      dir: "/repos/freshproj",
+      agents: 2,
+    });
   });
 
   it("calls initProject when init submit is clicked", async () => {

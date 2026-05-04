@@ -34,7 +34,7 @@ import {
 } from "../widgets/lib/pane-comms.ts";
 import { resolvePane } from "../send.ts";
 import { getSessionState, killSession, stopSessionMonitor } from "../lib/tmux.ts";
-import { readConfig } from "../lib/yaml-io.ts";
+import { readConfig, writeConfig } from "../lib/yaml-io.ts";
 import {
   ensureTasksDir,
   nextTaskId,
@@ -119,11 +119,26 @@ import {
   type ProjectTemplate,
 } from "../schemas/registry.ts";
 import {
+  InspectFilesystemRequestSchemaZ,
+  OnboardProjectRequestSchemaZ,
+} from "../schemas/inspect.ts";
+import {
   browseDirectory,
   InvalidPathError,
   PathNotFoundError,
   SandboxViolationError,
+  assertInsideSandbox,
 } from "../lib/filesystem-browser.ts";
+import { inspectProject, InspectDirNotFoundError } from "../lib/project-inspect.ts";
+import {
+  composeIdeYmlConfig,
+  assertNoExistingIdeYml,
+  OnboardConflictError,
+  OnboardInvalidInputError,
+} from "../lib/project-onboard.ts";
+import { realpathSync } from "node:fs";
+import { homedir } from "node:os";
+import { isAbsolute, resolve as pathResolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { WebSocketServer } from "ws";
 
@@ -293,6 +308,67 @@ function buildProjectStreamSnapshot(session: DiscoveredSession) {
     agents: project.agents,
     events: readEvents(session.dir).slice(-100).reverse(),
   };
+}
+
+/**
+ * Resolve a user-supplied directory to a canonical absolute path and verify
+ * it lives inside the filesystem-browser sandbox. Used by `/api/filesystem/
+ * inspect` and `/api/projects/onboard` so unregistered directories get the
+ * same protection as the directory browser. Returns either the canonical
+ * path or a structured error suitable for `c.json`.
+ *
+ * Tilde-expansion mirrors `/api/filesystem/browse`: `~` and `~/sub` map to
+ * `homedir()`. The sandbox roots are owned by `assertInsideSandbox`.
+ */
+type SandboxResolveOk = { canonical: string };
+type SandboxResolveErr = {
+  error: "invalid-path" | "not-found" | "outside-sandbox";
+  message: string;
+  status: 400 | 403 | 404;
+};
+function sandboxResolveDir(rawDir: string): SandboxResolveOk | SandboxResolveErr {
+  const trimmed = rawDir.trim();
+  if (!trimmed) return { error: "invalid-path", message: "Path must not be empty", status: 400 };
+  if (trimmed.includes("\0")) {
+    return { error: "invalid-path", message: "Path contains a null byte", status: 400 };
+  }
+  const home =
+    process.env.TMUX_IDE_HOME_OVERRIDE && process.env.TMUX_IDE_HOME_OVERRIDE.trim().length > 0
+      ? process.env.TMUX_IDE_HOME_OVERRIDE
+      : homedir();
+  let candidate = trimmed;
+  if (candidate === "~") {
+    candidate = home;
+  } else if (candidate.startsWith("~/")) {
+    candidate = `${home.replace(/\/+$/, "")}/${candidate.slice(2)}`;
+  }
+  if (!isAbsolute(candidate)) {
+    return { error: "invalid-path", message: "Path must be absolute", status: 400 };
+  }
+  const resolved = pathResolve(candidate);
+  let canonical: string;
+  try {
+    canonical = realpathSync(resolved);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return {
+        error: "not-found",
+        message: `Path "${resolved}" does not exist`,
+        status: 404,
+      };
+    }
+    throw err;
+  }
+  try {
+    assertInsideSandbox(canonical, home);
+  } catch (err) {
+    if (err instanceof SandboxViolationError) {
+      return { error: "outside-sandbox", message: err.message, status: 403 };
+    }
+    throw err;
+  }
+  return { canonical };
 }
 
 export function createApp(options: CreateAppOptions = {}): Hono {
@@ -2111,6 +2187,114 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     })();
 
     return c.json({ jobId }, 202);
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/filesystem/inspect — registry-agnostic directory inspection.
+  // POST /api/projects/onboard   — generate ide.yml + register the project.
+  // -------------------------------------------------------------------------
+
+  app.post("/api/filesystem/inspect", async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "invalid-path", message: "Invalid JSON body" }, 400);
+    }
+    const parsed = InspectFilesystemRequestSchemaZ.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: "invalid-path", message: "Invalid request" }, 400);
+    }
+    const sandboxResult = sandboxResolveDir(parsed.data.dir);
+    if ("error" in sandboxResult) {
+      return c.json(
+        { error: sandboxResult.error, message: sandboxResult.message },
+        sandboxResult.status,
+      );
+    }
+    try {
+      const project = await inspectProject(sandboxResult.canonical);
+      return c.json({ project });
+    } catch (err) {
+      if (err instanceof InspectDirNotFoundError) {
+        return c.json({ error: "not-found", message: err.message }, 404);
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/projects/onboard", async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+    const parsed = OnboardProjectRequestSchemaZ.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: "Invalid request", details: parsed.error.issues }, 400);
+    }
+    const sandboxResult = sandboxResolveDir(parsed.data.dir);
+    if ("error" in sandboxResult) {
+      return c.json(
+        { error: sandboxResult.error, message: sandboxResult.message },
+        sandboxResult.status,
+      );
+    }
+
+    const dir = sandboxResult.canonical;
+    let inspect;
+    try {
+      inspect = await inspectProject(dir);
+    } catch (err) {
+      if (err instanceof InspectDirNotFoundError) {
+        return c.json({ error: "not-found", message: err.message }, 404);
+      }
+      throw err;
+    }
+
+    // Never overwrite an existing ide.yml.
+    try {
+      assertNoExistingIdeYml(dir);
+    } catch (err) {
+      if (err instanceof OnboardConflictError) {
+        return c.json({ error: err.message, code: err.code }, 409);
+      }
+      throw err;
+    }
+
+    // Compose the config from inputs (defaults to inspect.name).
+    const finalName = parsed.data.name?.trim() || inspect.name;
+    let config;
+    try {
+      config = composeIdeYmlConfig({
+        name: finalName,
+        agents: parsed.data.agents,
+        devCommand: parsed.data.devCommand ?? null,
+        testCommand: parsed.data.testCommand ?? null,
+      });
+    } catch (err) {
+      if (err instanceof OnboardInvalidInputError) {
+        return c.json({ error: err.message, code: err.code }, 400);
+      }
+      throw err;
+    }
+
+    writeConfig(dir, config);
+
+    // Now register — this also broadcasts `projects.changed`.
+    try {
+      const project = await registerProject({ dir, name: finalName });
+      return c.json({ project }, 201);
+    } catch (err) {
+      if (err instanceof ProjectAlreadyRegisteredError) {
+        return c.json({ error: err.message, code: err.code, suggestion: err.suggestion }, 409);
+      }
+      if (err instanceof ProjectDirNotFoundError) {
+        return c.json({ error: err.message, code: err.code }, 400);
+      }
+      throw err;
+    }
   });
 
   // Serve the Next.js static dashboard for all non-API routes

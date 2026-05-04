@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventEmitter } from "node:events";
@@ -51,12 +58,19 @@ async function tick(ms = 10): Promise<void> {
 
 let registryHome: string;
 let projectDir: string;
+let sandboxRoot: string;
+let originalHomeOverride: string | undefined;
 let restorePane: () => void;
 let restoreTmux: () => void;
 
 beforeEach(() => {
   registryHome = mkdtempSync(join(tmpdir(), "tmux-ide-projects-"));
   projectDir = mkdtempSync(join(tmpdir(), "tmux-ide-proj-"));
+  // Sandbox boundary for inspect/onboard endpoints — must be canonical so
+  // the realpath() check in the route accepts paths inside it on macOS.
+  sandboxRoot = realpathSync(tmpdir());
+  originalHomeOverride = process.env.TMUX_IDE_HOME_OVERRIDE;
+  process.env.TMUX_IDE_HOME_OVERRIDE = sandboxRoot;
   process.env[REGISTRY_DIR_ENV] = registryHome;
   _resetCacheForTests();
 
@@ -81,6 +95,11 @@ beforeEach(() => {
 
 afterEach(() => {
   delete process.env[REGISTRY_DIR_ENV];
+  if (originalHomeOverride === undefined) {
+    delete process.env.TMUX_IDE_HOME_OVERRIDE;
+  } else {
+    process.env.TMUX_IDE_HOME_OVERRIDE = originalHomeOverride;
+  }
   rmSync(registryHome, { recursive: true, force: true });
   rmSync(projectDir, { recursive: true, force: true });
   _resetCacheForTests();
@@ -283,6 +302,149 @@ describe("REST /api/projects/init", () => {
       body: JSON.stringify({ dir: "/does/not/exist" }),
     });
     expect(res.status).toBe(400);
+  });
+});
+
+describe("REST /api/filesystem/inspect", () => {
+  it("returns inspect data for a directory without ide.yml", async () => {
+    const app = createApp();
+    const res = await app.request("/api/filesystem/inspect", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ dir: projectDir }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      project: {
+        hasIdeYml: boolean;
+        dir: string;
+        detected: { packageManager: string | null; frameworks: string[] };
+      };
+    };
+    expect(body.project.hasIdeYml).toBe(false);
+    expect(body.project.detected.frameworks).toEqual([]);
+  });
+
+  it("returns hasIdeYml=true when an ide.yml is present", async () => {
+    writeFileSync(
+      join(projectDir, "ide.yml"),
+      "name: x\nrows:\n  - panes:\n      - title: Shell\n",
+    );
+    const app = createApp();
+    const res = await app.request("/api/filesystem/inspect", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ dir: projectDir }),
+    });
+    const body = (await res.json()) as { project: { hasIdeYml: boolean } };
+    expect(body.project.hasIdeYml).toBe(true);
+  });
+
+  it("returns 404 when the directory does not exist", async () => {
+    const app = createApp();
+    const res = await app.request("/api/filesystem/inspect", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ dir: join(sandboxRoot, "nope-does-not-exist") }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 400 for relative paths", async () => {
+    const app = createApp();
+    const res = await app.request("/api/filesystem/inspect", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ dir: "relative/path" }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 403 for paths outside the sandbox", async () => {
+    const app = createApp();
+    const res = await app.request("/api/filesystem/inspect", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ dir: "/etc" }),
+    });
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("REST /api/projects/onboard", () => {
+  it("writes an ide.yml and registers the project", async () => {
+    const app = createApp();
+    const res = await app.request("/api/projects/onboard", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ dir: projectDir, agents: 2, devCommand: "pnpm dev" }),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as {
+      project: { name: string; dir: string; hasIdeYml: boolean };
+    };
+    expect(body.project.hasIdeYml).toBe(true);
+
+    // ide.yml landed on disk with our 2-agent layout.
+    const yamlPath = join(projectDir, "ide.yml");
+    expect(existsSync(yamlPath)).toBe(true);
+    const yaml = readFileSync(yamlPath, "utf-8");
+    expect(yaml).toContain("Lead");
+    expect(yaml).toContain("Teammate 1");
+    expect(yaml).toContain("pnpm dev");
+    expect(yaml).toContain("team:");
+
+    // Registry now contains the project.
+    const list = (await app.request("/api/projects").then((r) => r.json())) as {
+      projects: { name: string }[];
+    };
+    expect(list.projects.map((p) => p.name)).toContain(body.project.name);
+  });
+
+  it("returns 409 when ide.yml already exists", async () => {
+    writeFileSync(
+      join(projectDir, "ide.yml"),
+      "name: existing\nrows:\n  - panes:\n      - title: Shell\n",
+    );
+    const app = createApp();
+    const res = await app.request("/api/projects/onboard", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ dir: projectDir, agents: 1 }),
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it("returns 404 when the directory does not exist", async () => {
+    const app = createApp();
+    const res = await app.request("/api/projects/onboard", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ dir: join(sandboxRoot, "nope-onboard"), agents: 1 }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 400 for invalid agent counts", async () => {
+    const app = createApp();
+    const res = await app.request("/api/projects/onboard", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ dir: projectDir, agents: 5 }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("uses the user-supplied name when provided", async () => {
+    const app = createApp();
+    const res = await app.request("/api/projects/onboard", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ dir: projectDir, agents: 1, name: "custom-name" }),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { project: { name: string } };
+    expect(body.project.name).toBe("custom-name");
   });
 });
 

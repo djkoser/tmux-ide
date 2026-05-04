@@ -73,3 +73,17 @@ export type {
 export { FilesystemEntrySchemaZ, FilesystemBrowseResultSchemaZ } from "./filesystem.ts";
 
 export type { FilesystemEntry, FilesystemBrowseResult } from "./filesystem.ts";
+
+export {
+  ProjectInspectDetectedSchemaZ,
+  ProjectInspectSchemaZ,
+  InspectFilesystemRequestSchemaZ,
+  OnboardProjectRequestSchemaZ,
+} from "./inspect.ts";
+
+export type {
+  ProjectInspectDetected,
+  ProjectInspect,
+  InspectFilesystemRequest,
+  OnboardProjectRequest,
+} from "./inspect.ts";

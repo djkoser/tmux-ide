@@ -37,8 +37,7 @@ function resolveApiBase(): string {
   // IPv6 attempt before falling back. Pin to 127.0.0.1 explicitly when
   // the page is on localhost to skip the IPv6 lookup entirely.
   const port = process.env.NEXT_PUBLIC_API_PORT ?? "6060";
-  const host =
-    window.location.hostname === "localhost" ? "127.0.0.1" : window.location.hostname;
+  const host = window.location.hostname === "localhost" ? "127.0.0.1" : window.location.hostname;
   return `${window.location.protocol}//${host}:${port}`;
 }
 
@@ -731,14 +730,11 @@ export async function registerProject(dir: string, name?: string): Promise<Regis
 }
 
 export async function probeProject(dirOrName: string): Promise<RegisteredProject> {
-  const res = await fetch(
-    `${API_BASE}/api/projects/${encodeURIComponent(dirOrName)}/probe`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dir: dirOrName }),
-    },
-  );
+  const res = await fetch(`${API_BASE}/api/projects/${encodeURIComponent(dirOrName)}/probe`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dir: dirOrName }),
+  });
   if (!res.ok) {
     throw new ProjectApiError(
       await readErrorMessage(res, `Failed to probe project (HTTP ${res.status})`),
@@ -761,10 +757,7 @@ export async function unregisterProject(name: string): Promise<void> {
   }
 }
 
-export async function initProject(
-  dir: string,
-  template?: string,
-): Promise<{ jobId: string }> {
+export async function initProject(dir: string, template?: string): Promise<{ jobId: string }> {
   const res = await fetch(`${API_BASE}/api/projects/init`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -781,6 +774,68 @@ export async function initProject(
     throw new ProjectApiError("Server did not return a jobId", 500);
   }
   return { jobId: data.jobId };
+}
+
+/**
+ * Registry-agnostic directory inspection. Mirrors `POST
+ * /api/filesystem/inspect`. Used by the AddProjectDialog "Open existing"
+ * tab to peek at a directory before deciding whether to register it
+ * (`hasIdeYml=true` → register flow) or onboard it (`false` → wizard).
+ */
+export interface ProjectInspectDetected {
+  packageManager: "pnpm" | "npm" | "yarn" | "bun" | null;
+  frameworks: string[];
+  devCommand: string | null;
+  testCommand: string | null;
+}
+
+export interface ProjectInspect {
+  name: string;
+  dir: string;
+  hasIdeYml: boolean;
+  gitOrigin: string | null;
+  gitBranch: string | null;
+  detected: ProjectInspectDetected;
+}
+
+export async function inspectDirectory(dir: string): Promise<ProjectInspect> {
+  const res = await fetch(`${API_BASE}/api/filesystem/inspect`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dir }),
+  });
+  if (!res.ok) {
+    throw new ProjectApiError(
+      await readErrorMessage(res, `Failed to inspect directory (HTTP ${res.status})`),
+      res.status,
+    );
+  }
+  const data = (await res.json()) as { project: ProjectInspect };
+  return data.project;
+}
+
+export interface OnboardProjectInput {
+  dir: string;
+  name?: string;
+  agents: number;
+  devCommand?: string | null;
+  testCommand?: string | null;
+}
+
+export async function onboardProject(input: OnboardProjectInput): Promise<RegisteredProject> {
+  const res = await fetch(`${API_BASE}/api/projects/onboard`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    throw new ProjectApiError(
+      await readErrorMessage(res, `Failed to onboard project (HTTP ${res.status})`),
+      res.status,
+    );
+  }
+  const data = (await res.json()) as { project: RegisteredProject };
+  return data.project;
 }
 
 export async function fetchProjectTemplates(): Promise<ProjectTemplate[]> {
@@ -820,10 +875,9 @@ export async function fetchFilesystem(
   if (path && path.length > 0) params.set("path", path);
   if (showHidden) params.set("showHidden", "true");
   const qs = params.toString();
-  const res = await fetch(
-    `${API_BASE}/api/filesystem/browse${qs ? `?${qs}` : ""}`,
-    { cache: "no-store" },
-  );
+  const res = await fetch(`${API_BASE}/api/filesystem/browse${qs ? `?${qs}` : ""}`, {
+    cache: "no-store",
+  });
   if (!res.ok) {
     throw new ProjectApiError(
       await readErrorMessage(res, `Failed to browse (HTTP ${res.status})`),
