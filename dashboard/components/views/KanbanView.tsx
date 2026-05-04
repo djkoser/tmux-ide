@@ -1,8 +1,8 @@
 "use client";
 
-import { useSessionStream } from "@/lib/useSessionStream";
-import { KanbanBoard } from "@/components/KanbanBoard";
+import { KanbanBoard } from "@/components/kanban";
 import { Panel } from "@/components/ui";
+import { useSessionStream } from "@/lib/useSessionStream";
 
 interface KanbanViewProps {
   sessionName: string;
@@ -14,20 +14,19 @@ export function KanbanView({ sessionName }: KanbanViewProps) {
 
   if (!project) {
     return (
-      <Panel className="items-center justify-center text-[var(--dim)]">loading...</Panel>
+      <Panel testId="kanban-view-loading" className="items-center justify-center text-[var(--dim)]">
+        Loading…
+      </Panel>
     );
   }
 
   return (
-    <Panel>
-      <KanbanBoard
-        tasks={project.tasks}
-        sessionName={project.session}
-        agents={project.agents}
-        goals={project.goals}
-        events={snapshot?.events ?? []}
-        onRefresh={() => undefined}
-      />
-    </Panel>
+    <KanbanBoard
+      sessionName={project.session}
+      tasks={project.tasks}
+      goals={project.goals}
+      agents={project.agents}
+      events={snapshot?.events ?? []}
+    />
   );
 }
