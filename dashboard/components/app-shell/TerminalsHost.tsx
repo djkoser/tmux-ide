@@ -38,8 +38,16 @@ export function TerminalsHost() {
   const activeIsTerminal = activeTab?.kind === "terminal";
   const activeTerminal = activeIsTerminal ? activeTab : null;
 
-  const handleSessionExit = useCallback((id: string) => {
-    closeTab(id);
+  // Intentionally a no-op: do NOT auto-close the tab when the shell
+  // exits. The Terminal component already prints "[session ended: N]"
+  // into the xterm buffer, and that message — plus the user's option to
+  // close via the tab's X button — is the right UX. Auto-closing made
+  // the terminal flash up and disappear whenever the wrapped command
+  // (e.g. tmux-ide spawning a session that fast-exited because no
+  // ide.yml existed) terminated immediately on launch.
+  const handleSessionExit = useCallback((_id: string) => {
+    void _id;
+    void closeTab; // Kept imported for future "Close on exit" setting.
   }, []);
 
   if (terminalTabs.length === 0) return null;
