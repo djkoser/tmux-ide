@@ -91,8 +91,11 @@ export interface BrowseInput {
 /**
  * Validate an input path before passing to realpath. We reject obvious
  * traversal attempts and non-absolute paths so error messages stay clean.
+ * `~` and `~/...` expand to the user's home directory so the dialog's
+ * "Home" quick-jump (and any caller that hands us a tilde-prefixed path)
+ * doesn't trip the absolute-path check.
  */
-function preflight(rawPath: string): string {
+function preflight(rawPath: string, io: BrowseIo): string {
   const trimmed = rawPath.trim();
   if (!trimmed) {
     throw new InvalidPathError("Path must not be empty");
@@ -100,11 +103,17 @@ function preflight(rawPath: string): string {
   if (trimmed.includes("\0")) {
     throw new InvalidPathError("Path contains a null byte");
   }
-  if (!isAbsolute(trimmed)) {
+  let candidate = trimmed;
+  if (candidate === "~") {
+    candidate = io.home();
+  } else if (candidate.startsWith("~/")) {
+    candidate = join(io.home(), candidate.slice(2));
+  }
+  if (!isAbsolute(candidate)) {
     throw new InvalidPathError("Path must be absolute");
   }
   // Collapse `..` and `.` early so the realpath call has a clean input.
-  return resolve(trimmed);
+  return resolve(candidate);
 }
 
 /**
@@ -233,7 +242,7 @@ export function browseDirectory(input: BrowseInput, io: BrowseIo = realIo): File
 
   let preflightPath: string;
   try {
-    preflightPath = preflight(requestedPath);
+    preflightPath = preflight(requestedPath, io);
   } catch (err) {
     if (err instanceof InvalidPathError) throw err;
     throw new InvalidPathError("Invalid path");
