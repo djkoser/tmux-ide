@@ -3,21 +3,19 @@
 import { Folder, LayoutDashboard, Send, Settings, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchSessions, fetchSkills, injectIntoProject, type SkillData } from "@/lib/api";
 import { useLayoutState } from "@/lib/useLayoutState";
 import { useToasts } from "@/lib/useToasts";
 import type { SessionOverview } from "@/lib/types";
+import { SidebarTree } from "@/components/app-shell/SidebarTree";
+import type { SidebarItem, SidebarSection } from "@/components/app-shell/sidebar-types";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -106,21 +104,190 @@ export function AppSidebar() {
     };
   }, [activeProject, activitySection]);
 
-  function closeMobile() {
+  const closeMobile = useCallback(() => {
     if (isMobile) setOpenMobile(false);
-  }
+  }, [isMobile, setOpenMobile]);
 
-  async function injectSkill(skill: SkillData) {
-    if (!activeProject) return;
-    const ok = await injectIntoProject(activeProject, `<load skill: ${skill.name}>`, {
-      sendEnter: false,
-    });
-    push({
-      kind: ok ? "success" : "error",
-      title: ok ? "Sent to agent" : "Failed to inject",
-      body: skill.name,
-    });
-  }
+  const injectSkill = useCallback(
+    async (skill: SkillData) => {
+      if (!activeProject) return;
+      const ok = await injectIntoProject(activeProject, `<load skill: ${skill.name}>`, {
+        sendEnter: false,
+      });
+      push({
+        kind: ok ? "success" : "error",
+        title: ok ? "Sent to agent" : "Failed to inject",
+        body: skill.name,
+      });
+    },
+    [activeProject, push],
+  );
+
+  const items = useMemo<SidebarItem[]>(() => {
+    if (activitySection === "settings") {
+      const settingsSection: SidebarSection = {
+        id: "section-settings",
+        type: "section",
+        label: "settings",
+        icon: Settings,
+        items: [
+          {
+            id: "item-settings",
+            title: "Settings",
+            icon: Settings,
+            isActive: Boolean(settingsActive),
+            tooltip: "Settings",
+            testId: "sidebar-settings",
+            onClick: () => {
+              openWorkspaceTab("settings", null, "Settings");
+              setActivitySection("settings");
+              router.push("/");
+              closeMobile();
+            },
+          },
+        ],
+      };
+      return [settingsSection];
+    }
+
+    if (activitySection === "skills") {
+      const skillsSection: SidebarSection = {
+        id: "section-skills",
+        type: "section",
+        label: "skills",
+        icon: Sparkles,
+        loading: Boolean(activeProject) && skillsLoading,
+        loadingState: (
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuSkeleton showIcon />
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuSkeleton showIcon />
+            </SidebarMenuItem>
+          </SidebarMenu>
+        ),
+        error: Boolean(activeProject) && skillsError,
+        errorState: (
+          <div className="px-2 py-2 text-[11px] text-[var(--red)] group-data-[collapsible=icon]:hidden">
+            skills unavailable
+          </div>
+        ),
+        emptyState: !activeProject ? (
+          <div className="px-2 py-2 text-[11px] text-[var(--dim)] group-data-[collapsible=icon]:hidden">
+            open a project to load skills
+          </div>
+        ) : (
+          <div className="px-2 py-2 text-[11px] text-[var(--dim)] group-data-[collapsible=icon]:hidden">
+            no skills
+          </div>
+        ),
+        items:
+          activeProject && !skillsLoading && !skillsError
+            ? skills.map((skill) => ({
+                id: `skill-${skill.name}`,
+                title: skill.name,
+                icon: Sparkles,
+                tooltip: skill.name,
+                disabled: !activeProject,
+                testId: `sidebar-skill-${skill.name}`,
+                subtitle: skill.specialties[0] ? (
+                  <span className="text-[var(--cyan)]">{skill.specialties[0]}</span>
+                ) : undefined,
+                onClick: () => {
+                  if (!activeProject) return;
+                  openWorkspaceTab("skill", activeProject, `Skill · ${skill.name}`, skill.name);
+                  closeMobile();
+                },
+                action: {
+                  icon: Send,
+                  label: `Send ${skill.name} to active agent`,
+                  testId: `sidebar-skill-inject-${skill.name}`,
+                  showOnHover: true,
+                  disabled: !activeProject,
+                  onClick: () => void injectSkill(skill),
+                },
+              }))
+            : [],
+      };
+      return [skillsSection];
+    }
+
+    // sessions (default)
+    const sessionsSection: SidebarSection = {
+      id: "section-sessions",
+      type: "section",
+      label: "sessions",
+      icon: Folder,
+      error,
+      errorState: (
+        <div className="px-2 py-2 text-[11px] text-[var(--red)] group-data-[collapsible=icon]:hidden">
+          api unreachable
+        </div>
+      ),
+      loading: !error && sessionsLoading,
+      loadingState: (
+        <SidebarMenu>
+          {Array.from({ length: 3 }, (_, index) => (
+            <SidebarMenuItem key={index}>
+              <SidebarMenuSkeleton showIcon />
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      ),
+      emptyState: (
+        <div className="mx-1 mt-2 rounded-md border border-[var(--border-weak)] bg-[var(--surface)] px-3 py-4 text-center text-[11px] text-[var(--dim)] group-data-[collapsible=icon]:hidden">
+          <Folder
+            aria-hidden="true"
+            size={24}
+            strokeWidth={1.5}
+            className="mx-auto mb-2 text-[var(--accent)]"
+          />
+          <div className="text-[var(--fg-secondary)]">No sessions</div>
+          <div className="mt-1 leading-5">Run tmux-ide init in a project to create one.</div>
+        </div>
+      ),
+      items:
+        !error && !sessionsLoading
+          ? sessions.map((session) => ({
+              id: `session-${session.name}`,
+              title: session.name,
+              icon: Folder,
+              href: `/project/${encodeURIComponent(session.name)}`,
+              isActive: activeProject === session.name,
+              tooltip: session.name,
+              testId: `sidebar-session-${session.name}`,
+              badge:
+                session.stats && session.stats.totalTasks > 0
+                  ? `${session.stats.doneTasks}/${session.stats.totalTasks}`
+                  : undefined,
+              subtitle: session.mission?.title ? session.mission.title : undefined,
+              onClick: () => {
+                openWorkspaceTab("project", session.name, session.name);
+                setActivitySection("sessions");
+                closeMobile();
+              },
+            }))
+          : [],
+    };
+
+    return [sessionsSection];
+  }, [
+    activeProject,
+    activitySection,
+    closeMobile,
+    error,
+    injectSkill,
+    sessionsLoading,
+    sessions,
+    skills,
+    skillsError,
+    skillsLoading,
+    settingsActive,
+    openWorkspaceTab,
+    setActivitySection,
+    router,
+  ]);
 
   return (
     <Sidebar data-testid="app-sidebar" collapsible="icon">
@@ -149,42 +316,7 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        {activitySection === "settings" ? (
-          <SettingsSection
-            active={Boolean(settingsActive)}
-            onOpen={() => {
-              openWorkspaceTab("settings", null, "Settings");
-              setActivitySection("settings");
-              router.push("/");
-              closeMobile();
-            }}
-          />
-        ) : activitySection === "skills" ? (
-          <SkillsSection
-            activeProject={activeProject}
-            skills={skills}
-            loading={skillsLoading}
-            error={skillsError}
-            onOpen={(skill) => {
-              if (!activeProject) return;
-              openWorkspaceTab("skill", activeProject, `Skill · ${skill.name}`, skill.name);
-              closeMobile();
-            }}
-            onInject={(skill) => void injectSkill(skill)}
-          />
-        ) : (
-          <SessionsSection
-            activeProject={activeProject}
-            sessions={sessions}
-            loading={sessionsLoading}
-            error={error}
-            onOpen={(session) => {
-              openWorkspaceTab("project", session.name, session.name);
-              setActivitySection("sessions");
-              closeMobile();
-            }}
-          />
-        )}
+        <SidebarTree items={items} />
       </SidebarContent>
 
       <SidebarFooter>
@@ -197,200 +329,5 @@ export function AppSidebar() {
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
-  );
-}
-
-function SettingsSection({ active, onOpen }: { active: boolean; onOpen: () => void }) {
-  return (
-    <SidebarGroup>
-      <SidebarGroupLabel>
-        <Settings aria-hidden="true" size={11} />
-        settings
-      </SidebarGroupLabel>
-      <SidebarGroupContent>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              type="button"
-              data-testid="sidebar-settings"
-              isActive={active}
-              onClick={onOpen}
-              tooltip="Settings"
-            >
-              <Settings aria-hidden="true" />
-              <span>Settings</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
-  );
-}
-
-function SkillsSection({
-  activeProject,
-  skills,
-  loading,
-  error,
-  onOpen,
-  onInject,
-}: {
-  activeProject: string | null;
-  skills: SkillData[];
-  loading: boolean;
-  error: boolean;
-  onOpen: (skill: SkillData) => void;
-  onInject: (skill: SkillData) => void;
-}) {
-  return (
-    <SidebarGroup>
-      <SidebarGroupLabel>
-        <Sparkles aria-hidden="true" size={11} />
-        skills
-      </SidebarGroupLabel>
-      <SidebarGroupContent>
-        {!activeProject && (
-          <div className="px-2 py-2 text-[11px] text-[var(--dim)] group-data-[collapsible=icon]:hidden">
-            open a project to load skills
-          </div>
-        )}
-        {activeProject && error && (
-          <div className="px-2 py-2 text-[11px] text-[var(--red)] group-data-[collapsible=icon]:hidden">
-            skills unavailable
-          </div>
-        )}
-        {activeProject && loading && (
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuSkeleton showIcon />
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuSkeleton showIcon />
-            </SidebarMenuItem>
-          </SidebarMenu>
-        )}
-        {activeProject && !loading && !error && skills.length === 0 && (
-          <div className="px-2 py-2 text-[11px] text-[var(--dim)] group-data-[collapsible=icon]:hidden">
-            no skills
-          </div>
-        )}
-        <SidebarMenu>
-          {skills.map((skill) => (
-            <SidebarMenuItem key={skill.name}>
-              <SidebarMenuButton
-                type="button"
-                data-testid={`sidebar-skill-${skill.name}`}
-                onClick={() => onOpen(skill)}
-                disabled={!activeProject}
-                tooltip={skill.name}
-              >
-                <Sparkles aria-hidden="true" />
-                <span>{skill.name}</span>
-              </SidebarMenuButton>
-              <SidebarMenuAction
-                type="button"
-                data-testid={`sidebar-skill-inject-${skill.name}`}
-                onClick={() => onInject(skill)}
-                disabled={!activeProject}
-                showOnHover
-                aria-label={`Send ${skill.name} to active agent`}
-                title={`Send ${skill.name} to active agent`}
-              >
-                <Send aria-hidden="true" size={13} />
-              </SidebarMenuAction>
-              {skill.specialties[0] && (
-                <div className="ml-8 mt-0.5 truncate text-[10px] text-[var(--cyan)] group-data-[collapsible=icon]:hidden">
-                  {skill.specialties[0]}
-                </div>
-              )}
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
-  );
-}
-
-function SessionsSection({
-  activeProject,
-  sessions,
-  loading,
-  error,
-  onOpen,
-}: {
-  activeProject: string | null;
-  sessions: SessionOverview[];
-  loading: boolean;
-  error: boolean;
-  onOpen: (session: SessionOverview) => void;
-}) {
-  return (
-    <SidebarGroup>
-      <SidebarGroupLabel>
-        <Folder aria-hidden="true" size={11} />
-        sessions
-      </SidebarGroupLabel>
-      <SidebarGroupContent>
-        {error && (
-          <div className="px-2 py-2 text-[11px] text-[var(--red)] group-data-[collapsible=icon]:hidden">
-            api unreachable
-          </div>
-        )}
-        {!error && loading && (
-          <SidebarMenu>
-            {Array.from({ length: 3 }, (_, index) => (
-              <SidebarMenuItem key={index}>
-                <SidebarMenuSkeleton showIcon />
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        )}
-        {!error && !loading && sessions.length === 0 && (
-          <div className="mx-1 mt-2 rounded-md border border-[var(--border-weak)] bg-[var(--surface)] px-3 py-4 text-center text-[11px] text-[var(--dim)] group-data-[collapsible=icon]:hidden">
-            <Folder
-              aria-hidden="true"
-              size={24}
-              strokeWidth={1.5}
-              className="mx-auto mb-2 text-[var(--accent)]"
-            />
-            <div className="text-[var(--fg-secondary)]">No sessions</div>
-            <div className="mt-1 leading-5">Run tmux-ide init in a project to create one.</div>
-          </div>
-        )}
-        <SidebarMenu>
-          {sessions.map((session) => {
-            const isActive = activeProject === session.name;
-            return (
-              <SidebarMenuItem key={session.name}>
-                <SidebarMenuButton
-                  render={
-                    <Link
-                      href={`/project/${encodeURIComponent(session.name)}`}
-                      onClick={() => onOpen(session)}
-                    />
-                  }
-                  isActive={isActive}
-                  tooltip={session.name}
-                  data-testid={`sidebar-session-${session.name}`}
-                >
-                  <Folder aria-hidden="true" />
-                  <span>{session.name}</span>
-                </SidebarMenuButton>
-                {session.stats && session.stats.totalTasks > 0 && (
-                  <SidebarMenuBadge>
-                    {session.stats.doneTasks}/{session.stats.totalTasks}
-                  </SidebarMenuBadge>
-                )}
-                {session.mission?.title && (
-                  <div className="ml-8 mt-0.5 truncate text-[10px] text-[var(--dim)] group-data-[collapsible=icon]:hidden">
-                    {session.mission.title}
-                  </div>
-                )}
-              </SidebarMenuItem>
-            );
-          })}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
   );
 }

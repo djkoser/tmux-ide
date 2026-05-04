@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import Markdown from "react-markdown";
 import { useTheme } from "next-themes";
 import {
@@ -19,13 +26,13 @@ import type { Task } from "@/lib/types";
 import { Persist } from "@/lib/persist";
 import { usePolling } from "@/lib/usePolling";
 import { useToasts } from "@/lib/useToasts";
+import { NavigatorPortal } from "@/lib/useNavigatorSlot";
 import { AuthorshipBar } from "@/components/AuthorshipBar";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
 import {
   EmptyState,
   Panel,
   PanelBody,
-  SectionHeader,
   SkeletonText,
   StatusPill,
   SurfaceCard,
@@ -57,6 +64,8 @@ type PlanRailCollapseState = Record<string, Partial<Record<PlanStatus, boolean>>
 type PlanEditingState = Record<string, boolean>;
 const planRailPersist = Persist.global<PlanRailCollapseState>("tmux-ide.plans.rail", ["v1"], {});
 const planEditingPersist = Persist.global<PlanEditingState>("tmux-ide.plans.editing", ["v1"], {});
+
+const MOBILE_QUERY = "(max-width: 767px)";
 
 function activePlanKey(project: string): string {
   return `tmux-ide.plans.active.${project}`;
@@ -304,10 +313,434 @@ function Toc({ toc, activeId }: { toc: TocItem[]; activeId: string }) {
   );
 }
 
+/**
+ * Tracks the navigator-vs-mobile breakpoint. Returns `true` for viewports
+ * narrow enough that the navigator slot collapses (PlansView then renders
+ * the rail inline in its panel and uses `mobileDetailOpen` to switch
+ * between rail and detail). Always `false` during SSR and the first
+ * render so server HTML matches.
+ */
+function useIsMobileLayout(): boolean {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia(MOBILE_QUERY);
+    const update = () => setIsMobile(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  return isMobile;
+}
+
+interface PlanListNavigatorProps {
+  plans: PlanSummary[];
+  selectedFile: string | null;
+  onSelect: (file: string) => void;
+  planQuery: string;
+  setPlanQuery: (value: string) => void;
+  planSort: PlanSort;
+  setPlanSort: (value: PlanSort) => void;
+  collapsedGroups: Partial<Record<PlanStatus, boolean>>;
+  togglePlanGroup: (status: PlanStatus) => void;
+  onCreate: () => void;
+  visiblePlans: PlanSummary[];
+}
+
+/**
+ * Left rail: search, sort, grouped plan list, and "New plan" footer.
+ * Owns no plan state beyond the controlled props it receives.
+ */
+function PlanListNavigator({
+  plans,
+  selectedFile,
+  onSelect,
+  planQuery,
+  setPlanQuery,
+  planSort,
+  setPlanSort,
+  collapsedGroups,
+  togglePlanGroup,
+  onCreate,
+  visiblePlans,
+}: PlanListNavigatorProps) {
+  const planGroups = useMemo(
+    () =>
+      PLAN_RAIL_STATUSES.map((railStatus) => ({
+        status: railStatus,
+        plans: visiblePlans.filter((plan) => plan.status === railStatus),
+      })),
+    [visiblePlans],
+  );
+
+  return (
+    <div
+      data-testid="plan-list-navigator"
+      className="flex h-full min-h-0 w-full flex-col bg-[var(--bg-weak)]"
+    >
+      <div className="border-b border-[var(--border)] p-3">
+        <div className="mb-2 flex items-center gap-2 text-[11px] text-[var(--dim)]">
+          plans
+          <span className="ml-auto tabular-nums">
+            {visiblePlans.length}/{plans.length}
+          </span>
+        </div>
+        <input
+          data-testid="plan-list-search"
+          value={planQuery}
+          onChange={(event) => setPlanQuery(event.target.value)}
+          placeholder="search plans"
+          className="mb-2 h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg-strong)] px-2 text-[12px] text-[var(--fg)] outline-none placeholder:text-[var(--dimmer)] focus:border-[var(--accent)]"
+        />
+        <select
+          data-testid="plan-list-sort"
+          value={planSort}
+          onChange={(event) => setPlanSort(event.target.value as PlanSort)}
+          className="h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg-strong)] px-2 text-[12px] text-[var(--fg-secondary)] outline-none focus:border-[var(--accent)]"
+        >
+          <option value="recent">recently updated</option>
+          <option value="status">status</option>
+          <option value="title">title</option>
+          <option value="owner">owner</option>
+        </select>
+      </div>
+
+      <div data-testid="plan-list" className="min-h-0 flex-1 overflow-y-auto">
+        {planGroups.map((group) => {
+          const collapsed = Boolean(collapsedGroups[group.status]);
+          return (
+            <section key={group.status} className="border-b border-[var(--border-weak)]">
+              <button
+                type="button"
+                onClick={() => togglePlanGroup(group.status)}
+                aria-expanded={!collapsed}
+                className="flex h-8 w-full items-center gap-2 px-3 text-left text-[10px] uppercase tracking-[0.08em] text-[var(--dim)] hover:text-[var(--fg)]"
+              >
+                <span className="w-3 text-[var(--dimmer)]">{collapsed ? "+" : "-"}</span>
+                <span>{statusPill(group.status)}</span>
+                <span className="ml-auto tabular-nums">{group.plans.length}</span>
+              </button>
+
+              {!collapsed && (
+                <div>
+                  {group.plans.map((plan) => {
+                    const file = planFilename(plan);
+                    const selected = file === selectedFile;
+                    const tags = planTags(plan);
+                    return (
+                      <button
+                        key={file}
+                        type="button"
+                        data-testid="plan-list-item"
+                        onClick={() => onSelect(file)}
+                        className={`w-full px-3 py-2 text-left transition-colors ${
+                          selected
+                            ? "bg-[var(--surface-active)]"
+                            : "hover:bg-[var(--surface-hover)]"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="h-1.5 w-1.5 shrink-0 rounded-full"
+                            style={{ background: STATUS_COLORS[plan.status] }}
+                            aria-hidden="true"
+                          />
+                          <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--fg)]">
+                            {plan.title || plan.name}
+                          </span>
+                          <StatusPill
+                            variant={statusVariant(plan.status)}
+                            label={statusPill(plan.status)}
+                            dot={false}
+                          />
+                        </div>
+                        <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[10px] text-[var(--dimmer)]">
+                          <span className="truncate">@{planOwner(plan)}</span>
+                          <span>·</span>
+                          <span className="shrink-0 tabular-nums">
+                            {formatRelativeTime(plan.updated ?? plan.completed)}
+                          </span>
+                          {tags.slice(0, 2).map((tag) => (
+                            <span
+                              key={tag}
+                              className="min-w-0 max-w-20 truncate rounded-md bg-[var(--surface)] px-1 text-[var(--fg-secondary)]"
+                            >
+                              #{tag}
+                            </span>
+                          ))}
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {group.plans.length === 0 && (
+                    <div className="px-3 pb-3 text-[10px] text-[var(--dimmer)]">none</div>
+                  )}
+                </div>
+              )}
+            </section>
+          );
+        })}
+      </div>
+
+      <div className="border-t border-[var(--border)] p-3">
+        <button
+          type="button"
+          onClick={onCreate}
+          className="h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg-strong)] text-[11px] text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+        >
+          New plan
+        </button>
+      </div>
+    </div>
+  );
+}
+
+interface PlanDetailProps {
+  sessionName: string;
+  plans: PlanSummary[];
+  selectedPlan: PlanSummary | null;
+  selectedFile: string | null;
+  planData: PlanData;
+  setPlanData: React.Dispatch<React.SetStateAction<PlanData>>;
+  parsed: ReturnType<typeof parsePlanDocument>;
+  loadingPlan: boolean;
+  editing: boolean;
+  setEditing: (filename: string, value: boolean) => void;
+  editContent: string;
+  setEditContent: (value: string) => void;
+  saveState: "idle" | "dirty" | "saving" | "saved" | "error";
+  reloadPlan: PlanData | null;
+  reloadFromDisk: () => void;
+  cycleStatus: () => Promise<void> | void;
+  tasksById: Map<string, Task>;
+  scrollRef: React.RefObject<HTMLDivElement | null>;
+  activeHeading: string;
+  onMobileBack: () => void;
+  showMobileBack: boolean;
+}
+
+/**
+ * Right detail: plan header, status pill, edit toggle, markdown body
+ * (Markdown / MarkdownEditor), authorship footer, and outline aside.
+ */
+function PlanDetail({
+  selectedFile,
+  plans,
+  selectedPlan,
+  planData,
+  parsed,
+  loadingPlan,
+  editing,
+  setEditing,
+  editContent,
+  setEditContent,
+  saveState,
+  reloadPlan,
+  reloadFromDisk,
+  cycleStatus,
+  tasksById,
+  scrollRef,
+  activeHeading,
+  onMobileBack,
+  showMobileBack,
+}: PlanDetailProps) {
+  const status = parsed.frontmatter.status ?? selectedPlan?.status ?? "pending";
+  const title = parsed.frontmatter.title ?? selectedPlan?.title ?? selectedPlan?.name ?? "Plan";
+
+  function openTaskView() {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("tab");
+    window.history.replaceState(null, "", url.toString());
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }
+
+  if (plans.length === 0) return null;
+
+  return (
+    <main className="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
+      {showMobileBack && (
+        <div className="flex h-9 shrink-0 items-center border-b border-[var(--border)] bg-[var(--bg-weak)] px-2 md:hidden">
+          <button
+            type="button"
+            onClick={onMobileBack}
+            className="flex h-7 items-center gap-1 px-2 text-[12px] text-[var(--fg-secondary)] hover:text-[var(--accent)]"
+            aria-label="Back to plans"
+          >
+            ‹ plans
+          </button>
+        </div>
+      )}
+      <section ref={scrollRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+        {loadingPlan ? (
+          <div className="mx-auto max-w-4xl space-y-5 px-6 py-5">
+            <SurfaceCard>
+              <SkeletonText lines={6} />
+            </SurfaceCard>
+            <SurfaceCard>
+              <SkeletonText lines={10} />
+            </SurfaceCard>
+          </div>
+        ) : (
+          <article className="mx-auto max-w-4xl px-6 py-5">
+            <header className="mb-5 border-b border-[var(--border)] pb-4">
+              <div className="flex items-start gap-4">
+                <div className="min-w-0 flex-1">
+                  <h1 className="truncate text-[20px] font-semibold text-[var(--fg)]">{title}</h1>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {metadataChips(parsed.frontmatter)}
+                    {(parsed.frontmatter.related ?? []).map((task) =>
+                      chip(
+                        <button
+                          type="button"
+                          onClick={openTaskView}
+                          className="text-[var(--cyan)]"
+                        >
+                          {task}
+                        </button>,
+                        `related:${task}`,
+                      ),
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void cycleStatus()}
+                  className="shrink-0 rounded-md border border-[var(--border)] px-2 py-1 text-[11px] hover:border-[var(--accent)]"
+                >
+                  <StatusPill variant={statusVariant(status)} label={statusPill(status)} />
+                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                  {editing && (
+                    <span
+                      data-testid="plan-save-state"
+                      className="text-[10px] text-[var(--dimmer)]"
+                    >
+                      {saveState === "dirty"
+                        ? "unsaved"
+                        : saveState === "saving"
+                          ? "saving..."
+                          : saveState === "saved"
+                            ? "saved"
+                            : saveState === "error"
+                              ? "save failed"
+                              : ""}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    data-testid="plan-edit-toggle"
+                    onClick={() => selectedFile && setEditing(selectedFile, !editing)}
+                    className={`rounded-md border px-2 py-1 text-[11px] transition-colors ${
+                      editing
+                        ? "border-[var(--accent)] text-[var(--accent)]"
+                        : "border-[var(--border)] text-[var(--dim)] hover:border-[var(--accent)] hover:text-[var(--fg)]"
+                    }`}
+                  >
+                    {editing ? "View" : "Edit"}
+                  </button>
+                </div>
+              </div>
+            </header>
+
+            {editing ? (
+              <div className="flex min-h-[520px] flex-col overflow-hidden rounded-md border border-[var(--border)] bg-[var(--bg-strong)]">
+                {reloadPlan && (
+                  <div className="flex h-8 shrink-0 items-center justify-between border-b border-[var(--border)] px-3 text-[11px]">
+                    <span className="text-[var(--yellow)]">Plan changed on disk</span>
+                    <button
+                      type="button"
+                      onClick={reloadFromDisk}
+                      className="rounded-md border border-[var(--border)] px-2 py-0.5 text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                    >
+                      Reload from disk?
+                    </button>
+                  </div>
+                )}
+                <MarkdownEditor
+                  key={selectedFile}
+                  value={editContent}
+                  onChange={setEditContent}
+                  onSave={(value) => setEditContent(value)}
+                />
+              </div>
+            ) : (
+              <div className="plan-content">
+                <Markdown
+                  components={{
+                    h1: ({ children }) => {
+                      const text = String(children);
+                      const item = parsed.toc.find(
+                        (entry) => entry.text === text && entry.level === 1,
+                      );
+                      return <h1 id={item?.id}>{children}</h1>;
+                    },
+                    h2: ({ children }) => {
+                      const text = String(children);
+                      const matching = parsed.toc.filter(
+                        (entry) => entry.text === text && entry.level === 2,
+                      );
+                      return <h2 id={matching[0]?.id}>{children}</h2>;
+                    },
+                    h3: ({ children }) => {
+                      const text = String(children);
+                      const matching = parsed.toc.filter(
+                        (entry) => entry.text === text && entry.level === 3,
+                      );
+                      return <h3 id={matching[0]?.id}>{children}</h3>;
+                    },
+                    p: ({ children }) => (
+                      <p>
+                        {Array.isArray(children)
+                          ? children.map((child) =>
+                              renderInlineTasks(child, tasksById, openTaskView),
+                            )
+                          : renderInlineTasks(children, tasksById, openTaskView)}
+                      </p>
+                    ),
+                    li: ({ children }) => (
+                      <li>
+                        {Array.isArray(children)
+                          ? children.map((child) =>
+                              renderInlineTasks(child, tasksById, openTaskView),
+                            )
+                          : renderInlineTasks(children, tasksById, openTaskView)}
+                      </li>
+                    ),
+                    code: ({ className, children }) => {
+                      const code = String(children).replace(/\n$/, "");
+                      const match = /language-(\w+)/.exec(className ?? "");
+                      if (!match) return <code>{children}</code>;
+                      return <CodeBlock language={match[1] ?? "text"} code={code} />;
+                    },
+                  }}
+                >
+                  {parsed.content}
+                </Markdown>
+              </div>
+            )}
+
+            <div className="mt-8 border-t border-[var(--border)] pt-3">
+              <AuthorshipBar authorship={planData.authorship} />
+            </div>
+          </article>
+        )}
+      </section>
+
+      <aside className="hidden w-56 shrink-0 border-l border-[var(--border)] bg-[var(--bg-weak)] p-3 lg:block">
+        <div className="sticky top-3">
+          <div className="mb-2 text-[10px] uppercase text-[var(--dimmer)]">outline</div>
+          <Toc toc={parsed.toc} activeId={activeHeading} />
+        </div>
+      </aside>
+    </main>
+  );
+}
+
 export function PlansView({ sessionName }: PlansViewProps) {
   const fetcher = useCallback(() => fetchPlans(sessionName), [sessionName]);
   const { data: plans, loading, refresh } = usePolling<PlanSummary[]>(fetcher, 10000);
   const { push } = useToasts();
+  const isMobile = useIsMobileLayout();
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [planData, setPlanData] = useState<PlanData>({ content: "", authorship: null });
   const [loadingPlan, setLoadingPlan] = useState(false);
@@ -335,10 +768,9 @@ export function PlansView({ sessionName }: PlansViewProps) {
     [plans, selectedFile],
   );
   const parsed = useMemo(() => parsePlanDocument(planData.content), [planData.content]);
-  const status = parsed.frontmatter.status ?? selectedPlan?.status ?? "pending";
-  const title = parsed.frontmatter.title ?? selectedPlan?.title ?? selectedPlan?.name ?? "Plan";
   const selectedUpdated = selectedPlan?.updated ?? selectedPlan?.completed ?? null;
   const dirty = editContent !== savedContentRef.current;
+
   const visiblePlans = useMemo(() => {
     const query = planQuery.trim().toLowerCase();
     const filtered = (plans ?? []).filter((plan) => {
@@ -363,15 +795,6 @@ export function PlansView({ sessionName }: PlansViewProps) {
       return a.title.localeCompare(b.title);
     });
   }, [planQuery, planSort, plans]);
-
-  const planGroups = useMemo(
-    () =>
-      PLAN_RAIL_STATUSES.map((railStatus) => ({
-        status: railStatus,
-        plans: visiblePlans.filter((plan) => plan.status === railStatus),
-      })),
-    [visiblePlans],
-  );
 
   useEffect(() => {
     if (!plans || plans.length === 0 || selectedFile) return;
@@ -516,7 +939,9 @@ export function PlansView({ sessionName }: PlansViewProps) {
     return () => observer.disconnect();
   }, [parsed.toc, planData.content]);
 
-  async function cycleStatus() {
+  const status = parsed.frontmatter.status ?? selectedPlan?.status ?? "pending";
+
+  const cycleStatus = useCallback(async () => {
     if (!selectedPlan) return;
     const next =
       STATUS_ORDER[(STATUS_ORDER.indexOf(status) + 1) % STATUS_ORDER.length] ?? "pending";
@@ -530,24 +955,30 @@ export function PlansView({ sessionName }: PlansViewProps) {
       const refreshed = await fetchPlan(sessionName, planFilename(selectedPlan));
       setPlanData(refreshed);
     }
-  }
+  }, [push, refresh, selectedPlan, sessionName, status]);
 
-  function togglePlanGroup(groupStatus: PlanStatus) {
-    setCollapsedGroups((current) => {
-      const next = { ...current, [groupStatus]: !current[groupStatus] };
-      const stored = planRailPersist.read();
-      planRailPersist.write({ ...stored, [sessionName]: next });
-      return next;
-    });
-  }
+  const togglePlanGroup = useCallback(
+    (groupStatus: PlanStatus) => {
+      setCollapsedGroups((current) => {
+        const next = { ...current, [groupStatus]: !current[groupStatus] };
+        const stored = planRailPersist.read();
+        planRailPersist.write({ ...stored, [sessionName]: next });
+        return next;
+      });
+    },
+    [sessionName],
+  );
 
-  function setPlanEditing(filename: string, value: boolean) {
-    const stored = planEditingPersist.read();
-    planEditingPersist.write({ ...stored, [planEditingKey(sessionName, filename)]: value });
-    setEditing(value);
-  }
+  const setPlanEditing = useCallback(
+    (filename: string, value: boolean) => {
+      const stored = planEditingPersist.read();
+      planEditingPersist.write({ ...stored, [planEditingKey(sessionName, filename)]: value });
+      setEditing(value);
+    },
+    [sessionName],
+  );
 
-  function reloadFromDisk() {
+  const reloadFromDisk = useCallback(() => {
     if (!reloadPlan) return;
     setPlanData(reloadPlan);
     setEditContent(reloadPlan.content);
@@ -555,9 +986,9 @@ export function PlansView({ sessionName }: PlansViewProps) {
     loadedMtimeRef.current = reloadPlan.mtime ?? loadedMtimeRef.current;
     setReloadPlan(null);
     setSaveState("idle");
-  }
+  }, [reloadPlan]);
 
-  async function createPlanStub() {
+  const createPlanStub = useCallback(async () => {
     const title = "New Plan";
     const filename = `${Date.now()}-${slugifyPlanTitle(title)}.md`;
     const content = `---\ntitle: ${title}\nstatus: pending\n---\n# ${title}\n\n`;
@@ -580,14 +1011,12 @@ export function PlansView({ sessionName }: PlansViewProps) {
     loadedMtimeRef.current = result.mtime ?? null;
     setSaveState("saved");
     refresh();
-  }
+  }, [push, refresh, sessionName, setPlanEditing]);
 
-  function openTaskView() {
-    const url = new URL(window.location.href);
-    url.searchParams.delete("tab");
-    window.history.replaceState(null, "", url.toString());
-    window.dispatchEvent(new PopStateEvent("popstate"));
-  }
+  const handleSelect = useCallback((file: string) => {
+    setSelectedFile(file);
+    setMobileDetailOpen(true);
+  }, []);
 
   if (loading && !plans) {
     return (
@@ -625,309 +1054,89 @@ export function PlansView({ sessionName }: PlansViewProps) {
     );
   }
 
+  const navigator = (
+    <PlanListNavigator
+      plans={plans}
+      visiblePlans={visiblePlans}
+      selectedFile={selectedFile}
+      onSelect={handleSelect}
+      planQuery={planQuery}
+      setPlanQuery={setPlanQuery}
+      planSort={planSort}
+      setPlanSort={setPlanSort}
+      collapsedGroups={collapsedGroups}
+      togglePlanGroup={togglePlanGroup}
+      onCreate={() => void createPlanStub()}
+    />
+  );
+
+  // On mobile, the navigator slot collapses (the layout hides it under md).
+  // PlansView then renders the rail inline in its panel and uses
+  // mobileDetailOpen to switch between rail and detail. On desktop, the
+  // rail goes into the navigator slot via NavigatorPortal and the panel
+  // shows only the detail.
+  if (isMobile) {
+    return (
+      <Panel testId="plans-view">
+        {mobileDetailOpen ? (
+          <PlanDetail
+            sessionName={sessionName}
+            plans={plans}
+            selectedPlan={selectedPlan}
+            selectedFile={selectedFile}
+            planData={planData}
+            setPlanData={setPlanData}
+            parsed={parsed}
+            loadingPlan={loadingPlan}
+            editing={editing}
+            setEditing={setPlanEditing}
+            editContent={editContent}
+            setEditContent={setEditContent}
+            saveState={saveState}
+            reloadPlan={reloadPlan}
+            reloadFromDisk={reloadFromDisk}
+            cycleStatus={cycleStatus}
+            tasksById={tasksById}
+            scrollRef={scrollRef}
+            activeHeading={activeHeading}
+            onMobileBack={() => setMobileDetailOpen(false)}
+            showMobileBack
+          />
+        ) : (
+          <div className="flex min-h-0 flex-1">{navigator}</div>
+        )}
+      </Panel>
+    );
+  }
+
   return (
-    <Panel testId="plans-view">
-      <div className="flex min-h-0 flex-1">
-        <aside
-          className={`${mobileDetailOpen ? "hidden" : "flex"} w-full shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg-weak)] md:flex md:w-[280px]`}
-        >
-          <div className="border-b border-[var(--border)] p-3">
-            <div className="mb-2 flex items-center gap-2 text-[11px] text-[var(--dim)]">
-              plans
-              <span className="ml-auto tabular-nums">
-                {visiblePlans.length}/{plans.length}
-              </span>
-            </div>
-            <input
-              data-testid="plan-list-search"
-              value={planQuery}
-              onChange={(event) => setPlanQuery(event.target.value)}
-              placeholder="search plans"
-              className="mb-2 h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg-strong)] px-2 text-[12px] text-[var(--fg)] outline-none placeholder:text-[var(--dimmer)] focus:border-[var(--accent)]"
-            />
-            <select
-              data-testid="plan-list-sort"
-              value={planSort}
-              onChange={(event) => setPlanSort(event.target.value as PlanSort)}
-              className="h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg-strong)] px-2 text-[12px] text-[var(--fg-secondary)] outline-none focus:border-[var(--accent)]"
-            >
-              <option value="recent">recently updated</option>
-              <option value="status">status</option>
-              <option value="title">title</option>
-              <option value="owner">owner</option>
-            </select>
-          </div>
-
-          <div data-testid="plan-list" className="min-h-0 flex-1 overflow-y-auto">
-            {planGroups.map((group) => {
-              const collapsed = Boolean(collapsedGroups[group.status]);
-              return (
-                <section key={group.status} className="border-b border-[var(--border-weak)]">
-                  <button
-                    type="button"
-                    onClick={() => togglePlanGroup(group.status)}
-                    aria-expanded={!collapsed}
-                    className="flex h-8 w-full items-center gap-2 px-3 text-left text-[10px] uppercase tracking-[0.08em] text-[var(--dim)] hover:text-[var(--fg)]"
-                  >
-                    <span className="w-3 text-[var(--dimmer)]">{collapsed ? "+" : "-"}</span>
-                    <span>{statusPill(group.status)}</span>
-                    <span className="ml-auto tabular-nums">{group.plans.length}</span>
-                  </button>
-
-                  {!collapsed && (
-                    <div>
-                      {group.plans.map((plan) => {
-                        const file = planFilename(plan);
-                        const selected = file === selectedFile;
-                        const tags = planTags(plan);
-                        return (
-                          <button
-                            key={file}
-                            type="button"
-                            data-testid="plan-list-item"
-                            onClick={() => {
-                              setSelectedFile(file);
-                              setMobileDetailOpen(true);
-                            }}
-                            className={`w-full px-3 py-2 text-left transition-colors ${
-                              selected
-                                ? "bg-[var(--surface-active)]"
-                                : "hover:bg-[var(--surface-hover)]"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <span
-                                className="h-1.5 w-1.5 shrink-0 rounded-full"
-                                style={{ background: STATUS_COLORS[plan.status] }}
-                                aria-hidden="true"
-                              />
-                              <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--fg)]">
-                                {plan.title || plan.name}
-                              </span>
-                              <StatusPill
-                                variant={statusVariant(plan.status)}
-                                label={statusPill(plan.status)}
-                                dot={false}
-                              />
-                            </div>
-                            <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[10px] text-[var(--dimmer)]">
-                              <span className="truncate">@{planOwner(plan)}</span>
-                              <span>·</span>
-                              <span className="shrink-0 tabular-nums">
-                                {formatRelativeTime(plan.updated ?? plan.completed)}
-                              </span>
-                              {tags.slice(0, 2).map((tag) => (
-                                <span
-                                  key={tag}
-                                  className="min-w-0 max-w-20 truncate rounded-md bg-[var(--surface)] px-1 text-[var(--fg-secondary)]"
-                                >
-                                  #{tag}
-                                </span>
-                              ))}
-                            </div>
-                          </button>
-                        );
-                      })}
-                      {group.plans.length === 0 && (
-                        <div className="px-3 pb-3 text-[10px] text-[var(--dimmer)]">none</div>
-                      )}
-                    </div>
-                  )}
-                </section>
-              );
-            })}
-          </div>
-
-          <div className="border-t border-[var(--border)] p-3">
-            <button
-              type="button"
-              onClick={() => void createPlanStub()}
-              className="h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg-strong)] text-[11px] text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
-            >
-              New plan
-            </button>
-          </div>
-        </aside>
-
-        <main
-          className={`${mobileDetailOpen ? "flex" : "hidden"} min-h-0 min-w-0 flex-1 flex-col md:flex md:flex-row`}
-        >
-          <div className="flex h-9 shrink-0 items-center border-b border-[var(--border)] bg-[var(--bg-weak)] px-2 md:hidden">
-            <button
-              type="button"
-              onClick={() => setMobileDetailOpen(false)}
-              className="flex h-7 items-center gap-1 px-2 text-[12px] text-[var(--fg-secondary)] hover:text-[var(--accent)]"
-              aria-label="Back to plans"
-            >
-              ‹ plans
-            </button>
-          </div>
-          <section ref={scrollRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-            {loadingPlan ? (
-              <div className="mx-auto max-w-4xl space-y-5 px-6 py-5">
-                <SurfaceCard>
-                  <SkeletonText lines={6} />
-                </SurfaceCard>
-                <SurfaceCard>
-                  <SkeletonText lines={10} />
-                </SurfaceCard>
-              </div>
-            ) : (
-              <article className="mx-auto max-w-4xl px-6 py-5">
-                <header className="mb-5 border-b border-[var(--border)] pb-4">
-                  <div className="flex items-start gap-4">
-                    <div className="min-w-0 flex-1">
-                      <h1 className="truncate text-[20px] font-semibold text-[var(--fg)]">
-                        {title}
-                      </h1>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {metadataChips(parsed.frontmatter)}
-                        {(parsed.frontmatter.related ?? []).map((task) =>
-                          chip(
-                            <button
-                              type="button"
-                              onClick={openTaskView}
-                              className="text-[var(--cyan)]"
-                            >
-                              {task}
-                            </button>,
-                            `related:${task}`,
-                          ),
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={cycleStatus}
-                      className="shrink-0 rounded-md border border-[var(--border)] px-2 py-1 text-[11px] hover:border-[var(--accent)]"
-                    >
-                      <StatusPill variant={statusVariant(status)} label={statusPill(status)} />
-                    </button>
-                    <div className="flex shrink-0 items-center gap-2">
-                      {editing && (
-                        <span
-                          data-testid="plan-save-state"
-                          className="text-[10px] text-[var(--dimmer)]"
-                        >
-                          {saveState === "dirty"
-                            ? "unsaved"
-                            : saveState === "saving"
-                              ? "saving..."
-                              : saveState === "saved"
-                                ? "saved"
-                                : saveState === "error"
-                                  ? "save failed"
-                                  : ""}
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        data-testid="plan-edit-toggle"
-                        onClick={() => selectedFile && setPlanEditing(selectedFile, !editing)}
-                        className={`rounded-md border px-2 py-1 text-[11px] transition-colors ${
-                          editing
-                            ? "border-[var(--accent)] text-[var(--accent)]"
-                            : "border-[var(--border)] text-[var(--dim)] hover:border-[var(--accent)] hover:text-[var(--fg)]"
-                        }`}
-                      >
-                        {editing ? "View" : "Edit"}
-                      </button>
-                    </div>
-                  </div>
-                </header>
-
-                {editing ? (
-                  <div className="flex min-h-[520px] flex-col overflow-hidden rounded-md border border-[var(--border)] bg-[var(--bg-strong)]">
-                    {reloadPlan && (
-                      <div className="flex h-8 shrink-0 items-center justify-between border-b border-[var(--border)] px-3 text-[11px]">
-                        <span className="text-[var(--yellow)]">Plan changed on disk</span>
-                        <button
-                          type="button"
-                          onClick={reloadFromDisk}
-                          className="rounded-md border border-[var(--border)] px-2 py-0.5 text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                        >
-                          Reload from disk?
-                        </button>
-                      </div>
-                    )}
-                    <MarkdownEditor
-                      key={selectedFile}
-                      value={editContent}
-                      onChange={setEditContent}
-                      onSave={(value) => setEditContent(value)}
-                    />
-                  </div>
-                ) : (
-                  <div className="plan-content">
-                    <Markdown
-                      components={{
-                        h1: ({ children }) => {
-                          const text = String(children);
-                          const item = parsed.toc.find(
-                            (entry) => entry.text === text && entry.level === 1,
-                          );
-                          return <h1 id={item?.id}>{children}</h1>;
-                        },
-                        h2: ({ children }) => {
-                          const text = String(children);
-                          const matching = parsed.toc.filter(
-                            (entry) => entry.text === text && entry.level === 2,
-                          );
-                          return <h2 id={matching[0]?.id}>{children}</h2>;
-                        },
-                        h3: ({ children }) => {
-                          const text = String(children);
-                          const matching = parsed.toc.filter(
-                            (entry) => entry.text === text && entry.level === 3,
-                          );
-                          return <h3 id={matching[0]?.id}>{children}</h3>;
-                        },
-                        p: ({ children }) => (
-                          <p>
-                            {Array.isArray(children)
-                              ? children.map((child) =>
-                                  renderInlineTasks(child, tasksById, openTaskView),
-                                )
-                              : renderInlineTasks(children, tasksById, openTaskView)}
-                          </p>
-                        ),
-                        li: ({ children }) => (
-                          <li>
-                            {Array.isArray(children)
-                              ? children.map((child) =>
-                                  renderInlineTasks(child, tasksById, openTaskView),
-                                )
-                              : renderInlineTasks(children, tasksById, openTaskView)}
-                          </li>
-                        ),
-                        code: ({ className, children }) => {
-                          const code = String(children).replace(/\n$/, "");
-                          const match = /language-(\w+)/.exec(className ?? "");
-                          if (!match) return <code>{children}</code>;
-                          return <CodeBlock language={match[1] ?? "text"} code={code} />;
-                        },
-                      }}
-                    >
-                      {parsed.content}
-                    </Markdown>
-                  </div>
-                )}
-
-                <div className="mt-8 border-t border-[var(--border)] pt-3">
-                  <AuthorshipBar authorship={planData.authorship} />
-                </div>
-              </article>
-            )}
-          </section>
-
-          <aside className="hidden w-56 shrink-0 border-l border-[var(--border)] bg-[var(--bg-weak)] p-3 lg:block">
-            <div className="sticky top-3">
-              <div className="mb-2 text-[10px] uppercase text-[var(--dimmer)]">outline</div>
-              <Toc toc={parsed.toc} activeId={activeHeading} />
-            </div>
-          </aside>
-        </main>
-      </div>
-    </Panel>
+    <>
+      <NavigatorPortal>{navigator}</NavigatorPortal>
+      <Panel testId="plans-view">
+        <PlanDetail
+          sessionName={sessionName}
+          plans={plans}
+          selectedPlan={selectedPlan}
+          selectedFile={selectedFile}
+          planData={planData}
+          setPlanData={setPlanData}
+          parsed={parsed}
+          loadingPlan={loadingPlan}
+          editing={editing}
+          setEditing={setPlanEditing}
+          editContent={editContent}
+          setEditContent={setEditContent}
+          saveState={saveState}
+          reloadPlan={reloadPlan}
+          reloadFromDisk={reloadFromDisk}
+          cycleStatus={cycleStatus}
+          tasksById={tasksById}
+          scrollRef={scrollRef}
+          activeHeading={activeHeading}
+          onMobileBack={() => setMobileDetailOpen(false)}
+          showMobileBack={false}
+        />
+      </Panel>
+    </>
   );
 }

@@ -9,6 +9,7 @@ import { ToastStack } from "@/components/ToastStack";
 import { WorkspaceTabsBar } from "@/components/WorkspaceTabsBar";
 import { WorkspaceTabsManager } from "@/components/WorkspaceTabsManager";
 import { WorkspaceUrlSync } from "@/components/WorkspaceUrlSync";
+import { NavigatorSlot } from "@/components/app-shell";
 import { SidebarInset } from "@/components/ui/sidebar";
 
 export default function ShellLayout({ children }: { children: React.ReactNode }) {
@@ -19,6 +20,9 @@ export default function ShellLayout({ children }: { children: React.ReactNode })
       <div className="flex min-h-0 flex-1">
         <ActivityBar className="hidden md:flex" testId="activity-bar-inline" />
         <AppSidebar />
+        {/* Navigator column. Renders only when a view registers via NavigatorPortal.
+            Hidden on mobile (md:flex) so PlansView's mobile rail logic stays in charge. */}
+        <NavigatorSlot className="hidden md:flex" />
         <SidebarInset>
           <WorkspaceTabsBar />
           {/*
