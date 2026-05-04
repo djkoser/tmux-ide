@@ -778,6 +778,20 @@ export function ensureDefaultTerminal(sessionName: string, cwd?: string): Tab {
   const id = defaultTerminalTabId(sessionName);
   const existing = state.openTabs.find((t) => t.id === id);
   if (existing) {
+    // If a cwd is supplied AND it differs from the stored cwd, refresh
+    // the existing tab so the next mount/respawn picks up the right
+    // working directory. Activates either way. This keeps the tab
+    // identity stable (so xterm + WS stay alive) while still letting
+    // callers correct a stale cwd left over from a previous version
+    // that didn't pass one.
+    if (existing.kind === "terminal" && cwd && existing.cwd !== cwd) {
+      const updated: Tab = { ...existing, cwd };
+      state.openTabs = state.openTabs.map((t) => (t.id === id ? updated : t));
+      refreshSnapshot();
+      commit();
+      activateTab(id);
+      return updated;
+    }
     activateTab(id);
     return existing;
   }

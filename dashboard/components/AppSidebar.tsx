@@ -18,6 +18,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   fetchPlans,
+  fetchProject,
   fetchSessions,
   fetchSkills,
   injectIntoProject,
@@ -659,7 +660,23 @@ function buildProjectItems(args: ProjectArgs): SidebarItem[] {
         testId: "sidebar-view-terminal",
         onClick: () => {
           if (!activeProject) return;
-          ensureDefaultTerminal(activeProject, activeProjectDir ?? undefined);
+          // If the polled sessions cache already has the dir, open
+          // immediately. Otherwise fetch the project to resolve dir,
+          // then open. The PTY bridge is keyed on the tab's stable id,
+          // so we must spawn the FIRST connection with the right cwd —
+          // a "fix the cwd later" approach won't repath an already-
+          // running shell.
+          if (activeProjectDir) {
+            ensureDefaultTerminal(activeProject, activeProjectDir);
+            return;
+          }
+          void fetchProject(activeProject)
+            .then((project) => {
+              ensureDefaultTerminal(activeProject, project?.dir);
+            })
+            .catch(() => {
+              ensureDefaultTerminal(activeProject);
+            });
         },
       },
       {
