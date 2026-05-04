@@ -8,6 +8,7 @@ import {
   unlinkSync,
   statSync,
   renameSync,
+  readdirSync,
 } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -96,7 +97,28 @@ import { RegistrationPayloadSchema } from "../lib/hq/types.ts";
 import { dispatchResearch, loadResearchState } from "../lib/research.ts";
 import { serveDashboard } from "./static.ts";
 import { getOrchestratorHealth, getPaneContentHashMetrics } from "../lib/orchestrator.ts";
-import { handleWsEventsConnection } from "./ws-events.ts";
+import { handleWsEventsConnection, broadcastInitOutput, broadcastInitError } from "./ws-events.ts";
+import {
+  listProjects,
+  getProject,
+  registerProject,
+  unregisterProject,
+  refreshProject,
+  ProjectAlreadyRegisteredError,
+  ProjectDirNotFoundError,
+  ProjectNotFoundError,
+} from "../lib/project-registry.ts";
+import {
+  runInit,
+  ProjectInitFailedError,
+  ProjectInitTimeoutError,
+} from "../lib/project-init-runner.ts";
+import {
+  RegisterProjectRequestSchemaZ,
+  InitProjectRequestSchemaZ,
+  type ProjectTemplate,
+} from "../schemas/registry.ts";
+import { randomUUID } from "node:crypto";
 import { WebSocketServer } from "ws";
 
 export interface CreateAppOptions {
@@ -1935,10 +1957,191 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     });
   });
 
+  // --- Project registry ---
+
+  app.get("/api/projects", (c) => {
+    return c.json({ projects: listProjects() });
+  });
+
+  app.get("/api/projects/templates", (c) => {
+    return c.json({ templates: listAvailableTemplates() });
+  });
+
+  app.post("/api/projects", async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+    const parsed = RegisterProjectRequestSchemaZ.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: "Invalid request", details: parsed.error.issues }, 400);
+    }
+    try {
+      const project = await registerProject({
+        dir: parsed.data.dir,
+        name: parsed.data.name,
+      });
+      return c.json({ project }, 201);
+    } catch (err) {
+      if (err instanceof ProjectDirNotFoundError) {
+        return c.json({ error: err.message, code: err.code }, 400);
+      }
+      if (err instanceof ProjectAlreadyRegisteredError) {
+        return c.json({ error: err.message, code: err.code, suggestion: err.suggestion }, 409);
+      }
+      throw err;
+    }
+  });
+
+  app.delete("/api/projects/:name", (c) => {
+    const name = c.req.param("name");
+    try {
+      unregisterProject(name);
+      return c.json({ ok: true });
+    } catch (err) {
+      if (err instanceof ProjectNotFoundError) {
+        return c.json({ error: err.message, code: err.code }, 404);
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/projects/:name/probe", async (c) => {
+    const name = c.req.param("name");
+    if (!getProject(name)) {
+      return c.json({ error: `Project "${name}" not found in registry`, code: "NOT_FOUND" }, 404);
+    }
+    try {
+      const project = await refreshProject(name);
+      return c.json({ project });
+    } catch (err) {
+      if (err instanceof ProjectNotFoundError) {
+        return c.json({ error: err.message, code: err.code }, 404);
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/projects/init", async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+    const parsed = InitProjectRequestSchemaZ.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: "Invalid request", details: parsed.error.issues }, 400);
+    }
+    if (!existsSync(parsed.data.dir)) {
+      return c.json({ error: `Directory "${parsed.data.dir}" does not exist` }, 400);
+    }
+
+    const jobId = randomUUID();
+    const command = process.env.TMUX_IDE_INIT_COMMAND ?? "tmux-ide";
+
+    // Fire-and-forget — runs in the background and streams chunks via WS.
+    void (async () => {
+      try {
+        await runInit({
+          cwd: parsed.data.dir,
+          template: parsed.data.template,
+          command,
+          onChunk: (chunk) => {
+            broadcastInitOutput(jobId, chunk);
+          },
+        });
+        // Mark stream complete
+        broadcastInitOutput(jobId, "", true);
+
+        // Probe + register the freshly-init'd project so it shows up in
+        // the registry — also broadcasts `projects.changed`.
+        try {
+          await registerProject({ dir: parsed.data.dir });
+        } catch (err) {
+          // Already-registered is benign here; report anything else.
+          if (
+            !(err instanceof ProjectAlreadyRegisteredError) &&
+            !(err instanceof ProjectDirNotFoundError)
+          ) {
+            broadcastInitError(jobId, (err as Error).message);
+          }
+        }
+      } catch (err) {
+        if (err instanceof ProjectInitTimeoutError) {
+          broadcastInitError(jobId, err.message);
+        } else if (err instanceof ProjectInitFailedError) {
+          broadcastInitError(jobId, err.message);
+        } else {
+          broadcastInitError(jobId, (err as Error).message);
+        }
+      }
+    })();
+
+    return c.json({ jobId }, 202);
+  });
+
   // Serve the Next.js static dashboard for all non-API routes
   app.use("*", serveDashboard());
 
   return app;
+}
+
+/**
+ * Discover bundled templates by reading `templates/*.yml`. Hardcoded
+ * descriptions for the canonical set; unknown templates surface with a
+ * generic label so we don't break if templates are added without updating
+ * this map.
+ */
+function listAvailableTemplates(): ProjectTemplate[] {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dir = dirname(__filename);
+  const templatesDir = join(__dir, "..", "..", "templates");
+  if (!existsSync(templatesDir)) return [];
+  const labels: Record<string, { label: string; description: string }> = {
+    default: { label: "Default", description: "Single Claude pane + dev/shell row" },
+    nextjs: {
+      label: "Next.js",
+      description: "Two Claude panes + Next.js dev server + shell",
+    },
+    vite: { label: "Vite", description: "Vite dev server + Claude + shell" },
+    convex: {
+      label: "Convex",
+      description: "Convex dev + Next.js + Claude pane",
+    },
+    python: { label: "Python", description: "Python project with Claude + tests" },
+    go: { label: "Go", description: "Go project with Claude + tests + shell" },
+    "agent-team": {
+      label: "Agent Team",
+      description: "Lead + teammate Claude panes for coordinated multi-agent work",
+    },
+    "agent-team-nextjs": {
+      label: "Agent Team — Next.js",
+      description: "Agent team layout tuned for a Next.js app",
+    },
+    "agent-team-monorepo": {
+      label: "Agent Team — Monorepo",
+      description: "Agent team layout for monorepos with multiple apps",
+    },
+    missions: {
+      label: "Missions",
+      description: "Mission-driven layout with planner, validator, and researcher",
+    },
+  };
+  const entries = readdirSync(templatesDir).filter((f) => f.endsWith(".yml"));
+  return entries
+    .map((file) => {
+      const id = file.replace(/\.yml$/, "");
+      const meta = labels[id];
+      return {
+        id,
+        label: meta?.label ?? id,
+        description: meta?.description ?? `Template: ${id}`,
+      };
+    })
+    .sort((a, b) => a.id.localeCompare(b.id));
 }
 
 /**

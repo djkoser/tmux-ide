@@ -1,5 +1,26 @@
 import type { SessionOverview, ProjectDetail, Task, Mark, AuthorshipStats } from "./types";
 
+/**
+ * Project registry contract — mirrors the frozen REST + WS protocol that
+ * Agent 1 implements server-side. Defined here as a stub because the
+ * `@tmux-ide/schemas` package may not have shipped these types yet at the
+ * time this client lands; once it does, swap the import.
+ */
+export interface RegisteredProject {
+  name: string;
+  dir: string;
+  hasIdeYml: boolean;
+  gitOrigin: string | null;
+  gitBranch: string | null;
+  registeredAt: string;
+}
+
+export interface ProjectTemplate {
+  id: string;
+  label: string;
+  description: string;
+}
+
 function resolveApiBase(): string {
   // Explicit env wins — useful for dev pointing at a remote daemon.
   const explicit = process.env.NEXT_PUBLIC_API_URL;
@@ -664,4 +685,107 @@ export async function deletePlan(name: string, filename: string): Promise<boolea
     { method: "DELETE" },
   );
   return res.ok;
+}
+
+// --- Project registry ---
+
+export class ProjectApiError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ProjectApiError";
+    this.status = status;
+  }
+}
+
+async function readErrorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const data = (await res.json()) as { error?: string; message?: string };
+    return data.error ?? data.message ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export async function fetchProjects(): Promise<RegisteredProject[]> {
+  const res = await fetch(`${API_BASE}/api/projects`, { cache: "no-store" });
+  if (!res.ok) return [];
+  const data = (await res.json()) as { projects?: RegisteredProject[] };
+  return Array.isArray(data.projects) ? data.projects : [];
+}
+
+export async function registerProject(dir: string, name?: string): Promise<RegisteredProject> {
+  const res = await fetch(`${API_BASE}/api/projects`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(name ? { dir, name } : { dir }),
+  });
+  if (!res.ok) {
+    throw new ProjectApiError(
+      await readErrorMessage(res, `Failed to register project (HTTP ${res.status})`),
+      res.status,
+    );
+  }
+  const data = (await res.json()) as { project: RegisteredProject };
+  return data.project;
+}
+
+export async function probeProject(dirOrName: string): Promise<RegisteredProject> {
+  const res = await fetch(
+    `${API_BASE}/api/projects/${encodeURIComponent(dirOrName)}/probe`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dir: dirOrName }),
+    },
+  );
+  if (!res.ok) {
+    throw new ProjectApiError(
+      await readErrorMessage(res, `Failed to probe project (HTTP ${res.status})`),
+      res.status,
+    );
+  }
+  const data = (await res.json()) as { project: RegisteredProject };
+  return data.project;
+}
+
+export async function unregisterProject(name: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/projects/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    throw new ProjectApiError(
+      await readErrorMessage(res, `Failed to unregister project (HTTP ${res.status})`),
+      res.status,
+    );
+  }
+}
+
+export async function initProject(
+  dir: string,
+  template?: string,
+): Promise<{ jobId: string }> {
+  const res = await fetch(`${API_BASE}/api/projects/init`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(template ? { dir, template } : { dir }),
+  });
+  if (!res.ok && res.status !== 202) {
+    throw new ProjectApiError(
+      await readErrorMessage(res, `Failed to start init (HTTP ${res.status})`),
+      res.status,
+    );
+  }
+  const data = (await res.json()) as { jobId?: string };
+  if (!data.jobId) {
+    throw new ProjectApiError("Server did not return a jobId", 500);
+  }
+  return { jobId: data.jobId };
+}
+
+export async function fetchProjectTemplates(): Promise<ProjectTemplate[]> {
+  const res = await fetch(`${API_BASE}/api/projects/templates`, { cache: "no-store" });
+  if (!res.ok) return [];
+  const data = (await res.json()) as { templates?: ProjectTemplate[] };
+  return Array.isArray(data.templates) ? data.templates : [];
 }

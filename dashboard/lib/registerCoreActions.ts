@@ -2,6 +2,7 @@
 
 import { openCommandPalette } from "@/components/CommandPalette";
 import { registerAction } from "@/lib/actions";
+import { openAddProjectDialog } from "@/lib/addProjectDialogStore";
 import {
   closeTab,
   ensureDefaultTerminal,
@@ -48,6 +49,15 @@ export function registerCoreActions({
       keybind: "Mod+k",
       category: "General",
       run: openCommandPalette,
+    }),
+    registerAction({
+      id: "add-project",
+      label: "Add project",
+      description: "Open the Add Project dialog (existing or initialize)",
+      keywords: ["project", "add", "new", "init", "register"],
+      keybind: "Mod+n",
+      category: "General",
+      run: () => openAddProjectDialog(),
     }),
     registerAction({
       id: "toggle-sidebar",

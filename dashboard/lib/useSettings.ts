@@ -44,6 +44,12 @@ export interface Settings {
       | "metrics"
       | "activity";
     showNotifications: boolean;
+    /**
+     * Default starting directory shown in the AddProjectDialog directory
+     * pickers. Mirrors t3code's per-environment setting; here we keep it
+     * global because tmux-ide is single-user.
+     */
+    addProjectBaseDirectory: string;
   };
   keybinds: Record<string, string>;
 }
@@ -65,6 +71,7 @@ export const defaultSettings: Settings = {
     defaultActivity: "sessions",
     defaultProjectTab: "kanban",
     showNotifications: true,
+    addProjectBaseDirectory: "~/",
   },
   keybinds: {},
 };
@@ -162,6 +169,11 @@ function normalizeSettings(value: unknown): Settings {
         typeof general.showNotifications === "boolean"
           ? general.showNotifications
           : defaultSettings.general.showNotifications,
+      addProjectBaseDirectory:
+        typeof general.addProjectBaseDirectory === "string" &&
+        general.addProjectBaseDirectory.trim().length > 0
+          ? general.addProjectBaseDirectory
+          : defaultSettings.general.addProjectBaseDirectory,
     },
     keybinds: Object.fromEntries(
       Object.entries(keybinds).filter(

@@ -5,6 +5,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { CommandPalette, openCommandPalette } from "@/components/CommandPalette";
 import { EventBridge } from "@/components/EventBridge";
 import { KeybindRoot } from "@/components/KeybindRoot";
+import { AddProjectDialog } from "@/components/projects/AddProjectDialog";
 import { ShellStatusBar } from "@/components/StatusBar";
 import { ToastStack } from "@/components/ToastStack";
 import { WorkspaceUrlSync } from "@/components/WorkspaceUrlSync";
@@ -64,6 +65,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
       </div>
       <ShellStatusBar />
       <CommandPalette />
+      <AddProjectDialog />
       <ToastStack />
       <KeybindRoot />
       <TabKeybinds />

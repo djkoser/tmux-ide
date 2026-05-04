@@ -103,6 +103,30 @@ const SessionsChangedFrameZ = z.object({
   type: z.literal("sessions.changed"),
 });
 
+// Project-registry has changed (register / unregister / re-probe / init success).
+// Clients re-fetch GET /api/projects.
+const ProjectsChangedFrameZ = z.object({
+  type: z.literal("projects.changed"),
+});
+
+// Streaming output from `tmux-ide init` invoked via POST /api/projects/init.
+// `chunk` is a single line of stdout/stderr (newline stripped). `done: true`
+// is set on the final frame for the job; no more `init.output` frames will
+// follow for this jobId.
+const InitOutputFrameZ = z.object({
+  type: z.literal("init.output"),
+  jobId: z.string(),
+  chunk: z.string(),
+  done: z.boolean().optional(),
+});
+
+// Init job failed. Terminal — no `init.output` follow-ups.
+const InitErrorFrameZ = z.object({
+  type: z.literal("init.error"),
+  jobId: z.string(),
+  message: z.string(),
+});
+
 const PongFrameZ = z.object({
   type: z.literal("pong"),
 });
@@ -117,6 +141,9 @@ export const ServerFrameSchemaZ = z.discriminatedUnion("type", [
   AgentChangedFrameZ,
   EventAppendedFrameZ,
   SessionsChangedFrameZ,
+  ProjectsChangedFrameZ,
+  InitOutputFrameZ,
+  InitErrorFrameZ,
   PongFrameZ,
 ]);
 

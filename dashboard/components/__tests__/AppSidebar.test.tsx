@@ -84,10 +84,16 @@ const SKILLS = [
 ];
 
 vi.mock("@/lib/api", () => ({
+  API_BASE: "http://127.0.0.1:6060",
   fetchSessions: vi.fn(async () => SESSIONS),
   fetchPlans: vi.fn(async () => PLANS),
   fetchSkills: vi.fn(async () => SKILLS),
+  fetchProjects: vi.fn(async () => []),
   injectIntoProject: vi.fn(async () => true),
+}));
+
+vi.mock("@/lib/projectStore", () => ({
+  useProjects: () => ({ projects: [], loading: false, error: false }),
 }));
 
 vi.mock("@/lib/useSessionStream", () => ({
@@ -143,6 +149,23 @@ describe("AppSidebar", () => {
     expect(screen.getByTestId("sidebar-session-beta")).toBeTruthy();
     // No project tree sections on overview
     expect(screen.queryByTestId("sidebar-section-mission")).toBeNull();
+  });
+
+  it("shows the 'Add your first project' CTA when both lists are empty", async () => {
+    window.history.replaceState(null, "", "/");
+    __resetNavigationForTests({ type: "overview" });
+    const { fetchSessions } = await import("@/lib/api");
+    (fetchSessions as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    try {
+      renderSidebar();
+      await waitFor(() => {
+        expect(screen.getByTestId("sidebar-empty-state")).toBeTruthy();
+      });
+      expect(screen.getByTestId("sidebar-add-first-project")).toBeTruthy();
+    } finally {
+      // Restore for the rest of the suite.
+      (fetchSessions as ReturnType<typeof vi.fn>).mockResolvedValue(SESSIONS);
+    }
   });
 
   it("renders project tree sections + view leaves when on a project", async () => {

@@ -1,9 +1,17 @@
 "use client";
 
 import { Popover } from "@base-ui/react/popover";
-import { ChevronDown, Folder, LayoutDashboard, Settings, Sparkles } from "lucide-react";
+import {
+  ChevronDown,
+  Folder,
+  LayoutDashboard,
+  Plus,
+  Settings,
+  Sparkles,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchSessions } from "@/lib/api";
+import { openAddProjectDialog } from "@/lib/addProjectDialogStore";
 import {
   isSessions,
   isSettings,
@@ -212,6 +220,25 @@ export function ProjectSwitcher() {
                 >
                   <Settings aria-hidden="true" size={12} className="text-[var(--dim)]" />
                   <span>Settings</span>
+                </button>
+              </li>
+            </ul>
+
+            <div className="my-1 border-t border-[var(--border-weak)]" />
+
+            <ul className="flex flex-col">
+              <li>
+                <button
+                  type="button"
+                  data-testid="project-switcher-item-add-project"
+                  onClick={() => {
+                    openAddProjectDialog();
+                    setOpen(false);
+                  }}
+                  className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-[var(--accent)] transition-colors hover:bg-[var(--surface-hover)]"
+                >
+                  <Plus aria-hidden="true" size={12} />
+                  <span>Add project…</span>
                 </button>
               </li>
             </ul>

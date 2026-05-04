@@ -9,24 +9,12 @@
  */
 
 import type { RawData, WebSocket } from "ws";
-import {
-  discoverSessions,
-  buildOverviews,
-  buildProjectDetail,
-} from "./discovery.ts";
-import {
-  taskStore,
-  loadMission,
-  loadTasks,
-  type TaskStoreChangeEvent,
-} from "../lib/task-store.ts";
-import {
-  readEvents,
-  eventLogEmitter,
-  type OrchestratorEvent,
-} from "../lib/event-log.ts";
+import { discoverSessions, buildOverviews, buildProjectDetail } from "./discovery.ts";
+import { taskStore, loadMission, loadTasks, type TaskStoreChangeEvent } from "../lib/task-store.ts";
+import { readEvents, eventLogEmitter, type OrchestratorEvent } from "../lib/event-log.ts";
 import { loadValidationState } from "../lib/validation.ts";
 import { loadSkills } from "../lib/skill-registry.ts";
+import { projectRegistryEmitter } from "../lib/project-registry.ts";
 import type { ServerFrame, ClientFrame } from "../schemas/ws-events.ts";
 
 const WS_OPEN = 1;
@@ -49,16 +37,27 @@ interface SessionListener {
   eventListener: (message: { dir: string; event: OrchestratorEvent }) => void;
 }
 
-// Module-level globals for the "sessions.changed" broadcaster, shared by all
-// connected clients. The poller is started lazily on the first connection
-// and stopped when the last client disconnects.
-const allClients = new Set<{ broadcastSessionsChanged: () => void }>();
+// Module-level globals for cross-connection broadcasts (sessions.changed,
+// projects.changed, init.* job updates). All clients receive these — the
+// dashboard filters init.* frames by jobId on its end.
+interface ClientHandle {
+  broadcastSessionsChanged(): void;
+  broadcastProjectsChanged(): void;
+  broadcastInitOutput(jobId: string, chunk: string, done?: boolean): void;
+  broadcastInitError(jobId: string, message: string): void;
+}
+const allClients = new Set<ClientHandle>();
 let sessionsPollTimer: ReturnType<typeof setInterval> | null = null;
 let lastSessionsHash = "";
+let projectRegistryListener: (() => void) | null = null;
 
 function snapshotSessionsHash(): string {
   try {
-    return JSON.stringify(discoverSessions().map((s) => s.name).sort());
+    return JSON.stringify(
+      discoverSessions()
+        .map((s) => s.name)
+        .sort(),
+    );
   } catch {
     return "";
   }
@@ -80,6 +79,41 @@ function maybeStopSessionsPoller(): void {
   if (allClients.size > 0 || !sessionsPollTimer) return;
   clearInterval(sessionsPollTimer);
   sessionsPollTimer = null;
+}
+
+/**
+ * Subscribe (lazily) to the project-registry emitter and fan changes out to
+ * every connected ws client. The listener is registered on the first client
+ * and removed when the last one disconnects so we never leak.
+ */
+function ensureProjectRegistryListener(): void {
+  if (projectRegistryListener) return;
+  const listener = (): void => {
+    for (const client of allClients) client.broadcastProjectsChanged();
+  };
+  projectRegistryListener = listener;
+  projectRegistryEmitter.on("change", listener);
+}
+
+function maybeStopProjectRegistryListener(): void {
+  if (allClients.size > 0 || !projectRegistryListener) return;
+  projectRegistryEmitter.off("change", projectRegistryListener);
+  projectRegistryListener = null;
+}
+
+/**
+ * Push an `init.output` chunk to every connected client. Called by the
+ * REST handler that runs `tmux-ide init`; clients filter by `jobId`.
+ */
+export function broadcastInitOutput(jobId: string, chunk: string, done?: boolean): void {
+  for (const client of allClients) client.broadcastInitOutput(jobId, chunk, done);
+}
+
+/**
+ * Push an `init.error` frame to every connected client.
+ */
+export function broadcastInitError(jobId: string, message: string): void {
+  for (const client of allClients) client.broadcastInitError(jobId, message);
 }
 
 function rawDataToText(data: RawData | string): string {
@@ -189,10 +223,33 @@ export function handleWsEventsConnection(socket: WebSocket | WsLike): void {
     send({ type: "sessions.changed" });
   };
 
-  // Track this client globally for "sessions.changed" broadcasts.
-  const clientHandle = { broadcastSessionsChanged };
+  const broadcastProjectsChanged = (): void => {
+    send({ type: "projects.changed" });
+  };
+
+  const broadcastInitOutputForClient = (jobId: string, chunk: string, done?: boolean): void => {
+    const frame: ServerFrame =
+      done === undefined
+        ? { type: "init.output", jobId, chunk }
+        : { type: "init.output", jobId, chunk, done };
+    send(frame);
+  };
+
+  const broadcastInitErrorForClient = (jobId: string, message: string): void => {
+    send({ type: "init.error", jobId, message });
+  };
+
+  // Track this client globally for "sessions.changed" / "projects.changed"
+  // / init.* broadcasts.
+  const clientHandle: ClientHandle = {
+    broadcastSessionsChanged,
+    broadcastProjectsChanged,
+    broadcastInitOutput: broadcastInitOutputForClient,
+    broadcastInitError: broadcastInitErrorForClient,
+  };
   allClients.add(clientHandle);
   ensureSessionsPoller();
+  ensureProjectRegistryListener();
 
   // Server-initiated keepalive — mirrors the SSE behavior so middle-boxes
   // don't reap the connection.
@@ -268,6 +325,7 @@ export function handleWsEventsConnection(socket: WebSocket | WsLike): void {
     }
     subscriptions.clear();
     maybeStopSessionsPoller();
+    maybeStopProjectRegistryListener();
   };
 
   ws.on("message", (data) => {
@@ -319,4 +377,14 @@ export function _stopSessionsPollerForTests(): void {
   if (!sessionsPollTimer) return;
   clearInterval(sessionsPollTimer);
   sessionsPollTimer = null;
+}
+
+/**
+ * Test-only hook to detach the registry listener. Mirrors the sessions
+ * poller helper so tests can assert no listener leak across cases.
+ */
+export function _detachProjectRegistryListenerForTests(): void {
+  if (!projectRegistryListener) return;
+  projectRegistryEmitter.off("change", projectRegistryListener);
+  projectRegistryListener = null;
 }

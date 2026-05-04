@@ -52,10 +52,20 @@ export type {
   ProjectDetail,
 } from "./domain.ts";
 
-export {
-  ClientFrameSchemaZ,
-  ServerFrameSchemaZ,
-  SessionSnapshotSchemaZ,
-} from "./ws-events.ts";
+export { ClientFrameSchemaZ, ServerFrameSchemaZ, SessionSnapshotSchemaZ } from "./ws-events.ts";
 
 export type { ClientFrame, ServerFrame, SessionSnapshot } from "./ws-events.ts";
+
+export {
+  RegisteredProjectSchemaZ,
+  RegisterProjectRequestSchemaZ,
+  InitProjectRequestSchemaZ,
+  ProjectTemplateSchemaZ,
+} from "./registry.ts";
+
+export type {
+  RegisteredProject,
+  RegisterProjectRequest,
+  InitProjectRequest,
+  ProjectTemplate,
+} from "./registry.ts";

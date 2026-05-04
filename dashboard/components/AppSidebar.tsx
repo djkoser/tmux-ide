@@ -10,6 +10,7 @@ import {
   FolderOpen,
   GitCompare,
   Map as MapIcon,
+  Plus,
   Send,
   Sparkles,
   Target,
@@ -23,8 +24,10 @@ import {
   fetchSkills,
   injectIntoProject,
   type PlanSummary,
+  type RegisteredProject,
   type SkillData,
 } from "@/lib/api";
+import { openAddProjectDialog } from "@/lib/addProjectDialogStore";
 import {
   ensureDefaultTerminal,
   isOverview,
@@ -36,6 +39,7 @@ import {
 } from "@/lib/navigation";
 import { Persist } from "@/lib/persist";
 import { useLayoutState } from "@/lib/useLayoutState";
+import { useProjects } from "@/lib/projectStore";
 import { useSessionStream } from "@/lib/useSessionStream";
 import { useToasts } from "@/lib/useToasts";
 import type { SessionOverview } from "@/lib/types";
@@ -101,6 +105,51 @@ function writeExpansionMap(map: Record<string, SectionState>): void {
   expansionPersist.write(map);
 }
 
+/**
+ * Merged view of a project: it may be registered in the project registry,
+ * have a live tmux session, or both. The sidebar lists all of them; the
+ * stopped/running indicator is derived from the boolean flags.
+ */
+export interface MergedProject {
+  name: string;
+  registered: boolean;
+  running: boolean;
+  session: SessionOverview | null;
+  registeredProject: RegisteredProject | null;
+}
+
+export function mergeProjects(
+  sessions: ReadonlyArray<SessionOverview>,
+  registered: ReadonlyArray<RegisteredProject>,
+): MergedProject[] {
+  const byName = new Map<string, MergedProject>();
+  for (const session of sessions) {
+    byName.set(session.name, {
+      name: session.name,
+      registered: false,
+      running: true,
+      session,
+      registeredProject: null,
+    });
+  }
+  for (const project of registered) {
+    const existing = byName.get(project.name);
+    if (existing) {
+      existing.registered = true;
+      existing.registeredProject = project;
+    } else {
+      byName.set(project.name, {
+        name: project.name,
+        registered: true,
+        running: false,
+        session: null,
+        registeredProject: project,
+      });
+    }
+  }
+  return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 function milestoneStatusGlyph(status: string): string {
   switch (status) {
     case "done":
@@ -124,6 +173,10 @@ export function AppSidebar() {
   const [sessions, setSessions] = useState<SessionOverview[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessionsError, setSessionsError] = useState(false);
+
+  // Registered project list — projects the user added via AddProjectDialog,
+  // including ones whose tmux session isn't currently running.
+  const projectsState = useProjects();
 
   // Active project — derived from NavigationState only
   const activeProject = isSessions(nav) || isSkills(nav) ? (nav.sessionName ?? null) : null;
@@ -280,13 +333,18 @@ export function AppSidebar() {
 
   const items = useMemo<SidebarItem[]>(() => {
     if (onOverview || !activeProject) {
+      const merged = mergeProjects(sessions, projectsState.projects);
       return buildOverviewItems({
-        sessions,
-        loading: sessionsLoading,
-        error: sessionsError,
+        merged,
+        loading: sessionsLoading || projectsState.loading,
+        error: sessionsError && projectsState.error,
         onPick: (name) => {
           openWorkspaceTab("project", name, name);
           setNavigation({ type: "sessions", sessionName: name });
+          closeMobile();
+        },
+        onAddProject: () => {
+          openAddProjectDialog();
           closeMobile();
         },
       });
@@ -322,6 +380,9 @@ export function AppSidebar() {
     plans,
     plansError,
     plansLoading,
+    projectsState.error,
+    projectsState.loading,
+    projectsState.projects,
     sessions,
     sessionsError,
     sessionsLoading,
@@ -388,17 +449,20 @@ export function AppSidebar() {
 // ---------- Overview tree ----------
 
 interface OverviewArgs {
-  sessions: SessionOverview[];
+  merged: MergedProject[];
   loading: boolean;
   error: boolean;
   onPick: (name: string) => void;
+  onAddProject: () => void;
 }
 
 function buildOverviewItems(args: OverviewArgs): SidebarItem[] {
+  const isEmpty = !args.error && !args.loading && args.merged.length === 0;
+
   const sessionsSection: SidebarSection = {
     id: "section-sessions",
     type: "section",
-    label: "sessions",
+    label: "projects",
     icon: Folder,
     error: args.error,
     errorState: (
@@ -416,37 +480,76 @@ function buildOverviewItems(args: OverviewArgs): SidebarItem[] {
         ))}
       </SidebarMenu>
     ),
-    emptyState: (
-      <div className="mx-1 mt-2 rounded-md border border-[var(--border-weak)] bg-[var(--surface)] px-3 py-4 text-center text-[11px] text-[var(--dim)] group-data-[collapsible=icon]:hidden">
+    emptyState: isEmpty ? (
+      <div
+        data-testid="sidebar-empty-state"
+        className="mx-1 mt-2 rounded-md border border-[var(--border-weak)] bg-[var(--surface)] px-3 py-4 text-center text-[11px] text-[var(--dim)] group-data-[collapsible=icon]:hidden"
+      >
         <Folder
           aria-hidden="true"
           size={24}
           strokeWidth={1.5}
           className="mx-auto mb-2 text-[var(--accent)]"
         />
-        <div className="text-[var(--fg-secondary)]">No sessions</div>
-        <div className="mt-1 leading-5">Run tmux-ide init in a project to create one.</div>
+        <div className="text-[var(--fg-secondary)]">No projects yet</div>
+        <button
+          type="button"
+          data-testid="sidebar-add-first-project"
+          onClick={args.onAddProject}
+          className="mt-3 inline-flex items-center gap-1 rounded-md border border-[var(--accent)] bg-[var(--accent)] px-3 py-1.5 text-[11px] font-medium text-[var(--bg)] transition-opacity hover:opacity-90"
+        >
+          <Plus aria-hidden="true" size={12} />
+          Add your first project
+        </button>
       </div>
-    ),
+    ) : undefined,
+    // Items: registered + running projects, plus a trailing "Add project…"
+    // entry when the list is non-empty. When the list is empty we omit the
+    // trailing item entirely so the empty-state CTA can render instead.
     items:
-      !args.error && !args.loading
-        ? args.sessions.map((session) => ({
-            id: `session-${session.name}`,
-            title: session.name,
-            icon: Folder,
-            tooltip: session.name,
-            testId: `sidebar-session-${session.name}`,
-            badge:
-              session.stats && session.stats.totalTasks > 0
-                ? `${session.stats.doneTasks}/${session.stats.totalTasks}`
-                : undefined,
-            subtitle: session.mission?.title ? session.mission.title : undefined,
-            onClick: () => args.onPick(session.name),
-          }))
+      !args.error && !args.loading && args.merged.length > 0
+        ? [
+            ...args.merged.map((project) => projectToSidebarLink(project, args.onPick)),
+            {
+              id: "session-add-project",
+              title: "Add project…",
+              icon: Plus,
+              tooltip: "Add a project",
+              testId: "sidebar-add-project",
+              onClick: args.onAddProject,
+            },
+          ]
         : [],
   };
 
   return [sessionsSection];
+}
+
+function projectToSidebarLink(
+  project: MergedProject,
+  onPick: (name: string) => void,
+): SidebarItem {
+  const session = project.session;
+  const badge =
+    session && session.stats && session.stats.totalTasks > 0
+      ? `${session.stats.doneTasks}/${session.stats.totalTasks}`
+      : undefined;
+  const status = project.running ? "running" : "stopped";
+  const subtitle = session?.mission?.title
+    ? session.mission.title
+    : !project.running
+      ? "stopped"
+      : undefined;
+  return {
+    id: `session-${project.name}`,
+    title: project.name,
+    icon: Folder,
+    tooltip: `${project.name} (${status})`,
+    testId: `sidebar-session-${project.name}`,
+    ...(badge !== undefined ? { badge } : {}),
+    ...(subtitle !== undefined ? { subtitle } : {}),
+    onClick: () => onPick(project.name),
+  };
 }
 
 // ---------- Project tree ----------
