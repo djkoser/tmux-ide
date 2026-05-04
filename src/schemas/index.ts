@@ -69,3 +69,7 @@ export type {
   InitProjectRequest,
   ProjectTemplate,
 } from "./registry.ts";
+
+export { FilesystemEntrySchemaZ, FilesystemBrowseResultSchemaZ } from "./filesystem.ts";
+
+export type { FilesystemEntry, FilesystemBrowseResult } from "./filesystem.ts";

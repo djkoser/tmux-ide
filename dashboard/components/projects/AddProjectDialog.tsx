@@ -43,6 +43,7 @@ import {
   validateName,
   type InitJobState,
 } from "./AddProjectDialog.logic";
+import { DirectoryBrowser } from "./DirectoryBrowser";
 
 /**
  * Three-tab dialog for adding a project to the registry.
@@ -144,7 +145,7 @@ function OpenExistingTab() {
   const settings = useSettings();
   const { projects } = useProjects();
   const { push } = useToasts();
-  const baseDir = settings.general.addProjectBaseDirectory ?? "~/";
+  const baseDir = settings.general.addProjectBaseDirectory ?? "";
   const [rawDir, setRawDir] = useState(baseDir);
   const [probing, setProbing] = useState(false);
   const [probed, setProbed] = useState<RegisteredProject | null>(null);
@@ -152,14 +153,14 @@ function OpenExistingTab() {
   const [submitting, setSubmitting] = useState(false);
 
   const dir = normalizeDir(rawDir, baseDir);
-  const dirValidation = validateDir(rawDir);
+  const dirValidation = validateDir(rawDir || "/");
 
-  const onProbe = useCallback(async () => {
-    if (!dirValidation.valid) return;
+  const probeAt = useCallback(async (path: string) => {
     setProbing(true);
     setProbeError(null);
+    setProbed(null);
     try {
-      const project = await probeProject(dir);
+      const project = await probeProject(path);
       setProbed(project);
     } catch (error) {
       setProbed(null);
@@ -167,7 +168,7 @@ function OpenExistingTab() {
     } finally {
       setProbing(false);
     }
-  }, [dir, dirValidation.valid]);
+  }, []);
 
   const onSubmit = useCallback(async () => {
     if (!probed) return;
@@ -202,18 +203,25 @@ function OpenExistingTab() {
 
   return (
     <div className="space-y-3">
-      <DirInput
+      <DirectoryBrowser
         value={rawDir}
         onChange={(next) => {
           setRawDir(next);
           setProbed(null);
           setProbeError(null);
         }}
-        onBlur={onProbe}
-        onEnter={onProbe}
-        placeholder={baseDir}
-        validation={dirValidation}
+        onSelect={(next) => {
+          setRawDir(next);
+          void probeAt(next);
+        }}
+        baseDir={baseDir || undefined}
       />
+
+      {!dirValidation.valid && dirValidation.reason && (
+        <Banner tone="warn">{dirValidation.reason}</Banner>
+      )}
+
+      {probing && <Banner tone="info">Probing…</Banner>}
 
       {probeError && (
         <Banner tone="error" testId="add-project-probe-error">
@@ -223,14 +231,12 @@ function OpenExistingTab() {
 
       {probed && !probed.hasIdeYml && (
         <Banner tone="warn">
-          No <code>ide.yml</code> in this directory. Switch to{" "}
-          <strong>Initialize</strong> to create one.
+          No <code>ide.yml</code> in this directory. Switch to <strong>Initialize</strong> to create
+          one.
         </Banner>
       )}
 
-      {probed && probed.hasIdeYml && (
-        <ProjectPreview project={probed} />
-      )}
+      {probed && probed.hasIdeYml && <ProjectPreview project={probed} />}
 
       <div className="flex justify-end gap-2 pt-2">
         <Button variant="ghost" onClick={closeAddProjectDialog}>
@@ -256,7 +262,7 @@ function InitializeTab() {
   const settings = useSettings();
   const { projects } = useProjects();
   const { push } = useToasts();
-  const baseDir = settings.general.addProjectBaseDirectory ?? "~/";
+  const baseDir = settings.general.addProjectBaseDirectory ?? "";
   const [rawDir, setRawDir] = useState(baseDir);
   const [templates, setTemplates] = useState<ProjectTemplate[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
@@ -266,7 +272,7 @@ function InitializeTab() {
   const consoleRef = useRef<HTMLPreElement | null>(null);
 
   const dir = normalizeDir(rawDir, baseDir);
-  const dirValidation = validateDir(rawDir);
+  const dirValidation = validateDir(rawDir || "/");
 
   const derivedName = useMemo(() => deriveNameFromDir(dir), [dir]);
   const nameValidation = useMemo(
@@ -346,32 +352,30 @@ function InitializeTab() {
   const submitState = deriveInitTabSubmit({ dir, template: template || null, job });
 
   const consoleText = chunksToConsoleText(
-    job.kind === "running" || job.kind === "succeeded" || job.kind === "failed"
-      ? job.chunks
-      : [],
+    job.kind === "running" || job.kind === "succeeded" || job.kind === "failed" ? job.chunks : [],
   );
 
   return (
     <div className="space-y-3">
-      <DirInput
+      <DirectoryBrowser
         value={rawDir}
         onChange={setRawDir}
-        placeholder={baseDir}
-        validation={dirValidation}
+        onSelect={setRawDir}
+        baseDir={baseDir || undefined}
         disabled={job.kind === "running" || job.kind === "succeeded"}
       />
 
+      {!dirValidation.valid && dirValidation.reason && (
+        <Banner tone="warn">{dirValidation.reason}</Banner>
+      )}
+
       <label className="block">
-        <span className="text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]">
-          Template
-        </span>
+        <span className="text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]">Template</span>
         <select
           data-testid="add-project-template-select"
           value={template}
           onChange={(e) => setTemplate(e.target.value)}
-          disabled={
-            templatesLoading || job.kind === "running" || job.kind === "succeeded"
-          }
+          disabled={templatesLoading || job.kind === "running" || job.kind === "succeeded"}
           className="mt-1 w-full rounded-md border border-[var(--border-weak)] bg-[var(--bg)] px-2 py-1.5 text-[12px] text-[var(--fg)] outline-none focus-visible:focus-ring disabled:opacity-50"
         >
           <option value="">{templatesLoading ? "Loading…" : "Auto-detect"}</option>
@@ -388,13 +392,9 @@ function InitializeTab() {
         )}
       </label>
 
-      {derivedName && !nameValidation.valid && (
-        <Banner tone="warn">{nameValidation.reason}</Banner>
-      )}
+      {derivedName && !nameValidation.valid && <Banner tone="warn">{nameValidation.reason}</Banner>}
 
-      {(job.kind === "running" ||
-        job.kind === "succeeded" ||
-        job.kind === "failed") && (
+      {(job.kind === "running" || job.kind === "succeeded" || job.kind === "failed") && (
         <pre
           ref={consoleRef}
           data-testid="add-project-output"
@@ -404,9 +404,7 @@ function InitializeTab() {
         </pre>
       )}
 
-      {job.kind === "succeeded" && (
-        <SuccessPanel jobId={job.jobId} />
-      )}
+      {job.kind === "succeeded" && <SuccessPanel jobId={job.jobId} />}
 
       {job.kind === "failed" && <Banner tone="error">{job.message}</Banner>}
 
@@ -434,22 +432,37 @@ function InitializeTab() {
 
 // TODO: Wire to server-side `/api/projects/clone` once Agent 1 ships it.
 function CloneTab() {
+  const settings = useSettings();
+  const baseDir = settings.general.addProjectBaseDirectory ?? "";
+  const [rawDir, setRawDir] = useState(baseDir);
   return (
     <div className="space-y-3">
       <Banner tone="info">
-        Cloning straight from Git is coming soon. For now, clone the repo
-        manually and use the <strong>Open existing</strong> tab.
+        Cloning straight from Git is coming soon. For now, clone the repo manually and use the{" "}
+        <strong>Open existing</strong> tab.
       </Banner>
       <label className="block">
-        <span className="text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]">
-          Git URL
-        </span>
+        <span className="text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]">Git URL</span>
         <input
           disabled
           placeholder="git@github.com:owner/repo.git"
           className="mt-1 w-full rounded-md border border-[var(--border-weak)] bg-[var(--bg)] px-2 py-1.5 font-mono text-[11px] text-[var(--fg)] outline-none disabled:opacity-50"
         />
       </label>
+      <div>
+        <span className="block text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]">
+          Target directory
+        </span>
+        <div className="mt-1">
+          <DirectoryBrowser
+            value={rawDir}
+            onChange={setRawDir}
+            onSelect={setRawDir}
+            baseDir={baseDir || undefined}
+            disabled
+          />
+        </div>
+      </div>
       <div className="flex justify-end gap-2 pt-2">
         <Button variant="ghost" onClick={closeAddProjectDialog}>
           Cancel
@@ -463,55 +476,6 @@ function CloneTab() {
 }
 
 // ---------- Shared bits ----------
-
-interface DirInputProps {
-  value: string;
-  onChange: (next: string) => void;
-  onBlur?: () => void;
-  onEnter?: () => void;
-  placeholder?: string;
-  validation: { valid: boolean; reason: string | null };
-  disabled?: boolean;
-}
-
-function DirInput({
-  value,
-  onChange,
-  onBlur,
-  onEnter,
-  placeholder,
-  validation,
-  disabled,
-}: DirInputProps) {
-  return (
-    <label className="block">
-      <span className="text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]">
-        Directory
-      </span>
-      <input
-        data-testid="add-project-dir-input"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={onBlur}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            onEnter?.();
-          }
-        }}
-        placeholder={placeholder}
-        spellCheck={false}
-        disabled={disabled}
-        autoCapitalize="off"
-        autoCorrect="off"
-        className="mt-1 w-full rounded-md border border-[var(--border-weak)] bg-[var(--bg)] px-2 py-1.5 font-mono text-[11px] text-[var(--fg)] outline-none focus-visible:focus-ring disabled:opacity-50"
-      />
-      {!validation.valid && validation.reason && (
-        <span className="mt-1 block text-[11px] text-[var(--red)]">{validation.reason}</span>
-      )}
-    </label>
-  );
-}
 
 interface BannerProps {
   tone: "info" | "warn" | "error";
@@ -540,11 +504,7 @@ function ProjectPreview({ project }: { project: RegisteredProject }) {
   return (
     <div className="rounded-md border border-[var(--border-weak)] bg-[var(--surface)] px-3 py-2 text-[11px] text-[var(--fg)]">
       <div className="flex items-center gap-2">
-        <CheckCircle2
-          aria-hidden="true"
-          size={14}
-          className="text-[var(--green)]"
-        />
+        <CheckCircle2 aria-hidden="true" size={14} className="text-[var(--green)]" />
         <span className="font-medium">{project.name}</span>
       </div>
       <dl className="mt-2 grid grid-cols-[80px_1fr] gap-y-1 text-[var(--dim)]">

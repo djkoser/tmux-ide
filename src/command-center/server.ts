@@ -118,6 +118,12 @@ import {
   InitProjectRequestSchemaZ,
   type ProjectTemplate,
 } from "../schemas/registry.ts";
+import {
+  browseDirectory,
+  InvalidPathError,
+  PathNotFoundError,
+  SandboxViolationError,
+} from "../lib/filesystem-browser.ts";
 import { randomUUID } from "node:crypto";
 import { WebSocketServer } from "ws";
 
@@ -2003,6 +2009,30 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     } catch (err) {
       if (err instanceof ProjectNotFoundError) {
         return c.json({ error: err.message, code: err.code }, 404);
+      }
+      throw err;
+    }
+  });
+
+  app.get("/api/filesystem/browse", (c) => {
+    const rawPath = c.req.query("path");
+    const showHiddenRaw = c.req.query("showHidden");
+    const showHidden = showHiddenRaw === "1" || showHiddenRaw === "true";
+    try {
+      const result = browseDirectory({
+        path: rawPath ?? null,
+        showHidden,
+      });
+      return c.json(result);
+    } catch (err) {
+      if (err instanceof SandboxViolationError) {
+        return c.json({ error: "outside-sandbox", message: err.message }, 403);
+      }
+      if (err instanceof PathNotFoundError) {
+        return c.json({ error: "not-found", message: err.message }, 404);
+      }
+      if (err instanceof InvalidPathError) {
+        return c.json({ error: "invalid-path", message: err.message }, 400);
       }
       throw err;
     }

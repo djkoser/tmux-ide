@@ -789,3 +789,46 @@ export async function fetchProjectTemplates(): Promise<ProjectTemplate[]> {
   const data = (await res.json()) as { templates?: ProjectTemplate[] };
   return Array.isArray(data.templates) ? data.templates : [];
 }
+
+// ---------------------------------------------------------------------------
+// Filesystem browser — server-driven directory picker
+// ---------------------------------------------------------------------------
+
+export interface FilesystemEntry {
+  name: string;
+  fullPath: string;
+  isDir: boolean;
+  isSymlink: boolean;
+}
+
+export interface FilesystemBrowseResult {
+  path: string;
+  parentPath: string | null;
+  entries: FilesystemEntry[];
+}
+
+/**
+ * Browse a directory on the server. Pass `path` empty/undefined to list the
+ * user's home (the daemon decides — never trust the client to know HOME).
+ * Throws `ProjectApiError` on 4xx/5xx so callers can surface the message.
+ */
+export async function fetchFilesystem(
+  path?: string,
+  showHidden?: boolean,
+): Promise<FilesystemBrowseResult> {
+  const params = new URLSearchParams();
+  if (path && path.length > 0) params.set("path", path);
+  if (showHidden) params.set("showHidden", "true");
+  const qs = params.toString();
+  const res = await fetch(
+    `${API_BASE}/api/filesystem/browse${qs ? `?${qs}` : ""}`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) {
+    throw new ProjectApiError(
+      await readErrorMessage(res, `Failed to browse (HTTP ${res.status})`),
+      res.status,
+    );
+  }
+  return (await res.json()) as FilesystemBrowseResult;
+}
