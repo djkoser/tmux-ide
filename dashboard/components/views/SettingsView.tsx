@@ -132,10 +132,10 @@ export function SettingsView() {
 
   return (
     <Panel testId="settings-view">
-      <NavigatorPortal>
-        <SettingsNavigator active={active} onChange={setActive} />
-      </NavigatorPortal>
       <div className="flex min-h-0 flex-1">
+        <aside className="hidden w-[200px] shrink-0 border-r border-[var(--border-weak)] bg-[var(--bg-weak)] sm:block">
+          <SettingsNavigator active={active} onChange={setActive} />
+        </aside>
         <main className="min-w-0 flex-1 space-y-5 overflow-auto p-4">
           {active === "general" && (
             <section data-testid="settings-section-general" className="max-w-3xl">
