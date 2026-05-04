@@ -90,16 +90,17 @@ interface NavigatorPortalProps {
  */
 export function NavigatorPortal({ children }: NavigatorPortalProps) {
   const id = useId();
-  // Register synchronously on each render so that `children` updates flow
-  // through to the consumer immediately. The cleanup runs only when the
-  // component unmounts (not on each render) because `id` is stable.
-  register(id, children);
-
+  // Register inside an effect — never during render. Mutating the store and
+  // firing listeners during render schedules updates in NavigatorSlot
+  // mid-render, which React (correctly) flags as a setState-in-render bug.
+  // The effect runs after commit so updates flow through one frame later;
+  // that's fine for portal content.
   useEffect(() => {
+    register(id, children);
     return () => {
       unregister(id);
     };
-  }, [id]);
+  }, [id, children]);
 
   return null;
 }
