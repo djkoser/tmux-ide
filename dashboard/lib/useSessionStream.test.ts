@@ -1,49 +1,50 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useSessionStream, type SessionSnapshot } from "./useSessionStream";
 
-class MockEventSource {
-  static instances: MockEventSource[] = [];
+type MockHandler = ((event: { data: string }) => void) | (() => void) | null;
+
+class MockWebSocket {
+  static instances: MockWebSocket[] = [];
+  static OPEN = 1;
+  static CLOSED = 3;
+
   readonly url: string;
-  onopen: (() => void) | null = null;
-  onerror: (() => void) | null = null;
-  closed = false;
-  private listeners = new Map<string, Set<(event: MessageEvent<string>) => void>>();
+  readyState: number = 0;
+  onopen: MockHandler = null;
+  onmessage: MockHandler = null;
+  onerror: MockHandler = null;
+  onclose: MockHandler = null;
+  sent: string[] = [];
 
   constructor(url: string) {
     this.url = url;
-    MockEventSource.instances.push(this);
+    MockWebSocket.instances.push(this);
   }
-
-  addEventListener(type: string, listener: EventListener): void {
-    const listeners = this.listeners.get(type) ?? new Set();
-    listeners.add(listener as (event: MessageEvent<string>) => void);
-    this.listeners.set(type, listeners);
+  send(data: string): void {
+    this.sent.push(data);
   }
-
-  removeEventListener(type: string, listener: EventListener): void {
-    this.listeners.get(type)?.delete(listener as (event: MessageEvent<string>) => void);
-  }
-
   close(): void {
-    this.closed = true;
+    if (this.readyState === MockWebSocket.CLOSED) return;
+    this.readyState = MockWebSocket.CLOSED;
+    (this.onclose as (() => void) | null)?.();
   }
-
   open(): void {
-    this.onopen?.();
+    this.readyState = MockWebSocket.OPEN;
+    (this.onopen as (() => void) | null)?.();
   }
-
-  error(): void {
-    this.onerror?.();
+  message(payload: unknown): void {
+    (this.onmessage as ((event: { data: string }) => void) | null)?.({
+      data: JSON.stringify(payload),
+    });
   }
-
-  emit(type: string, payload: unknown): void {
-    const event = { data: JSON.stringify(payload) } as MessageEvent<string>;
-    for (const listener of this.listeners.get(type) ?? []) listener(event);
+  errorAndClose(): void {
+    (this.onerror as (() => void) | null)?.();
+    this.readyState = MockWebSocket.CLOSED;
+    (this.onclose as (() => void) | null)?.();
   }
 }
 
-function snapshot(overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
+function snapshotData(overrides: Record<string, unknown> = {}) {
   return {
     project: null,
     mission: null,
@@ -57,9 +58,40 @@ function snapshot(overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
   };
 }
 
-beforeEach(() => {
-  MockEventSource.instances = [];
-  vi.stubGlobal("EventSource", MockEventSource);
+function buildTask(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "001",
+    title: "Stream task",
+    description: "",
+    goal: null,
+    status: "todo",
+    assignee: null,
+    priority: 1,
+    created: "2026-01-01T00:00:00Z",
+    updated: "2026-01-01T00:00:00Z",
+    tags: [],
+    proof: null,
+    retryCount: 0,
+    maxRetries: 5,
+    lastError: null,
+    nextRetryAt: null,
+    depends_on: [],
+    milestone: null,
+    specialty: null,
+    fulfills: [],
+    discoveredIssues: [],
+    salientSummary: null,
+    ...overrides,
+  };
+}
+
+beforeEach(async () => {
+  MockWebSocket.instances = [];
+  vi.stubGlobal("WebSocket", MockWebSocket);
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    value: { hostname: "localhost", protocol: "http:" },
+  });
   vi.stubGlobal(
     "fetch",
     vi.fn((input: RequestInfo | URL) => {
@@ -80,6 +112,8 @@ beforeEach(() => {
       );
     }),
   );
+  // Reset the singleton wsBus between tests.
+  vi.resetModules();
 });
 
 afterEach(() => {
@@ -87,55 +121,36 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("useSessionStream", () => {
-  it("opens the project stream and applies snapshot events", () => {
-    const { result, unmount } = renderHook(() => useSessionStream("alpha"));
-    const source = MockEventSource.instances[0]!;
+async function loadHook() {
+  const mod = await import("./useSessionStream");
+  return mod.useSessionStream;
+}
 
-    expect(source.url).toContain("/api/project/alpha/stream");
+describe("useSessionStream", () => {
+  it("opens the WS bus and applies snapshot frames", async () => {
+    const useSessionStream = await loadHook();
+    const { result, unmount } = renderHook(() => useSessionStream("alpha"));
+
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    const sock = MockWebSocket.instances[0]!;
+    expect(sock.url).toContain("/ws/events");
 
     act(() => {
-      source.open();
-      source.emit(
-        "snapshot",
-        snapshot({
-          tasks: [
-            {
-              id: "001",
-              title: "Stream task",
-              description: "",
-              goal: null,
-              status: "todo",
-              assignee: null,
-              priority: 1,
-              created: "2026-01-01T00:00:00Z",
-              updated: "2026-01-01T00:00:00Z",
-              tags: [],
-              proof: null,
-              retryCount: 0,
-              maxRetries: 5,
-              lastError: null,
-              nextRetryAt: null,
-              depends_on: [],
-              milestone: null,
-              specialty: null,
-              fulfills: [],
-              discoveredIssues: [],
-              salientSummary: null,
-            },
-          ],
-        }),
-      );
+      sock.open();
+      sock.message({
+        type: "snapshot",
+        sessionName: "alpha",
+        data: snapshotData({ tasks: [buildTask({ title: "Stream task" })] }),
+      });
     });
 
     expect(result.current.connected).toBe(true);
     expect(result.current.snapshot?.tasks[0]?.title).toBe("Stream task");
 
     unmount();
-    expect(source.closed).toBe(true);
   });
 
-  it("refetches the snapshot after granular change events", async () => {
+  it("refetches the snapshot after granular change frames", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("/mission")) return Promise.resolve(new Response(null, { status: 404 }));
@@ -149,68 +164,94 @@ describe("useSessionStream", () => {
           mission: null,
           goals: [],
           agents: [],
-          tasks: [
-            {
-              id: "001",
-              title: "Refetched task",
-              description: "",
-              goal: null,
-              status: "done",
-              assignee: null,
-              priority: 1,
-              created: "2026-01-01T00:00:00Z",
-              updated: "2026-01-01T00:00:00Z",
-              tags: [],
-              proof: null,
-              retryCount: 0,
-              maxRetries: 5,
-              lastError: null,
-              nextRetryAt: null,
-              depends_on: [],
-              milestone: null,
-              specialty: null,
-              fulfills: [],
-              discoveredIssues: [],
-              salientSummary: null,
-            },
-          ],
+          tasks: [buildTask({ title: "Refetched task", status: "done" })],
         }),
       );
     });
     vi.stubGlobal("fetch", fetchMock);
 
+    const useSessionStream = await loadHook();
     const { result } = renderHook(() => useSessionStream("alpha"));
-    const source = MockEventSource.instances[0]!;
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    const sock = MockWebSocket.instances[0]!;
 
     act(() => {
-      source.emit("snapshot", snapshot());
-      source.emit("task.changed", { id: "001", op: "update" });
+      sock.open();
+      sock.message({ type: "snapshot", sessionName: "alpha", data: snapshotData() });
+      sock.message({ type: "task.changed", sessionName: "alpha" });
     });
 
     await waitFor(() => expect(result.current.snapshot?.tasks[0]?.title).toBe("Refetched task"));
   });
 
-  it("reconnects with backoff after stream errors", () => {
-    vi.useFakeTimers();
+  it("appends frames from event.appended without duplicating", async () => {
+    const useSessionStream = await loadHook();
     const { result } = renderHook(() => useSessionStream("alpha"));
-    const source = MockEventSource.instances[0]!;
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    const sock = MockWebSocket.instances[0]!;
 
     act(() => {
-      source.open();
+      sock.open();
+      sock.message({ type: "snapshot", sessionName: "alpha", data: snapshotData() });
     });
-    expect(result.current.connected).toBe(true);
+
+    const event = {
+      timestamp: "2026-05-03T10:00:00Z",
+      type: "completion",
+      taskId: "001",
+      message: "Task done",
+      relative: "now",
+    };
 
     act(() => {
-      source.error();
+      sock.message({ type: "event.appended", sessionName: "alpha", event });
+      sock.message({ type: "event.appended", sessionName: "alpha", event });
     });
-    expect(result.current.connected).toBe(false);
-    expect(source.closed).toBe(true);
+
+    expect(result.current.snapshot?.events).toHaveLength(1);
+    expect(result.current.snapshot?.events[0]?.message).toBe("Task done");
+  });
+
+  it("ignores frames for other sessions", async () => {
+    const useSessionStream = await loadHook();
+    const { result } = renderHook(() => useSessionStream("alpha"));
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    const sock = MockWebSocket.instances[0]!;
 
     act(() => {
-      vi.advanceTimersByTime(1000);
+      sock.open();
+      sock.message({ type: "snapshot", sessionName: "alpha", data: snapshotData() });
+      sock.message({
+        type: "snapshot",
+        sessionName: "beta",
+        data: snapshotData({ tasks: [buildTask({ title: "Should not leak" })] }),
+      });
     });
 
-    expect(MockEventSource.instances).toHaveLength(2);
-    expect(MockEventSource.instances[1]?.url).toContain("/api/project/alpha/stream");
+    // Alpha got an empty snapshot; beta's snapshot must not leak in.
+    expect(result.current.snapshot?.tasks).toEqual([]);
+  });
+
+  it("reconnects the underlying WS after a transport error", async () => {
+    vi.useFakeTimers();
+    const useSessionStream = await loadHook();
+    renderHook(() => useSessionStream("alpha"));
+    await vi.waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    const first = MockWebSocket.instances[0]!;
+
+    act(() => {
+      first.open();
+    });
+
+    act(() => {
+      first.errorAndClose();
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(1500);
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(2);
+    expect(MockWebSocket.instances[1]?.url).toContain("/ws/events");
   });
 });

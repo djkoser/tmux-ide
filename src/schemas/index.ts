@@ -51,3 +51,11 @@ export type {
   SessionOverview,
   ProjectDetail,
 } from "./domain.ts";
+
+export {
+  ClientFrameSchemaZ,
+  ServerFrameSchemaZ,
+  SessionSnapshotSchemaZ,
+} from "./ws-events.ts";
+
+export type { ClientFrame, ServerFrame, SessionSnapshot } from "./ws-events.ts";

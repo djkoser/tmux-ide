@@ -96,6 +96,8 @@ import { RegistrationPayloadSchema } from "../lib/hq/types.ts";
 import { dispatchResearch, loadResearchState } from "../lib/research.ts";
 import { serveDashboard } from "./static.ts";
 import { getOrchestratorHealth, getPaneContentHashMetrics } from "../lib/orchestrator.ts";
+import { handleWsEventsConnection } from "./ws-events.ts";
+import { WebSocketServer } from "ws";
 
 export interface CreateAppOptions {
   authService?: AuthService;
@@ -1937,4 +1939,38 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   app.use("*", serveDashboard());
 
   return app;
+}
+
+/**
+ * Attach the unified `/ws/events` push channel to a Node HTTP server. The
+ * daemon calls this once after binding the command-center port. Existing
+ * SSE endpoints (`/api/events`, `/api/project/<name>/stream`) continue to
+ * work alongside this — they will be retired in a follow-up slice.
+ */
+export function attachWsEvents(server: import("node:http").Server): {
+  close: () => void;
+} {
+  const wss = new WebSocketServer({ noServer: true });
+
+  const upgradeListener = (
+    req: import("node:http").IncomingMessage,
+    socket: import("node:net").Socket,
+    head: Buffer,
+  ): void => {
+    const url = req.url ?? "/";
+    const pathname = url.split("?")[0];
+    if (pathname !== "/ws/events") return;
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      handleWsEventsConnection(ws);
+    });
+  };
+
+  server.on("upgrade", upgradeListener);
+
+  return {
+    close: () => {
+      server.off("upgrade", upgradeListener);
+      wss.close();
+    },
+  };
 }

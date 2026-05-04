@@ -262,7 +262,7 @@ async function startOrchestrator(): Promise<void> {
 
 async function startCommandCenter(): Promise<void> {
   try {
-    const { createApp } = await import("../command-center/server.ts");
+    const { createApp, attachWsEvents } = await import("../command-center/server.ts");
     const { getRequestListener } = await import(_require.resolve("@hono/node-server"));
     const { AuthService } = await import("./auth/auth-service.ts");
     const { AuthConfigSchema } = await import("./auth/types.ts");
@@ -350,6 +350,13 @@ async function startCommandCenter(): Promise<void> {
     const commandCenterStarted = await bindRequestedPort(requestedPort);
     if (commandCenterStarted) {
       httpServer = server;
+      // Wire the unified push channel for the dashboard. Existing SSE
+      // routes continue to work; this is additive.
+      try {
+        attachWsEvents(server);
+      } catch (err) {
+        console.error("[daemon] /ws/events attach failed:", err);
+      }
     } else {
       // Port is in use — check if it's another tmux-ide command center we can share
       try {

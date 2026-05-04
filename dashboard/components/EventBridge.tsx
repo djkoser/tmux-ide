@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
-import { API_BASE } from "@/lib/api";
 import { playSound } from "@/lib/sounds";
 import { getSettingsSnapshot } from "@/lib/useSettings";
 import { useNotifications } from "@/lib/useNotifications";
 import { useToasts, type ToastInput } from "@/lib/useToasts";
+import { subscribeGlobal, type ServerFrame } from "@/lib/wsBus";
 
 interface EventPayload {
   session?: string;
@@ -94,24 +94,25 @@ export function EventBridge() {
   const { push: pushNotification } = useNotifications();
 
   useEffect(() => {
-    if (typeof EventSource === "undefined") return;
-
     const mountedAt = Date.now();
     const seen = new Set<string>();
-    const source = new EventSource(`${API_BASE}/api/events`);
 
-    function handleMessage(event: MessageEvent<string>) {
-      let payload: EventPayload;
-      try {
-        payload = JSON.parse(event.data) as EventPayload;
-      } catch {
-        return;
-      }
+    function handleFrame(frame: ServerFrame) {
+      if (frame.type !== "event.appended") return;
+      const event = frame.event as EventPayload;
+      const payload: EventPayload = {
+        // Spread server-provided fields first, then pin the canonical fields
+        // so the wire-level frame's `sessionName` always wins as `session`
+        // and the typed event field wins as `type`.
+        ...event,
+        session: frame.sessionName,
+        type: event.type,
+      };
 
       const eventTime = payload.timestamp ? new Date(payload.timestamp).getTime() : mountedAt;
       if (Number.isFinite(eventTime) && eventTime < mountedAt) return;
 
-      const stableId = `event:${hashStable(`${payload.type ?? event.type}:${event.lastEventId || event.data}`)}`;
+      const stableId = `event:${hashStable(`${payload.type ?? "event"}:${payload.timestamp ?? ""}:${payload.taskId ?? ""}:${payload.message ?? ""}`)}`;
       if (seen.has(stableId)) return;
       seen.add(stableId);
 
@@ -138,11 +139,7 @@ export function EventBridge() {
       }
     }
 
-    source.addEventListener("orchestrator_event", handleMessage as EventListener);
-    return () => {
-      source.removeEventListener("orchestrator_event", handleMessage as EventListener);
-      source.close();
-    };
+    return subscribeGlobal(handleFrame);
   }, [pushNotification, pushToast]);
 
   return null;

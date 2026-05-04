@@ -2,29 +2,16 @@
 
 import { useEffect, useState } from "react";
 import {
-  API_BASE,
   fetchEvents,
   fetchMilestones,
   fetchMission,
   fetchProject,
   fetchSkills,
   type EventData,
-  type MilestoneData,
-  type MissionDetail,
-  type SkillData,
 } from "@/lib/api";
-import type { AgentDetail, Goal, ProjectDetail, Task } from "@/lib/types";
+import { subscribeSession, type ServerFrame, type SessionSnapshot } from "@/lib/wsBus";
 
-export interface SessionSnapshot {
-  project: ProjectDetail | null;
-  mission: MissionDetail | null;
-  milestones: MilestoneData[];
-  goals: Goal[];
-  tasks: Task[];
-  skills: SkillData[];
-  agents: AgentDetail[];
-  events: EventData[];
-}
+export type { SessionSnapshot } from "@/lib/wsBus";
 
 interface StreamState {
   snapshot: SessionSnapshot | null;
@@ -73,14 +60,6 @@ function normalizeSnapshot(payload: Partial<SessionSnapshot>): SessionSnapshot {
   };
 }
 
-function parseEvent<T>(event: MessageEvent<string>): T | null {
-  try {
-    return JSON.parse(event.data) as T;
-  } catch {
-    return null;
-  }
-}
-
 function relativeEvent(event: EventData): EventData {
   if (event.relative) return event;
   const ms = Date.now() - new Date(event.timestamp).getTime();
@@ -95,22 +74,19 @@ function relativeEvent(event: EventData): EventData {
 }
 
 /**
- * Per-session shared subscription.
+ * Per-session shared subscription on top of the WebSocket bus.
  *
- * One EventSource per session, regardless of how many components in the tree
- * call `useSessionStream(name)`. Each call adds a subscriber to the shared
- * channel and listens to its broadcast state. The last unsubscribe closes
- * the underlying connection. This avoids exhausting the browser's per-origin
- * HTTP/1.1 connection limit (6 streams) when a single project page mounts
- * AppSidebar + KanbanView + MissionView + StatusBar + ActivityView, all
- * each previously opening their own SSE.
+ * One bus subscription per session, regardless of how many components in the
+ * tree call `useSessionStream(name)`. Each call adds a subscriber to the
+ * shared channel and listens to its broadcast state. The last unsubscribe
+ * releases the bus subscription. The bus itself runs over a single shared
+ * WebSocket so this avoids the per-origin HTTP/1.1 connection limit (6
+ * streams) that previously froze the dashboard when AppSidebar + KanbanView +
+ * MissionView + StatusBar + ActivityView each opened their own SSE.
  */
 interface Channel {
   state: StreamState;
-  source: EventSource | null;
-  reconnect: ReturnType<typeof setTimeout> | null;
-  backoff: number;
-  closed: boolean;
+  release: (() => void) | null;
   subscribers: Set<(s: StreamState) => void>;
   refetching: boolean;
 }
@@ -131,117 +107,82 @@ async function refreshChannelSnapshot(channel: Channel, sessionName: string): Pr
     const snapshot = await fetchSnapshot(sessionName);
     setChannelState(channel, (current) => ({ ...current, snapshot, lastEventAt: Date.now() }));
   } catch {
-    // Keep current snapshot; reconnect path retries independently.
+    // Keep current snapshot; the bus retries the WS independently.
   } finally {
     channel.refetching = false;
   }
 }
 
-function connectChannel(channel: Channel, sessionName: string): void {
-  if (channel.closed) return;
-  if (typeof EventSource === "undefined") return;
-  const source = new EventSource(
-    `${API_BASE}/api/project/${encodeURIComponent(sessionName)}/stream`,
-  );
-  channel.source = source;
-
-  source.onopen = () => {
-    channel.backoff = 1000;
-    setChannelState(channel, (current) => ({
-      ...current,
-      connected: true,
-      lastEventAt: Date.now(),
-    }));
-  };
-
-  source.addEventListener("snapshot", (event) => {
-    const payload = parseEvent<Partial<SessionSnapshot>>(event as MessageEvent<string>);
-    if (!payload) return;
-    setChannelState(channel, {
-      snapshot: normalizeSnapshot(payload),
-      connected: true,
-      lastEventAt: Date.now(),
-    });
-  });
-
-  for (const eventName of [
-    "task.changed",
-    "mission.changed",
-    "goal.changed",
-    "milestone.changed",
-    "agent.changed",
-  ]) {
-    source.addEventListener(eventName, () => void refreshChannelSnapshot(channel, sessionName));
-  }
-
-  source.addEventListener("event.appended", (event) => {
-    const payload = parseEvent<EventData>(event as MessageEvent<string>);
-    if (!payload) return;
-    setChannelState(channel, (current) => {
-      const snapshot = current.snapshot;
-      if (!snapshot) return { ...current, lastEventAt: Date.now() };
-      const nextEvent = relativeEvent(payload);
-      const seen = new Set(
-        snapshot.events.map((item) => `${item.timestamp}:${item.type}:${item.taskId ?? ""}`),
-      );
-      const key = `${nextEvent.timestamp}:${nextEvent.type}:${nextEvent.taskId ?? ""}`;
-      if (seen.has(key)) return { ...current, lastEventAt: Date.now() };
-      return {
-        ...current,
+function handleFrame(channel: Channel, sessionName: string, frame: ServerFrame): void {
+  switch (frame.type) {
+    case "snapshot": {
+      // Mark as connected on first frame received. The bus has no per-session
+      // open/close semantics — receiving a frame proves the channel is live.
+      setChannelState(channel, {
+        snapshot: normalizeSnapshot(frame.data),
+        connected: true,
         lastEventAt: Date.now(),
-        snapshot: {
-          ...snapshot,
-          events: [nextEvent, ...snapshot.events].slice(0, 200),
-        },
-      };
-    });
-  });
-
-  source.addEventListener("ping", () => {
-    setChannelState(channel, (current) => ({
-      ...current,
-      connected: true,
-      lastEventAt: Date.now(),
-    }));
-  });
-
-  source.onerror = () => {
-    source.close();
-    if (channel.source !== source) return;
-    channel.source = null;
-    setChannelState(channel, (current) => ({ ...current, connected: false }));
-    if (channel.closed) return;
-    const delay = channel.backoff;
-    channel.backoff = Math.min(delay * 2, 30_000);
-    channel.reconnect = setTimeout(() => connectChannel(channel, sessionName), delay);
-  };
-}
-
-function teardownChannel(channel: Channel): void {
-  channel.closed = true;
-  if (channel.reconnect) {
-    clearTimeout(channel.reconnect);
-    channel.reconnect = null;
+      });
+      return;
+    }
+    case "task.changed":
+    case "mission.changed":
+    case "goal.changed":
+    case "milestone.changed":
+    case "agent.changed": {
+      setChannelState(channel, (current) => ({ ...current, connected: true, lastEventAt: Date.now() }));
+      void refreshChannelSnapshot(channel, sessionName);
+      return;
+    }
+    case "event.appended": {
+      setChannelState(channel, (current) => {
+        const snapshot = current.snapshot;
+        if (!snapshot) return { ...current, connected: true, lastEventAt: Date.now() };
+        const nextEvent = relativeEvent(frame.event);
+        const seen = new Set(
+          snapshot.events.map((item) => `${item.timestamp}:${item.type}:${item.taskId ?? ""}`),
+        );
+        const key = `${nextEvent.timestamp}:${nextEvent.type}:${nextEvent.taskId ?? ""}`;
+        if (seen.has(key)) {
+          return { ...current, connected: true, lastEventAt: Date.now() };
+        }
+        return {
+          ...current,
+          connected: true,
+          lastEventAt: Date.now(),
+          snapshot: {
+            ...snapshot,
+            events: [nextEvent, ...snapshot.events].slice(0, 200),
+          },
+        };
+      });
+      return;
+    }
+    default:
+      // Other frame types ("hello", "sessions.changed", "pong") are not
+      // session-scoped and never arrive through `subscribeSession`.
+      return;
   }
-  channel.source?.close();
-  channel.source = null;
 }
 
 function acquireChannel(sessionName: string, listener: (s: StreamState) => void): () => void {
   let channel = channels.get(sessionName);
   if (!channel) {
-    channel = {
+    const created: Channel = {
       state: INITIAL_STATE,
-      source: null,
-      reconnect: null,
-      backoff: 1000,
-      closed: false,
+      release: null,
       subscribers: new Set(),
       refetching: false,
     };
-    channels.set(sessionName, channel);
-    void refreshChannelSnapshot(channel, sessionName);
-    connectChannel(channel, sessionName);
+    channels.set(sessionName, created);
+    // Kick off an initial REST fetch so consumers get data even before the
+    // server pushes a snapshot frame. The bus will deliver pushes as they
+    // arrive and refresh the snapshot on `*.changed` frames.
+    void refreshChannelSnapshot(created, sessionName);
+    created.release = subscribeSession(sessionName, (frame) =>
+      handleFrame(created, sessionName, frame),
+    );
+    channel = created;
   }
   channel.subscribers.add(listener);
   // Push current state immediately so late subscribers don't render INITIAL.
@@ -251,7 +192,8 @@ function acquireChannel(sessionName: string, listener: (s: StreamState) => void)
     if (!ch) return;
     ch.subscribers.delete(listener);
     if (ch.subscribers.size === 0) {
-      teardownChannel(ch);
+      ch.release?.();
+      ch.release = null;
       channels.delete(sessionName);
     }
   };

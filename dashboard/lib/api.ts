@@ -9,8 +9,16 @@ function resolveApiBase(): string {
   // Default: command-center is exposed on port 6060 of whatever hostname
   // the dashboard was loaded from. Works for localhost, Tailscale MagicDNS,
   // direct tailnet IP, etc. — no per-host env config required.
+  //
+  // BUT: when the dashboard hostname is "localhost", browsers (Chrome on
+  // macOS especially) try IPv6 ([::1]) first. If the daemon binds IPv4-
+  // only (`*:6060` = 0.0.0.0), every cross-origin request hangs on the
+  // IPv6 attempt before falling back. Pin to 127.0.0.1 explicitly when
+  // the page is on localhost to skip the IPv6 lookup entirely.
   const port = process.env.NEXT_PUBLIC_API_PORT ?? "6060";
-  return `${window.location.protocol}//${window.location.hostname}:${port}`;
+  const host =
+    window.location.hostname === "localhost" ? "127.0.0.1" : window.location.hostname;
+  return `${window.location.protocol}//${host}:${port}`;
 }
 
 export const API_BASE = resolveApiBase();
