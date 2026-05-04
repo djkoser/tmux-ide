@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, FolderPlus, GitBranch, Sparkles } from "lucide-react";
+import { ArrowLeft, CheckCircle2, FolderPlus, GitBranch, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   fetchProjectTemplates,
@@ -9,7 +9,6 @@ import {
   onboardProject,
   registerProject,
   type OnboardProjectInput,
-  type ProjectInspect,
   type ProjectTemplate,
   type RegisteredProject,
 } from "@/lib/api";
@@ -17,7 +16,6 @@ import {
   closeAddProjectDialog,
   setAddProjectDialogOpen,
   useAddProjectDialog,
-  type AddProjectTab,
 } from "@/lib/addProjectDialogStore";
 import { setNavigation } from "@/lib/navigation";
 import { useProjects, refreshProjects } from "@/lib/projectStore";
@@ -33,10 +31,16 @@ import {
   DialogTitle,
 } from "@/components/ui";
 import {
+  activeFooterKind,
   chunksToConsoleText,
+  commitDir,
+  defaultFlowState,
   deriveInitTabSubmit,
   deriveNameFromDir,
   deriveOpenTabSubmit,
+  gotoNextAfterInspect,
+  gotoPick,
+  gotoTab,
   initJobReducer,
   isInitDoneFrame,
   isInitErrorFrame,
@@ -44,6 +48,8 @@ import {
   parseInitOutputFrame,
   validateDir,
   validateName,
+  type AddProjectFlowState,
+  type AddProjectTab,
   type InitJobState,
 } from "./AddProjectDialog.logic";
 import { DirectoryBrowser } from "./DirectoryBrowser";
@@ -56,63 +62,106 @@ import { OnboardingWizard } from "./OnboardingWizard";
  *   - "init"  — pick a directory + template, server runs `tmux-ide init`.
  *   - "clone" — coming soon (server-side support gated by Agent 1).
  *
- * Rendering only — all validators, the init job state machine, and the
- * frame parsers live in `AddProjectDialog.logic.ts`. The store / WS / fetch
- * wiring is in this file because that's the only React concern.
+ * Each tab is a panel stack — `pick` first, then `confirm`/`onboard`/`init`
+ * after the user commits a directory. Only one panel is visible at a time
+ * so the dialog never overflows the viewport. The OnboardingWizard owns
+ * its own footer when active; otherwise the dialog renders its own.
+ *
+ * Rendering only — validators, the init job state machine, frame parsers,
+ * and the panel-step state machine all live in `AddProjectDialog.logic.ts`.
  */
 export function AddProjectDialog() {
   const { open, initialTab } = useAddProjectDialog();
-  const [tab, setTab] = useState<AddProjectTab>(initialTab);
+  const [flow, setFlow] = useState<AddProjectFlowState>(() => defaultFlowState(initialTab));
 
-  // Reset internal tab when the singleton open transitions false -> true.
+  // Reset when the singleton open transitions false -> true.
   useEffect(() => {
-    if (open) setTab(initialTab);
+    if (open) setFlow(defaultFlowState(initialTab));
   }, [open, initialTab]);
+
+  const onTabChange = useCallback(
+    (tab: AddProjectTab) => setFlow((s) => gotoTab(s, tab)),
+    [],
+  );
 
   return (
     <Dialog open={open} onOpenChange={setAddProjectDialogOpen}>
       <DialogContent
         data-testid="add-project-dialog"
-        className="w-[min(640px,calc(100vw-32px))] p-5"
+        className="flex max-h-[min(720px,calc(100vh-80px))] w-[min(640px,calc(100vw-32px))] flex-col p-0"
       >
-        <DialogHeader>
+        <DialogHeader className="shrink-0 border-b border-[var(--border-weak)] px-4 pt-4 pb-3">
           <DialogTitle>Add a project</DialogTitle>
           <DialogDescription>
             Open an existing tmux-ide project or initialize a new one in a directory.
           </DialogDescription>
+          {flow.step !== "pick" && flow.selectedDir && (
+            <Breadcrumb dir={flow.selectedDir} onChange={() => setFlow(gotoPick)} />
+          )}
         </DialogHeader>
 
-        <div className="mt-4 flex border-b border-[var(--border-weak)]">
+        <div className="flex shrink-0 border-b border-[var(--border-weak)] px-4">
           <TabButton
-            active={tab === "open"}
-            onClick={() => setTab("open")}
+            active={flow.tab === "open"}
+            onClick={() => onTabChange("open")}
             icon={<FolderPlus aria-hidden="true" size={13} />}
             label="Open existing"
             testId="add-project-tab-open"
           />
           <TabButton
-            active={tab === "init"}
-            onClick={() => setTab("init")}
+            active={flow.tab === "init"}
+            onClick={() => onTabChange("init")}
             icon={<Sparkles aria-hidden="true" size={13} />}
             label="Initialize"
             testId="add-project-tab-init"
           />
           <TabButton
-            active={tab === "clone"}
-            onClick={() => setTab("clone")}
+            active={flow.tab === "clone"}
+            onClick={() => onTabChange("clone")}
             icon={<GitBranch aria-hidden="true" size={13} />}
             label="Clone from Git"
             testId="add-project-tab-clone"
           />
         </div>
 
-        <div className="mt-4">
-          {tab === "open" && <OpenExistingTab />}
-          {tab === "init" && <InitializeTab />}
-          {tab === "clone" && <CloneTab />}
+        <div
+          data-testid="add-project-body"
+          data-footer-kind={activeFooterKind(flow)}
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-3"
+        >
+          {flow.tab === "open" && <OpenExistingTab flow={flow} setFlow={setFlow} />}
+          {flow.tab === "init" && <InitializeTab flow={flow} setFlow={setFlow} />}
+          {flow.tab === "clone" && <CloneTab />}
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface BreadcrumbProps {
+  dir: string;
+  onChange: () => void;
+}
+
+function Breadcrumb({ dir, onChange }: BreadcrumbProps) {
+  return (
+    <div
+      data-testid="add-project-breadcrumb"
+      className="mt-2 flex items-center gap-2 text-[11px] text-[var(--dim)]"
+    >
+      <span className="truncate font-mono text-[var(--fg)]" title={dir}>
+        {dir}
+      </span>
+      <button
+        type="button"
+        data-testid="add-project-breadcrumb-change"
+        onClick={onChange}
+        className="flex shrink-0 items-center gap-1 rounded border border-[var(--border-weak)] px-1.5 py-0.5 text-[10px] text-[var(--fg)] hover:bg-[var(--surface)] focus-visible:focus-ring"
+      >
+        <ArrowLeft aria-hidden="true" size={10} />
+        Change
+      </button>
+    </div>
   );
 }
 
@@ -145,34 +194,43 @@ function TabButton({ active, onClick, icon, label, testId }: TabButtonProps) {
 
 // ---------- Open existing ----------
 
-function OpenExistingTab() {
+interface TabPanelProps {
+  flow: AddProjectFlowState;
+  setFlow: React.Dispatch<React.SetStateAction<AddProjectFlowState>>;
+}
+
+function OpenExistingTab({ flow, setFlow }: TabPanelProps) {
   const settings = useSettings();
   const { projects } = useProjects();
   const { push } = useToasts();
   const baseDir = settings.general.addProjectBaseDirectory ?? "";
-  const [rawDir, setRawDir] = useState(baseDir);
+
+  const initialDir = flow.selectedDir ?? baseDir;
+  const [rawDir, setRawDir] = useState(initialDir);
   const [probing, setProbing] = useState(false);
-  const [inspect, setInspect] = useState<ProjectInspect | null>(null);
   const [probeError, setProbeError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const dir = normalizeDir(rawDir, baseDir);
   const dirValidation = validateDir(rawDir || "/");
 
-  const probeAt = useCallback(async (path: string) => {
-    setProbing(true);
-    setProbeError(null);
-    setInspect(null);
-    try {
-      const project = await inspectDirectory(path);
-      setInspect(project);
-    } catch (error) {
-      setInspect(null);
-      setProbeError(error instanceof Error ? error.message : "Inspect failed");
-    } finally {
-      setProbing(false);
-    }
-  }, []);
+  const inspect = flow.inspect;
+
+  const probeAt = useCallback(
+    async (path: string) => {
+      setProbing(true);
+      setProbeError(null);
+      try {
+        const result = await inspectDirectory(path);
+        setFlow((s) => gotoNextAfterInspect({ ...s, selectedDir: path }, result));
+      } catch (error) {
+        setProbeError(error instanceof Error ? error.message : "Inspect failed");
+      } finally {
+        setProbing(false);
+      }
+    },
+    [setFlow],
+  );
 
   const finishWith = useCallback(
     (project: RegisteredProject, label: string) => {
@@ -242,76 +300,83 @@ function OpenExistingTab() {
     existing: projects,
   });
 
-  return (
-    <div className="space-y-3">
-      <DirectoryBrowser
-        value={rawDir}
-        onChange={(next) => {
-          setRawDir(next);
-          setInspect(null);
-          setProbeError(null);
-        }}
-        onSelect={(next) => {
-          setRawDir(next);
-          void probeAt(next);
-        }}
-        baseDir={baseDir || undefined}
-      />
+  // ----- pick panel -----
+  if (flow.step === "pick") {
+    return (
+      <div data-testid="add-project-panel-pick" className="flex min-h-0 flex-1 flex-col gap-3">
+        <DirectoryBrowserSlot
+          value={rawDir}
+          onChange={(next) => setRawDir(next)}
+          onSelect={(next) => {
+            setRawDir(next);
+            void probeAt(next);
+          }}
+          baseDir={baseDir || undefined}
+          disabled={probing}
+        />
 
-      {!dirValidation.valid && dirValidation.reason && (
-        <Banner tone="warn">{dirValidation.reason}</Banner>
-      )}
+        {!dirValidation.valid && dirValidation.reason && (
+          <Banner tone="warn">{dirValidation.reason}</Banner>
+        )}
 
-      {probing && <Banner tone="info">Inspecting…</Banner>}
+        {probing && <Banner tone="info">Inspecting…</Banner>}
 
-      {probeError && (
-        <Banner tone="error" testId="add-project-probe-error">
-          {probeError}
-        </Banner>
-      )}
+        {probeError && (
+          <Banner tone="error" testId="add-project-probe-error">
+            {probeError}
+          </Banner>
+        )}
 
-      {inspect && inspect.hasIdeYml && probedRegistered && (
+        <PickFooter />
+      </div>
+    );
+  }
+
+  // ----- confirm panel (has ide.yml) -----
+  if (flow.step === "confirm" && inspect && probedRegistered) {
+    return (
+      <div data-testid="add-project-panel-confirm" className="flex min-h-0 flex-1 flex-col gap-3">
         <ProjectPreview project={probedRegistered} />
-      )}
+        <ConfirmFooter
+          onBack={() => setFlow(gotoPick)}
+          onSubmit={onSubmit}
+          submitting={submitting}
+          disabled={!submitState.canSubmit || submitting}
+          reason={submitState.reason}
+        />
+      </div>
+    );
+  }
 
-      {inspect && !inspect.hasIdeYml && (
+  // ----- onboard panel (no ide.yml) -----
+  if (flow.step === "onboard" && inspect) {
+    return (
+      <div data-testid="add-project-panel-onboard" className="flex min-h-0 flex-1 flex-col">
         <OnboardingWizard
           inspect={inspect}
           existingProjects={projects}
           submitting={submitting}
-          onCancel={closeAddProjectDialog}
+          onCancel={() => setFlow(gotoPick)}
           onSubmit={onOnboardSubmit}
+          embedded
         />
-      )}
+      </div>
+    );
+  }
 
-      {(!inspect || inspect.hasIdeYml) && (
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="ghost" onClick={closeAddProjectDialog}>
-            Cancel
-          </Button>
-          <Button
-            data-testid="add-project-submit"
-            onClick={onSubmit}
-            isPending={submitting}
-            disabled={!submitState.canSubmit || submitting}
-            title={submitState.reason ?? undefined}
-          >
-            Add project
-          </Button>
-        </div>
-      )}
-    </div>
-  );
+  return null;
 }
 
 // ---------- Initialize ----------
 
-function InitializeTab() {
+function InitializeTab({ flow, setFlow }: TabPanelProps) {
   const settings = useSettings();
   const { projects } = useProjects();
   const { push } = useToasts();
   const baseDir = settings.general.addProjectBaseDirectory ?? "";
-  const [rawDir, setRawDir] = useState(baseDir);
+
+  const initialDir = flow.selectedDir ?? baseDir;
+  const [rawDir, setRawDir] = useState(initialDir);
   const [templates, setTemplates] = useState<ProjectTemplate[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
   const [template, setTemplate] = useState<string>("");
@@ -356,12 +421,7 @@ function InitializeTab() {
         dispatch({ type: "chunk", jobId: expectedJobId, chunk });
       }
       if (isInitDoneFrame(frame, expectedJobId)) {
-        // Server pushes a `projects.changed` frame too; the project store
-        // refetches and we can then look up the newly-registered project.
         void refreshProjects().then(() => {
-          // We don't get the project on the frame itself; rely on the
-          // refreshed list to find it. Best-effort: the success state
-          // can still be reached without a project reference.
           dispatch({ type: "succeeded", jobId: expectedJobId, project: null });
         });
       }
@@ -403,20 +463,38 @@ function InitializeTab() {
     job.kind === "running" || job.kind === "succeeded" || job.kind === "failed" ? job.chunks : [],
   );
 
+  // ----- pick panel -----
+  if (flow.step === "pick") {
+    return (
+      <div
+        data-testid="add-project-panel-init-pick"
+        className="flex min-h-0 flex-1 flex-col gap-3"
+      >
+        <DirectoryBrowserSlot
+          value={rawDir}
+          onChange={setRawDir}
+          onSelect={(next) => {
+            setRawDir(next);
+            setFlow((s) => commitDir(s, next));
+          }}
+          baseDir={baseDir || undefined}
+        />
+
+        {!dirValidation.valid && dirValidation.reason && (
+          <Banner tone="warn">{dirValidation.reason}</Banner>
+        )}
+
+        <PickFooter />
+      </div>
+    );
+  }
+
+  // ----- init panel (template + console) -----
   return (
-    <div className="space-y-3">
-      <DirectoryBrowser
-        value={rawDir}
-        onChange={setRawDir}
-        onSelect={setRawDir}
-        baseDir={baseDir || undefined}
-        disabled={job.kind === "running" || job.kind === "succeeded"}
-      />
-
-      {!dirValidation.valid && dirValidation.reason && (
-        <Banner tone="warn">{dirValidation.reason}</Banner>
-      )}
-
+    <div
+      data-testid="add-project-panel-init"
+      className="flex min-h-0 flex-1 flex-col gap-3"
+    >
       <label className="block">
         <span className="text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]">Template</span>
         <select
@@ -456,22 +534,14 @@ function InitializeTab() {
 
       {job.kind === "failed" && <Banner tone="error">{job.message}</Banner>}
 
-      <div className="flex justify-end gap-2 pt-2">
-        <Button variant="ghost" onClick={closeAddProjectDialog}>
-          {job.kind === "succeeded" ? "Close" : "Cancel"}
-        </Button>
-        {job.kind !== "succeeded" && (
-          <Button
-            data-testid="add-project-submit"
-            onClick={onSubmit}
-            isPending={starting || job.kind === "running"}
-            disabled={!submitState.canSubmit || starting}
-            title={submitState.reason ?? undefined}
-          >
-            Initialize
-          </Button>
-        )}
-      </div>
+      <InitFooter
+        onBack={() => setFlow(gotoPick)}
+        onSubmit={onSubmit}
+        submitting={starting || job.kind === "running"}
+        disabled={!submitState.canSubmit || starting}
+        reason={submitState.reason}
+        succeeded={job.kind === "succeeded"}
+      />
     </div>
   );
 }
@@ -480,11 +550,8 @@ function InitializeTab() {
 
 // TODO: Wire to server-side `/api/projects/clone` once Agent 1 ships it.
 function CloneTab() {
-  const settings = useSettings();
-  const baseDir = settings.general.addProjectBaseDirectory ?? "";
-  const [rawDir, setRawDir] = useState(baseDir);
   return (
-    <div className="space-y-3">
+    <div data-testid="add-project-panel-clone" className="flex min-h-0 flex-1 flex-col gap-3">
       <Banner tone="info">
         Cloning straight from Git is coming soon. For now, clone the repo manually and use the{" "}
         <strong>Open existing</strong> tab.
@@ -497,28 +564,162 @@ function CloneTab() {
           className="mt-1 w-full rounded-md border border-[var(--border-weak)] bg-[var(--bg)] px-2 py-1.5 font-mono text-[11px] text-[var(--fg)] outline-none disabled:opacity-50"
         />
       </label>
-      <div>
-        <span className="block text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]">
-          Target directory
-        </span>
-        <div className="mt-1">
-          <DirectoryBrowser
-            value={rawDir}
-            onChange={setRawDir}
-            onSelect={setRawDir}
-            baseDir={baseDir || undefined}
-            disabled
-          />
-        </div>
-      </div>
-      <div className="flex justify-end gap-2 pt-2">
-        <Button variant="ghost" onClick={closeAddProjectDialog}>
-          Cancel
+      <CloneFooter />
+    </div>
+  );
+}
+
+// ---------- Footers ----------
+//
+// Each step renders its own footer inside the dialog's outer DialogFooter
+// region. We render a small fixed-position container at the bottom of the
+// dialog body so the footer is always visible: panels themselves lay out
+// `flex-1` of body content, then a non-flex footer row stays pinned at the
+// bottom. (We intentionally don't portal into DialogFooter because the
+// markup keeps better testability when it's all in the local subtree.)
+
+function PickFooter() {
+  return (
+    <FooterRow testId="add-project-footer-pick">
+      <Button
+        variant="ghost"
+        onClick={closeAddProjectDialog}
+        data-testid="add-project-cancel"
+      >
+        Cancel
+      </Button>
+    </FooterRow>
+  );
+}
+
+interface ConfirmFooterProps {
+  onBack: () => void;
+  onSubmit: () => void;
+  submitting: boolean;
+  disabled: boolean;
+  reason: string | null;
+}
+
+function ConfirmFooter({ onBack, onSubmit, submitting, disabled, reason }: ConfirmFooterProps) {
+  return (
+    <FooterRow testId="add-project-footer-confirm">
+      <Button variant="ghost" onClick={onBack} data-testid="add-project-back">
+        Back
+      </Button>
+      <Button variant="ghost" onClick={closeAddProjectDialog} data-testid="add-project-cancel">
+        Cancel
+      </Button>
+      <Button
+        data-testid="add-project-submit"
+        onClick={onSubmit}
+        isPending={submitting}
+        disabled={disabled}
+        title={reason ?? undefined}
+      >
+        Add project
+      </Button>
+    </FooterRow>
+  );
+}
+
+interface InitFooterProps {
+  onBack: () => void;
+  onSubmit: () => void;
+  submitting: boolean;
+  disabled: boolean;
+  reason: string | null;
+  succeeded: boolean;
+}
+
+function InitFooter({
+  onBack,
+  onSubmit,
+  submitting,
+  disabled,
+  reason,
+  succeeded,
+}: InitFooterProps) {
+  return (
+    <FooterRow testId="add-project-footer-init">
+      {!succeeded && (
+        <Button variant="ghost" onClick={onBack} data-testid="add-project-back">
+          Back
         </Button>
-        <Button data-testid="add-project-submit" disabled>
-          Clone
+      )}
+      <Button
+        variant="ghost"
+        onClick={closeAddProjectDialog}
+        data-testid="add-project-cancel"
+      >
+        {succeeded ? "Close" : "Cancel"}
+      </Button>
+      {!succeeded && (
+        <Button
+          data-testid="add-project-submit"
+          onClick={onSubmit}
+          isPending={submitting}
+          disabled={disabled}
+          title={reason ?? undefined}
+        >
+          Initialize
         </Button>
-      </div>
+      )}
+    </FooterRow>
+  );
+}
+
+function CloneFooter() {
+  return (
+    <FooterRow testId="add-project-footer-clone">
+      <Button variant="ghost" onClick={closeAddProjectDialog} data-testid="add-project-cancel">
+        Cancel
+      </Button>
+      <Button data-testid="add-project-submit" disabled>
+        Clone
+      </Button>
+    </FooterRow>
+  );
+}
+
+interface FooterRowProps {
+  testId: string;
+  children: React.ReactNode;
+}
+
+/**
+ * Sticky footer pinned to the bottom of the panel's body — guarantees the
+ * action buttons stay visible even when panel content overflows. The
+ * outer DialogFooter is reserved for the wizard's internal footer.
+ */
+function FooterRow({ testId, children }: FooterRowProps) {
+  return (
+    <div
+      data-testid={testId}
+      className="sticky bottom-0 -mx-4 mt-auto flex justify-end gap-2 border-t border-[var(--border-weak)] bg-[var(--bg-strong)] px-4 py-3"
+    >
+      {children}
+    </div>
+  );
+}
+
+// ---------- Directory browser slot ----------
+
+interface DirectoryBrowserSlotProps {
+  value: string;
+  onChange: (path: string) => void;
+  onSelect: (path: string) => void;
+  baseDir?: string;
+  disabled?: boolean;
+}
+
+/**
+ * Wraps the DirectoryBrowser in a flex-1 container so its entry list has
+ * the entire remaining body height to scroll inside.
+ */
+function DirectoryBrowserSlot(props: DirectoryBrowserSlotProps) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <DirectoryBrowser {...props} />
     </div>
   );
 }
@@ -550,7 +751,10 @@ function Banner({ tone, testId, children }: BannerProps) {
 
 function ProjectPreview({ project }: { project: RegisteredProject }) {
   return (
-    <div className="rounded-md border border-[var(--border-weak)] bg-[var(--surface)] px-3 py-2 text-[11px] text-[var(--fg)]">
+    <div
+      data-testid="add-project-preview"
+      className="rounded-md border border-[var(--border-weak)] bg-[var(--surface)] px-3 py-2 text-[11px] text-[var(--fg)]"
+    >
       <div className="flex items-center gap-2">
         <CheckCircle2 aria-hidden="true" size={14} className="text-[var(--green)]" />
         <span className="font-medium">{project.name}</span>

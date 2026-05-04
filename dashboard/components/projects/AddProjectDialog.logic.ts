@@ -1,4 +1,4 @@
-import type { RegisteredProject } from "@/lib/api";
+import type { ProjectInspect, RegisteredProject } from "@/lib/api";
 
 /**
  * Pure logic helpers for AddProjectDialog. No React, no DOM, no fetch —
@@ -9,6 +9,105 @@ import type { RegisteredProject } from "@/lib/api";
  */
 
 export type AddProjectTab = "open" | "init" | "clone";
+
+/**
+ * Panel-stack flow. Each tab advances through a small set of named panels
+ * — only one is rendered at a time so the dialog never overflows.
+ *
+ *   "pick"     — DirectoryBrowser fills the body. Footer: Cancel.
+ *   "confirm"  — ProjectPreview card. Footer: Back + Add project.
+ *                Used when the picked dir already has an ide.yml.
+ *   "onboard"  — OnboardingWizard fills the body and owns its own footer.
+ *                Used when the picked dir has no ide.yml.
+ *   "init"     — Init template picker + console output. Footer: Back +
+ *                Initialize / Close.
+ *
+ * Not every step applies to every tab — see `gotoNextAfterInspect` for the
+ * branching rules.
+ */
+export type AddProjectStep = "pick" | "confirm" | "onboard" | "init";
+
+export interface AddProjectFlowState {
+  tab: AddProjectTab;
+  step: AddProjectStep;
+  /** Path the user committed via the directory browser. */
+  selectedDir: string | null;
+  /** Server probe result for `selectedDir`. */
+  inspect: ProjectInspect | null;
+}
+
+export type FooterKind =
+  | "pick"
+  | "confirm"
+  | "init"
+  | "wizard-internal"
+  | "clone";
+
+export function defaultFlowState(tab: AddProjectTab = "open"): AddProjectFlowState {
+  return { tab, step: "pick", selectedDir: null, inspect: null };
+}
+
+/** Reset to the pick panel for the active tab, clearing inspect. */
+export function gotoPick(state: AddProjectFlowState): AddProjectFlowState {
+  return { ...state, step: "pick", inspect: null };
+}
+
+/**
+ * Switch tabs — always lands on the pick panel for the new tab and forgets
+ * the prior tab's selection.
+ */
+export function gotoTab(
+  state: AddProjectFlowState,
+  tab: AddProjectTab,
+): AddProjectFlowState {
+  if (state.tab === tab) return state;
+  return { tab, step: "pick", selectedDir: null, inspect: null };
+}
+
+/**
+ * After a successful `inspectDirectory`, advance the open-tab flow:
+ *
+ *   - hasIdeYml         → "confirm" panel
+ *   - !hasIdeYml        → "onboard" panel (wizard takes over)
+ *
+ * For the init tab we always advance to the "init" panel after a dir is
+ * committed (no inspect required there).
+ */
+export function gotoNextAfterInspect(
+  state: AddProjectFlowState,
+  inspect: ProjectInspect,
+): AddProjectFlowState {
+  if (state.tab !== "open") return { ...state, inspect };
+  return {
+    ...state,
+    inspect,
+    step: inspect.hasIdeYml ? "confirm" : "onboard",
+  };
+}
+
+export function commitDir(
+  state: AddProjectFlowState,
+  dir: string,
+): AddProjectFlowState {
+  // For the init tab we step to the init panel directly. Open tab waits for
+  // inspect to resolve before advancing.
+  if (state.tab === "init") {
+    return { ...state, selectedDir: dir, step: "init" };
+  }
+  return { ...state, selectedDir: dir };
+}
+
+/**
+ * Which footer the dialog should render. The wizard panel renders its own
+ * footer — when "wizard-internal", the dialog hides its outer footer.
+ */
+export function activeFooterKind(state: AddProjectFlowState): FooterKind {
+  if (state.tab === "clone") return "clone";
+  if (state.step === "onboard") return "wizard-internal";
+  if (state.step === "confirm") return "confirm";
+  if (state.step === "init") return "init";
+  return "pick";
+}
 
 export interface OpenTabState {
   dir: string;

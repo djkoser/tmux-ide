@@ -158,12 +158,12 @@ export function DirectoryBrowser({
   return (
     <div
       data-testid="directory-browser"
-      className="rounded-md border border-[var(--border-weak)] bg-[var(--bg)] outline-none"
+      className="flex min-h-0 flex-1 flex-col rounded-md border border-[var(--border-weak)] bg-[var(--bg)] outline-none"
       onKeyDown={onKeyDown}
       tabIndex={0}
     >
       {/* Toolbar */}
-      <div className="flex items-center gap-2 border-b border-[var(--border-weak)] px-2 py-1.5">
+      <div className="flex shrink-0 items-center gap-2 border-b border-[var(--border-weak)] px-2 py-1.5">
         <button
           type="button"
           data-testid="directory-browser-back"
@@ -218,11 +218,12 @@ export function DirectoryBrowser({
         </label>
       </div>
 
-      {/* Entry list */}
+      {/* Entry list — flex-grows inside the parent so it scrolls internally
+          regardless of the surrounding panel height. */}
       <ul
         ref={listRef}
         data-testid="directory-browser-list"
-        className="max-h-[260px] min-h-[180px] overflow-auto py-1"
+        className="min-h-[180px] flex-1 overflow-auto py-1"
         role="listbox"
         aria-label="Directory entries"
       >
@@ -280,7 +281,7 @@ export function DirectoryBrowser({
       </ul>
 
       {/* Status bar */}
-      <div className="flex items-center justify-between gap-2 border-t border-[var(--border-weak)] px-2 py-1.5">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-t border-[var(--border-weak)] px-2 py-1.5">
         <span className="truncate font-mono text-[11px] text-[var(--dim)]">
           Selected: <span className="text-[var(--fg)]">{state.path || "—"}</span>
         </span>

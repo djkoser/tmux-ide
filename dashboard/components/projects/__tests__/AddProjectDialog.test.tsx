@@ -149,7 +149,142 @@ describe("AddProjectDialog", () => {
     await waitFor(() => {
       expect(screen.getByTestId("add-project-tab-init").getAttribute("data-active")).toBe("true");
     });
-    expect(screen.getByTestId("add-project-template-select")).toBeTruthy();
+    // Init tab opens on the pick panel — directory browser shows; template
+    // picker is gated behind committing a folder.
+    expect(screen.getByTestId("add-project-panel-init-pick")).toBeTruthy();
+    expect(screen.queryByTestId("add-project-template-select")).toBeNull();
+  });
+
+  it("starts on the pick panel with no wizard, preview, or submit visible", async () => {
+    await renderDialog();
+    await waitFor(() => expect(screen.getByTestId("directory-browser")).toBeTruthy());
+
+    // Only the pick panel is rendered.
+    expect(screen.getByTestId("add-project-panel-pick")).toBeTruthy();
+    // Panels for confirm / onboard / init are not in the tree yet.
+    expect(screen.queryByTestId("add-project-panel-confirm")).toBeNull();
+    expect(screen.queryByTestId("add-project-panel-onboard")).toBeNull();
+    expect(screen.queryByTestId("onboarding-wizard")).toBeNull();
+    expect(screen.queryByTestId("add-project-preview")).toBeNull();
+    expect(screen.queryByTestId("add-project-submit")).toBeNull();
+    // Pick footer is the active footer — Cancel only.
+    expect(screen.getByTestId("add-project-footer-pick")).toBeTruthy();
+  });
+
+  it("advances pick → confirm when picked dir has ide.yml", async () => {
+    await renderDialog();
+    await waitFor(() => expect(screen.getByTestId("directory-browser-entry-alpha")).toBeTruthy());
+
+    fireEvent.click(screen.getByTestId("directory-browser-entry-alpha"));
+    await waitFor(() => {
+      expect(screen.getByTestId("directory-browser-path").getAttribute("title")).toBe(
+        "/repos/alpha",
+      );
+    });
+    fireEvent.click(screen.getByTestId("directory-browser-select"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("add-project-panel-confirm")).toBeTruthy();
+    });
+    // Pick panel is gone — only one panel visible at a time.
+    expect(screen.queryByTestId("add-project-panel-pick")).toBeNull();
+    expect(screen.getByTestId("add-project-preview")).toBeTruthy();
+    expect(screen.getByTestId("add-project-back")).toBeTruthy();
+    expect(screen.getByTestId("add-project-submit")).toBeTruthy();
+    // Breadcrumb appears with a Change action that pops back to pick.
+    expect(screen.getByTestId("add-project-breadcrumb")).toBeTruthy();
+  });
+
+  it("Back button on confirm pops back to pick panel", async () => {
+    await renderDialog();
+    await waitFor(() => expect(screen.getByTestId("directory-browser-entry-alpha")).toBeTruthy());
+
+    fireEvent.click(screen.getByTestId("directory-browser-entry-alpha"));
+    await waitFor(() => {
+      expect(screen.getByTestId("directory-browser-path").getAttribute("title")).toBe(
+        "/repos/alpha",
+      );
+    });
+    fireEvent.click(screen.getByTestId("directory-browser-select"));
+    await waitFor(() => expect(screen.getByTestId("add-project-panel-confirm")).toBeTruthy());
+
+    fireEvent.click(screen.getByTestId("add-project-back"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("add-project-panel-pick")).toBeTruthy();
+    });
+    expect(screen.queryByTestId("add-project-panel-confirm")).toBeNull();
+  });
+
+  it("breadcrumb Change action returns to pick panel", async () => {
+    await renderDialog();
+    await waitFor(() => expect(screen.getByTestId("directory-browser-entry-alpha")).toBeTruthy());
+
+    fireEvent.click(screen.getByTestId("directory-browser-entry-alpha"));
+    await waitFor(() => {
+      expect(screen.getByTestId("directory-browser-path").getAttribute("title")).toBe(
+        "/repos/alpha",
+      );
+    });
+    fireEvent.click(screen.getByTestId("directory-browser-select"));
+    await waitFor(() => expect(screen.getByTestId("add-project-panel-confirm")).toBeTruthy());
+
+    fireEvent.click(screen.getByTestId("add-project-breadcrumb-change"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("add-project-panel-pick")).toBeTruthy();
+    });
+  });
+
+  it("when picked dir has no ide.yml, the wizard panel takes over and the dialog footer hides", async () => {
+    await renderDialog();
+    await waitFor(() =>
+      expect(screen.getByTestId("directory-browser-entry-freshproj")).toBeTruthy(),
+    );
+
+    fireEvent.click(screen.getByTestId("directory-browser-entry-freshproj"));
+    await waitFor(() => {
+      expect(screen.getByTestId("directory-browser-path").getAttribute("title")).toBe(
+        "/repos/freshproj",
+      );
+    });
+    fireEvent.click(screen.getByTestId("directory-browser-select"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("add-project-panel-onboard")).toBeTruthy();
+    });
+    // Wizard owns the body.
+    expect(screen.getByTestId("onboarding-wizard")).toBeTruthy();
+    expect(screen.getByTestId("onboarding-wizard").getAttribute("data-embedded")).toBe("true");
+    // The dialog's outer pick/confirm/init footers are gone — wizard's own
+    // footer is the only one rendered.
+    expect(screen.queryByTestId("add-project-footer-pick")).toBeNull();
+    expect(screen.queryByTestId("add-project-footer-confirm")).toBeNull();
+    expect(screen.getByTestId("onboarding-footer")).toBeTruthy();
+  });
+
+  it("wizard Cancel pops back to pick (does not close the dialog)", async () => {
+    await renderDialog();
+    await waitFor(() =>
+      expect(screen.getByTestId("directory-browser-entry-freshproj")).toBeTruthy(),
+    );
+
+    fireEvent.click(screen.getByTestId("directory-browser-entry-freshproj"));
+    await waitFor(() => {
+      expect(screen.getByTestId("directory-browser-path").getAttribute("title")).toBe(
+        "/repos/freshproj",
+      );
+    });
+    fireEvent.click(screen.getByTestId("directory-browser-select"));
+    await waitFor(() => expect(screen.getByTestId("add-project-panel-onboard")).toBeTruthy());
+
+    fireEvent.click(screen.getByTestId("onboarding-cancel"));
+
+    // Dialog is still open — we just popped back to the pick panel.
+    await waitFor(() => {
+      expect(screen.getByTestId("add-project-panel-pick")).toBeTruthy();
+    });
+    expect(screen.getByTestId("add-project-dialog")).toBeTruthy();
   });
 
   it("renders the directory browser on the open tab", async () => {

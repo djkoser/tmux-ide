@@ -40,6 +40,12 @@ export interface OnboardingWizardProps {
   submitting?: boolean;
   onCancel: () => void;
   onSubmit: (input: OnboardProjectInput) => void;
+  /**
+   * When true, the wizard fills its container (no rounded card border) and
+   * its footer sticks to the bottom of the parent scroll area. Used inside
+   * the AddProjectDialog so the wizard takes over the dialog body.
+   */
+  embedded?: boolean;
 }
 
 const STEP_LABELS: Record<OnboardStep, string> = {
@@ -55,6 +61,7 @@ export function OnboardingWizard({
   submitting,
   onCancel,
   onSubmit,
+  embedded = false,
 }: OnboardingWizardProps) {
   const existingNames = useMemo(() => existingProjectNames(existingProjects), [existingProjects]);
   const [state, setState] = useState<OnboardState>(() =>
@@ -108,12 +115,31 @@ export function OnboardingWizard({
 
   const isLastStep = state.step === "review";
 
+  // When embedded inside the AddProjectDialog body, drop the card chrome
+  // (border + rounded corners) and let the wizard fill the parent container.
+  // The footer sticks to the bottom of the parent scroll area so it stays
+  // reachable even when step content is long.
+  const rootClass = embedded
+    ? "flex min-h-0 flex-1 flex-col"
+    : "rounded-md border border-[var(--border-weak)] bg-[var(--surface)]";
+
+  const bodyWrapperClass = embedded
+    ? "flex min-h-0 flex-1"
+    : "flex min-h-[280px]";
+
+  const footerClass = embedded
+    ? "sticky bottom-0 -mx-4 mt-auto flex items-center justify-end gap-2 border-t border-[var(--border-weak)] bg-[var(--bg-strong)] px-4 py-3"
+    : "flex items-center justify-end gap-2 border-t border-[var(--border-weak)] px-3 py-2";
+
   return (
-    <div
-      data-testid="onboarding-wizard"
-      className="rounded-md border border-[var(--border-weak)] bg-[var(--surface)]"
-    >
-      <div className="border-b border-[var(--border-weak)] px-3 py-2">
+    <div data-testid="onboarding-wizard" data-embedded={embedded ? "true" : "false"} className={rootClass}>
+      <div
+        className={
+          embedded
+            ? "border-b border-[var(--border-weak)] pb-2"
+            : "border-b border-[var(--border-weak)] px-3 py-2"
+        }
+      >
         <h3 className="text-[12px] font-medium text-[var(--fg)]">
           Set up tmux-ide for &quot;{inspect.name}&quot;
         </h3>
@@ -122,9 +148,9 @@ export function OnboardingWizard({
         </p>
       </div>
 
-      <div className="flex min-h-[280px]">
+      <div className={bodyWrapperClass}>
         <StepRail state={state} validateOpts={validateOpts} onGoTo={goTo} />
-        <div className="flex-1 px-4 py-3">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
           {state.step === "basics" && (
             <BasicsStep
               state={state}
@@ -149,7 +175,7 @@ export function OnboardingWizard({
         </div>
       </div>
 
-      <div className="flex items-center justify-end gap-2 border-t border-[var(--border-weak)] px-3 py-2">
+      <div className={footerClass} data-testid="onboarding-footer">
         <Button
           variant="ghost"
           data-testid="onboarding-cancel"
