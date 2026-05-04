@@ -35,10 +35,18 @@ export interface ComposeIdeYmlInput {
   name: string;
   /** 1, 2, or 3 — how many Claude panes to put in the top row. */
   agents: number;
+  /**
+   * Optional per-agent pane titles. When provided, length must equal
+   * `agents`; otherwise it's ignored and the canonical defaults are used
+   * (`Lead`/`Teammate N` for team layouts, `Claude N` for solo).
+   */
+  agentNames?: string[];
   /** Dev server command. `null` / undefined → no dev pane. */
   devCommand?: string | null;
   /** Test command. Currently unused in the generated layout but kept for future. */
   testCommand?: string | null;
+  /** Lint command. Currently unused in the generated layout but kept for future. */
+  lintCommand?: string | null;
 }
 
 /**
@@ -64,10 +72,26 @@ export function composeIdeYmlConfig(input: ComposeIdeYmlInput): IdeConfig {
   const agentsCount = input.agents;
   const useTeam = agentsCount > 1;
 
+  const customNames = input.agentNames;
+  if (customNames !== undefined) {
+    if (customNames.length !== agentsCount) {
+      throw new OnboardInvalidInputError(
+        `agentNames length (${customNames.length}) must equal agents (${agentsCount})`,
+      );
+    }
+    for (const name of customNames) {
+      if (typeof name !== "string" || name.trim() === "") {
+        throw new OnboardInvalidInputError("agentNames entries must be non-empty strings");
+      }
+    }
+  }
+
   const topPanes: Pane[] = [];
   for (let i = 0; i < agentsCount; i++) {
+    const fallback = useTeam ? (i === 0 ? "Lead" : `Teammate ${i}`) : `Claude ${i + 1}`;
+    const customTitle = customNames?.[i]?.trim();
     const pane: Pane = {
-      title: useTeam ? (i === 0 ? "Lead" : `Teammate ${i}`) : `Claude ${i + 1}`,
+      title: customTitle && customTitle.length > 0 ? customTitle : fallback,
       command: "claude",
     };
     if (useTeam) {

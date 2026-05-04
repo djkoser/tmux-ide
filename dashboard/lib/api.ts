@@ -818,8 +818,12 @@ export interface OnboardProjectInput {
   dir: string;
   name?: string;
   agents: number;
+  /** Optional per-agent pane titles. Length must equal `agents` when set. */
+  agentNames?: string[];
   devCommand?: string | null;
   testCommand?: string | null;
+  /** Optional lint command. Currently informational; stored for later. */
+  lintCommand?: string | null;
 }
 
 export async function onboardProject(input: OnboardProjectInput): Promise<RegisteredProject> {

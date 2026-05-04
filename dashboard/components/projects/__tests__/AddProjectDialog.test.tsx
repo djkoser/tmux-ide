@@ -238,7 +238,7 @@ describe("AddProjectDialog", () => {
     expect(screen.getByTestId("onboarding-name")).toBeTruthy();
   });
 
-  it("calls onboardProject when wizard submit is clicked", async () => {
+  it("calls onboardProject when wizard reaches review and Create is clicked", async () => {
     const { onboardProject } = await import("@/lib/api");
     await renderDialog();
     await waitFor(() =>
@@ -252,6 +252,12 @@ describe("AddProjectDialog", () => {
       );
     });
     fireEvent.click(screen.getByTestId("directory-browser-select"));
+
+    // Wizard appears on Basics — step through Basics → Agents → Tools → Review.
+    await screen.findByTestId("onboarding-wizard");
+    fireEvent.click(screen.getByTestId("onboarding-next")); // → Agents
+    fireEvent.click(screen.getByTestId("onboarding-next")); // → Tools
+    fireEvent.click(screen.getByTestId("onboarding-next")); // → Review
 
     const submit = await screen.findByTestId("onboarding-submit");
     fireEvent.click(submit);

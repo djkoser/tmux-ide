@@ -277,6 +277,7 @@ function OpenExistingTab() {
       {inspect && !inspect.hasIdeYml && (
         <OnboardingWizard
           inspect={inspect}
+          existingProjects={projects}
           submitting={submitting}
           onCancel={closeAddProjectDialog}
           onSubmit={onOnboardSubmit}

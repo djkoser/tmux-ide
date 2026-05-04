@@ -83,6 +83,32 @@ describe("composeIdeYmlConfig", () => {
     expect(() => composeIdeYmlConfig({ name: "", agents: 1 })).toThrow(OnboardInvalidInputError);
     expect(() => composeIdeYmlConfig({ name: "   ", agents: 1 })).toThrow(OnboardInvalidInputError);
   });
+
+  it("uses provided agentNames as pane titles when length matches", () => {
+    const config = composeIdeYmlConfig({
+      name: "alpha",
+      agents: 2,
+      agentNames: ["Captain", "Frontend"],
+    });
+    expect(config.rows[0]!.panes.map((p) => p.title)).toEqual(["Captain", "Frontend"]);
+    // Roles stay canonical regardless of titles.
+    expect(config.rows[0]!.panes.map((p) => p.role)).toEqual(["lead", "teammate"]);
+  });
+
+  it("rejects agentNames whose length disagrees with agents", () => {
+    expect(() =>
+      composeIdeYmlConfig({ name: "alpha", agents: 2, agentNames: ["Only one"] }),
+    ).toThrow(OnboardInvalidInputError);
+    expect(() =>
+      composeIdeYmlConfig({ name: "alpha", agents: 1, agentNames: ["A", "B"] }),
+    ).toThrow(OnboardInvalidInputError);
+  });
+
+  it("rejects agentNames containing empty strings", () => {
+    expect(() =>
+      composeIdeYmlConfig({ name: "alpha", agents: 2, agentNames: ["Lead", "  "] }),
+    ).toThrow(OnboardInvalidInputError);
+  });
 });
 
 describe("composeIdeYml (yaml output)", () => {

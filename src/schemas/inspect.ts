@@ -51,9 +51,17 @@ export const OnboardProjectRequestSchemaZ = z.object({
   name: z.string().min(1).optional(),
   /** 1, 2, or 3 — how many Claude panes to scaffold in the top row. */
   agents: z.number().int().min(1).max(3),
+  /**
+   * Optional per-agent pane titles. When provided, length must equal
+   * `agents`; the server uses these as `title:` for the Claude panes
+   * instead of the canonical `Lead`/`Teammate N`/`Claude N` defaults.
+   */
+  agentNames: z.array(z.string().min(1)).optional(),
   /** Dev server command (e.g. `pnpm dev`). Omit / null to skip the dev pane. */
   devCommand: z.string().min(1).nullable().optional(),
   /** Test command (e.g. `pnpm test`). Currently informational; stored for later. */
   testCommand: z.string().min(1).nullable().optional(),
+  /** Lint command (e.g. `pnpm lint`). Currently informational; stored for later. */
+  lintCommand: z.string().min(1).nullable().optional(),
 });
 export type OnboardProjectRequest = z.infer<typeof OnboardProjectRequestSchemaZ>;

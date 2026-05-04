@@ -2270,8 +2270,10 @@ export function createApp(options: CreateAppOptions = {}): Hono {
       config = composeIdeYmlConfig({
         name: finalName,
         agents: parsed.data.agents,
+        agentNames: parsed.data.agentNames,
         devCommand: parsed.data.devCommand ?? null,
         testCommand: parsed.data.testCommand ?? null,
+        lintCommand: parsed.data.lintCommand ?? null,
       });
     } catch (err) {
       if (err instanceof OnboardInvalidInputError) {
