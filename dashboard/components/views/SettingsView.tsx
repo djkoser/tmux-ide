@@ -6,17 +6,10 @@ import { useActions } from "@/lib/actions";
 import { playSound, type SoundKind } from "@/lib/sounds";
 import { type ThemeId, useSettings } from "@/lib/useSettings";
 import { Panel, SectionHeader, SurfaceCard } from "@/components/ui";
+import { NavigatorPortal } from "@/lib/useNavigatorSlot";
+import { SettingsNavigator, type SettingsSectionId } from "@/components/navigators";
 
-type SectionId = "general" | "appearance" | "keybinds" | "terminal" | "sounds" | "about";
-
-const sections: { id: SectionId; label: string }[] = [
-  { id: "general", label: "General" },
-  { id: "appearance", label: "Appearance" },
-  { id: "keybinds", label: "Keybinds" },
-  { id: "terminal", label: "Terminal" },
-  { id: "sounds", label: "Sounds" },
-  { id: "about", label: "About" },
-];
+type SectionId = SettingsSectionId;
 
 const themes: { id: ThemeId; label: string; colors: string[] }[] = [
   { id: "dark", label: "Dark", colors: ["#101010", "#fab283", "#9bcd97"] },
@@ -139,26 +132,10 @@ export function SettingsView() {
 
   return (
     <Panel testId="settings-view">
+      <NavigatorPortal>
+        <SettingsNavigator active={active} onChange={setActive} />
+      </NavigatorPortal>
       <div className="flex min-h-0 flex-1">
-        <nav className="w-52 shrink-0 border-r border-[var(--border-weak)] bg-[var(--bg-strong)] p-2">
-          {sections.map((section) => (
-            <button
-              key={section.id}
-              type="button"
-              data-testid={`settings-nav-${section.id}`}
-              data-active={active === section.id ? "true" : "false"}
-              onClick={() => setActive(section.id)}
-              className={`block h-8 w-full rounded-md px-2 text-left text-[12px] transition-colors ${
-                active === section.id
-                  ? "bg-[var(--surface-active)] text-[var(--accent)]"
-                  : "text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--fg)]"
-              }`}
-            >
-              {section.label}
-            </button>
-          ))}
-        </nav>
-
         <main className="min-w-0 flex-1 space-y-5 overflow-auto p-4">
           {active === "general" && (
             <section data-testid="settings-section-general" className="max-w-3xl">

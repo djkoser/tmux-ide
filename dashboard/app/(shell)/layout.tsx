@@ -1,4 +1,3 @@
-import { ActivityBar } from "@/components/ActivityBar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { CommandPalette } from "@/components/CommandPalette";
 import { EventBridge } from "@/components/EventBridge";
@@ -10,6 +9,7 @@ import { WorkspaceTabsBar } from "@/components/WorkspaceTabsBar";
 import { WorkspaceTabsManager } from "@/components/WorkspaceTabsManager";
 import { WorkspaceUrlSync } from "@/components/WorkspaceUrlSync";
 import { NavigatorSlot } from "@/components/app-shell";
+import { DefaultNavigator } from "@/components/navigators";
 import { SidebarInset } from "@/components/ui/sidebar";
 
 export default function ShellLayout({ children }: { children: React.ReactNode }) {
@@ -18,11 +18,17 @@ export default function ShellLayout({ children }: { children: React.ReactNode })
       <WorkspaceUrlSync />
       <EventBridge />
       <div className="flex min-h-0 flex-1">
-        <ActivityBar className="hidden md:flex" testId="activity-bar-inline" />
+        {/* AppSidebar = narrow icon-only mode picker (Sessions/Skills/Settings).
+            Stays consistent across all routes. The Base UI primitive handles
+            the mobile drawer with full labels. */}
         <AppSidebar />
-        {/* Navigator column. Renders only when a view registers via NavigatorPortal.
-            Hidden on mobile (md:flex) so PlansView's mobile rail logic stays in charge. */}
-        <NavigatorSlot className="hidden md:flex" />
+        {/* Navigator column. Always visible on desktop (md+). When no view
+            registers a navigator via NavigatorPortal, DefaultNavigator picks
+            the right contextual list (Sessions/Skills/MissionTree). */}
+        <NavigatorSlot
+          className="hidden md:flex"
+          fallback={<DefaultNavigator />}
+        />
         <SidebarInset>
           <WorkspaceTabsBar />
           {/*

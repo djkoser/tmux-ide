@@ -10,8 +10,13 @@ export const PANEL_SASH_LINE_WIDTH = 2;
 export const PANEL_SASH_FLEX_MARGIN = -(PANEL_GAP / 2);
 export const PANEL_SASH_HALF_HIT_WIDTH = PANEL_SASH_HIT_WIDTH / 2;
 
-export const SIDEBAR_WIDTH = 224;
+/** Narrow icon-only sidebar (mode picker). 56px matches craft-agents. */
+export const SIDEBAR_WIDTH = 56;
+/** Always-visible navigator column (contextual lists). */
 export const NAVIGATOR_WIDTH = 280;
+/** Legacy — kept for backwards compatibility (ActivityBar removed). */
 export const ACTIVITY_BAR_WIDTH = 48;
+/** Spring transition for sidebar/navigator collapse animations. */
+export const PANEL_SPRING = { type: "spring" as const, stiffness: 600, damping: 49 };
 export const TOP_BAR_HEIGHT = 24;
 export const STATUS_BAR_HEIGHT = 24;

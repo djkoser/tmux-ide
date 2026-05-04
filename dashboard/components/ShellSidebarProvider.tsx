@@ -8,7 +8,11 @@ export function ShellSidebarProvider({ children }: { children: React.ReactNode }
   const keybind = keybinds["toggle-sidebar"] ?? getEffectiveKeybind("toggle-sidebar", "Mod+b");
 
   return (
-    <SidebarProvider keyboardShortcut={keybind} className="min-h-screen flex-col">
+    <SidebarProvider
+      keyboardShortcut={keybind}
+      defaultOpen={false}
+      className="min-h-screen flex-col"
+    >
       {children}
     </SidebarProvider>
   );
