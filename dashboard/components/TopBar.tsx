@@ -4,8 +4,8 @@ import { Command, Terminal } from "lucide-react";
 import { useState, useEffect } from "react";
 import { openCommandPalette } from "./CommandPalette";
 import { ThemeToggle } from "./ThemeToggle";
+import { ProjectSwitcher } from "@/components/app-shell";
 import { useLayoutState } from "@/lib/useLayoutState";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 
 export function TopBar() {
   const [time, setTime] = useState("");
@@ -28,8 +28,7 @@ export function TopBar() {
 
   return (
     <div className="sticky top-0 z-30 flex h-6 items-center border-b bg-[var(--bg-weak)] px-2 text-[11px] md:px-3">
-      <SidebarTrigger className="mr-2" />
-      <span className="font-medium text-[var(--accent)]">tmux-ide</span>
+      <ProjectSwitcher />
       <span className="flex-1" />
       <button
         type="button"

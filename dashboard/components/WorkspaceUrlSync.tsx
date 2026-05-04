@@ -1,25 +1,14 @@
 "use client";
 
-import { useEffect } from "react";
-import { isSessions, useNavigation } from "@/lib/navigation";
-import { useLayoutState } from "@/lib/useLayoutState";
-
 /**
- * Auto-open a workspace tab whenever NavigationState lands on a session.
- * Workspace tabs (the persisted "recently opened" row) are still managed
- * via `useLayoutState`; NavigationState is the trigger.
+ * WorkspaceUrlSync — Phase Z no-op.
  *
- * This component is no longer the source of truth for "what view is
- * active" — it just keeps the workspace tab cache in sync with the URL.
+ * The new NavigationState already syncs `window.history.replaceState`
+ * on every state change (see `commit()` in `lib/navigation.ts`), so
+ * there is nothing for this component to do. It remains as a mount
+ * point so existing layout files keep importing the symbol; remove
+ * once `(shell)/layout.tsx` is reshaped.
  */
 export function WorkspaceUrlSync() {
-  const nav = useNavigation();
-  const { openWorkspaceTab } = useLayoutState();
-
-  useEffect(() => {
-    if (!isSessions(nav) || !nav.sessionName) return;
-    openWorkspaceTab("project", nav.sessionName, nav.sessionName);
-  }, [nav, openWorkspaceTab]);
-
   return null;
 }

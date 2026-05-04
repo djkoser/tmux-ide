@@ -67,6 +67,16 @@ export interface SidebarSection {
   /** Error-state node rendered above the items when error is true */
   errorState?: ReactNode;
   error?: boolean;
+  /** Optional badge rendered next to the section label (e.g. count) */
+  badge?: string | number;
+  /** When true, the section header is interactive: clicking toggles expansion. */
+  collapsible?: boolean;
+  /** Controlled expansion state (only meaningful when collapsible). */
+  expanded?: boolean;
+  /** Toggle handler for collapsible sections. */
+  onToggle?: () => void;
+  /** Optional test id for the section's header button (collapsible sections). */
+  testId?: string;
 }
 
 export function isSidebarSeparator(item: SidebarItem): item is SidebarSeparator {

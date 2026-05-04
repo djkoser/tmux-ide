@@ -137,43 +137,103 @@ function SidebarSeparatorView() {
 }
 
 function SidebarSectionView({ section }: { section: SidebarSection }) {
+  const collapsible = Boolean(section.collapsible);
+  const expanded = collapsible ? (section.expanded ?? true) : true;
   const showEmpty =
     !section.loading && !section.error && section.items.length === 0 && section.emptyState;
 
+  const labelInner = (
+    <>
+      {collapsible ? (
+        <span
+          aria-hidden="true"
+          className="inline-flex h-3 w-3 shrink-0 items-center justify-center text-[var(--dim)] transition-transform group-data-[collapsible=icon]:hidden"
+          style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)" }}
+        >
+          <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
+            <path d="M2 1 L6 4 L2 7 Z" />
+          </svg>
+        </span>
+      ) : null}
+      {renderIcon(section.icon, 11)}
+      <span className="flex-1 truncate">{section.label}</span>
+      {section.badge !== undefined ? (
+        <span className="ml-auto rounded bg-[var(--surface)] px-1.5 text-[10px] tabular-nums text-[var(--dim)] group-data-[collapsible=icon]:hidden">
+          {section.badge}
+        </span>
+      ) : null}
+    </>
+  );
+
+  const labelNode = collapsible ? (
+    <SidebarGroupLabel className="p-0">
+      <button
+        type="button"
+        onClick={() => section.onToggle?.()}
+        aria-expanded={expanded}
+        data-testid={section.testId}
+        className="flex h-full w-full items-center gap-2 rounded-md px-2 text-left hover:bg-[var(--sidebar-accent)] hover:text-[var(--fg)]"
+      >
+        {labelInner}
+      </button>
+    </SidebarGroupLabel>
+  ) : (
+    <SidebarGroupLabel>{labelInner}</SidebarGroupLabel>
+  );
+
+  const body = (
+    <>
+      {section.error && section.errorState ? section.errorState : null}
+      {section.loading && section.loadingState ? section.loadingState : null}
+      {showEmpty ? section.emptyState : null}
+      <SidebarMenu>
+        <AnimatePresence initial={false}>
+          {section.items.map((child) => {
+            if (isSidebarSeparator(child)) {
+              return (
+                <li
+                  key={child.id}
+                  data-slot="sidebar-tree-separator"
+                  className="my-1 h-px bg-[var(--sidebar-border)]"
+                  aria-hidden="true"
+                />
+              );
+            }
+            if (isSidebarSection(child)) {
+              return (
+                <li key={child.id} data-slot="sidebar-tree-nested-section">
+                  <SidebarSectionView section={child} />
+                </li>
+              );
+            }
+            return <SidebarLinkRow key={child.id} item={child} />;
+          })}
+        </AnimatePresence>
+      </SidebarMenu>
+    </>
+  );
+
   return (
-    <SidebarGroup>
-      <SidebarGroupLabel>
-        {renderIcon(section.icon, 11)}
-        {section.label}
-      </SidebarGroupLabel>
+    <SidebarGroup data-section-id={section.id}>
+      {labelNode}
       <SidebarGroupContent>
-        {section.error && section.errorState ? section.errorState : null}
-        {section.loading && section.loadingState ? section.loadingState : null}
-        {showEmpty ? section.emptyState : null}
-        <SidebarMenu>
+        {collapsible ? (
           <AnimatePresence initial={false}>
-            {section.items.map((child) => {
-              if (isSidebarSeparator(child)) {
-                return (
-                  <li
-                    key={child.id}
-                    data-slot="sidebar-tree-separator"
-                    className="my-1 h-px bg-[var(--sidebar-border)]"
-                    aria-hidden="true"
-                  />
-                );
-              }
-              if (isSidebarSection(child)) {
-                return (
-                  <li key={child.id} data-slot="sidebar-tree-nested-section">
-                    <SidebarSectionView section={child} />
-                  </li>
-                );
-              }
-              return <SidebarLinkRow key={child.id} item={child} />;
-            })}
+            {expanded && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeInOut" }}
+                className="overflow-hidden group-data-[collapsible=icon]:!h-auto group-data-[collapsible=icon]:!opacity-100"
+              >
+                {body}
+              </motion.div>
+            )}
           </AnimatePresence>
-        </SidebarMenu>
+        ) : (
+          body
+        )}
       </SidebarGroupContent>
     </SidebarGroup>
   );

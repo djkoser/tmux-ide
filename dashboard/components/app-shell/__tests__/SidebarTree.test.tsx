@@ -139,4 +139,35 @@ describe("SidebarTree", () => {
     fireEvent.click(screen.getByTestId("sidebar-skill-inject-foo"));
     expect(onAction).toHaveBeenCalledTimes(1);
   });
+
+  it("renders a collapsible section header that fires onToggle", () => {
+    const onToggle = vi.fn();
+    const items: SidebarItem[] = [
+      {
+        id: "section-mission",
+        type: "section",
+        label: "mission",
+        icon: Folder,
+        collapsible: true,
+        expanded: true,
+        onToggle,
+        testId: "sidebar-section-mission",
+        items: [
+          {
+            id: "milestone-M1",
+            title: "M1",
+            icon: Folder,
+            testId: "sidebar-milestone-M1",
+          },
+        ],
+      },
+    ];
+
+    renderTree(items);
+    const header = screen.getByTestId("sidebar-section-mission");
+    expect(header).toBeTruthy();
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(header);
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
 });

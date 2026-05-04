@@ -2,17 +2,36 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Bell, Folder, Settings, Sparkles, X, type LucideIcon } from "lucide-react";
-import type { WorkspaceTab } from "@/lib/useLayoutState";
+import { File, Folder, Settings, Sparkles, X } from "lucide-react";
+import type { Tab } from "@/lib/navigation";
 
-interface WorkspaceTabItemProps {
-  tab: WorkspaceTab;
+interface MainTabItemProps {
+  tab: Tab;
   active: boolean;
   onActivate: () => void;
   onClose: () => void;
 }
 
-export function WorkspaceTabItem({ tab, active, onActivate, onClose }: WorkspaceTabItemProps) {
+function TabIcon({ kind }: { kind: Tab["kind"] }) {
+  switch (kind) {
+    case "settings":
+      return <Settings aria-hidden="true" size={14} className="shrink-0 text-[var(--dimmer)]" />;
+    case "skill":
+      return <Sparkles aria-hidden="true" size={14} className="shrink-0 text-[var(--dimmer)]" />;
+    case "file":
+      return <File aria-hidden="true" size={14} className="shrink-0 text-[var(--dimmer)]" />;
+    case "view":
+    default:
+      return <Folder aria-hidden="true" size={14} className="shrink-0 text-[var(--dimmer)]" />;
+  }
+}
+
+/**
+ * Single tab pill in the unified main tab strip. Drag-reorder is
+ * provided via `useSortable` from @dnd-kit/sortable; the surrounding
+ * `MainTabsBar` mounts the SortableContext + DndContext.
+ */
+export function MainTabItem({ tab, active, onActivate, onClose }: MainTabItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: tab.id,
   });
@@ -23,22 +42,14 @@ export function WorkspaceTabItem({ tab, active, onActivate, onClose }: Workspace
     opacity: isDragging ? 0.65 : 1,
   };
 
-  const Icon: LucideIcon =
-    tab.kind === "settings"
-      ? Settings
-      : tab.kind === "notifications"
-        ? Bell
-        : tab.kind === "skill"
-          ? Sparkles
-          : Folder;
-
   return (
     <div
       ref={setNodeRef}
       style={style}
-      data-testid="workspace-tab"
+      data-testid="main-tab"
       data-active={active ? "true" : "false"}
       data-kind={tab.kind}
+      data-tab-id={tab.id}
       onClick={onActivate}
       onKeyDown={(event) => {
         if (event.key !== "Enter" && event.key !== " ") return;
@@ -53,11 +64,12 @@ export function WorkspaceTabItem({ tab, active, onActivate, onClose }: Workspace
       {...attributes}
       {...listeners}
     >
-      <Icon aria-hidden="true" size={14} className="shrink-0 text-[var(--dimmer)]" />
+      <TabIcon kind={tab.kind} />
       <span className="truncate">{tab.title}</span>
       <button
         type="button"
         aria-label={`Close ${tab.title}`}
+        data-testid={`main-tab-close-${tab.id}`}
         onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => {
           event.stopPropagation();

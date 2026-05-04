@@ -7,7 +7,11 @@ export { PanelResizeSash } from "./PanelResizeSash";
 export type { PanelResizeUpdate } from "./PanelResizeSash";
 export { NavigatorSlot } from "./NavigatorSlot";
 export { SecondaryTabsSlot } from "./SecondaryTabsSlot";
+export { ProjectSwitcher } from "./ProjectSwitcher";
 export { SidebarTree } from "./SidebarTree";
+export { MainTabsBar } from "./MainTabsBar";
+export { MainTabContent } from "./MainTabContent";
+export { MainTabItem } from "./MainTabItem";
 export type {
   SidebarItem,
   SidebarLink,

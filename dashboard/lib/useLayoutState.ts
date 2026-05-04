@@ -17,24 +17,33 @@ export interface TerminalTabOptions {
   cmd?: string[];
 }
 
+/**
+ * @deprecated Workspace tabs moved into NavigationState as part of
+ * Phase Z. This kind union remains so legacy call sites in
+ * `sessions/SessionsNavigator.tsx`, `skills/SkillsNavigator.tsx`, and
+ * `KeybindRoot.tsx` keep compiling — the shims below route through the
+ * new navigation tab store when given a project workspace tab.
+ */
 export type WorkspaceTabKind = "project" | "settings" | "notifications" | "skill";
 
+/**
+ * @deprecated Surface preserved for legacy navigators that still call
+ * `openWorkspaceTab(...)`. New code should construct `Tab` values via
+ * `viewTab/skillTab/settingsTab` and call `openTab(...)` from
+ * `@/lib/navigation`.
+ */
 export interface WorkspaceTab {
   id: string;
   kind: WorkspaceTabKind;
   projectName: string | null;
   title: string;
-  /** Optional secondary identifier (e.g. skill name, file path) — used by tab kinds
-   *  that need more than projectName to disambiguate the resource. */
   ref?: string;
 }
 
 /**
- * @deprecated Use `NavigationState` from `@/lib/navigation` instead. The
- * activity section concept has been folded into `NavigationState`'s `type`
- * tag (`overview` | `settings` | `skills` | `sessions`). This alias
- * remains so legacy navigators/* call sites compile while Agents 2/3
- * migrate them; new code MUST read from `useNavigation()`.
+ * @deprecated Activity section is no longer part of layout state; modes
+ * (sessions/skills/settings) are derived from the active tab kind in
+ * NavigationState. Keep the type alias so legacy imports still compile.
  */
 export type ActivitySection = "sessions" | "settings" | "skills";
 
@@ -48,9 +57,6 @@ export interface LayoutState {
    */
   activeTabIdByProject: Record<string, string | null>;
   tabs: TerminalTab[];
-  workspaceTabs: WorkspaceTab[];
-  activeWorkspaceTabId: string | null;
-  activitySection: ActivitySection;
 }
 
 export interface LayoutQueries {
@@ -64,43 +70,53 @@ export interface LayoutActions {
   toggleTerminal(): void;
   openTerminalMode(): void;
   closeTerminalMode(): void;
-  /** Active state is scoped per-project so each project remembers its own focused tab. */
   setActiveTab(projectName: string, id: string): void;
   newTab(projectName: string, options?: string | TerminalTabOptions): TerminalTab;
   closeTab(id: string): void;
   reorderTabs(orderedIds: string[]): void;
+  /**
+   * @deprecated Use `openTab(...)` from `@/lib/navigation` instead. This
+   * shim routes project/settings/skill tabs through the new navigation
+   * store so legacy call sites keep working.
+   */
   openWorkspaceTab(
     kind: WorkspaceTabKind,
     projectName: string | null,
     title?: string,
     ref?: string,
   ): WorkspaceTab;
+  /** @deprecated No-op shim. */
   closeWorkspaceTab(id: string): void;
+  /** @deprecated No-op shim. */
   setActiveWorkspaceTab(id: string): void;
+  /** @deprecated No-op shim. */
   reorderWorkspaceTabs(orderedIds: string[]): void;
+  /** @deprecated No-op shim. */
   setActivitySection(section: ActivitySection): void;
 }
 
-type PersistedLayoutState = Pick<
-  LayoutState,
-  "activeTabIdByProject" | "tabs" | "workspaceTabs" | "activeWorkspaceTabId" | "activitySection"
->;
-type LayoutStore = LayoutState & LayoutActions & LayoutQueries;
+type PersistedLayoutState = Pick<LayoutState, "activeTabIdByProject" | "tabs">;
+type LayoutStore = LayoutState &
+  LayoutActions &
+  LayoutQueries & {
+    /** @deprecated Always empty — workspace tabs migrated to NavigationState. */
+    readonly workspaceTabs: WorkspaceTab[];
+    /** @deprecated Always null — workspace tabs migrated to NavigationState. */
+    readonly activeWorkspaceTabId: string | null;
+    /** @deprecated Always "sessions" — modes derived from NavigationState. */
+    readonly activitySection: ActivitySection;
+  };
 
 const defaults: PersistedLayoutState = {
   activeTabIdByProject: {},
   tabs: [],
-  workspaceTabs: [],
-  activeWorkspaceTabId: null,
-  activitySection: "sessions",
 };
 
 const persist = Persist.global<PersistedLayoutState>(
   "tmux-ide.layout",
-  ["v1", "v2", "v3", "v4", "v5", "v6", "v7"],
+  ["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8"],
   defaults,
   {
-    // Migrating INTO v2: legacy `activeTabId` (single global) → `activeTabIdByProject` map.
     v2: (prev: unknown) => {
       if (!isRecord(prev)) return defaults;
       const tabs = Array.isArray(prev.tabs) ? prev.tabs : [];
@@ -118,47 +134,21 @@ const persist = Persist.global<PersistedLayoutState>(
       }
       return { tabs, activeTabIdByProject };
     },
-    // Migrating INTO v3: keep existing terminal state and initialize workspace tabs.
-    v3: (prev: unknown) => ({
-      ...(isRecord(prev) ? prev : {}),
-      workspaceTabs: isRecord(prev) && Array.isArray(prev.workspaceTabs) ? prev.workspaceTabs : [],
-      activeWorkspaceTabId:
-        isRecord(prev) && typeof prev.activeWorkspaceTabId === "string"
-          ? prev.activeWorkspaceTabId
-          : null,
-      activitySection:
-        isRecord(prev) && isActivitySection(prev.activitySection)
-          ? prev.activitySection
-          : "sessions",
-    }),
-    // Migrating INTO v4: terminal pane tabs carried an optional paneId. Legacy
-    // bash tabs passed through unchanged with paneId omitted.
+    v3: (prev: unknown) => (isRecord(prev) ? prev : defaults),
     v4: (prev: unknown) => (isRecord(prev) ? prev : defaults),
-    // Migrating INTO v5: terminal tabs may carry cwd/cmd. Existing tabs pass
-    // through and normalize without paneId.
     v5: (prev: unknown) => (isRecord(prev) ? prev : defaults),
-    // Migrating INTO v6: workspace tabs add notifications and activity adds
-    // skills. Existing project/settings tabs pass through unchanged.
     v6: (prev: unknown) => (isRecord(prev) ? prev : defaults),
-    // Migrating INTO v7: workspace tabs gain optional `ref` for kinds that
-    // need a secondary identifier (e.g. skill name). Pass through unchanged.
     v7: (prev: unknown) => (isRecord(prev) ? prev : defaults),
+    // v8: dropped workspaceTabs / activeWorkspaceTabId / activitySection
+    // (migrated into NavigationState in Phase Z). Existing terminal-tab
+    // state passes through untouched.
+    v8: (prev: unknown) => (isRecord(prev) ? prev : defaults),
   },
 );
 const listeners = new Set<() => void>();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isWorkspaceTabKind(value: unknown): value is WorkspaceTabKind {
-  return (
-    value === "project" || value === "settings" || value === "notifications" || value === "skill"
-  );
-}
-
-function isActivitySection(value: unknown): value is ActivitySection {
-  return value === "sessions" || value === "settings" || value === "skills";
 }
 
 function normalizePersisted(value: unknown): PersistedLayoutState {
@@ -200,42 +190,7 @@ function normalizePersisted(value: unknown): PersistedLayoutState {
     }
   }
 
-  const seenWorkspaceTabs = new Set<string>();
-  const rawWorkspaceTabs = Array.isArray(value.workspaceTabs) ? value.workspaceTabs : [];
-  const workspaceTabs = rawWorkspaceTabs.flatMap((tab) => {
-    if (
-      !isRecord(tab) ||
-      typeof tab["id"] !== "string" ||
-      !isWorkspaceTabKind(tab["kind"]) ||
-      !(typeof tab["projectName"] === "string" || tab["projectName"] === null) ||
-      typeof tab["title"] !== "string" ||
-      seenWorkspaceTabs.has(tab["id"])
-    ) {
-      return [];
-    }
-    seenWorkspaceTabs.add(tab["id"]);
-    return [
-      {
-        id: tab["id"],
-        kind: tab["kind"],
-        projectName: tab["projectName"],
-        title: tab["title"],
-        ...(typeof tab["ref"] === "string" ? { ref: tab["ref"] } : {}),
-      },
-    ];
-  });
-
-  const activeWorkspaceTabId =
-    typeof value.activeWorkspaceTabId === "string" &&
-    seenWorkspaceTabs.has(value.activeWorkspaceTabId)
-      ? value.activeWorkspaceTabId
-      : (workspaceTabs[0]?.id ?? null);
-
-  const activitySection = isActivitySection(value.activitySection)
-    ? value.activitySection
-    : "sessions";
-
-  return { tabs, activeTabIdByProject, workspaceTabs, activeWorkspaceTabId, activitySection };
+  return { tabs, activeTabIdByProject };
 }
 
 function initialState(): LayoutState {
@@ -244,9 +199,6 @@ function initialState(): LayoutState {
     terminalOpen: false,
     activeTabIdByProject: persisted.activeTabIdByProject,
     tabs: persisted.tabs,
-    workspaceTabs: persisted.workspaceTabs,
-    activeWorkspaceTabId: persisted.activeWorkspaceTabId,
-    activitySection: persisted.activitySection,
   };
 }
 
@@ -256,9 +208,6 @@ function persistState(next: LayoutState): void {
   persist.write({
     activeTabIdByProject: next.activeTabIdByProject,
     tabs: next.tabs,
-    workspaceTabs: next.workspaceTabs,
-    activeWorkspaceTabId: next.activeWorkspaceTabId,
-    activitySection: next.activitySection,
   });
 }
 
@@ -307,32 +256,6 @@ function projectTabs(tabs: TerminalTab[], projectName: string): TerminalTab[] {
 function fallbackActive(tabs: TerminalTab[], projectName: string): string | null {
   const first = projectTabs(tabs, projectName)[0];
   return first ? first.id : null;
-}
-
-function workspaceTabId(
-  kind: WorkspaceTabKind,
-  projectName: string | null,
-  ref?: string,
-): string {
-  const base = `${kind}:${projectName ?? ""}`;
-  return ref ? `${base}:${ref}` : base;
-}
-
-function workspaceTabTitle(
-  kind: WorkspaceTabKind,
-  projectName: string | null,
-  title?: string,
-  ref?: string,
-): string {
-  if (title) return title;
-  if (kind === "settings") return "Settings";
-  if (kind === "notifications") return "Notifications";
-  if (kind === "skill" && ref) return `Skill · ${ref}`;
-  return projectName || "Project";
-}
-
-function workspaceFallthrough(tabs: WorkspaceTab[], removedIndex: number): string | null {
-  return tabs[removedIndex - 1]?.id ?? tabs[removedIndex]?.id ?? null;
 }
 
 const actions: LayoutActions = {
@@ -412,78 +335,51 @@ const actions: LayoutActions = {
       };
     });
   },
+  // ----- Deprecated workspace-tab compat shims -----
   openWorkspaceTab(
     kind: WorkspaceTabKind,
     projectName: string | null,
     title?: string,
     ref?: string,
   ) {
-    const existing = state.workspaceTabs.find(
-      (tab) => tab.kind === kind && tab.projectName === projectName && tab.ref === ref,
-    );
-    if (existing) {
-      setState((current) => ({
-        ...current,
-        activeWorkspaceTabId: existing.id,
-      }));
-      return existing;
+    void kind;
+    void title;
+    void ref;
+    // Route through the new navigation store so legacy call sites still
+    // open the right tab. Lazy-imported to avoid a circular module load.
+    if (typeof window !== "undefined") {
+      void import("./navigation").then((nav) => {
+        if (kind === "project" && projectName) {
+          nav.setActiveSession(projectName);
+        } else if (kind === "settings") {
+          nav.openTab(nav.settingsTab());
+        } else if (kind === "skill" && projectName && ref) {
+          nav.openTab(nav.skillTab(projectName, ref, title));
+        }
+      });
     }
-
-    const tab: WorkspaceTab = {
-      id: workspaceTabId(kind, projectName, ref),
+    return {
+      id: `${kind}:${projectName ?? ""}${ref ? `:${ref}` : ""}`,
       kind,
       projectName,
-      title: workspaceTabTitle(kind, projectName, title, ref),
+      title:
+        title ??
+        (kind === "settings" ? "Settings" : kind === "skill" && ref ? `Skill · ${ref}` : "Tab"),
       ...(ref ? { ref } : {}),
     };
-    setState((current) => ({
-      ...current,
-      activeWorkspaceTabId: tab.id,
-      workspaceTabs: [...current.workspaceTabs, tab],
-    }));
-    return tab;
   },
-  closeWorkspaceTab(id: string) {
-    setState((current) => {
-      const index = current.workspaceTabs.findIndex((tab) => tab.id === id);
-      if (index === -1) return current;
-
-      const workspaceTabs = current.workspaceTabs.filter((tab) => tab.id !== id);
-      const activeWorkspaceTabId =
-        current.activeWorkspaceTabId === id
-          ? workspaceFallthrough(workspaceTabs, index)
-          : current.activeWorkspaceTabId;
-
-      return {
-        ...current,
-        activeWorkspaceTabId,
-        workspaceTabs,
-      };
-    });
+  closeWorkspaceTab(_id: string) {
+    // No-op: workspace tabs moved into NavigationState.
   },
-  setActiveWorkspaceTab(id: string) {
-    setState((current) => {
-      if (!current.workspaceTabs.some((tab) => tab.id === id)) return current;
-      return { ...current, activeWorkspaceTabId: id };
-    });
+  setActiveWorkspaceTab(_id: string) {
+    // No-op: workspace tabs moved into NavigationState.
   },
-  reorderWorkspaceTabs(orderedIds: string[]) {
-    setState((current) => {
-      const byId = new Map(current.workspaceTabs.map((tab) => [tab.id, tab]));
-      const ordered = orderedIds.flatMap((id) => {
-        const tab = byId.get(id);
-        if (!tab) return [];
-        byId.delete(id);
-        return [tab];
-      });
-      return {
-        ...current,
-        workspaceTabs: [...ordered, ...byId.values()],
-      };
-    });
+  reorderWorkspaceTabs(_orderedIds: string[]) {
+    // No-op: workspace tabs moved into NavigationState.
   },
-  setActivitySection(section: ActivitySection) {
-    setState((current) => ({ ...current, activitySection: section }));
+  setActivitySection(_section: ActivitySection) {
+    // No-op: activity section concept retired; modes derive from
+    // NavigationState's active tab kind.
   },
 };
 
@@ -496,18 +392,10 @@ function getSnapshot(): LayoutState {
   return state;
 }
 
-// Returned during SSR AND the first client render before hydration completes.
-// Always reflects the persistence-free defaults so server-rendered HTML matches
-// the first client render — React then re-renders with getSnapshot once the
-// store subscription kicks in. Without this, localStorage-derived state on the
-// client diverges from the server's empty defaults and triggers a mismatch.
 const serverSnapshot: LayoutState = {
   terminalOpen: false,
   activeTabIdByProject: {},
   tabs: [],
-  workspaceTabs: [],
-  activeWorkspaceTabId: null,
-  activitySection: "sessions",
 };
 
 function getServerSnapshot(): LayoutState {
@@ -532,11 +420,6 @@ function queriesForSnapshot(snapshot: LayoutState): LayoutQueries {
   };
 }
 
-// Stable module-level live queries for callers OUTSIDE the render lifecycle
-// (e.g., action `run` callbacks registered with the action registry). They
-// read the current module state, which mutates in place. Render-time consumers
-// must use the snapshot-bound queries returned by useLayoutState() so SSR and
-// the first hydration render agree.
 export function getProjectTabsLive(projectName: string): TerminalTab[] {
   return projectTabs(state.tabs, projectName);
 }
@@ -551,11 +434,14 @@ export function getActiveTabIdLive(projectName: string): string | null {
 
 export function useLayoutState(): LayoutStore {
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  // Queries must close over the React snapshot (not the module-level `state`)
-  // so server-rendered HTML and the first client render agree during
-  // hydration — otherwise consumers like FullScreenTerminal read live
-  // localStorage state and diverge from the SSR defaults.
-  return { ...snapshot, ...actions, ...queriesForSnapshot(snapshot) };
+  return {
+    ...snapshot,
+    ...actions,
+    ...queriesForSnapshot(snapshot),
+    workspaceTabs: [],
+    activeWorkspaceTabId: null,
+    activitySection: "sessions",
+  };
 }
 
 export function __resetLayoutStateForTests(next?: Partial<LayoutState>): void {

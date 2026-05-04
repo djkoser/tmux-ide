@@ -1,34 +1,209 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
+  __resetNavigationForTests,
+  activateTab,
+  activeSessionName,
+  activeSkillName,
+  activeView,
+  closeTab,
+  getNavigationLive,
+  getNavigationStateLive,
   isOverview,
   isSessions,
   isSettings,
   isSkills,
+  openTab,
   pathFromState,
+  reorderTabs,
+  setActiveSession,
+  setNavigation,
+  settingsTab,
+  skillTab,
   stateFromPath,
+  viewTab,
+  type LegacyNavigationState,
   type NavigationState,
 } from "../navigation";
 
-describe("navigation type guards", () => {
-  it("isOverview narrows to the overview variant", () => {
-    const overview: NavigationState = { type: "overview" };
-    expect(isOverview(overview)).toBe(true);
-    expect(isSettings(overview)).toBe(false);
-    expect(isSkills(overview)).toBe(false);
-    expect(isSessions(overview)).toBe(false);
+beforeEach(() => {
+  window.localStorage.clear();
+  __resetNavigationForTests({ type: "overview" });
+});
+
+describe("type guards on NavigationState", () => {
+  it("isOverview when no session and no active tab", () => {
+    const state: NavigationState = { sessionName: null, openTabs: [], activeTabId: null };
+    expect(isOverview(state)).toBe(true);
+    expect(isSessions(state)).toBe(false);
+    expect(isSkills(state)).toBe(false);
+    expect(isSettings(state)).toBe(false);
   });
 
-  it("isSessions / isSkills / isSettings narrow correctly", () => {
-    const sessions: NavigationState = { type: "sessions", sessionName: "alpha", tab: "kanban" };
-    const skills: NavigationState = { type: "skills", sessionName: "alpha" };
-    const settings: NavigationState = { type: "settings", section: "general" };
+  it("isSettings when active tab kind is settings", () => {
+    const tab = settingsTab();
+    const state: NavigationState = {
+      sessionName: null,
+      openTabs: [tab],
+      activeTabId: tab.id,
+    };
+    expect(isSettings(state)).toBe(true);
+    expect(isOverview(state)).toBe(false);
+    expect(isSessions(state)).toBe(false);
+  });
 
-    expect(isSessions(sessions)).toBe(true);
-    expect(isSessions(skills)).toBe(false);
-    expect(isSkills(skills)).toBe(true);
-    expect(isSkills(settings)).toBe(false);
-    expect(isSettings(settings)).toBe(true);
-    expect(isSettings(sessions)).toBe(false);
+  it("isSkills when active tab kind is skill", () => {
+    const tab = skillTab("alpha", "frontend");
+    const state: NavigationState = {
+      sessionName: "alpha",
+      openTabs: [tab],
+      activeTabId: tab.id,
+    };
+    expect(isSkills(state)).toBe(true);
+    expect(isSessions(state)).toBe(false);
+  });
+
+  it("isSessions when sessionName set and active tab is not settings/skill", () => {
+    const tab = viewTab("alpha", "kanban");
+    const state: NavigationState = {
+      sessionName: "alpha",
+      openTabs: [tab],
+      activeTabId: tab.id,
+    };
+    expect(isSessions(state)).toBe(true);
+    expect(isSettings(state)).toBe(false);
+    expect(isSkills(state)).toBe(false);
+  });
+});
+
+describe("accessors", () => {
+  it("activeView returns the project tab when active tab is a view", () => {
+    const tab = viewTab("alpha", "plans");
+    const state: NavigationState = {
+      sessionName: "alpha",
+      openTabs: [tab],
+      activeTabId: tab.id,
+    };
+    expect(activeView(state)).toBe("plans");
+    expect(activeSessionName(state)).toBe("alpha");
+    expect(activeSkillName(state)).toBeNull();
+  });
+
+  it("activeSkillName returns the skill name when active tab is a skill", () => {
+    const tab = skillTab("alpha", "frontend");
+    const state: NavigationState = {
+      sessionName: "alpha",
+      openTabs: [tab],
+      activeTabId: tab.id,
+    };
+    expect(activeSkillName(state)).toBe("frontend");
+    expect(activeView(state)).toBeNull();
+  });
+});
+
+describe("setActiveSession + tab actions", () => {
+  it("opens a default kanban tab when activating a fresh session", () => {
+    setActiveSession("alpha");
+    const live = getNavigationLive();
+    expect(live.type).toBe("sessions");
+    if (live.type === "sessions") {
+      expect(live.sessionName).toBe("alpha");
+      expect(live.tab).toBe("kanban");
+    }
+  });
+
+  it("openTab activates a heterogeneous tab", () => {
+    setActiveSession("alpha");
+    const skill = skillTab("alpha", "frontend");
+    openTab(skill);
+    const live = getNavigationLive();
+    expect(live.type).toBe("skills");
+    if (live.type === "skills") {
+      expect(live.sessionName).toBe("alpha");
+      expect(live.skillName).toBe("frontend");
+    }
+  });
+
+  it("closeTab falls back to the previous tab when closing the active one", () => {
+    setActiveSession("alpha");
+    const skill = skillTab("alpha", "frontend");
+    openTab(skill);
+    closeTab(skill.id);
+    const live = getNavigationLive();
+    expect(live.type).toBe("sessions");
+    if (live.type === "sessions") expect(live.tab).toBe("kanban");
+  });
+
+  it("activateTab switches active tab without changing session", () => {
+    setActiveSession("alpha");
+    openTab(viewTab("alpha", "plans"));
+    activateTab("view:alpha:kanban");
+    expect(activeView(getNavigationStateLive())).toBe("kanban");
+  });
+
+  it("reorderTabs respects the requested order", () => {
+    setActiveSession("alpha");
+    openTab(viewTab("alpha", "plans"));
+    openTab(viewTab("alpha", "metrics"));
+    reorderTabs([
+      "view:alpha:metrics",
+      "view:alpha:plans",
+      "view:alpha:kanban",
+    ]);
+    const ids = getNavigationStateLive().openTabs.map((t) => t.id);
+    expect(ids).toEqual([
+      "view:alpha:metrics",
+      "view:alpha:plans",
+      "view:alpha:kanban",
+    ]);
+  });
+
+  it("persists per-session tab strips so switching back restores them", () => {
+    setActiveSession("alpha");
+    openTab(viewTab("alpha", "plans"));
+    setActiveSession("beta");
+    openTab(viewTab("beta", "metrics"));
+    setActiveSession("alpha");
+    const ids = getNavigationStateLive().openTabs.map((t) => t.id);
+    expect(ids).toContain("view:alpha:plans");
+    expect(ids).toContain("view:alpha:kanban");
+    expect(ids).not.toContain("view:beta:metrics");
+  });
+});
+
+describe("legacy setNavigation compat", () => {
+  it("translates type:sessions into a view tab", () => {
+    setNavigation({ type: "sessions", sessionName: "alpha", tab: "plans" });
+    const live = getNavigationLive();
+    expect(live.type).toBe("sessions");
+    if (live.type === "sessions") {
+      expect(live.sessionName).toBe("alpha");
+      expect(live.tab).toBe("plans");
+    }
+  });
+
+  it("translates type:settings into a settings tab", () => {
+    setNavigation({ type: "settings", section: "appearance" });
+    const live = getNavigationLive();
+    expect(live.type).toBe("settings");
+    if (live.type === "settings") {
+      expect(live.section).toBe("appearance");
+    }
+  });
+
+  it("translates type:skills with sessionName + skillName into a skill tab", () => {
+    setNavigation({ type: "skills", sessionName: "alpha", skillName: "frontend" });
+    const live = getNavigationLive();
+    expect(live.type).toBe("skills");
+    if (live.type === "skills") {
+      expect(live.sessionName).toBe("alpha");
+      expect(live.skillName).toBe("frontend");
+    }
+  });
+
+  it("translates type:overview by clearing the session", () => {
+    setNavigation({ type: "sessions", sessionName: "alpha" });
+    setNavigation({ type: "overview" });
+    expect(getNavigationLive()).toEqual({ type: "overview" });
   });
 });
 
@@ -131,7 +306,7 @@ describe("stateFromPath", () => {
   });
 
   it("round-trips through pathFromState → stateFromPath", () => {
-    const cases: NavigationState[] = [
+    const cases: LegacyNavigationState[] = [
       { type: "overview" },
       { type: "settings" },
       { type: "settings", section: "keybinds" },

@@ -4,18 +4,36 @@ import { useEffect, useSyncExternalStore } from "react";
 
 /**
  * NavigationState — the single source of truth for "what the user is
- * looking at". Replaces the old quintet of pathname / ?tab= / activitySection /
- * activeWorkspaceTabId / module-portal stores that constantly disagreed.
+ * looking at". Phase Z collapses the previous discriminated-union shape
+ * into a tab-driven model:
  *
- * Inspired by craft-agents-oss's NavigationState union — discriminated by
- * `type`, with type guards (`isOverview`, `isSettings`, `isSkills`,
- * `isSessions`) for narrowing.
+ *   { sessionName: string | null, openTabs: Tab[], activeTabId: string | null }
  *
- * URL is OUTPUT, state is INPUT: state updates derive a pathname via
- * `pathFromState(...)` and the store calls `history.replaceState(...)` so
- * back/forward + reload still work. Browser navigation events (popstate)
- * are observed and re-parsed via `stateFromPath(...)`.
+ * The active session is `sessionName`. The main area renders `openTabs`
+ * for that session (one strip of heterogeneous tabs: views, files,
+ * skills, settings). Selecting a tab updates `activeTabId`. The
+ * pre-Phase-Z mode/type union is gone — "settings mode" just means the
+ * active tab kind is "settings", "skills mode" means kind is "skill".
+ *
+ * Compat shims (this file): the type guards `isOverview`, `isSessions`,
+ * `isSkills`, `isSettings` are reimplemented on the new shape so
+ * Agents 1/2 (TopBar, AppSidebar, ProjectSwitcher) keep compiling.
+ * `setNavigation(...)` accepts the legacy discriminated union and
+ * translates it into store ops on the new shape. `getNavigationLive()`
+ * returns a legacy-shape projection so the existing test fixtures stay
+ * green.
+ *
+ * Persistence: per-session tab strips are stored in
+ * `tmux-ide.tabs.<sessionName>` so reopening a session restores its
+ * tabs. Global tabs (settings, skill-without-session) live under the
+ * synthetic `__global__` slot.
+ *
+ * URL is OUTPUT, state is INPUT: state changes derive a pathname via
+ * `pathFromState(...)` and `history.replaceState(...)` reshapes the URL.
+ * popstate re-parses via `stateFromPath(...)`.
  */
+
+// ---------- Types ----------
 
 export type ProjectTab =
   | "kanban"
@@ -44,44 +62,6 @@ export type SettingsSection =
   | "sounds"
   | "about";
 
-export type NavigationState =
-  | { type: "overview" }
-  | { type: "settings"; section?: SettingsSection }
-  | { type: "skills"; sessionName?: string; skillName?: string }
-  | { type: "sessions"; sessionName?: string; tab?: ProjectTab };
-
-// ---------- Type guards ----------
-
-export function isOverview(
-  state: NavigationState,
-): state is Extract<NavigationState, { type: "overview" }> {
-  return state.type === "overview";
-}
-
-export function isSettings(
-  state: NavigationState,
-): state is Extract<NavigationState, { type: "settings" }> {
-  return state.type === "settings";
-}
-
-export function isSkills(
-  state: NavigationState,
-): state is Extract<NavigationState, { type: "skills" }> {
-  return state.type === "skills";
-}
-
-export function isSessions(
-  state: NavigationState,
-): state is Extract<NavigationState, { type: "sessions" }> {
-  return state.type === "sessions";
-}
-
-// ---------- URL <-> state ----------
-
-function isProjectTab(value: string | null | undefined): value is ProjectTab {
-  return typeof value === "string" && (PROJECT_TABS as readonly string[]).includes(value);
-}
-
 const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   "general",
   "appearance",
@@ -91,16 +71,140 @@ const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   "about",
 ];
 
+export type Tab =
+  | { id: string; kind: "view"; sessionName: string; view: ProjectTab; title: string }
+  | { id: string; kind: "file"; sessionName: string; path: string; title: string }
+  | { id: string; kind: "skill"; sessionName: string; skillName: string; title: string }
+  | { id: string; kind: "settings"; section?: SettingsSection; title: string };
+
+export type TabKind = Tab["kind"];
+
+export interface NavigationState {
+  sessionName: string | null;
+  openTabs: Tab[];
+  activeTabId: string | null;
+  /**
+   * @deprecated Compat field — derived from the active tab. Equivalent
+   * to `activeView(state)` for view tabs, defaults to "kanban" for
+   * other kinds when the session is set. Kept so legacy reads like
+   * `nav.tab` (AppSidebar, ProjectPage) keep working during Phase Z.
+   */
+  readonly tab?: ProjectTab;
+  /**
+   * @deprecated Compat field — `activeSkillName(state)` projected.
+   */
+  readonly skillName?: string;
+  /**
+   * @deprecated Compat field — `activeSettingsSection(state)` projected.
+   */
+  readonly section?: SettingsSection;
+  /**
+   * @deprecated Compat field — synthetic discriminator that lets
+   * legacy code do `if (nav.type === "sessions")`. Mirrors the legacy
+   * NavigationState type tag for the duration of Phase Z.
+   */
+  readonly type?: "overview" | "settings" | "skills" | "sessions";
+}
+
+/**
+ * Legacy discriminated-union shape retained as a compat surface so
+ * `setNavigation({ type: "sessions", ... })` calls continue to work
+ * during the Phase Z transition.
+ */
+export type LegacyNavigationState =
+  | { type: "overview" }
+  | { type: "settings"; section?: SettingsSection }
+  | { type: "skills"; sessionName?: string; skillName?: string }
+  | { type: "sessions"; sessionName?: string; tab?: ProjectTab };
+
+// ---------- Type guards & accessors ----------
+
+function activeTab(state: NavigationState): Tab | null {
+  if (!state.activeTabId) return null;
+  return state.openTabs.find((tab) => tab.id === state.activeTabId) ?? null;
+}
+
+export function isOverview(state: NavigationState): boolean {
+  return state.sessionName === null && activeTab(state) === null;
+}
+
+export function isSettings(state: NavigationState): boolean {
+  return activeTab(state)?.kind === "settings";
+}
+
+export function isSkills(state: NavigationState): boolean {
+  return activeTab(state)?.kind === "skill";
+}
+
+export function isSessions(state: NavigationState): boolean {
+  if (state.sessionName === null) return false;
+  return !isSettings(state) && !isSkills(state);
+}
+
+export function activeView(state: NavigationState): ProjectTab | null {
+  const tab = activeTab(state);
+  return tab && tab.kind === "view" ? tab.view : null;
+}
+
+export function activeSessionName(state: NavigationState): string | null {
+  return state.sessionName;
+}
+
+export function activeSkillName(state: NavigationState): string | null {
+  const tab = activeTab(state);
+  return tab && tab.kind === "skill" ? tab.skillName : null;
+}
+
+export function activeSettingsSection(state: NavigationState): SettingsSection | null {
+  const tab = activeTab(state);
+  return tab && tab.kind === "settings" ? (tab.section ?? "general") : null;
+}
+
+// ---------- URL <-> legacy projection ----------
+
+function isProjectTab(value: string | null | undefined): value is ProjectTab {
+  return typeof value === "string" && (PROJECT_TABS as readonly string[]).includes(value);
+}
+
 function isSettingsSection(value: string | null | undefined): value is SettingsSection {
   return typeof value === "string" && (SETTINGS_SECTIONS as readonly string[]).includes(value);
 }
 
 /**
- * Compute the URL for a navigation state. Pathname is derived from `type`;
- * tabs / settings sections / skill name ride along as query params so the
- * URL is shareable + bookmarkable.
+ * Project NavigationState into the legacy discriminated union for URL
+ * synthesis and back-compat call sites.
  */
-export function pathFromState(state: NavigationState): string {
+function toLegacy(state: NavigationState): LegacyNavigationState {
+  const tab = activeTab(state);
+  if (tab) {
+    if (tab.kind === "settings") {
+      return tab.section ? { type: "settings", section: tab.section } : { type: "settings" };
+    }
+    if (tab.kind === "skill") {
+      const next: Extract<LegacyNavigationState, { type: "skills" }> = {
+        type: "skills",
+        sessionName: tab.sessionName,
+        skillName: tab.skillName,
+      };
+      return next;
+    }
+    if (tab.kind === "view") {
+      return { type: "sessions", sessionName: tab.sessionName, tab: tab.view };
+    }
+    if (tab.kind === "file") {
+      return { type: "sessions", sessionName: tab.sessionName, tab: "kanban" };
+    }
+  }
+  if (state.sessionName) return { type: "sessions", sessionName: state.sessionName, tab: "kanban" };
+  return { type: "overview" };
+}
+
+/**
+ * Compute the URL for a navigation state. Input is the legacy
+ * discriminated union; the store calls `toLegacy(...)` first so callers
+ * outside this file can read the URL form via `pathFromState(legacy)`.
+ */
+export function pathFromState(state: LegacyNavigationState): string {
   switch (state.type) {
     case "overview":
       return "/";
@@ -135,10 +239,12 @@ export function pathFromState(state: NavigationState): string {
 }
 
 /**
- * Parse a pathname + search string into a NavigationState. Inverse of
- * `pathFromState`. Unknown / malformed inputs collapse to "overview".
+ * Parse a pathname + search string into the legacy discriminated union.
+ * Inverse of `pathFromState`. Unknown / malformed inputs collapse to
+ * "overview". Callers translate into a NavigationState via
+ * `applyLegacy(...)` if they need to mutate the store.
  */
-export function stateFromPath(pathname: string, search: string): NavigationState {
+export function stateFromPath(pathname: string, search: string): LegacyNavigationState {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   const mode = params.get("mode");
 
@@ -147,7 +253,10 @@ export function stateFromPath(pathname: string, search: string): NavigationState
     const sessionName = decodeURIComponent(projectMatch[1]!);
     if (mode === "skills") {
       const skill = params.get("skill") ?? undefined;
-      const next: Extract<NavigationState, { type: "skills" }> = { type: "skills", sessionName };
+      const next: Extract<LegacyNavigationState, { type: "skills" }> = {
+        type: "skills",
+        sessionName,
+      };
       if (skill) next.skillName = skill;
       return next;
     }
@@ -162,7 +271,7 @@ export function stateFromPath(pathname: string, search: string): NavigationState
   if (pathname === "/" || pathname === "") {
     if (mode === "settings") {
       const section = params.get("section");
-      const next: Extract<NavigationState, { type: "settings" }> = { type: "settings" };
+      const next: Extract<LegacyNavigationState, { type: "settings" }> = { type: "settings" };
       if (isSettingsSection(section)) next.section = section;
       return next;
     }
@@ -175,38 +284,266 @@ export function stateFromPath(pathname: string, search: string): NavigationState
   return { type: "overview" };
 }
 
-// ---------- Equality helper ----------
+// ---------- Tab construction helpers ----------
 
-function navEquals(a: NavigationState, b: NavigationState): boolean {
-  if (a.type !== b.type) return false;
-  switch (a.type) {
-    case "overview":
-      return true;
+function viewTabId(sessionName: string, view: ProjectTab): string {
+  return `view:${sessionName}:${view}`;
+}
+
+function skillTabId(sessionName: string, skillName: string): string {
+  return `skill:${sessionName}:${skillName}`;
+}
+
+function fileTabId(sessionName: string, path: string): string {
+  return `file:${sessionName}:${path}`;
+}
+
+function settingsTabId(section?: SettingsSection): string {
+  return section ? `settings:${section}` : "settings:";
+}
+
+export function viewTab(sessionName: string, view: ProjectTab, title?: string): Tab {
+  return {
+    id: viewTabId(sessionName, view),
+    kind: "view",
+    sessionName,
+    view,
+    title: title ?? view,
+  };
+}
+
+export function skillTab(sessionName: string, skillName: string, title?: string): Tab {
+  return {
+    id: skillTabId(sessionName, skillName),
+    kind: "skill",
+    sessionName,
+    skillName,
+    title: title ?? `Skill · ${skillName}`,
+  };
+}
+
+export function fileTab(sessionName: string, path: string, title?: string): Tab {
+  return {
+    id: fileTabId(sessionName, path),
+    kind: "file",
+    sessionName,
+    path,
+    title: title ?? path.split("/").pop() ?? path,
+  };
+}
+
+export function settingsTab(section?: SettingsSection, title?: string): Tab {
+  return {
+    id: settingsTabId(section),
+    kind: "settings",
+    title: title ?? "Settings",
+    ...(section ? { section } : {}),
+  };
+}
+
+// ---------- Persistence ----------
+
+const GLOBAL_TABS_KEY = "__global__";
+
+interface PersistedTabStrip {
+  openTabs: Tab[];
+  activeTabId: string | null;
+}
+
+function persistKey(sessionName: string | null): string {
+  return `tmux-ide.tabs.${sessionName ?? GLOBAL_TABS_KEY}`;
+}
+
+function readPersistedStrip(sessionName: string | null): PersistedTabStrip | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(persistKey(sessionName));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+    const value = parsed as { openTabs?: unknown; activeTabId?: unknown };
+    if (!Array.isArray(value.openTabs)) return null;
+    const tabs = value.openTabs.filter(isValidTab);
+    const id =
+      typeof value.activeTabId === "string" && tabs.some((t) => t.id === value.activeTabId)
+        ? value.activeTabId
+        : (tabs[0]?.id ?? null);
+    return { openTabs: tabs, activeTabId: id };
+  } catch {
+    return null;
+  }
+}
+
+function writePersistedStrip(sessionName: string | null, strip: PersistedTabStrip): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (strip.openTabs.length === 0) {
+      window.localStorage.removeItem(persistKey(sessionName));
+      return;
+    }
+    window.localStorage.setItem(persistKey(sessionName), JSON.stringify(strip));
+  } catch {
+    // localStorage unavailable / quota — silent.
+  }
+}
+
+function isValidTab(value: unknown): value is Tab {
+  if (!value || typeof value !== "object") return false;
+  const tab = value as Record<string, unknown>;
+  if (typeof tab.id !== "string" || typeof tab.title !== "string") return false;
+  switch (tab.kind) {
+    case "view":
+      return (
+        typeof tab.sessionName === "string" &&
+        typeof tab.view === "string" &&
+        (PROJECT_TABS as readonly string[]).includes(tab.view as string)
+      );
+    case "file":
+      return typeof tab.sessionName === "string" && typeof tab.path === "string";
+    case "skill":
+      return typeof tab.sessionName === "string" && typeof tab.skillName === "string";
     case "settings":
-      return a.section === (b as typeof a).section;
+      return tab.section === undefined || isSettingsSection(tab.section as string);
+    default:
+      return false;
+  }
+}
+
+// ---------- Store ----------
+
+interface InternalState extends NavigationState {
+  /** Per-session tab strips so switching sessions restores their tabs. */
+  tabsBySession: Map<string | null, PersistedTabStrip>;
+}
+
+function emptyState(): InternalState {
+  return {
+    sessionName: null,
+    openTabs: [],
+    activeTabId: null,
+    tabsBySession: new Map(),
+  };
+}
+
+function readFromWindow(): InternalState {
+  if (typeof window === "undefined") return emptyState();
+  const legacy = stateFromPath(window.location.pathname, window.location.search);
+  return applyLegacyToFresh(legacy);
+}
+
+function applyLegacyToFresh(legacy: LegacyNavigationState): InternalState {
+  const next = emptyState();
+  applyLegacy(next, legacy);
+  return next;
+}
+
+/**
+ * Translate a legacy-shape navigation update into mutations on the
+ * given internal state. Used by `setNavigation`, popstate, and the
+ * fresh-state initializer.
+ */
+function applyLegacy(state: InternalState, legacy: LegacyNavigationState): void {
+  switch (legacy.type) {
+    case "overview": {
+      saveCurrentStrip(state);
+      state.sessionName = null;
+      // Restore global strip if any.
+      const strip = state.tabsBySession.get(null) ?? readPersistedStrip(null);
+      if (strip) {
+        state.openTabs = strip.openTabs;
+        state.activeTabId = strip.activeTabId;
+      } else {
+        state.openTabs = [];
+        state.activeTabId = null;
+      }
+      return;
+    }
+    case "settings": {
+      saveCurrentStrip(state);
+      state.sessionName = null;
+      const strip = state.tabsBySession.get(null) ?? readPersistedStrip(null) ?? {
+        openTabs: [],
+        activeTabId: null,
+      };
+      state.openTabs = strip.openTabs;
+      state.activeTabId = strip.activeTabId;
+      const tab = settingsTab(legacy.section, "Settings");
+      ensureTab(state, tab);
+      state.activeTabId = tab.id;
+      return;
+    }
     case "skills": {
-      const bb = b as typeof a;
-      return a.sessionName === bb.sessionName && a.skillName === bb.skillName;
+      saveCurrentStrip(state);
+      state.sessionName = legacy.sessionName ?? null;
+      const strip =
+        state.tabsBySession.get(state.sessionName) ?? readPersistedStrip(state.sessionName);
+      state.openTabs = strip?.openTabs ?? [];
+      state.activeTabId = strip?.activeTabId ?? null;
+      if (legacy.sessionName && legacy.skillName) {
+        const tab = skillTab(legacy.sessionName, legacy.skillName);
+        ensureTab(state, tab);
+        state.activeTabId = tab.id;
+      } else if (state.openTabs.length === 0 && legacy.sessionName) {
+        // Skills-without-skill on a session: open default kanban so the
+        // shell has something to render.
+        const fallback = viewTab(legacy.sessionName, "kanban");
+        ensureTab(state, fallback);
+        state.activeTabId = fallback.id;
+      }
+      return;
     }
     case "sessions": {
-      const bb = b as typeof a;
-      return a.sessionName === bb.sessionName && a.tab === bb.tab;
+      saveCurrentStrip(state);
+      state.sessionName = legacy.sessionName ?? null;
+      if (!legacy.sessionName) {
+        const strip = state.tabsBySession.get(null) ?? readPersistedStrip(null);
+        state.openTabs = strip?.openTabs ?? [];
+        state.activeTabId = strip?.activeTabId ?? null;
+        return;
+      }
+      const strip =
+        state.tabsBySession.get(legacy.sessionName) ?? readPersistedStrip(legacy.sessionName);
+      state.openTabs = strip?.openTabs ?? [];
+      state.activeTabId = strip?.activeTabId ?? null;
+      const tab = viewTab(legacy.sessionName, legacy.tab ?? "kanban");
+      ensureTab(state, tab);
+      state.activeTabId = tab.id;
+      return;
     }
   }
 }
 
-// ---------- External store ----------
-
-function readFromWindow(): NavigationState {
-  if (typeof window === "undefined") return { type: "overview" };
-  return stateFromPath(window.location.pathname, window.location.search);
+function saveCurrentStrip(state: InternalState): void {
+  const strip: PersistedTabStrip = {
+    openTabs: state.openTabs,
+    activeTabId: state.activeTabId,
+  };
+  state.tabsBySession.set(state.sessionName, strip);
+  writePersistedStrip(state.sessionName, strip);
 }
 
-let state: NavigationState = readFromWindow();
+function ensureTab(state: InternalState, tab: Tab): void {
+  const existing = state.openTabs.find((t) => t.id === tab.id);
+  if (existing) return;
+  state.openTabs = [...state.openTabs, tab];
+}
+
+let state: InternalState = readFromWindow();
 const listeners = new Set<() => void>();
 
 function emit(): void {
   for (const listener of listeners) listener();
+}
+
+function commit(): void {
+  saveCurrentStrip(state);
+  if (typeof window !== "undefined") {
+    const target = pathFromState(toLegacy(state));
+    if (target !== `${window.location.pathname}${window.location.search}`) {
+      window.history.replaceState(null, "", target);
+    }
+  }
+  emit();
 }
 
 function subscribe(listener: () => void): () => void {
@@ -216,16 +553,49 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-function getSnapshot(): NavigationState {
-  return state;
+function publicSnapshot(): NavigationState {
+  const projection: NavigationState = {
+    sessionName: state.sessionName,
+    openTabs: state.openTabs,
+    activeTabId: state.activeTabId,
+  };
+  // Derive legacy compat fields. These mirror the discriminated-union
+  // shape so call sites doing `nav.tab` / `nav.skillName` / `nav.type`
+  // keep working without churn. Mutable assignment is fine because the
+  // returned snapshot is fresh per refresh.
+  const legacy = toLegacy(state);
+  (projection as { type?: NavigationState["type"] }).type = legacy.type;
+  if (legacy.type === "sessions" && legacy.tab) {
+    (projection as { tab?: ProjectTab }).tab = legacy.tab;
+  }
+  if (legacy.type === "skills" && legacy.skillName) {
+    (projection as { skillName?: string }).skillName = legacy.skillName;
+  }
+  if (legacy.type === "settings" && legacy.section) {
+    (projection as { section?: SettingsSection }).section = legacy.section;
+  }
+  return projection;
 }
 
-// SSR + first-render snapshot. Always returns the persistence-free default
-// so server HTML matches the first client render. The URL parse runs once
-// the popstate listener kicks in client-side.
-const serverSnapshot: NavigationState = { type: "overview" };
+let cachedSnapshot: NavigationState = publicSnapshot();
+
+function getSnapshot(): NavigationState {
+  return cachedSnapshot;
+}
+
+const serverSnapshot: NavigationState = {
+  sessionName: null,
+  openTabs: [],
+  activeTabId: null,
+  type: "overview",
+};
+
 function getServerSnapshot(): NavigationState {
   return serverSnapshot;
+}
+
+function refreshSnapshot(): void {
+  cachedSnapshot = publicSnapshot();
 }
 
 let popstateBound = false;
@@ -233,62 +603,116 @@ let popstateBound = false;
 function ensureBrowserSync(): void {
   if (popstateBound || typeof window === "undefined") return;
   popstateBound = true;
-  // Re-read state on browser-driven URL changes (back/forward, anchor
-  // navigation, manual history.pushState elsewhere). Only updates when the
-  // parsed state differs to avoid spurious renders.
   const onPop = () => {
-    const next = readFromWindow();
-    if (navEquals(next, state)) return;
-    state = next;
+    const legacy = stateFromPath(window.location.pathname, window.location.search);
+    applyLegacy(state, legacy);
+    refreshSnapshot();
     emit();
   };
   window.addEventListener("popstate", onPop);
 }
 
-/**
- * Imperatively update navigation state. Writes the new URL via
- * history.replaceState (so reloads + share-links work) and fires listeners
- * for all subscribers. No-op if the new state is structurally equal to the
- * current one.
- *
- * NOTE: this does NOT call Next.js's router. Next's internal router state
- * stays in sync with `pathname` via popstate. Most consumers care about
- * NavigationState; the few that need `usePathname()` continue to read it
- * directly and stay in lockstep.
- */
-export function setNavigation(next: NavigationState): void {
-  if (navEquals(next, state)) return;
-  state = next;
-  if (typeof window !== "undefined") {
-    const target = pathFromState(next);
-    if (target !== `${window.location.pathname}${window.location.search}`) {
-      // We use replaceState — pushState would litter history with every
-      // sidebar click. The browser back button still works because real
-      // route transitions (via Next router) push entries.
-      window.history.replaceState(null, "", target);
-    }
-  }
-  emit();
-}
+// ---------- Public API ----------
 
 /**
- * Subscribe to NavigationState. Returns the current snapshot and
- * re-renders on change.
- *
- * Auto-binds the popstate listener on first mount. Components listing this
- * hook get back/forward sync for free.
+ * Imperative legacy entrypoint. Accepts the discriminated-union shape
+ * for compat with Z1/Z2 call sites and translates into the new tabbed
+ * state. Also accepts the structural NavigationState for forward-compat
+ * with new code paths that already build the new shape.
  */
+export function setNavigation(next: LegacyNavigationState | NavigationState): void {
+  if (isStructuralState(next)) {
+    saveCurrentStrip(state);
+    state.sessionName = next.sessionName;
+    state.openTabs = [...next.openTabs];
+    state.activeTabId = next.activeTabId;
+  } else {
+    applyLegacy(state, next);
+  }
+  refreshSnapshot();
+  commit();
+}
+
+function isStructuralState(value: LegacyNavigationState | NavigationState): value is NavigationState {
+  return "openTabs" in value && Array.isArray((value as NavigationState).openTabs);
+}
+
+export function setActiveSession(name: string | null): void {
+  if (state.sessionName === name) return;
+  saveCurrentStrip(state);
+  state.sessionName = name;
+  const strip = state.tabsBySession.get(name) ?? readPersistedStrip(name);
+  state.openTabs = strip?.openTabs ?? [];
+  state.activeTabId = strip?.activeTabId ?? null;
+  // Default project: open kanban tab.
+  if (name && state.openTabs.length === 0) {
+    const tab = viewTab(name, "kanban");
+    ensureTab(state, tab);
+    state.activeTabId = tab.id;
+  }
+  refreshSnapshot();
+  commit();
+}
+
+export function openTab(tab: Tab): void {
+  const existing = state.openTabs.find((candidate) => candidate.id === tab.id);
+  if (!existing) {
+    state.openTabs = [...state.openTabs, tab];
+  }
+  state.activeTabId = tab.id;
+  refreshSnapshot();
+  commit();
+}
+
+export function closeTab(tabId: string): void {
+  const index = state.openTabs.findIndex((tab) => tab.id === tabId);
+  if (index === -1) return;
+  const remaining = state.openTabs.filter((tab) => tab.id !== tabId);
+  state.openTabs = remaining;
+  if (state.activeTabId === tabId) {
+    const fallback = remaining[index - 1] ?? remaining[index] ?? null;
+    state.activeTabId = fallback?.id ?? null;
+  }
+  refreshSnapshot();
+  commit();
+}
+
+export function activateTab(tabId: string): void {
+  if (state.activeTabId === tabId) return;
+  if (!state.openTabs.some((tab) => tab.id === tabId)) return;
+  state.activeTabId = tabId;
+  refreshSnapshot();
+  commit();
+}
+
+export function reorderTabs(orderedIds: string[]): void {
+  const byId = new Map(state.openTabs.map((tab) => [tab.id, tab]));
+  const ordered: Tab[] = [];
+  for (const id of orderedIds) {
+    const tab = byId.get(id);
+    if (tab) {
+      ordered.push(tab);
+      byId.delete(id);
+    }
+  }
+  for (const tab of byId.values()) ordered.push(tab);
+  state.openTabs = ordered;
+  refreshSnapshot();
+  commit();
+}
+
 export function useNavigation(): NavigationState {
-  // Safe across SSR thanks to getServerSnapshot. The hook below installs
-  // the popstate listener once on the client.
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   useEffect(() => {
     ensureBrowserSync();
-    // Re-sync on mount in case the URL changed before the listener bound
-    // (e.g. SSR → first client render path mismatch).
     const next = readFromWindow();
-    if (!navEquals(next, state)) {
+    if (
+      next.sessionName !== state.sessionName ||
+      next.activeTabId !== state.activeTabId ||
+      next.openTabs.length !== state.openTabs.length
+    ) {
       state = next;
+      refreshSnapshot();
       emit();
     }
   }, []);
@@ -296,15 +720,51 @@ export function useNavigation(): NavigationState {
 }
 
 /**
- * Read the live navigation state from outside React (action callbacks,
- * imperative code paths). Not reactive — pair with setNavigation.
+ * Live (non-reactive) accessor. Returns the legacy discriminated-union
+ * projection so existing test fixtures (`ProjectSwitcher.test.tsx`)
+ * keep asserting on `next.type`. New consumers should read
+ * `useNavigation()` for the structural shape.
  */
-export function getNavigationLive(): NavigationState {
-  return state;
+export function getNavigationLive(): LegacyNavigationState {
+  return toLegacy(state);
 }
 
-/** Test-only reset. */
-export function __resetNavigationForTests(next: NavigationState = { type: "overview" }): void {
-  state = next;
+/**
+ * Live (non-reactive) accessor for the structural NavigationState.
+ * Returns the new shape `{ sessionName, openTabs, activeTabId }`. Pair
+ * with the imperative actions for tests + outside-React code paths.
+ */
+export function getNavigationStateLive(): NavigationState {
+  return publicSnapshot();
+}
+
+/** Test-only reset. Accepts the legacy shape for back-compat. */
+export function __resetNavigationForTests(
+  next: LegacyNavigationState | NavigationState = { type: "overview" },
+): void {
+  if (typeof window !== "undefined") {
+    try {
+      const keys: string[] = [];
+      for (let i = 0; i < window.localStorage.length; i += 1) {
+        const key = window.localStorage.key(i);
+        if (key && key.startsWith("tmux-ide.tabs.")) keys.push(key);
+      }
+      for (const key of keys) window.localStorage.removeItem(key);
+    } catch {
+      // ignore
+    }
+  }
+  if (isStructuralState(next)) {
+    state = {
+      sessionName: next.sessionName,
+      openTabs: [...next.openTabs],
+      activeTabId: next.activeTabId,
+      tabsBySession: new Map(),
+    };
+  } else {
+    state = applyLegacyToFresh(next);
+  }
+  refreshSnapshot();
   emit();
 }
+
