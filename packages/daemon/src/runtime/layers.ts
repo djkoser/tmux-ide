@@ -37,15 +37,21 @@ import {
   makeTurnProjection,
   type TurnProjection,
 } from "../persistence/projections/turn-projection.ts";
+import {
+  makeTurnDiffProjection,
+  type TurnDiffProjection,
+} from "../persistence/projections/turn-diff-projection.ts";
 import { makeReactor, type Reactor } from "../chat/reactors/reactor.ts";
 
 import { ChatEventStoreError, ProjectionError, ReactorError } from "./errors.ts";
 import {
   ChatEventStoreService,
   ChatReactorService,
+  TurnDiffProjectionService,
   TurnProjectionService,
   type ChatEventStoreServiceShape,
   type ChatReactorServiceShape,
+  type TurnDiffProjectionServiceShape,
   type TurnProjectionServiceShape,
 } from "./services.ts";
 
@@ -163,6 +169,59 @@ export const TurnProjectionLive = (
       const shape = wrapProjection(projection);
       // Register cleanup: stop the projection (releases the subscription)
       // when the Scope closes.
+      yield* Effect.addFinalizer(() => Effect.sync(() => projection.stop()));
+      return shape;
+    }),
+  );
+
+// ---------------------------------------------------------------------------
+// TurnDiffProjectionService (G14-T101)
+// ---------------------------------------------------------------------------
+
+function wrapTurnDiffProjection(
+  projection: TurnDiffProjection,
+): TurnDiffProjectionServiceShape {
+  const start = Effect.try({
+    try: () => projection.start(),
+    catch: (cause) =>
+      new ProjectionError({
+        projection: "turn-diff",
+        reason: "bootstrap",
+        message: cause instanceof Error ? cause.message : String(cause),
+        cause,
+      }),
+  });
+  return {
+    start,
+    stop: Effect.sync(() => projection.stop()),
+    cursor: Effect.sync(() => projection.cursor()),
+    listForTurn: (turnId) => Effect.sync(() => projection.listForTurn(turnId)),
+    listForThread: (threadId) => Effect.sync(() => projection.listForThread(threadId)),
+    aggregateForThread: (threadId) =>
+      Effect.sync(() => projection.aggregateForThread(threadId)),
+    raw: projection,
+  };
+}
+
+/**
+ * Build the turn-diff projection from a `ChatEventStoreService`. Scoped
+ * so the subscription is released on Scope close — same lifecycle as
+ * `TurnProjectionLive`.
+ */
+export const TurnDiffProjectionLive = (
+  options: MakeTurnProjectionLayerOptions = {},
+): Layer.Layer<TurnDiffProjectionService, never, ChatEventStoreService> =>
+  Layer.scoped(
+    TurnDiffProjectionService,
+    Effect.gen(function* () {
+      const eventStore = yield* ChatEventStoreService;
+      const projection = makeTurnDiffProjection({
+        reader: readerFromStore(eventStore.raw),
+        cursorStore: options.cursorStore ?? makeInMemoryCursorStore(),
+        name: options.name ? `${options.name}-diff` : undefined,
+        batchSize: options.batchSize,
+      });
+      const shape = wrapTurnDiffProjection(projection);
       yield* Effect.addFinalizer(() => Effect.sync(() => projection.stop()));
       return shape;
     }),
@@ -305,7 +364,10 @@ export interface ChatTurnPipelineLayerOptions {
 export const ChatTurnPipelineLive = (
   options: ChatTurnPipelineLayerOptions,
 ): Layer.Layer<
-  ChatEventStoreService | TurnProjectionService | ChatReactorService,
+  | ChatEventStoreService
+  | TurnProjectionService
+  | TurnDiffProjectionService
+  | ChatReactorService,
   ReactorError,
   Scope.Scope
 > => {
@@ -319,14 +381,24 @@ export const ChatTurnPipelineLive = (
         }),
       );
   const projectionLayer = TurnProjectionLive(options.projection ?? {});
+  // The turn-diff projection rides on the same event-store subscription
+  // path as TurnProjection (T091); both projections see every committed
+  // event in sequence order via their own subscribe handle. Composing it
+  // here means HTTP/IPC callers get the "changed files" panel for free
+  // as soon as they pull a ChatTurnPipelineLive into their runtime.
+  const turnDiffLayer = TurnDiffProjectionLive(options.projection ?? {});
   const reactorLayer = ChatReactorLive(options.reactor);
 
   return Layer.mergeAll(
     eventStoreLayer,
     Layer.provide(projectionLayer, eventStoreLayer),
+    Layer.provide(turnDiffLayer, eventStoreLayer),
     Layer.provide(reactorLayer, eventStoreLayer),
   ) as Layer.Layer<
-    ChatEventStoreService | TurnProjectionService | ChatReactorService,
+    | ChatEventStoreService
+    | TurnProjectionService
+    | TurnDiffProjectionService
+    | ChatReactorService,
     ReactorError,
     Scope.Scope
   >;

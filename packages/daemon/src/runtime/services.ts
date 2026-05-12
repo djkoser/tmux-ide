@@ -27,6 +27,11 @@ import type {
   PersistedChatEvent,
 } from "../persistence/chat-event-store.ts";
 import type { TurnProjection, TurnRecord } from "../persistence/projections/turn-projection.ts";
+import type {
+  TurnDiffAggregate,
+  TurnDiffEntry,
+  TurnDiffProjection,
+} from "../persistence/projections/turn-diff-projection.ts";
 import type { LatestTurn } from "@tmux-ide/contracts";
 import type { Reactor } from "../chat/reactors/reactor.ts";
 
@@ -77,6 +82,27 @@ export interface TurnProjectionServiceShape {
 export class TurnProjectionService extends Context.Tag(
   "@tmux-ide/daemon/runtime/TurnProjectionService",
 )<TurnProjectionService, TurnProjectionServiceShape>() {}
+
+// ---------------------------------------------------------------------------
+// TurnDiffProjectionService (G14-T101)
+// ---------------------------------------------------------------------------
+
+export interface TurnDiffProjectionServiceShape {
+  readonly start: Effect.Effect<void, ProjectionError>;
+  readonly stop: Effect.Effect<void, never>;
+  readonly cursor: Effect.Effect<number, never>;
+  readonly listForTurn: (turnId: string) => Effect.Effect<readonly TurnDiffEntry[], never>;
+  readonly listForThread: (
+    threadId: string,
+  ) => Effect.Effect<Readonly<Record<string, readonly TurnDiffEntry[]>>, never>;
+  readonly aggregateForThread: (threadId: string) => Effect.Effect<TurnDiffAggregate, never>;
+  /** Escape hatch — direct access to the plain projection. */
+  readonly raw: TurnDiffProjection;
+}
+
+export class TurnDiffProjectionService extends Context.Tag(
+  "@tmux-ide/daemon/runtime/TurnDiffProjectionService",
+)<TurnDiffProjectionService, TurnDiffProjectionServiceShape>() {}
 
 // ---------------------------------------------------------------------------
 // ChatReactorService
