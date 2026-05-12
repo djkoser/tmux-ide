@@ -55,6 +55,8 @@ export function ChatThreadView(props: { options: Accessor<ChatMountOptions> }) {
             attachments={chat.attachments}
             terminalPanes={chat.terminalPanes}
             prefillPromptText={chat.prefillPromptText}
+            threadId={() => props.options().threadId}
+            mentionCandidates={() => props.options().mentionCandidates ?? []}
             onPrefillPromptConsumed={() => chat.prefillPrompt(null)}
             onAddAttachment={chat.addAttachment}
             onRemoveAttachment={chat.removeAttachment}

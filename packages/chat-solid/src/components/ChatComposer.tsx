@@ -1,7 +1,15 @@
 import { createEffect, createMemo, createSignal, For, Show, type Accessor } from "solid-js";
 import { ComposerCommandMenu } from "./ComposerCommandMenu";
+import { ComposerMentionMenu } from "./ComposerMentionMenu";
 import { searchSlashCommands } from "../lib/slashCommandSearch";
 import { detectSlashContext } from "../lib/slashCursor";
+import { detectMentionContext } from "../lib/mentionCursor";
+import {
+  searchMentions,
+  type MentionCandidate,
+  type MentionSearchResult,
+} from "../lib/mentionSearch";
+import { clearDraft, loadDraft, saveDraft } from "../lib/composerDraftStore";
 import type {
   AvailableCommand,
   ComposerAttachment,
@@ -20,6 +28,19 @@ export function ChatComposer(props: {
   attachments: Accessor<ComposerAttachment[]>;
   terminalPanes: Accessor<ComposerTerminalPane[]>;
   prefillPromptText?: Accessor<string | null>;
+  /**
+   * Identity for per-thread draft persistence. When provided, the
+   * composer restores any saved prompt on mount / thread switch and
+   * writes keystrokes back to localStorage (debounced). Null disables
+   * persistence (e.g. pre-thread draft sessions handled by the host).
+   */
+  threadId?: Accessor<string | null>;
+  /**
+   * Candidate set for the @-mention autocomplete. Host owns sourcing:
+   * project files, sibling threads, agents. Empty / undefined disables
+   * the menu (the `@` token still types through plainly).
+   */
+  mentionCandidates?: Accessor<ReadonlyArray<MentionCandidate>>;
   onPrefillPromptConsumed?: () => void;
   onAddAttachment(attachment: ComposerAttachment): void;
   onRemoveAttachment(index: number): void;
@@ -33,7 +54,12 @@ export function ChatComposer(props: {
     slashIndex: number;
     query: string;
   } | null>(null);
+  const [hiddenMention, setHiddenMention] = createSignal<{
+    atIndex: number;
+    query: string;
+  } | null>(null);
   const [commandHighlight, setCommandHighlight] = createSignal(0);
+  const [mentionHighlight, setMentionHighlight] = createSignal(0);
   const [pickerOpen, setPickerOpen] = createSignal(false);
   const slashContext = createMemo(() => detectSlashContext(value(), caret()));
   const commandQuery = createMemo(() => {
@@ -49,6 +75,23 @@ export function ChatComposer(props: {
     const hidden = hiddenSlash();
     return hidden?.slashIndex !== context.slashIndex || hidden.query !== context.query;
   });
+
+  const mentionContext = createMemo(() => detectMentionContext(value(), caret()));
+  const mentionQuery = createMemo(() => {
+    const context = mentionContext();
+    return context.active ? context.query : "";
+  });
+  const mentionResults = createMemo<MentionSearchResult[]>(() =>
+    props.mentionCandidates ? searchMentions(props.mentionCandidates(), mentionQuery()) : [],
+  );
+  const showMentions = createMemo(() => {
+    if (showCommands()) return false;
+    const context = mentionContext();
+    if (!context.active) return false;
+    if (!props.mentionCandidates || props.mentionCandidates().length === 0) return false;
+    const hidden = hiddenMention();
+    return hidden?.atIndex !== context.atIndex || hidden.query !== context.query;
+  });
   const hasContent = () => value().trim().length > 0 || props.attachments().length > 0;
   const canSend = () => hasContent() && !props.disabled();
 
@@ -59,11 +102,45 @@ export function ChatComposer(props: {
   });
 
   createEffect(() => {
+    mentionQuery();
+    if (props.mentionCandidates) props.mentionCandidates();
+    setMentionHighlight(0);
+  });
+
+  // Per-thread draft persistence: restore on thread switch, clear local
+  // state when threadId goes null. Skips during prefill (handled below).
+  createEffect(() => {
+    const id = props.threadId?.() ?? null;
+    if (!id) {
+      setValue("");
+      setCaret(0);
+      setHiddenSlash(null);
+      setHiddenMention(null);
+      return;
+    }
+    const draft = loadDraft(id);
+    setValue(draft);
+    setHiddenSlash(null);
+    setHiddenMention(null);
+    setTextareaCaret(draft.length);
+  });
+
+  // Save keystrokes to the per-thread draft. The store debounces writes
+  // internally so this is cheap to fire on every value change.
+  createEffect(() => {
+    const id = props.threadId?.() ?? null;
+    if (!id) return;
+    saveDraft(id, value());
+  });
+
+  createEffect(() => {
     const next = props.prefillPromptText?.();
     if (next === undefined || next === null) return;
     setValue(next);
     setHiddenSlash(null);
+    setHiddenMention(null);
     setCommandHighlight(0);
+    setMentionHighlight(0);
     setTextareaCaret(next.length);
     props.onPrefillPromptConsumed?.();
   });
@@ -79,6 +156,9 @@ export function ChatComposer(props: {
     setValue("");
     setCaret(0);
     setHiddenSlash(null);
+    setHiddenMention(null);
+    const id = props.threadId?.() ?? null;
+    if (id) clearDraft(id);
     await props.onSend(text ? [{ type: "text", text }] : []);
     textarea()?.focus();
   }
@@ -119,6 +199,32 @@ export function ChatComposer(props: {
     setTextareaCaret(nextCaret);
   }
 
+  function selectMention(candidate: MentionCandidate) {
+    const context = mentionContext();
+    if (!context.active) return;
+
+    const tail = value().slice(caret());
+    const tokenTailLength = tail.search(/\s/);
+    const replaceEnd = tokenTailLength === -1 ? value().length : caret() + tokenTailLength;
+    const replacement = `@${candidate.value} `;
+    const nextValue =
+      value().slice(0, context.atIndex) + replacement + value().slice(replaceEnd);
+    const nextCaret = context.atIndex + replacement.length;
+
+    setValue(nextValue);
+    setHiddenMention(null);
+    setMentionHighlight(0);
+    setTextareaCaret(nextCaret);
+  }
+
+  function closeMentionMenu() {
+    const context = mentionContext();
+    if (!context.active) return;
+    const nextCaret = caret();
+    setHiddenMention({ atIndex: context.atIndex, query: context.query });
+    setTextareaCaret(nextCaret);
+  }
+
   function handleKeyDown(event: KeyboardEvent) {
     if (showCommands()) {
       const results = searchResults();
@@ -144,6 +250,34 @@ export function ChatComposer(props: {
       if (event.key === "Escape") {
         event.preventDefault();
         closeCommandMenu();
+        return;
+      }
+    }
+
+    if (showMentions()) {
+      const results = mentionResults();
+      if (event.key === "ArrowDown" && results.length > 0) {
+        event.preventDefault();
+        setMentionHighlight((mentionHighlight() + 1) % results.length);
+        return;
+      }
+
+      if (event.key === "ArrowUp" && results.length > 0) {
+        event.preventDefault();
+        setMentionHighlight((mentionHighlight() - 1 + results.length) % results.length);
+        return;
+      }
+
+      if ((event.key === "Tab" || event.key === "Enter") && results.length > 0) {
+        event.preventDefault();
+        const selected = results[Math.min(mentionHighlight(), results.length - 1)];
+        if (selected) selectMention(selected.candidate);
+        return;
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeMentionMenu();
         return;
       }
     }
@@ -180,6 +314,14 @@ export function ChatComposer(props: {
           highlightedIndex={commandHighlight}
           onHighlight={setCommandHighlight}
           onSelect={selectCommand}
+          anchor={textarea}
+        />
+        <ComposerMentionMenu
+          open={showMentions}
+          results={mentionResults}
+          highlightedIndex={mentionHighlight}
+          onHighlight={setMentionHighlight}
+          onSelect={selectMention}
           anchor={textarea}
         />
         <textarea

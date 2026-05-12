@@ -1,3 +1,5 @@
+import type { MentionCandidate } from "./lib/mentionSearch";
+
 export type ContentBlock =
   | { type: "text"; text: string }
   | { type: "image"; data: string; mimeType: string }
@@ -207,6 +209,14 @@ export interface ChatMountOptions {
   apiBaseUrl: string;
   wsUrl: string;
   bearerToken: string | null;
+  /**
+   * Optional candidates surfaced by the @-mention autocomplete in the
+   * composer. The host owns sourcing — typically files from
+   * /api/project/:name/files, sibling threads, and agent panes. Updates
+   * flow in via setOptions() on the mount handle. Omit / pass [] to
+   * disable the autocomplete (the `@` token still types through).
+   */
+  mentionCandidates?: ReadonlyArray<MentionCandidate>;
   onClose?: () => void;
 }
 

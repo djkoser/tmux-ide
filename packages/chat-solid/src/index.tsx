@@ -5,6 +5,7 @@ import "./styles.css";
 import type { ChatHandle, ChatMountOptions } from "./types";
 
 export type { ChatHandle, ChatMountOptions } from "./types";
+export type { MentionCandidate, MentionSearchResult } from "./lib/mentionSearch";
 
 export function mount(container: HTMLElement, opts: ChatMountOptions): ChatHandle {
   const [options, setOptions] = createSignal(opts);
