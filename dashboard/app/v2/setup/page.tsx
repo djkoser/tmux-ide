@@ -2,12 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useReducer } from "react";
-import Card from "@/components/tui/Card";
-import Button from "@/components/tui/Button";
-import ButtonGroup from "@/components/tui/ButtonGroup";
-import Input from "@/components/tui/Input";
-import RowSpaceBetween from "@/components/tui/RowSpaceBetween";
+import { useEffect, useReducer, type InputHTMLAttributes, type ReactNode } from "react";
 import { dispatch } from "@/lib/actionClient";
 import {
   inspectDirectory,
@@ -239,33 +234,31 @@ export default function V2SetupPage() {
   const canAdvance = computeCanAdvance(state);
 
   return (
-    <div className="flex h-screen flex-col bg-[var(--bg)] text-[var(--fg)]">
-      <header className="flex h-7 shrink-0 items-center border-b border-[var(--border)] bg-[var(--bg-strong)] px-3 text-[11px] tabular-nums">
+    <div className="font-sans flex h-screen flex-col bg-[var(--bg)] text-[var(--fg)]">
+      <header className="flex h-9 shrink-0 items-center border-b border-border bg-[var(--bg-strong)] px-4 text-xs tabular-nums">
         <Link
           href="/v2"
-          className="mr-2 inline-flex items-center gap-1 text-[var(--dim)] hover:text-[var(--fg)]"
+          className="mr-2 inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
         >
           <span aria-hidden="true">◇</span>
           <span>tmux-ide</span>
         </Link>
-        <span className="mx-1 text-[var(--dimmer)]">/</span>
+        <span className="mx-1 text-subtle-foreground">/</span>
         <span className="text-[var(--accent)]">setup</span>
         <span className="flex-1" />
-        <span className="text-[var(--dim)]">
+        <span className="text-muted-foreground">
           step {stepIndex + 1} of {STEPS.length}
         </span>
       </header>
 
-      <div className="flex-1 min-h-0 overflow-y-auto p-4">
-        <div className="mx-auto max-w-3xl space-y-3">
-          <ButtonGroup
-            items={STEPS.map((s, i) => ({
-              body: s.label,
-              selected: s.id === state.step,
-              onClick: () => {
-                if (i <= stepIndex || canStepDirectly(state, s.id)) gotoStep(s.id);
-              },
-            }))}
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5">
+        <div className="mx-auto max-w-3xl space-y-4">
+          <StepTabs
+            steps={STEPS}
+            currentStep={state.step}
+            stepIndex={stepIndex}
+            canStepDirectly={(target) => canStepDirectly(state, target)}
+            onSelect={gotoStep}
           />
 
           {state.step === "detect" && (
@@ -295,9 +288,9 @@ export default function V2SetupPage() {
         </div>
       </div>
 
-      <footer className="flex shrink-0 items-center gap-2 border-t border-[var(--border)] bg-[var(--bg-strong)] px-3 py-2">
-        <Button
-          theme="SECONDARY"
+      <footer className="flex shrink-0 items-center gap-2 border-t border-border bg-[var(--bg-strong)] px-4 py-2.5">
+        <SetupButton
+          variant="secondary"
           onClick={() => {
             const prev = STEPS[stepIndex - 1];
             if (prev) gotoStep(prev.id);
@@ -305,10 +298,10 @@ export default function V2SetupPage() {
           disabled={stepIndex === 0}
         >
           Back
-        </Button>
+        </SetupButton>
         <span className="flex-1" />
         {state.step !== "review" ? (
-          <Button
+          <SetupButton
             onClick={() => {
               const next = STEPS[stepIndex + 1];
               if (next && canAdvance) gotoStep(next.id);
@@ -316,9 +309,9 @@ export default function V2SetupPage() {
             disabled={!canAdvance}
           >
             Next
-          </Button>
+          </SetupButton>
         ) : (
-          <Button
+          <SetupButton
             onClick={handleSaveAndLaunch}
             disabled={state.saving || state.launching || !!state.savedName}
           >
@@ -329,7 +322,7 @@ export default function V2SetupPage() {
                 : state.savedName
                   ? "Done"
                   : "Save & Launch"}
-          </Button>
+          </SetupButton>
         )}
       </footer>
     </div>
@@ -370,6 +363,108 @@ function canStepDirectly(state: SetupState, target: StepId): boolean {
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// Inline primitives — design-token replacements for the retired tui/* set.
+// Kept local to this page so the dashboard's primitive surface stays small.
+// ---------------------------------------------------------------------------
+
+interface StepTabsProps {
+  steps: { id: StepId; label: string }[];
+  currentStep: StepId;
+  stepIndex: number;
+  canStepDirectly: (target: StepId) => boolean;
+  onSelect: (step: StepId) => void;
+}
+
+function StepTabs({ steps, currentStep, stepIndex, canStepDirectly, onSelect }: StepTabsProps) {
+  return (
+    <div
+      data-testid="setup-step-tabs"
+      className="inline-flex rounded-md border border-border bg-[var(--surface)] p-0.5"
+    >
+      {steps.map((s, i) => {
+        const selected = s.id === currentStep;
+        const reachable = i <= stepIndex || canStepDirectly(s.id);
+        return (
+          <button
+            key={s.id}
+            type="button"
+            disabled={!reachable}
+            data-selected={selected ? "true" : "false"}
+            onClick={() => reachable && onSelect(s.id)}
+            className={`rounded px-3 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+              selected
+                ? "bg-[var(--accent)] text-[var(--bg)]"
+                : "text-muted-foreground hover:bg-[var(--surface-hover)] hover:text-foreground"
+            }`}
+          >
+            {s.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SetupCard({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="rounded-lg border border-border/45 bg-card/25 p-4">
+      <h2 className="mb-3 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/80">
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+function SetupRow({ children }: { children: ReactNode }) {
+  return <div className="flex items-center justify-between gap-3 py-1 text-xs">{children}</div>;
+}
+
+interface SetupInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "size"> {
+  label: string;
+}
+
+function SetupInput({ label, className, ...rest }: SetupInputProps) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[11px] text-muted-foreground">{label}</span>
+      <input
+        type="text"
+        spellCheck={false}
+        autoComplete="off"
+        className={`block w-full rounded-md border border-input bg-[var(--surface)] px-2.5 py-1.5 text-xs text-foreground placeholder:text-subtle-foreground focus:border-[var(--accent)] focus:outline-none ${className ?? ""}`}
+        {...rest}
+      />
+    </label>
+  );
+}
+
+interface SetupButtonProps {
+  variant?: "primary" | "secondary";
+  onClick?: () => void;
+  disabled?: boolean;
+  children: ReactNode;
+}
+
+function SetupButton({ variant = "primary", onClick, disabled, children }: SetupButtonProps) {
+  const base =
+    "h-7 shrink-0 cursor-pointer rounded-md px-2.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50";
+  const theme =
+    variant === "primary"
+      ? "bg-[var(--accent)] text-[var(--bg)] hover:opacity-90"
+      : "border border-border bg-[var(--surface)] text-foreground hover:bg-[var(--surface-hover)]";
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} className={`${base} ${theme}`}>
+      {children}
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Step panels
+// ---------------------------------------------------------------------------
+
 interface DetectPanelProps {
   state: SetupState;
   onDir: (dir: string) => void;
@@ -378,32 +473,34 @@ interface DetectPanelProps {
 
 function DetectPanel({ state, onDir, onDetect }: DetectPanelProps) {
   return (
-    <Card title="DETECT PROJECT" mode="left">
-      <p className="mb-3 text-[var(--dim)]">
+    <SetupCard title="Detect project">
+      <p className="mb-3 text-xs text-muted-foreground">
         Point the wizard at a directory. The daemon inspects it and reports the package manager,
         frameworks, and detected dev/test commands.
       </p>
-      <Input
+      <SetupInput
         label="Directory"
         placeholder="/Users/me/Developer/my-project"
         value={state.dir}
         onChange={(e) => onDir(e.currentTarget.value)}
       />
-      <RowSpaceBetween>
-        <span className="text-[11px] text-[var(--dim)]">
-          {state.inspectLoading ? "Inspecting..." : state.inspectError ? "" : ""}
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <span className="text-[11px] text-muted-foreground">
+          {state.inspectLoading ? "Inspecting..." : ""}
         </span>
-        <Button onClick={onDetect} disabled={!state.dir.trim() || state.inspectLoading}>
+        <SetupButton onClick={onDetect} disabled={!state.dir.trim() || state.inspectLoading}>
           {state.inspectLoading ? "..." : "Inspect"}
-        </Button>
-      </RowSpaceBetween>
+        </SetupButton>
+      </div>
 
-      {state.inspectError && <p className="mt-2 text-[var(--red)]">{state.inspectError}</p>}
+      {state.inspectError && (
+        <p className="mt-2 text-xs text-destructive-foreground">{state.inspectError}</p>
+      )}
 
       {state.inspect && (
         <DetectSummary detected={state.inspect.detected} hasIdeYml={state.inspect.hasIdeYml} />
       )}
-    </Card>
+    </SetupCard>
   );
 }
 
@@ -415,27 +512,27 @@ function DetectSummary({
   hasIdeYml: boolean;
 }) {
   return (
-    <div className="mt-3 space-y-1 text-[12px]">
-      <RowSpaceBetween>
-        <span className="text-[var(--dim)]">Package manager</span>
+    <div className="mt-3 space-y-1">
+      <SetupRow>
+        <span className="text-muted-foreground">Package manager</span>
         <span>{detected.packageManager ?? "—"}</span>
-      </RowSpaceBetween>
-      <RowSpaceBetween>
-        <span className="text-[var(--dim)]">Frameworks</span>
+      </SetupRow>
+      <SetupRow>
+        <span className="text-muted-foreground">Frameworks</span>
         <span>{detected.frameworks.length > 0 ? detected.frameworks.join(", ") : "—"}</span>
-      </RowSpaceBetween>
-      <RowSpaceBetween>
-        <span className="text-[var(--dim)]">Dev command</span>
+      </SetupRow>
+      <SetupRow>
+        <span className="text-muted-foreground">Dev command</span>
         <span>{detected.devCommand ?? "—"}</span>
-      </RowSpaceBetween>
-      <RowSpaceBetween>
-        <span className="text-[var(--dim)]">Test command</span>
+      </SetupRow>
+      <SetupRow>
+        <span className="text-muted-foreground">Test command</span>
         <span>{detected.testCommand ?? "—"}</span>
-      </RowSpaceBetween>
-      <RowSpaceBetween>
-        <span className="text-[var(--dim)]">Existing ide.yml</span>
+      </SetupRow>
+      <SetupRow>
+        <span className="text-muted-foreground">Existing ide.yml</span>
         <span>{hasIdeYml ? "yes (will be replaced)" : "no"}</span>
-      </RowSpaceBetween>
+      </SetupRow>
     </div>
   );
 }
@@ -447,8 +544,8 @@ interface LayoutPanelProps {
 
 function LayoutPanel({ currentId, onSelect }: LayoutPanelProps) {
   return (
-    <Card title="PICK LAYOUT" mode="left">
-      <p className="mb-3 text-[var(--dim)]">
+    <SetupCard title="Pick layout">
+      <p className="mb-3 text-xs text-muted-foreground">
         Choose the pane arrangement. You can edit ide.yml later.
       </p>
       <div className="space-y-2">
@@ -460,25 +557,25 @@ function LayoutPanel({ currentId, onSelect }: LayoutPanelProps) {
               type="button"
               onClick={() => onSelect(layout.id)}
               data-selected={selected ? "true" : "false"}
-              className={`block w-full border px-3 py-2 text-left transition-colors ${
+              className={`block w-full rounded-md border px-3 py-2 text-left transition-colors ${
                 selected
                   ? "border-[var(--accent)] bg-[var(--surface-active)]"
-                  : "border-[var(--border-weak)] bg-[var(--bg-strong)] hover:bg-[var(--surface-hover)]"
+                  : "border-border bg-[var(--bg-strong)] hover:bg-[var(--surface-hover)]"
               }`}
             >
-              <RowSpaceBetween>
-                <span className="font-medium text-[var(--fg)]">{layout.label}</span>
-                <span className="text-[11px] text-[var(--dim)]">{layout.agents} agents</span>
-              </RowSpaceBetween>
-              <p className="mt-1 text-[11px] text-[var(--dim)]">{layout.description}</p>
-              <pre className="mt-2 overflow-x-auto text-[10px] leading-tight text-[var(--fg-secondary)]">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-foreground">{layout.label}</span>
+                <span className="text-[11px] text-muted-foreground">{layout.agents} agents</span>
+              </div>
+              <p className="mt-1 text-[11px] text-muted-foreground">{layout.description}</p>
+              <pre className="mt-2 overflow-x-auto font-mono text-[10px] leading-tight text-secondary-foreground">
                 {layout.diagram.join("\n")}
               </pre>
             </button>
           );
         })}
       </div>
-    </Card>
+    </SetupCard>
   );
 }
 
@@ -491,9 +588,11 @@ interface NamingPanelProps {
 
 function NamingPanel({ projectName, agentNames, onProjectName, onAgentName }: NamingPanelProps) {
   return (
-    <Card title="NAME AGENTS" mode="left">
-      <p className="mb-3 text-[var(--dim)]">Pick a session name and per-agent pane titles.</p>
-      <Input
+    <SetupCard title="Name agents">
+      <p className="mb-3 text-xs text-muted-foreground">
+        Pick a session name and per-agent pane titles.
+      </p>
+      <SetupInput
         label="Session name"
         placeholder="my-project"
         value={projectName}
@@ -501,7 +600,7 @@ function NamingPanel({ projectName, agentNames, onProjectName, onAgentName }: Na
       />
       <div className="mt-3 space-y-2">
         {agentNames.map((name, i) => (
-          <Input
+          <SetupInput
             key={i}
             label={`Agent ${i + 1}`}
             value={name}
@@ -509,7 +608,7 @@ function NamingPanel({ projectName, agentNames, onProjectName, onAgentName }: Na
           />
         ))}
       </div>
-    </Card>
+    </SetupCard>
   );
 }
 
@@ -528,39 +627,45 @@ function ReviewPanel({ state, layout, onSubmit }: ReviewPanelProps) {
   void onSubmit;
 
   return (
-    <Card title="REVIEW" mode="left">
-      <RowSpaceBetween>
-        <span className="text-[var(--dim)]">Directory</span>
+    <SetupCard title="Review">
+      <SetupRow>
+        <span className="text-muted-foreground">Directory</span>
         <span className="truncate">{state.inspect?.dir ?? "—"}</span>
-      </RowSpaceBetween>
-      <RowSpaceBetween>
-        <span className="text-[var(--dim)]">Session name</span>
+      </SetupRow>
+      <SetupRow>
+        <span className="text-muted-foreground">Session name</span>
         <span>{state.projectName.trim() || state.inspect?.name || "—"}</span>
-      </RowSpaceBetween>
-      <RowSpaceBetween>
-        <span className="text-[var(--dim)]">Layout</span>
+      </SetupRow>
+      <SetupRow>
+        <span className="text-muted-foreground">Layout</span>
         <span>{layout.label}</span>
-      </RowSpaceBetween>
-      <RowSpaceBetween>
-        <span className="text-[var(--dim)]">Agents</span>
+      </SetupRow>
+      <SetupRow>
+        <span className="text-muted-foreground">Agents</span>
         <span>{state.agentNames.join(", ")}</span>
-      </RowSpaceBetween>
-      <RowSpaceBetween>
-        <span className="text-[var(--dim)]">Dev command</span>
+      </SetupRow>
+      <SetupRow>
+        <span className="text-muted-foreground">Dev command</span>
         <span>{state.inspect?.detected.devCommand ?? "—"}</span>
-      </RowSpaceBetween>
-      <RowSpaceBetween>
-        <span className="text-[var(--dim)]">Test command</span>
+      </SetupRow>
+      <SetupRow>
+        <span className="text-muted-foreground">Test command</span>
         <span>{state.inspect?.detected.testCommand ?? "—"}</span>
-      </RowSpaceBetween>
+      </SetupRow>
 
-      {state.saveError && <p className="mt-3 text-[var(--red)]">Save failed: {state.saveError}</p>}
+      {state.saveError && (
+        <p className="mt-3 text-xs text-destructive-foreground">Save failed: {state.saveError}</p>
+      )}
       {state.launchError && (
-        <p className="mt-3 text-[var(--red)]">Launch failed: {state.launchError}</p>
+        <p className="mt-3 text-xs text-destructive-foreground">
+          Launch failed: {state.launchError}
+        </p>
       )}
       {state.savedName && !state.launchError && (
-        <p className="mt-3 text-[var(--green)]">Saved {state.savedName}. Launching session…</p>
+        <p className="mt-3 text-xs text-success-foreground">
+          Saved {state.savedName}. Launching session…
+        </p>
       )}
-    </Card>
+    </SetupCard>
   );
 }
