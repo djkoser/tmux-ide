@@ -48,23 +48,25 @@
   --color-popover-foreground: var(--fg);
   --color-muted: var(--surface);
   --color-muted-foreground: var(--dim);
+  --color-subtle-foreground: var(--dimmer); /* PR 2 — placeholder/disabled tier */
   --color-accent: var(--surface-active);
   --color-accent-foreground: var(--fg);
   --color-secondary: var(--surface-raised);
-  --color-secondary-foreground: var(--fg);
+  --color-secondary-foreground: var(--fg-secondary); /* PR 2 — was --fg, now stepped */
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong); /* PR 2 — emphasis border */
   --color-input: var(--border);
   --color-ring: var(--accent);
   --color-primary: var(--accent);
   --color-primary-foreground: var(--bg);
   --color-destructive: var(--red);
-  --color-destructive-foreground: var(--bg);
+  --color-destructive-foreground: var(--red-foreground); /* PR 2 — paired status fg */
   --color-success: var(--green);
-  --color-success-foreground: var(--bg);
+  --color-success-foreground: var(--green-foreground); /* PR 2 — paired status fg */
   --color-warning: var(--yellow);
-  --color-warning-foreground: var(--bg);
+  --color-warning-foreground: var(--yellow-foreground); /* PR 2 — paired status fg */
   --color-info: var(--cyan);
-  --color-info-foreground: var(--bg);
+  --color-info-foreground: var(--cyan-foreground); /* PR 2 — paired status fg */
 }
 
 /*
@@ -178,7 +180,8 @@
   --fg-secondary: rgba(255, 255, 255, 0.618);
   --dim: rgba(255, 255, 255, 0.422);
   --dimmer: rgba(255, 255, 255, 0.284);
-  --border: rgba(255, 255, 255, 0.195);
+  --border: rgba(255, 255, 255, 0.08); /* PR 2 — softened from 0.195 */
+  --border-strong: rgba(255, 255, 255, 0.195); /* PR 2 — emphasis tier */
   --border-weak: #282828;
   --accent: #fab283;
   --green: #9bcd97;
@@ -186,6 +189,11 @@
   --red: #fc533a;
   --cyan: #56b6c2;
   --magenta: #edb2f1;
+  /* PR 2 — status foregrounds: brighter/more saturated for dark backgrounds. */
+  --red-foreground: color-mix(in srgb, var(--red) 70%, var(--fg));
+  --green-foreground: color-mix(in srgb, var(--green) 70%, var(--fg));
+  --yellow-foreground: color-mix(in srgb, var(--yellow) 70%, var(--fg));
+  --cyan-foreground: color-mix(in srgb, var(--cyan) 70%, var(--fg));
   --diff-add-bg: #1a2919;
   --diff-add-text: #9bcd97;
   --diff-del-bg: #42120b;
@@ -245,7 +253,8 @@
   --fg-secondary: #555566;
   --dim: #888899;
   --dimmer: #bbbbcc;
-  --border: rgba(0, 0, 0, 0.12);
+  --border: rgba(0, 0, 0, 0.08); /* PR 2 — softened from 0.12 */
+  --border-strong: rgba(0, 0, 0, 0.12); /* PR 2 — emphasis tier */
   --border-weak: #e2e2ea;
   --accent: #2563eb;
   --green: #16a34a;
@@ -253,6 +262,11 @@
   --red: #dc2626;
   --cyan: #0891b2;
   --magenta: #9333ea;
+  /* PR 2 — status foregrounds: darker shades for contrast on light surfaces. */
+  --red-foreground: color-mix(in srgb, var(--red) 75%, #000);
+  --green-foreground: color-mix(in srgb, var(--green) 75%, #000);
+  --yellow-foreground: color-mix(in srgb, var(--yellow) 75%, #000);
+  --cyan-foreground: color-mix(in srgb, var(--cyan) 75%, #000);
   --diff-add-bg: #dcfce7;
   --diff-add-text: #15803d;
   --diff-del-bg: #fef2f2;
@@ -311,7 +325,8 @@
   --fg-secondary: #bac2de;
   --dim: #9399b2;
   --dimmer: #6c7086;
-  --border: rgba(205, 214, 244, 0.16);
+  --border: rgba(205, 214, 244, 0.08); /* PR 2 — softened from 0.16 */
+  --border-strong: rgba(205, 214, 244, 0.16); /* PR 2 — emphasis tier */
   --border-weak: #313244;
   --accent: #cba6f7;
   --green: #a6e3a1;
@@ -319,6 +334,10 @@
   --red: #f38ba8;
   --cyan: #89dceb;
   --magenta: #f5c2e7;
+  --red-foreground: color-mix(in srgb, var(--red) 70%, var(--fg));
+  --green-foreground: color-mix(in srgb, var(--green) 70%, var(--fg));
+  --yellow-foreground: color-mix(in srgb, var(--yellow) 70%, var(--fg));
+  --cyan-foreground: color-mix(in srgb, var(--cyan) 70%, var(--fg));
   --diff-add-bg: #203522;
   --diff-add-text: #a6e3a1;
   --diff-del-bg: #3a1f29;
@@ -361,7 +380,8 @@
   --fg-secondary: #cfcfd1;
   --dim: #8b8c9b;
   --dimmer: #6272a4;
-  --border: rgba(248, 248, 242, 0.16);
+  --border: rgba(248, 248, 242, 0.08); /* PR 2 — softened from 0.16 */
+  --border-strong: rgba(248, 248, 242, 0.16); /* PR 2 — emphasis tier */
   --border-weak: #44475a;
   --accent: #bd93f9;
   --green: #50fa7b;
@@ -369,6 +389,10 @@
   --red: #ff5555;
   --cyan: #8be9fd;
   --magenta: #ff79c6;
+  --red-foreground: color-mix(in srgb, var(--red) 70%, var(--fg));
+  --green-foreground: color-mix(in srgb, var(--green) 70%, var(--fg));
+  --yellow-foreground: color-mix(in srgb, var(--yellow) 70%, var(--fg));
+  --cyan-foreground: color-mix(in srgb, var(--cyan) 70%, var(--fg));
   --diff-add-bg: #1f3b2a;
   --diff-add-text: #50fa7b;
   --diff-del-bg: #47242a;
@@ -411,7 +435,8 @@
   --fg-secondary: #a9b1d6;
   --dim: #787c99;
   --dimmer: #565f89;
-  --border: rgba(192, 202, 245, 0.16);
+  --border: rgba(192, 202, 245, 0.08); /* PR 2 — softened from 0.16 */
+  --border-strong: rgba(192, 202, 245, 0.16); /* PR 2 — emphasis tier */
   --border-weak: #2f3549;
   --accent: #7aa2f7;
   --green: #9ece6a;
@@ -419,6 +444,10 @@
   --red: #f7768e;
   --cyan: #7dcfff;
   --magenta: #bb9af7;
+  --red-foreground: color-mix(in srgb, var(--red) 70%, var(--fg));
+  --green-foreground: color-mix(in srgb, var(--green) 70%, var(--fg));
+  --yellow-foreground: color-mix(in srgb, var(--yellow) 70%, var(--fg));
+  --cyan-foreground: color-mix(in srgb, var(--cyan) 70%, var(--fg));
   --diff-add-bg: #203221;
   --diff-add-text: #9ece6a;
   --diff-del-bg: #40232e;
@@ -461,7 +490,8 @@
   --fg-secondary: #93a1a1;
   --dim: #839496;
   --dimmer: #586e75;
-  --border: rgba(238, 232, 213, 0.16);
+  --border: rgba(238, 232, 213, 0.08); /* PR 2 — softened from 0.16 */
+  --border-strong: rgba(238, 232, 213, 0.16); /* PR 2 — emphasis tier */
   --border-weak: #104451;
   --accent: #268bd2;
   --green: #859900;
@@ -469,6 +499,10 @@
   --red: #dc322f;
   --cyan: #2aa198;
   --magenta: #d33682;
+  --red-foreground: color-mix(in srgb, var(--red) 70%, var(--fg));
+  --green-foreground: color-mix(in srgb, var(--green) 70%, var(--fg));
+  --yellow-foreground: color-mix(in srgb, var(--yellow) 70%, var(--fg));
+  --cyan-foreground: color-mix(in srgb, var(--cyan) 70%, var(--fg));
   --term-bg: #002b36;
   --term-fg: #eee8d5;
   --term-cursor: #268bd2;
@@ -504,9 +538,14 @@
   --fg-secondary: #d5c4a1;
   --dim: #a89984;
   --dimmer: #928374;
-  --border: rgba(235, 219, 178, 0.16);
+  --border: rgba(235, 219, 178, 0.08); /* PR 2 — softened from 0.16 */
+  --border-strong: rgba(235, 219, 178, 0.16); /* PR 2 — emphasis tier */
   --border-weak: #3c3836;
   --accent: #fabd2f;
+  --red-foreground: color-mix(in srgb, var(--red) 70%, var(--fg));
+  --green-foreground: color-mix(in srgb, var(--green) 70%, var(--fg));
+  --yellow-foreground: color-mix(in srgb, var(--yellow) 70%, var(--fg));
+  --cyan-foreground: color-mix(in srgb, var(--cyan) 70%, var(--fg));
   --term-bg: #282828;
   --term-fg: #ebdbb2;
   --term-cursor: #fabd2f;
@@ -533,9 +572,14 @@
   --fg-secondary: #504945;
   --dim: #7c6f64;
   --dimmer: #928374;
-  --border: rgba(60, 56, 54, 0.16);
+  --border: rgba(60, 56, 54, 0.08); /* PR 2 — softened from 0.16 */
+  --border-strong: rgba(60, 56, 54, 0.16); /* PR 2 — emphasis tier */
   --border-weak: #d5c4a1;
   --accent: #b57614;
+  --red-foreground: color-mix(in srgb, var(--red) 75%, #000);
+  --green-foreground: color-mix(in srgb, var(--green) 75%, #000);
+  --yellow-foreground: color-mix(in srgb, var(--yellow) 75%, #000);
+  --cyan-foreground: color-mix(in srgb, var(--cyan) 75%, #000);
   --term-bg: #fbf1c7;
   --term-fg: #3c3836;
   --term-cursor: #b57614;
