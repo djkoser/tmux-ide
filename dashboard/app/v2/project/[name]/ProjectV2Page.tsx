@@ -42,6 +42,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { MainTabsBar } from "@/components/app-shell/MainTabsBar";
 import { FileTree, type FileTreeEntry } from "@/components/tui-tree/FileTree";
 import { ExplorerBridge } from "@/components/explorer-bridge";
+import { TasksViewBridge } from "@/components/tasks-view-bridge";
 import { CreateTaskDialog } from "@/components/kanban";
 import { openCommandPalette } from "@/components/CommandPalette";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui";
@@ -669,7 +670,7 @@ function MainContent(props: MainContentProps) {
         </div>
       );
     case "tasks":
-      return <TasksView projectName={props.projectName} tasks={props.tasks} />;
+      return <TasksTabContainer projectName={props.projectName} tasks={props.tasks} goals={props.goals} />;
     case "files":
       return <V2ExplorerIsland projectName={props.projectName} onOpenFile={props.openInPreview} />;
     case "preview":
@@ -1011,6 +1012,33 @@ type TasksMode = "list" | "detail" | "edit" | "create";
 
 const TASK_STATUSES: TaskStatus[] = ["todo", "in-progress", "review", "done"];
 const TASK_PRIORITIES: number[] = [1, 2, 3, 4];
+
+/**
+ * Feature flag: `?tasks=solid` swaps the React TasksView for the Solid
+ * widget at @tmux-ide/v2-solid-widgets. Same data source (project page
+ * snapshot.tasks + snapshot.goals); the Solid version owns its filter
+ * chips + detail panel state internally.
+ */
+function TasksTabContainer({
+  projectName,
+  tasks,
+  goals,
+}: {
+  projectName: string;
+  tasks: Task[];
+  goals: Goal[];
+}) {
+  const searchParams = useSearchParams();
+  const useSolid = searchParams?.get("tasks") === "solid";
+  if (useSolid) {
+    return (
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+        <TasksViewBridge projectName={projectName} tasks={tasks} goals={goals} />
+      </div>
+    );
+  }
+  return <TasksView projectName={projectName} tasks={tasks} />;
+}
 
 function TasksView({ projectName, tasks }: { projectName: string; tasks: Task[] }) {
   const [mode, setMode] = useState<TasksMode>("list");

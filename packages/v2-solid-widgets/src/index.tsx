@@ -10,6 +10,7 @@ import { ExplorerDashboardView } from "./widgets/ExplorerDashboard";
 import { MissionControlView } from "./widgets/MissionControl";
 import { MissionControlDashboardView } from "./widgets/MissionControlDashboard";
 import { PlansRailView } from "./widgets/PlansRail";
+import { TasksViewView } from "./widgets/TasksView";
 import type {
   ActivityMountHandle,
   ActivityMountOptions,
@@ -30,6 +31,12 @@ import type {
   MountHandle,
   PlansRailMountHandle,
   PlansRailMountOptions,
+  TasksTask,
+  TasksTaskStatus,
+  TasksGoalSummary,
+  TasksMilestoneSummary,
+  TasksViewMountHandle,
+  TasksViewMountOptions,
 } from "./types";
 
 export type {
@@ -62,6 +69,12 @@ export type {
   MountHandle,
   PlansRailMountHandle,
   PlansRailMountOptions,
+  TasksTask,
+  TasksTaskStatus,
+  TasksGoalSummary,
+  TasksMilestoneSummary,
+  TasksViewMountHandle,
+  TasksViewMountOptions,
 } from "./types";
 
 /**
@@ -317,6 +330,39 @@ export function mountPlansRail(
   const [options, setOpts] = createSignal(opts);
   container.classList.add("v2-solid-widget");
   const dispose = render(() => <PlansRailView options={options} />, container);
+
+  return {
+    unmount() {
+      dispose();
+      container.classList.remove("v2-solid-widget");
+    },
+    setOptions(next) {
+      setOpts((current) => ({ ...current, ...next }));
+    },
+  };
+}
+
+/**
+ * Mount the Tasks view — production replacement for the React TasksView
+ * at dashboard/app/v2/project/[name]/ProjectV2Page.tsx (case "tasks").
+ *
+ * Composite dashboard surface mirroring MissionControlDashboard's prop-
+ * driven pattern: the React host owns the canonical task list (sourced
+ * from /api/project/:name) and pushes it through `setOptions({ tasks })`.
+ * Filter chip state + selected-task id are owned internally.
+ *
+ * Visual + behavior parity with the React TasksView; see
+ * packages/v2-solid-widgets/src/widgets/TasksView.tsx for the t3
+ * alignment notes (semantic data-* hooks, status pill convention,
+ * design-token palette).
+ */
+export function mountTasksView(
+  container: HTMLElement,
+  opts: TasksViewMountOptions,
+): TasksViewMountHandle {
+  const [options, setOpts] = createSignal(opts);
+  container.classList.add("v2-solid-widget");
+  const dispose = render(() => <TasksViewView options={options} />, container);
 
   return {
     unmount() {

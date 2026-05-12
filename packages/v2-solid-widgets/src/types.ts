@@ -299,3 +299,73 @@ export interface ActivityMountHandle {
   unmount(): void;
   setOptions(next: Partial<ActivityMountOptions>): void;
 }
+
+// ---------------------------------------------------------------------------
+// TasksView — prop-driven Solid port of dashboard's React TasksView.
+// Composite dashboard surface mirroring MissionControlDashboard's prop-
+// driven pattern: the React host owns the canonical task list (sourced
+// from /api/project/:name) and pushes it through `setOptions({ tasks })`.
+// The widget owns its own filter chip + detail-panel state.
+// ---------------------------------------------------------------------------
+
+export type TasksTaskStatus = "todo" | "in-progress" | "review" | "done";
+
+export interface TasksTask {
+  id: string;
+  title: string;
+  status: TasksTaskStatus | string;
+  /** 1 (highest) – 4 (lowest). Renders as a coloured dot in the row. */
+  priority: number;
+  assignee?: string | null;
+  /** Goal id (e.g. "01", "13", "14"). */
+  goal?: string | null;
+  milestone?: string | null;
+  /** Other task ids this one is blocked by. Rendered as a "⛓ N" badge. */
+  depends_on?: ReadonlyArray<string>;
+  tags?: ReadonlyArray<string>;
+  description?: string | null;
+  created?: string;
+  updated?: string;
+  /** Free-form proof payload from the daemon — surfaced verbatim in the detail panel. */
+  proof?: unknown;
+}
+
+export interface TasksGoalSummary {
+  id: string;
+  title: string;
+}
+
+export interface TasksMilestoneSummary {
+  id: string;
+  title?: string;
+  order?: number;
+}
+
+export interface TasksViewMountOptions {
+  /** Canonical task list. Updates flow in via setOptions. */
+  tasks?: ReadonlyArray<TasksTask>;
+  /** Goal index — used by the goal filter chip group. */
+  goals?: ReadonlyArray<TasksGoalSummary>;
+  /** Milestone index — used by the milestone filter chip group. */
+  milestones?: ReadonlyArray<TasksMilestoneSummary>;
+  /** Optional initial filter state. Useful for deep-linking via URL params. */
+  initialFilters?: {
+    status?: TasksTaskStatus[];
+    goalIds?: string[];
+    milestoneIds?: string[];
+    priorities?: number[];
+    assignees?: string[];
+    search?: string;
+  };
+  /** Click handler — host routes to the kanban detail or opens a dialog. */
+  onTaskClick?: (taskId: string) => void;
+  /** Fired when the user clicks "New task" in the toolbar. */
+  onCreateTask?: () => void;
+  /** Optional density override; defaults to "compact". */
+  density?: "compact" | "regular";
+}
+
+export interface TasksViewMountHandle {
+  unmount(): void;
+  setOptions(next: Partial<TasksViewMountOptions>): void;
+}
