@@ -279,15 +279,6 @@ function SidebarPane({ merged, loading, error }: SidebarPaneProps) {
         ))
       )}
 
-      <div className="mb-1 mt-3 border-t border-[var(--border-weak)] pt-2 px-3 text-[10px] uppercase tracking-wider text-[var(--dim)]">
-        tools
-      </div>
-      <Link href="/tui-demo" style={rowStyle} className={`${rowCls} text-[var(--fg)]`}>
-        <span aria-hidden="true" className="w-4 text-center">
-          ◆
-        </span>
-        <span>TUI Kitchen Sink</span>
-      </Link>
       <Link
         href="/"
         style={rowStyle}
