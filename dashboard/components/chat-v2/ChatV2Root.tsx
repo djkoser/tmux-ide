@@ -127,7 +127,44 @@ export function ChatV2Root(props: ChatV2RootProps) {
         diffsByTurn={diffsByTurn}
         mentionCandidates={props.mentionCandidates}
         onSubmit={(text) => {
-          if (props.activeThreadId) props.onSend(props.activeThreadId, text);
+          if (!props.activeThreadId) return;
+          // Optimistic UI: synthesize a `chat.activity.appended` event
+          // so the user's message appears in the stream the instant
+          // they hit Send. Without this the message wouldn't surface
+          // until the page is reloaded — the daemon's chat-v2 internal
+          // bus currently doesn't bridge activity events to /ws/events
+          // (only `chat.thread.index` is broadcast), so the live WS
+          // path is silent for new sends. The store's
+          // applyActivityAppended is idempotent (dedup by activity.id),
+          // so a future daemon-side broadcast or a reload-rehydrate
+          // won't double-render this row.
+          //
+          // Dispatched here (not in V2ChatView) so the optimistic write
+          // and the selector subscription resolve to the same useChatStore
+          // module instance — V2ChatView is loaded via next/dynamic
+          // (ssr: false), which can produce a separate chunk and a
+          // duplicate zustand store identity in some bundler modes.
+          const trimmed = text.trim();
+          if (!trimmed) return;
+          const now = new Date().toISOString();
+          useChatStore.getState().applyEvent({
+            type: "chat.activity.appended",
+            threadId: props.activeThreadId,
+            // seq=0 is benign — the reducer uses Math.max(prev, seq)
+            // for lastSeqByThread, so this won't clobber a higher real
+            // seq from hydration or a future WS event.
+            seq: 0,
+            activity: {
+              id: `optimistic:${props.activeThreadId}:${Date.now()}`,
+              tone: "info",
+              kind: "user_prompt",
+              summary: trimmed,
+              payload: [{ type: "text", text: trimmed }],
+              turnId: null,
+              createdAt: now,
+            },
+          });
+          props.onSend(props.activeThreadId, trimmed);
         }}
         onRevert={(ref) => {
           if (props.activeThreadId) props.onRevert?.(props.activeThreadId, ref);

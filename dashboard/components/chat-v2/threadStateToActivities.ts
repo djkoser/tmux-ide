@@ -24,6 +24,22 @@ interface HydrationResult {
   turns: Record<string, TurnSummary>;
 }
 
+/**
+ * If the trailing assistant chunk is older than this when hydration
+ * runs, the turn cannot be live-streaming and we close it as
+ * `completed`. Live turns deliver chunks every few hundred ms so a 30s
+ * gap is a strong "this turn already ended" signal even if the daemon
+ * never persisted a stop event.
+ *
+ * Why this matters: ThreadState (returned by `GET /api/threads/:id`)
+ * carries no stop-reason field — only the index entry does. So without
+ * this heuristic the hydrator always marks the trailing turn `running`
+ * for any thread the user previously chatted in, which permanently
+ * disables the composer (`composerDisabled = groups.some(g => g.state
+ * === "running")` in ThreadView).
+ */
+const STALE_RUNNING_THRESHOLD_MS = 30_000;
+
 interface AgentUpdateMsg {
   _tag: "AgentUpdate";
   id: string;
@@ -81,7 +97,16 @@ function isAssistantMessageChunk(msg: ThreadMessage): boolean {
   return msg._tag === "AgentUpdate" && msg.update.sessionUpdate === "agent_message_chunk";
 }
 
-export function threadStateToActivities(threadId: string, state: ThreadState): HydrationResult {
+export interface ThreadStateToActivitiesOptions {
+  /** Override "now" for tests. Defaults to `Date.now()`. */
+  now?: number;
+}
+
+export function threadStateToActivities(
+  threadId: string,
+  state: ThreadState,
+  options: ThreadStateToActivitiesOptions = {},
+): HydrationResult {
   const activities: ActivityView[] = [];
   const turns: Record<string, TurnSummary> = {};
 
@@ -162,24 +187,40 @@ export function threadStateToActivities(threadId: string, state: ThreadState): H
     }
   }
 
-  // Close the trailing turn. Heuristic: if the last message is an
-  // AgentUpdate AND no `stop_reason` event has been recorded (the
-  // ThreadState shape we get back doesn't carry a turn-stop flag — the
-  // store's TurnSummary tracks that via WS), we conservatively leave the
-  // turn marked `running`. The WS bridge will issue the actual
-  // `chat.turn.completed` event when the daemon closes the turn.
+  // Close the trailing turn. ThreadState doesn't carry a turn-stop flag
+  // (only the index entry's `lastStopReason` does), so we infer "this
+  // turn is no longer streaming" from the wall-clock age of the last
+  // assistant chunk. The WS bridge will issue an idempotent
+  // `chat.turn.completed` later if the daemon happens to send one.
   if (currentTurnId !== null) {
     const trailing = state.messages[state.messages.length - 1];
     const trailingIsUserPrompt = trailing?._tag === "UserPrompt";
     if (trailingIsUserPrompt) {
-      // User typed but agent hasn't responded yet — running.
-      // (Already set when the prompt was processed above.)
+      // User typed but no agent activity yet — genuinely awaiting first chunk.
     } else if (!assistantSeenInCurrentTurn) {
       // No assistant output at all — treat as still running.
-    } else {
-      // We have an assistant chunk and no stop signal — leave running so
-      // the UI keeps the streaming indicator. The next WS turn-completed
-      // event will close it.
+    } else if (lastAgentMessageAt) {
+      const now = options.now ?? Date.now();
+      const ageMs = now - new Date(lastAgentMessageAt).getTime();
+      if (Number.isFinite(ageMs) && ageMs >= STALE_RUNNING_THRESHOLD_MS) {
+        // Stale assistant chunk — this turn already ended (cleanly or
+        // not). Mark `completed` so the composer enables. If a live
+        // stream is somehow still going, the WS bridge's
+        // `applyActivityAppended` will keep feeding chunks; the turn
+        // state will round-trip to running again on the next WS frame.
+        const existing = turns[currentTurnId];
+        if (existing && existing.state === "running") {
+          turns[currentTurnId] = {
+            ...existing,
+            state: "completed",
+            completedAt: lastAgentMessageAt,
+            assistantMessageId: lastAgentMessageId,
+          };
+        }
+      }
+      // else: chunk is fresh (< threshold) — leave running so the UI
+      // keeps the streaming indicator. The next WS turn-completed event
+      // will close it.
     }
   }
 
