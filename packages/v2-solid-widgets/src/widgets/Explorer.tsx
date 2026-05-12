@@ -1,0 +1,316 @@
+import { createSignal, createMemo, For, Show, onCleanup, onMount } from "solid-js";
+import { fetchProjectFiles, type ProjectFileNode } from "../api";
+import type { ExplorerMountOptions } from "../types";
+
+interface ExplorerViewProps {
+  options: () => ExplorerMountOptions;
+}
+
+interface FlatRow {
+  node: ProjectFileNode;
+  depth: number;
+  expanded: boolean;
+  expandable: boolean;
+}
+
+/**
+ * Walk the recursive file tree into a flat row list, honoring the
+ * per-directory expanded set so collapsed branches are pruned.
+ */
+function flatten(
+  tree: ProjectFileNode[],
+  expanded: Set<string>,
+  depth = 0,
+  out: FlatRow[] = [],
+): FlatRow[] {
+  for (const node of tree) {
+    const isExpanded = node.isDirectory && expanded.has(node.path);
+    out.push({
+      node,
+      depth,
+      expanded: isExpanded,
+      expandable: node.isDirectory && !!node.children && node.children.length > 0,
+    });
+    if (isExpanded && node.children && node.children.length > 0) {
+      flatten(node.children, expanded, depth + 1, out);
+    }
+  }
+  return out;
+}
+
+export function ExplorerView(props: ExplorerViewProps) {
+  const [tree, setTree] = createSignal<ProjectFileNode[]>([]);
+  const [expanded, setExpanded] = createSignal<Set<string>>(new Set());
+  const [selected, setSelected] = createSignal(0);
+  const [error, setError] = createSignal<string | null>(null);
+  const [loading, setLoading] = createSignal(true);
+  const [truncated, setTruncated] = createSignal(false);
+  let listEl: HTMLDivElement | undefined;
+
+  async function refresh() {
+    try {
+      setLoading(true);
+      const data = await fetchProjectFiles(props.options());
+      setTree(data.tree);
+      setTruncated(data.truncated);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  onMount(() => {
+    void refresh();
+  });
+
+  const rows = createMemo<FlatRow[]>(() => flatten(tree(), expanded()));
+
+  function toggle(path: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }
+
+  function activateRow(row: FlatRow) {
+    if (row.node.isDirectory) {
+      toggle(row.node.path);
+    } else {
+      props.options().onOpenFile?.(row.node.path);
+    }
+  }
+
+  // Keep the selected row scrolled into view.
+  function scrollSelectedIntoView() {
+    if (!listEl) return;
+    const node = listEl.querySelector<HTMLElement>(`[data-row-index="${selected()}"]`);
+    node?.scrollIntoView({ block: "nearest" });
+  }
+
+  // Keyboard navigation — j/k or arrow keys move selection,
+  // enter / l / right activate, h / left collapse-or-up, r refreshes.
+  onMount(() => {
+    const handler = (e: KeyboardEvent) => {
+      const list = rows();
+      if (list.length === 0) return;
+      if (e.key === "j" || e.key === "ArrowDown") {
+        setSelected((i) => Math.min(list.length - 1, i + 1));
+        e.preventDefault();
+        queueMicrotask(scrollSelectedIntoView);
+      } else if (e.key === "k" || e.key === "ArrowUp") {
+        setSelected((i) => Math.max(0, i - 1));
+        e.preventDefault();
+        queueMicrotask(scrollSelectedIntoView);
+      } else if (e.key === "Enter" || e.key === "l" || e.key === "ArrowRight") {
+        const row = list[selected()];
+        if (row) activateRow(row);
+        e.preventDefault();
+      } else if (e.key === "h" || e.key === "ArrowLeft") {
+        const row = list[selected()];
+        if (!row) return;
+        if (row.node.isDirectory && row.expanded) {
+          // Collapse the current directory.
+          toggle(row.node.path);
+        } else {
+          // Walk up to the parent row of the same depth - 1.
+          const targetDepth = row.depth - 1;
+          if (targetDepth < 0) return;
+          for (let i = selected() - 1; i >= 0; i--) {
+            if (list[i]!.depth === targetDepth) {
+              setSelected(i);
+              break;
+            }
+          }
+        }
+        e.preventDefault();
+        queueMicrotask(scrollSelectedIntoView);
+      } else if (e.key === "r") {
+        void refresh();
+        e.preventDefault();
+      } else if (e.key === "g") {
+        setSelected(0);
+        e.preventDefault();
+        queueMicrotask(scrollSelectedIntoView);
+      } else if (e.key === "G") {
+        setSelected(list.length - 1);
+        e.preventDefault();
+        queueMicrotask(scrollSelectedIntoView);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    onCleanup(() => window.removeEventListener("keydown", handler));
+  });
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        "flex-direction": "column",
+        height: "100%",
+        "min-height": "0",
+        "font-family": "var(--font-family-mono, var(--font-mono))",
+        "font-size": "12px",
+        color: "var(--theme-text, var(--fg))",
+        "background-color": "var(--theme-background, var(--bg))",
+      }}
+    >
+      <header
+        style={{
+          padding: "6px 12px",
+          "border-bottom": "1px solid var(--theme-border, var(--border))",
+          "flex-shrink": "0",
+          display: "flex",
+          gap: "12px",
+          "align-items": "center",
+          "font-size": "11px",
+          "font-variant-numeric": "tabular-nums",
+        }}
+      >
+        <span style={{ "font-weight": "500" }}>Explorer</span>
+        <Show when={truncated()}>
+          <span style={{ color: "var(--yellow, var(--theme-focused-foreground-subdued))" }}>
+            tree truncated · increase limit on backend
+          </span>
+        </Show>
+        <span style={{ flex: "1" }} />
+        <span style={{ color: "var(--theme-focused-foreground-subdued, var(--dim))" }}>
+          {rows().length} entr{rows().length === 1 ? "y" : "ies"}
+        </span>
+      </header>
+
+      <Show when={error()}>
+        <div
+          style={{
+            padding: "4px 12px",
+            color: "var(--red)",
+            "background-color": "var(--bg-strong)",
+            "border-bottom": "1px solid var(--red)",
+            "font-size": "11px",
+          }}
+        >
+          {error()}
+        </div>
+      </Show>
+
+      <div
+        ref={listEl}
+        style={{
+          "flex-grow": "1",
+          "overflow-y": "auto",
+          "min-height": "0",
+        }}
+        data-testid="v2-explorer-list"
+      >
+        <Show
+          when={!loading() && rows().length === 0 && !error()}
+        >
+          <div
+            style={{
+              padding: "12px",
+              color: "var(--theme-focused-foreground-subdued, var(--dim))",
+            }}
+          >
+            — no files visible (gitignored or empty) —
+          </div>
+        </Show>
+        <Show when={loading() && rows().length === 0}>
+          <div
+            style={{
+              padding: "12px",
+              color: "var(--theme-focused-foreground-subdued, var(--dim))",
+            }}
+          >
+            … loading
+          </div>
+        </Show>
+        <For each={rows()}>
+          {(row, i) => {
+            const isSel = () => i() === selected();
+            const indent = () => row.depth * 12;
+            const glyph = () =>
+              row.node.isDirectory ? (row.expanded ? "▾" : "▸") : "·";
+            return (
+              <div
+                data-row-index={i()}
+                data-row-path={row.node.path}
+                data-row-kind={row.node.isDirectory ? "dir" : "file"}
+                style={{
+                  display: "flex",
+                  "align-items": "center",
+                  gap: "6px",
+                  padding: "2px 12px 2px 6px",
+                  "border-left": isSel()
+                    ? "2px solid var(--accent)"
+                    : "2px solid transparent",
+                  "background-color": isSel() ? "var(--surface-hover)" : "transparent",
+                  cursor: "pointer",
+                  "white-space": "nowrap",
+                  overflow: "hidden",
+                  "text-overflow": "ellipsis",
+                }}
+                onClick={() => {
+                  setSelected(i());
+                  activateRow(row);
+                }}
+              >
+                <span style={{ width: `${indent()}px`, "flex-shrink": "0" }} />
+                <span
+                  aria-hidden="true"
+                  style={{
+                    color: row.node.isDirectory
+                      ? "var(--theme-focused-foreground-subdued, var(--dim))"
+                      : "var(--theme-focused-foreground-subdued, var(--dim))",
+                    "font-family": "var(--font-mono)",
+                    width: "1ch",
+                    "text-align": "center",
+                    "flex-shrink": "0",
+                  }}
+                >
+                  {glyph()}
+                </span>
+                <span
+                  style={{
+                    overflow: "hidden",
+                    "text-overflow": "ellipsis",
+                    color: row.node.isDirectory
+                      ? "var(--theme-text, var(--fg))"
+                      : "var(--theme-text, var(--fg))",
+                    "font-weight": row.node.isDirectory ? "500" : "400",
+                  }}
+                >
+                  {row.node.name}
+                </span>
+                <Show when={row.node.truncated}>
+                  <span
+                    style={{
+                      "font-size": "10px",
+                      color: "var(--theme-focused-foreground-subdued, var(--dim))",
+                    }}
+                  >
+                    …
+                  </span>
+                </Show>
+              </div>
+            );
+          }}
+        </For>
+      </div>
+
+      <footer
+        style={{
+          padding: "4px 12px",
+          "border-top": "1px solid var(--theme-border-subdued, var(--border-weak))",
+          color: "var(--theme-focused-foreground-subdued, var(--dim))",
+          "font-size": "10px",
+          "flex-shrink": "0",
+        }}
+      >
+        j/k navigate · enter/l open · h collapse/up · r refresh
+      </footer>
+    </div>
+  );
+}
