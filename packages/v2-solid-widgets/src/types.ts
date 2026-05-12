@@ -476,3 +476,35 @@ export interface KanbanBoardMountHandle {
   unmount(): void;
   setOptions(next: Partial<KanbanBoardMountOptions>): void;
 }
+
+// ---------------------------------------------------------------------------
+// SkillsView — prop-driven Solid port of the (retired) React SkillsView.
+// Two-pane composite: rail listing project skills + detail panel
+// rendering the selected skill's markdown body. The React host owns the
+// canonical skill list (sourced from /api/project/:name/skills) and
+// pushes it via `setOptions({ skills })`. The widget owns the selected
+// skill id + search filter.
+// ---------------------------------------------------------------------------
+
+export interface SkillSummary {
+  name: string;
+  specialties?: ReadonlyArray<string>;
+  role?: string;
+  description?: string;
+  /** Markdown body. Rendered inside a `.chat-markdown` wrapper. */
+  body?: string;
+}
+
+export interface SkillsViewMountOptions {
+  /** Canonical skill list. Updates flow in via setOptions. */
+  skills?: ReadonlyArray<SkillSummary>;
+  /** Initial selected skill name. Useful for deep-linking via URL params. */
+  initialSelected?: string | null;
+  /** Fired when the user picks a skill from the rail. */
+  onSelect?: (skillName: string) => void;
+}
+
+export interface SkillsViewMountHandle {
+  unmount(): void;
+  setOptions(next: Partial<SkillsViewMountOptions>): void;
+}

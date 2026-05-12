@@ -12,6 +12,7 @@ import { MissionControlView } from "./widgets/MissionControl";
 import { MissionControlDashboardView } from "./widgets/MissionControlDashboard";
 import { PlansPanelView } from "./widgets/PlansPanel";
 import { PlansRailView } from "./widgets/PlansRail";
+import { SkillsViewView } from "./widgets/SkillsView";
 import { TasksViewView } from "./widgets/TasksView";
 import type {
   ActivityMountHandle,
@@ -34,6 +35,8 @@ import type {
   PlansPanelMountOptions,
   PlansRailMountHandle,
   PlansRailMountOptions,
+  SkillsViewMountHandle,
+  SkillsViewMountOptions,
   TasksViewMountHandle,
   TasksViewMountOptions,
 } from "./types";
@@ -79,6 +82,9 @@ export type {
   PlansPanelPlanSummary,
   PlansRailMountHandle,
   PlansRailMountOptions,
+  SkillsViewMountHandle,
+  SkillsViewMountOptions,
+  SkillSummary,
   TasksTask,
   TasksTaskStatus,
   TasksGoalSummary,
@@ -430,6 +436,36 @@ export function mountKanbanBoard(
   const [options, setOpts] = createSignal(opts);
   container.classList.add("v2-solid-widget");
   const dispose = render(() => <KanbanBoardView options={options} />, container);
+
+  return {
+    unmount() {
+      dispose();
+      container.classList.remove("v2-solid-widget");
+    },
+    setOptions(next) {
+      setOpts((current) => ({ ...current, ...next }));
+    },
+  };
+}
+
+/**
+ * Mount the SkillsView — restores the /v2 "Skills" surface that the U5
+ * orphan sweep retired. Two-pane composite: a left rail listing project
+ * skills + a right detail panel rendering the selected skill's markdown
+ * body (rendered inside `.chat-markdown`).
+ *
+ * Prop-driven: the React host fetches `/api/project/:name/skills` and
+ * pushes the list via `setOptions({ skills })`. The widget owns the
+ * selected-skill id + search filter internally. Row clicks fire
+ * `onSelect(skillName)` so the host can deep-link via URL params.
+ */
+export function mountSkillsView(
+  container: HTMLElement,
+  opts: SkillsViewMountOptions,
+): SkillsViewMountHandle {
+  const [options, setOpts] = createSignal(opts);
+  container.classList.add("v2-solid-widget");
+  const dispose = render(() => <SkillsViewView options={options} />, container);
 
   return {
     unmount() {

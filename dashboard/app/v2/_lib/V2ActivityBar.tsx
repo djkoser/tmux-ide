@@ -9,6 +9,7 @@ import {
   Target,
   MessagesSquare,
   Terminal as TerminalIcon,
+  BookOpen,
   UserCircle,
   Settings as SettingsIcon,
   type LucideIcon,
@@ -34,6 +35,7 @@ export type ActivityBarViewId =
   | "diffs"
   | "plans"
   | "tasks"
+  | "skills"
   | "mission"
   | "chat"
   | "terminal";
@@ -95,6 +97,13 @@ export function V2ActivityBar({ view, onView }: V2ActivityBarProps) {
       Icon: CheckSquare,
       label: "Tasks",
       onClick: () => onView("tasks"),
+    },
+    {
+      id: "skills",
+      view: "skills",
+      Icon: BookOpen,
+      label: "Skills",
+      onClick: () => onView("skills"),
     },
     {
       id: "mission",

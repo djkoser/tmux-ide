@@ -29,6 +29,7 @@ import {
   type ProjectFileNode,
 } from "@/lib/api";
 import { KanbanBoardBridge } from "@/components/kanban-board-bridge";
+import { SkillsViewBridge } from "@/components/skills-view-bridge";
 import { V2PlansView } from "../../_lib/V2PlansView";
 import { V2ChatView } from "../../_lib/V2ChatView";
 import { V2CostsIsland } from "../../_lib/V2CostsIsland";
@@ -123,7 +124,6 @@ export default function ProjectV2Page() {
   const tasks: Task[] = snapshot?.tasks ?? [];
   const goals: Goal[] = snapshot?.goals ?? [];
   const events: EventData[] = snapshot?.events ?? [];
-  const skills = snapshot?.skills ?? [];
 
   return (
     <div className="flex h-screen flex-col bg-[var(--bg)] text-[var(--fg)]">
@@ -199,7 +199,6 @@ export default function ProjectV2Page() {
                         agents={agents}
                         goals={goals}
                         events={events}
-                        skills={skills}
                         metrics={metrics}
                         previewPath={previewPath}
                         setPreviewPath={setPreviewPath}
@@ -485,7 +484,6 @@ interface MainContentProps {
   agents: AgentDetail[];
   goals: Goal[];
   events: EventData[];
-  skills: ReadonlyArray<{ name: string; specialties?: string[] }>;
   metrics: MetricsData | null;
   previewPath: string;
   setPreviewPath: (path: string) => void;
@@ -677,7 +675,7 @@ function MainContent(props: MainContentProps) {
         />
       );
     case "skills":
-      return <SkillsView skills={props.skills} />;
+      return <SkillsViewBridge projectName={props.projectName} />;
     case "metrics":
       return (
         <MetricsView
@@ -788,34 +786,6 @@ function MissionView({
 
       <Card title="TASKS" mode="left">
         <DataTable data={taskRows} />
-      </Card>
-    </div>
-  );
-}
-
-function SkillsView({
-  skills,
-}: {
-  skills: ReadonlyArray<{ name: string; specialties?: string[] }>;
-}) {
-  return (
-    <div className="h-full overflow-y-auto p-3">
-      <Card title="SKILLS" mode="left">
-        {skills.length === 0 ? (
-          <p className="text-[var(--dim)]">No skills registered for this project.</p>
-        ) : (
-          skills.map((s) => (
-            <RowSpaceBetween key={s.name}>
-              <span>
-                <span aria-hidden="true" className="mr-1">
-                  ✶
-                </span>
-                {s.name}
-              </span>
-              <span className="text-[var(--dim)]">{s.specialties?.[0] ?? "—"}</span>
-            </RowSpaceBetween>
-          ))
-        )}
       </Card>
     </div>
   );
