@@ -48,17 +48,24 @@ import {
   type ProviderApprovalPolicy,
   type ProviderApprovalRules,
 } from "../chat/provider-approval-policy.ts";
+import {
+  makeProviderCapabilitiesStore,
+  type ProviderCapabilitiesOverride,
+  type ProviderCapabilitiesStore,
+} from "../chat/provider-capabilities.ts";
 
 import { ApprovalPolicyError, ChatEventStoreError, ProjectionError, ReactorError } from "./errors.ts";
 import {
   ChatEventStoreService,
   ChatReactorService,
   ProviderApprovalPolicyService,
+  ProviderCapabilitiesService,
   TurnDiffProjectionService,
   TurnProjectionService,
   type ChatEventStoreServiceShape,
   type ChatReactorServiceShape,
   type ProviderApprovalPolicyServiceShape,
+  type ProviderCapabilitiesServiceShape,
   type TurnDiffProjectionServiceShape,
   type TurnProjectionServiceShape,
 } from "./services.ts";
@@ -318,6 +325,49 @@ export const ProviderApprovalPolicyFromValue = (
   Layer.succeed(ProviderApprovalPolicyService, wrapApprovalPolicy(policy));
 
 // ---------------------------------------------------------------------------
+// ProviderCapabilitiesService (G14-T13 / T103)
+// ---------------------------------------------------------------------------
+
+interface MakeProviderCapabilitiesLayerOptions {
+  overrides?: Record<string, ProviderCapabilitiesOverride>;
+}
+
+function wrapCapabilitiesStore(
+  store: ProviderCapabilitiesStore,
+): ProviderCapabilitiesServiceShape {
+  return {
+    forInstance: (instance) => Effect.sync(() => store.forInstance(instance)),
+    setOverride: (id, override) => Effect.sync(() => store.setOverride(id, override)),
+    clearOverride: (id) => Effect.sync(() => store.clearOverride(id)),
+    getOverride: (id) => Effect.sync(() => store.getOverride(id)),
+    negotiate: (instance, requested) => Effect.sync(() => store.negotiate(instance, requested)),
+    raw: store,
+  };
+}
+
+/**
+ * In-memory capabilities store + Live layer. Pure synchronous wrapper —
+ * no I/O, no Effect failure channel, so Layer.sync is sufficient.
+ */
+export const ProviderCapabilitiesLive = (
+  options: MakeProviderCapabilitiesLayerOptions = {},
+): Layer.Layer<ProviderCapabilitiesService> =>
+  Layer.sync(ProviderCapabilitiesService, () =>
+    wrapCapabilitiesStore(
+      makeProviderCapabilitiesStore({
+        ...(options.overrides ? { overrides: options.overrides } : {}),
+      }),
+    ),
+  );
+
+/** Bind a pre-built store — useful when tests want to inspect side-effects
+ *  outside the Effect runtime. */
+export const ProviderCapabilitiesFromValue = (
+  store: ProviderCapabilitiesStore,
+): Layer.Layer<ProviderCapabilitiesService> =>
+  Layer.succeed(ProviderCapabilitiesService, wrapCapabilitiesStore(store));
+
+// ---------------------------------------------------------------------------
 // ChatReactorService
 // ---------------------------------------------------------------------------
 
@@ -442,6 +492,8 @@ export interface ChatTurnPipelineLayerOptions {
   projection?: MakeTurnProjectionLayerOptions;
   /** Optional initial approval-policy config (T102). */
   approvalPolicy?: MakeProviderApprovalPolicyLayerOptions;
+  /** Optional initial provider capability overrides (T103). */
+  capabilities?: MakeProviderCapabilitiesLayerOptions;
 }
 
 /**
@@ -460,7 +512,8 @@ export const ChatTurnPipelineLive = (
   | TurnProjectionService
   | TurnDiffProjectionService
   | ChatReactorService
-  | ProviderApprovalPolicyService,
+  | ProviderApprovalPolicyService
+  | ProviderCapabilitiesService,
   ReactorError,
   Scope.Scope
 > => {
@@ -484,6 +537,9 @@ export const ChatTurnPipelineLive = (
   // Approval policy (T102) — independent of the event store / reactor,
   // so it joins the merge without a Layer.provide chain.
   const policyLayer = ProviderApprovalPolicyLive(options.approvalPolicy ?? {});
+  // Provider capabilities (T103) — pure in-memory store; same shape as
+  // the approval-policy layer above.
+  const capabilitiesLayer = ProviderCapabilitiesLive(options.capabilities ?? {});
 
   return Layer.mergeAll(
     eventStoreLayer,
@@ -491,12 +547,14 @@ export const ChatTurnPipelineLive = (
     Layer.provide(turnDiffLayer, eventStoreLayer),
     Layer.provide(reactorLayer, eventStoreLayer),
     policyLayer,
+    capabilitiesLayer,
   ) as Layer.Layer<
     | ChatEventStoreService
     | TurnProjectionService
     | TurnDiffProjectionService
     | ChatReactorService
-    | ProviderApprovalPolicyService,
+    | ProviderApprovalPolicyService
+    | ProviderCapabilitiesService,
     ReactorError,
     Scope.Scope
   >;

@@ -36,6 +36,7 @@ import {
   type ProviderInstance,
   type ProviderKind,
 } from "@tmux-ide/contracts";
+import { capabilitiesFor, type ProviderCapabilities } from "./provider-capabilities.ts";
 
 // ---------------------------------------------------------------------------
 // Adapter surface
@@ -62,6 +63,15 @@ export interface SendTurnInput {
 export interface ProviderAdapter {
   readonly kind: ProviderKind;
   readonly instance: ProviderInstance;
+  /**
+   * Declared capability surface (T103). The chat layer consults this
+   * BEFORE issuing requests so it can degrade gracefully (skip vision,
+   * fall back from streaming, drop tool-call hints) instead of sending
+   * a request the provider will reject. Defaults come from
+   * `BUILT_IN_CAPABILITIES[kind]`; per-instance overrides flow through
+   * the `ProviderCapabilitiesStore` (runtime/services.ts).
+   */
+  readonly capabilities: ProviderCapabilities;
   sendTurn(input: SendTurnInput): AsyncIterable<ProviderEvent>;
 }
 
@@ -206,6 +216,7 @@ function makeAnthropicAdapter(
   return {
     kind: "anthropic",
     instance,
+    capabilities: capabilitiesFor(instance),
     async *sendTurn({ messages, signal }) {
       const fetchFn = resolveFetch(deps);
       const url = `${config.baseUrl ?? "https://api.anthropic.com"}/v1/messages`;
@@ -258,6 +269,7 @@ function makeOpenAIAdapter(instance: ProviderInstance, deps?: AdapterFactoryDeps
   return {
     kind: "openai",
     instance,
+    capabilities: capabilitiesFor(instance),
     async *sendTurn({ messages, signal }) {
       const fetchFn = resolveFetch(deps);
       const url = `${config.baseUrl ?? "https://api.openai.com/v1"}/chat/completions`;
@@ -304,6 +316,7 @@ function makeOllamaAdapter(instance: ProviderInstance, deps?: AdapterFactoryDeps
   return {
     kind: "local-ollama",
     instance,
+    capabilities: capabilitiesFor(instance),
     async *sendTurn({ messages, signal }) {
       const fetchFn = resolveFetch(deps);
       const url = `${config.baseUrl}/api/chat`;
@@ -356,7 +369,12 @@ function makeLmStudioAdapter(
     },
   };
   const inner = makeOpenAIAdapter(openAiInstance, deps);
-  return { ...inner, kind: "local-lmstudio", instance };
+  return {
+    ...inner,
+    kind: "local-lmstudio",
+    instance,
+    capabilities: capabilitiesFor(instance),
+  };
 }
 
 function makeGenericAcpAdapter(instance: ProviderInstance): ProviderAdapter {
@@ -364,6 +382,7 @@ function makeGenericAcpAdapter(instance: ProviderInstance): ProviderAdapter {
   return {
     kind: "generic-acp",
     instance,
+    capabilities: capabilitiesFor(instance),
     async *sendTurn() {
       // The actual ACP transport lives in packages/daemon/src/acp; this
       // adapter is the registry's stub for the generic-ACP case. T080

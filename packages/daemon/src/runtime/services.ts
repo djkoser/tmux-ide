@@ -41,6 +41,14 @@ import type {
   ProviderApprovalPolicy,
   ProviderApprovalRules,
 } from "../chat/provider-approval-policy.ts";
+import type {
+  NegotiationResult,
+  ProviderCapabilities,
+  ProviderCapabilitiesOverride,
+  ProviderCapabilitiesStore,
+  RequestedFeatures,
+} from "../chat/provider-capabilities.ts";
+import type { ProviderInstance } from "@tmux-ide/contracts";
 
 import type {
   ApprovalPolicyError,
@@ -164,6 +172,39 @@ export interface ProviderApprovalPolicyServiceShape {
 export class ProviderApprovalPolicyService extends Context.Tag(
   "@tmux-ide/daemon/runtime/ProviderApprovalPolicyService",
 )<ProviderApprovalPolicyService, ProviderApprovalPolicyServiceShape>() {}
+
+// ---------------------------------------------------------------------------
+// ProviderCapabilitiesService (G14-T13 / T103)
+// ---------------------------------------------------------------------------
+
+export interface ProviderCapabilitiesServiceShape {
+  /** Resolve capabilities for a provider instance (built-in defaults merged with override). */
+  readonly forInstance: (
+    instance: Pick<ProviderInstance, "id" | "kind">,
+  ) => Effect.Effect<ProviderCapabilities, never>;
+  /** Hot-update a per-instance override. Operators flip toggles in the
+   *  Provider Settings UI; last-write-wins. */
+  readonly setOverride: (
+    id: string,
+    override: ProviderCapabilitiesOverride,
+  ) => Effect.Effect<void, never>;
+  readonly clearOverride: (id: string) => Effect.Effect<boolean, never>;
+  readonly getOverride: (
+    id: string,
+  ) => Effect.Effect<ProviderCapabilitiesOverride | null, never>;
+  /** Negotiate a request against the provider's capabilities — returns the
+   *  granted feature set + a list of downgrades the UI should surface. */
+  readonly negotiate: (
+    instance: Pick<ProviderInstance, "id" | "kind">,
+    requested: RequestedFeatures,
+  ) => Effect.Effect<NegotiationResult, never>;
+  /** Escape hatch — direct access to the plain store. */
+  readonly raw: ProviderCapabilitiesStore;
+}
+
+export class ProviderCapabilitiesService extends Context.Tag(
+  "@tmux-ide/daemon/runtime/ProviderCapabilitiesService",
+)<ProviderCapabilitiesService, ProviderCapabilitiesServiceShape>() {}
 
 // ---------------------------------------------------------------------------
 
