@@ -349,6 +349,65 @@ export interface ActivityMountHandle {
 }
 
 // ---------------------------------------------------------------------------
+// Inspector — right-rail composite for the v2 IDE shell. Wraps the
+// Activity timeline in a narrow ~300px frame with a header (collapse
+// caret + count badge) and a severity filter footer. Scope-aware: the
+// host pushes a `currentView` (e.g. "chat", "files", "tasks") and the
+// Inspector trims events to those that match the scope.
+// ---------------------------------------------------------------------------
+
+/**
+ * Severity bucket exposed by the Inspector footer chips. "all" leaves
+ * the event list untouched; the other buckets filter by event type
+ * (errors / completions). New buckets land here as the daemon emits new
+ * event kinds — keep the type union narrow so chip rendering stays
+ * exhaustive.
+ */
+export type InspectorSeverityFilter = "all" | "errors" | "completions";
+
+/**
+ * Coarse "what view is the user looking at?" hint. Used to scope the
+ * event list — e.g. "files" suppresses dispatch/completion noise that
+ * isn't file-related. Open string so hosts can experiment with new
+ * scope keys without a contract bump.
+ */
+export type InspectorScope =
+  | "chat"
+  | "files"
+  | "tasks"
+  | "diffs"
+  | "plans"
+  | "mission"
+  | "metrics"
+  | "all"
+  | (string & {});
+
+export interface InspectorMountOptions {
+  /** Live event list — same shape Activity consumes. */
+  events?: ReadonlyArray<ActivityEvent>;
+  /** Drop agent_heartbeat noise. Defaults to true. */
+  hideHeartbeats?: boolean;
+  /** Current view the user is looking at; scopes the event filter. */
+  currentView?: InspectorScope;
+  /**
+   * Controlled expanded state. When omitted the widget owns its own
+   * `expanded` signal (uncontrolled). When provided the host owns it.
+   */
+  expanded?: boolean;
+  /** Fired when the collapse caret is clicked. */
+  onToggleExpanded?: (next: boolean) => void;
+  /** Override the initial uncontrolled expanded value (default true). */
+  defaultExpanded?: boolean;
+  /** Override the initial uncontrolled severity filter (default "all"). */
+  defaultSeverityFilter?: InspectorSeverityFilter;
+}
+
+export interface InspectorMountHandle {
+  unmount(): void;
+  setOptions(next: Partial<InspectorMountOptions>): void;
+}
+
+// ---------------------------------------------------------------------------
 // TasksView — prop-driven Solid port of dashboard's React TasksView.
 // Composite dashboard surface mirroring MissionControlDashboard's prop-
 // driven pattern: the React host owns the canonical task list (sourced

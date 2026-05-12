@@ -7,6 +7,7 @@ import { CostsDashboardView } from "./widgets/CostsDashboard";
 import { DiffsViewerView } from "./widgets/DiffsViewer";
 import { ExplorerView } from "./widgets/Explorer";
 import { ExplorerDashboardView } from "./widgets/ExplorerDashboard";
+import { InspectorView } from "./widgets/Inspector";
 import { KanbanBoardView } from "./widgets/KanbanBoard";
 import { MissionControlView } from "./widgets/MissionControl";
 import { MissionControlDashboardView } from "./widgets/MissionControlDashboard";
@@ -29,6 +30,8 @@ import type {
   ExplorerDashboardMountOptions,
   ExplorerMountHandle,
   ExplorerMountOptions,
+  InspectorMountHandle,
+  InspectorMountOptions,
   KanbanBoardMountHandle,
   KanbanBoardMountOptions,
   MissionControlDashboardMountHandle,
@@ -73,6 +76,10 @@ export type {
   ExplorerMountHandle,
   ExplorerMountOptions,
   ExplorerNode,
+  InspectorMountHandle,
+  InspectorMountOptions,
+  InspectorScope,
+  InspectorSeverityFilter,
   KanbanBoardMountHandle,
   KanbanBoardMountOptions,
   KanbanGroupBy,
@@ -502,6 +509,34 @@ export function mountCommandPalette(
   const [options, setOpts] = createSignal(opts);
   container.classList.add("v2-solid-widget");
   const dispose = render(() => <CommandPaletteView options={options} />, container);
+
+  return {
+    unmount() {
+      dispose();
+      container.classList.remove("v2-solid-widget");
+    },
+    setOptions(next) {
+      setOpts((current) => ({ ...current, ...next }));
+    },
+  };
+}
+
+/**
+ * Mount the Inspector — right-rail composite. Wraps [[mountActivity]]'s
+ * timeline in a narrow ~300px frame with a collapse caret, scope badge,
+ * and severity filter footer. The host pushes the SessionSnapshot
+ * event list + the current view (e.g. "chat", "files") and the widget
+ * scopes the visible events accordingly. Designed to be parked in the
+ * new v2 shell's right-sidebar slot (pane 1's shell refactor wires it
+ * once the slot lands).
+ */
+export function mountInspector(
+  container: HTMLElement,
+  opts: InspectorMountOptions,
+): InspectorMountHandle {
+  const [options, setOpts] = createSignal(opts);
+  container.classList.add("v2-solid-widget");
+  const dispose = render(() => <InspectorView options={options} />, container);
 
   return {
     unmount() {
