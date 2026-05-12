@@ -18,6 +18,7 @@ export default defineConfig({
       "src/chat/session-store.test.ts",
       "src/chat/activity-log.test.ts",
       "src/chat/checkpoint-store.test.ts",
+      "src/chat/legacy-to-v2.test.ts",
       "src/chat/event-emissions.test.ts",
       "src/chat/chat-integration.test.ts",
       "src/chat/plan-store.test.ts",

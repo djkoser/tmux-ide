@@ -9,6 +9,7 @@ import {
 } from "@tmux-ide/contracts";
 import { spawnAcpClient } from "../acp/index.ts";
 import { broadcastChatEvent } from "../command-center/ws-events.ts";
+import { translateLegacyToV2 } from "./legacy-to-v2.ts";
 import { openDatabase, type SqliteDb } from "../lib/sqlite-adapter.ts";
 import { makeChatEventStore, type ChatEventStore } from "../persistence/chat-event-store.ts";
 import {
@@ -161,6 +162,16 @@ function persistAndBroadcast(event: ChatEvent): void {
     }
   }
   broadcastChatEvent(event);
+
+  // v1 → v2 wire-event bridge. thread-manager (the production
+  // emitter) ships chat.thread.update; the dashboard's chat-v2 store
+  // only consumes chat.activity.appended. Translate here so live
+  // assistant streaming surfaces in the chat UI without waiting on
+  // the thread-manager → chat-integration-harness migration. See
+  // legacy-to-v2.ts for the rationale + drop conditions.
+  for (const derived of translateLegacyToV2(event)) {
+    broadcastChatEvent(derived);
+  }
 }
 
 export function getDefaultThreadStore(): ThreadStore {
