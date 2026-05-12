@@ -30,7 +30,10 @@ import type {
   ChatTurnCompletedEvent,
   ChatTurnStartedEvent,
   ThreadIndexEntry,
+  ThreadMessage,
+  ThreadState,
 } from "./types";
+import { threadStateToActivities } from "./threadStateToActivities";
 
 export interface TurnSummary {
   threadId: string;
@@ -97,6 +100,15 @@ export interface ChatV2Actions {
    * total over the discriminated union — every variant has a branch.
    */
   applyEvent(event: ChatBusEvent): void;
+  /**
+   * Hydrate per-thread state from the materialized thread snapshot
+   * returned by `GET /api/threads/:id`. Used by orchestrationRecovery
+   * on chat-v2 mount / thread switch so the UI is non-empty before the
+   * WS bridge catches up. Idempotent — calling twice replaces whatever
+   * was synthesized last time; live WS events that arrive after this
+   * call are still applied (drop-dup is by activity.id).
+   */
+  hydrateFromThreadState(threadId: string, state: ThreadState): void;
   /** Reset store to initial state (testing). */
   reset(): void;
 }
@@ -188,6 +200,29 @@ export const useChatStore = create<ChatV2State & ChatV2Actions>()((set, get) => 
       default:
         return;
     }
+  },
+
+  hydrateFromThreadState(threadId, state) {
+    const { activities, turns } = threadStateToActivities(threadId, state);
+    set((s) => ({
+      activitiesByThread: {
+        ...s.activitiesByThread,
+        [threadId]: activities,
+      },
+      turnsByThread: {
+        ...s.turnsByThread,
+        [threadId]: turns,
+      },
+      // Hydration produces synthetic seqs; track the highest one so the
+      // WS bridge can compare incoming live events against it.
+      lastSeqByThread: {
+        ...s.lastSeqByThread,
+        [threadId]: activities.reduce(
+          (max, a) => Math.max(max, a.sequence ?? -1),
+          s.lastSeqByThread[threadId] ?? -1,
+        ),
+      },
+    }));
   },
 
   reset() {

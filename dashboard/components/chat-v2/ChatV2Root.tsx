@@ -18,6 +18,7 @@ import { fetchThreadTurnDiffs, type TurnDiffEntry } from "@/lib/api";
 import { ThreadListRail } from "./ThreadListRail";
 import { ThreadView } from "./ThreadView";
 import { useChatStore } from "./useChatStore";
+import { useOrchestrationRecovery } from "./useOrchestrationRecovery";
 import { useChatV2WsBridge } from "./useWsBridge";
 
 export interface ChatV2RootProps {
@@ -46,6 +47,7 @@ const EMPTY_MAP: Readonly<Record<string, unknown>> = {};
 
 export function ChatV2Root(props: ChatV2RootProps) {
   useChatV2WsBridge(props.projectName);
+  useOrchestrationRecovery(props.activeThreadId);
 
   const setThreads = useChatStore((s) => s.setThreads);
   const setActiveThread = useChatStore((s) => s.setActiveThread);

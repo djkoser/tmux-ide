@@ -112,6 +112,26 @@ export async function chatThreadCreate(
   return { thread: data.thread, state: data.state };
 }
 
+/**
+ * Fetch the materialized state of a single thread — used by the
+ * orchestrationRecovery flow on chat-v2 mount / thread switch to seed
+ * the store before the WS bridge takes over.
+ */
+export async function chatThreadGet(threadId: string): Promise<ThreadState | null> {
+  const res = await fetch(`${API_BASE}/api/threads/${encodeURIComponent(threadId)}`, {
+    cache: "no-store",
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new ProjectApiError(
+      await readErrorMessage(res, `Failed to fetch thread (HTTP ${res.status})`),
+      res.status,
+    );
+  }
+  const data = (await res.json()) as { thread?: ThreadState };
+  return data.thread ?? null;
+}
+
 export async function chatThreadDelete(input: { id: string }): Promise<void> {
   const res = await fetch(`${API_BASE}/api/threads/${encodeURIComponent(input.id)}`, {
     method: "DELETE",
