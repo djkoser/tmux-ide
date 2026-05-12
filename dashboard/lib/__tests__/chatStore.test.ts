@@ -21,7 +21,7 @@ import type {
   ChatTurnCompletedEvent,
   ChatTurnStartedEvent,
   ThreadIndexEntry,
-} from "@/components/chat/types";
+} from "@/components/chat-v2/types";
 
 const THREAD_A: ThreadIndexEntry = {
   id: "thr_a",

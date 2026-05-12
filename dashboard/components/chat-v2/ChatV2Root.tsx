@@ -12,7 +12,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { ThreadIndexEntry } from "../chat/types";
+import type { ThreadIndexEntry } from "./types";
 import { fetchThreadTurnDiffs, type TurnDiffEntry } from "@/lib/api";
 import { ThreadListRail } from "./ThreadListRail";
 import { ThreadView } from "./ThreadView";

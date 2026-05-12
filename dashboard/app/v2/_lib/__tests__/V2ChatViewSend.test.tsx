@@ -15,16 +15,6 @@ vi.mock("@/lib/wsBus", () => ({
   subscribeSession: vi.fn(() => () => undefined),
 }));
 
-vi.mock("@/lib/appProtocol", () => ({
-  resolveApiBase: () => "http://localhost",
-  resolveAuthToken: () => null,
-  withWsBase: (path: string) => `ws://localhost${path}`,
-}));
-
-vi.mock("@tmux-ide/chat-solid", () => ({
-  mount: () => ({ unmount: () => undefined, setThreadId: () => undefined }),
-}));
-
 // ChatV2Root is the seam — surface its onSend prop via a recording stub so we
 // can assert V2ChatView wires onSend → chatSessionSend with the active thread.
 const lastProps: { current: any } = { current: null };
@@ -50,7 +40,7 @@ beforeEach(() => {
 
 describe("V2ChatView :: onSend wiring (T085 fix #1)", () => {
   it("invokes chatSessionSend with active thread + content on submit", async () => {
-    render(<V2ChatView projectName="demo" chatVersionOverride="v2" />);
+    render(<V2ChatView projectName="demo" />);
     expect(lastProps.current).not.toBeNull();
     await act(async () => {
       lastProps.current.onSend("thread-42", "hello world");
@@ -63,7 +53,7 @@ describe("V2ChatView :: onSend wiring (T085 fix #1)", () => {
   });
 
   it("trims whitespace before calling chatSessionSend", async () => {
-    render(<V2ChatView projectName="demo" chatVersionOverride="v2" />);
+    render(<V2ChatView projectName="demo" />);
     await act(async () => {
       lastProps.current.onSend("thread-42", "   padded   ");
     });
@@ -74,7 +64,7 @@ describe("V2ChatView :: onSend wiring (T085 fix #1)", () => {
   });
 
   it("skips the call entirely when the text is empty / whitespace-only", async () => {
-    render(<V2ChatView projectName="demo" chatVersionOverride="v2" />);
+    render(<V2ChatView projectName="demo" />);
     await act(async () => {
       lastProps.current.onSend("thread-42", "   ");
     });

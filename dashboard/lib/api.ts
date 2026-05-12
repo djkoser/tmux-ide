@@ -1,5 +1,5 @@
 import type { SessionOverview, ProjectDetail, Task, Mark, AuthorshipStats } from "./types";
-import type { AgentProvider, ThreadIndexEntry, ThreadState } from "@/components/chat/types";
+import type { AgentProvider, ThreadIndexEntry, ThreadState } from "@/components/chat-v2/types";
 
 /**
  * Provider discovery summary served by the daemon at `/api/chat/providers`.

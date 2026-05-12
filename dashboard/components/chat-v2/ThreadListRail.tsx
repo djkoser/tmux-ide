@@ -8,7 +8,7 @@
  * keyed list shape so it's a drop-in upgrade.
  */
 
-import type { ThreadIndexEntry } from "../chat/types";
+import type { ThreadIndexEntry } from "./types";
 
 export interface ThreadListRailProps {
   threads: ThreadIndexEntry[];

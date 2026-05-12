@@ -30,7 +30,7 @@ import type {
   ChatTurnCompletedEvent,
   ChatTurnStartedEvent,
   ThreadIndexEntry,
-} from "../chat/types";
+} from "./types";
 
 export interface TurnSummary {
   threadId: string;

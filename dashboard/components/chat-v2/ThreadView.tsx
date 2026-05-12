@@ -7,7 +7,7 @@
  */
 
 import { useMemo } from "react";
-import type { ThreadIndexEntry } from "../chat/types";
+import type { ThreadIndexEntry } from "./types";
 import type { TurnDiffEntry } from "@/lib/api";
 
 /**

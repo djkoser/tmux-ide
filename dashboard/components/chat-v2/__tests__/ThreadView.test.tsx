@@ -7,7 +7,7 @@ import type {
   ProposedPlanView,
   TurnSummary,
 } from "../useChatStore";
-import type { ThreadIndexEntry } from "@/components/chat/types";
+import type { ThreadIndexEntry } from "@/components/chat-v2/types";
 
 const THREAD: ThreadIndexEntry = {
   id: "thr_a",

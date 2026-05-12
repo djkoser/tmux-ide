@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ThreadListRail } from "../ThreadListRail";
-import type { ThreadIndexEntry } from "@/components/chat/types";
+import type { ThreadIndexEntry } from "@/components/chat-v2/types";
 
 const NOW = Date.parse("2026-05-11T12:00:00Z");
 

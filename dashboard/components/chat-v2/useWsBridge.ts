@@ -10,7 +10,7 @@
 
 import { useEffect } from "react";
 import { subscribeSession, type ServerFrame } from "@/lib/wsBus";
-import type { ChatBusEvent } from "../chat/types";
+import type { ChatBusEvent } from "./types";
 import { useChatStore } from "./useChatStore";
 
 const T3_CHAT_EVENT_TYPES = new Set<string>([
