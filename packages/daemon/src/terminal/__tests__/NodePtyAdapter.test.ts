@@ -8,6 +8,13 @@
  * Also covers the `ensureNodePtySpawnHelperExecutable` helper that t3
  * borrows the chmod-on-helper trick from — we can chmod a fake helper at
  * an explicit path and assert no throw.
+ *
+ * Runner: vitest only. This file is registered in
+ * `packages/daemon/vitest.config.ts`. When `bun test` discovers it via
+ * the wider `bun test src/` invocation we skip the suite — node-pty's
+ * `onData` callback does not fire under bun (T085/T087 finding sealed
+ * by the PtyAdapter abstraction; same reason daemon-watchdog spawns
+ * tsx-via-node instead of bun in `src/lib/tmux.ts`).
  */
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -25,8 +32,12 @@ import { NodePtyAdapter, ensureNodePtySpawnHelperExecutable } from "../NodePtyAd
 import { PtySpawnError } from "../PtyAdapter.ts";
 
 const skipOnWin = process.platform === "win32";
+// node-pty's `onData` callback never fires under bun's runtime. This
+// suite is a vitest-only integration test; under `bun test` we skip
+// the entire describe block. See file header.
+const isBun = typeof (globalThis as { Bun?: unknown }).Bun !== "undefined";
 
-describe.skipIf(skipOnWin)("NodePtyAdapter", () => {
+describe.skipIf(skipOnWin || isBun)("NodePtyAdapter", () => {
   let workDir: string;
 
   beforeAll(() => {
