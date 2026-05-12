@@ -1,7 +1,7 @@
 "use client";
 
 import { Filter, Group, Layers } from "lucide-react";
-import { NavigatorShell } from "@/components/navigators/NavigatorShell";
+import { PanelHeader } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import type { Task } from "@/lib/types";
 import { PRIORITY_LABELS, type GroupBy, type KanbanFilters } from "./kanban-types";
@@ -37,8 +37,13 @@ export function KanbanNavigator({
   }
 
   return (
-    <NavigatorShell title="Kanban" testId="kanban-navigator">
-      <div className="space-y-4 p-3 text-[12px]">
+    <div
+      data-testid="kanban-navigator"
+      className="flex h-full min-h-0 w-full flex-col bg-[var(--bg-weak)]"
+    >
+      <PanelHeader title="Kanban" />
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="space-y-4 p-3 text-[12px]">
         <Section icon={<Group aria-hidden="true" size={11} />} title="Group by">
           {(["status", "milestone", "agent", "priority"] as GroupBy[]).map((value) => (
             <NavRow
@@ -110,8 +115,9 @@ export function KanbanNavigator({
             Clear all filters
           </button>
         )}
+        </div>
       </div>
-    </NavigatorShell>
+    </div>
   );
 }
 

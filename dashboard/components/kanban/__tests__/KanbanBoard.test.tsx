@@ -7,12 +7,6 @@ vi.mock("@/lib/useNavigatorSlot", () => ({
   NavigatorPortal: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-vi.mock("@/components/navigators/NavigatorShell", () => ({
-  NavigatorShell: ({ children, testId }: { children: React.ReactNode; testId?: string }) => (
-    <div data-testid={testId}>{children}</div>
-  ),
-}));
-
 function makeTask(overrides: Partial<Task> = {}): Task {
   return {
     id: "001",
