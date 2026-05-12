@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
+import { ActivityView } from "./widgets/Activity";
 import { ChangesView } from "./widgets/Changes";
 import { CostsView } from "./widgets/Costs";
 import { CostsDashboardView } from "./widgets/CostsDashboard";
@@ -10,6 +11,8 @@ import { MissionControlView } from "./widgets/MissionControl";
 import { MissionControlDashboardView } from "./widgets/MissionControlDashboard";
 import { PlansRailView } from "./widgets/PlansRail";
 import type {
+  ActivityMountHandle,
+  ActivityMountOptions,
   BaseMountOptions,
   CostsDashboardMountHandle,
   CostsDashboardMountOptions,
@@ -30,6 +33,9 @@ import type {
 } from "./types";
 
 export type {
+  ActivityEvent,
+  ActivityMountHandle,
+  ActivityMountOptions,
   BaseMountOptions,
   CostsAgentEntry,
   CostsDashboardMountHandle,
@@ -139,6 +145,32 @@ export function mountMissionControl(container: HTMLElement, opts: BaseMountOptio
   const [options, setOpts] = createSignal(opts);
   container.classList.add("v2-solid-widget");
   const dispose = render(() => <MissionControlView options={options} />, container);
+
+  return {
+    unmount() {
+      dispose();
+      container.classList.remove("v2-solid-widget");
+    },
+    setOptions(next) {
+      setOpts((current) => ({ ...current, ...next }));
+    },
+  };
+}
+
+/**
+ * Mount the Activity timeline — prop-driven Solid port of
+ * dashboard/components/activity/ActivityView.tsx. The React host feeds
+ * the live event list (sourced from useSessionStream / the WebSocket
+ * bus) via `setOptions({ events })`. The widget owns search / filter
+ * chips / KPI filter / live-tail toggle internally.
+ */
+export function mountActivity(
+  container: HTMLElement,
+  opts: ActivityMountOptions,
+): ActivityMountHandle {
+  const [options, setOpts] = createSignal(opts);
+  container.classList.add("v2-solid-widget");
+  const dispose = render(() => <ActivityView options={options} />, container);
 
   return {
     unmount() {

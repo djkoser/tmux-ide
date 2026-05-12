@@ -269,3 +269,33 @@ export interface ExplorerDashboardMountHandle {
   unmount(): void;
   setOptions(next: Partial<ExplorerDashboardMountOptions>): void;
 }
+
+// ---------------------------------------------------------------------------
+// Activity — prop-driven Solid port of
+// dashboard/components/activity/ActivityView.tsx. Stream-driven timeline:
+// the React host owns the SessionSnapshot's `events` array (sourced from
+// the WebSocket bus) and pushes it through `setOptions({ events })`. The
+// widget owns filter chip state, search query, and live-tail toggle
+// internally.
+// ---------------------------------------------------------------------------
+
+export interface ActivityEvent {
+  timestamp: string;
+  type: string;
+  message: string;
+  agent?: string | null;
+  taskId?: string;
+  relative?: string;
+}
+
+export interface ActivityMountOptions {
+  /** Live event list from the host's WebSocket snapshot. */
+  events?: ReadonlyArray<ActivityEvent>;
+  /** Hide `agent_heartbeat` (and similar noise) from the list. Default true. */
+  hideHeartbeats?: boolean;
+}
+
+export interface ActivityMountHandle {
+  unmount(): void;
+  setOptions(next: Partial<ActivityMountOptions>): void;
+}

@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type { EventData } from "@/lib/api";
 import { useSessionStream } from "@/lib/useSessionStream";
+import { ActivityBridge } from "@/components/activity-bridge";
 import {
   EmptyState,
   KpiCard,
@@ -92,6 +94,22 @@ function eventVariant(type: string): StatusPillVariant {
 }
 
 export function ActivityView({ sessionName }: ActivityViewProps) {
+  // Feature flag: `?activity=solid` swaps the React event timeline for
+  // the Solid widget. Same data source (useSessionStream / WebSocket
+  // bus) — the Solid version uses fine-grained signals so appending a
+  // new event re-renders only the new row.
+  const searchParams = useSearchParams();
+  if (searchParams?.get("activity") === "solid") {
+    return (
+      <Panel testId="activity-view">
+        <ActivityBridge sessionName={sessionName} />
+      </Panel>
+    );
+  }
+  return <ActivityViewReact sessionName={sessionName} />;
+}
+
+function ActivityViewReact({ sessionName }: ActivityViewProps) {
   const { snapshot } = useSessionStream(sessionName);
   const events = snapshot?.events ?? EMPTY_EVENTS;
   const [kpiFilter, setKpiFilter] = useState<KpiFilter>("all");
