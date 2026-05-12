@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { Panel, Group, type PanelImperativeHandle } from "react-resizable-panels";
+import { Panel, Group, type Layout, type PanelImperativeHandle } from "react-resizable-panels";
 import { VSeparator, HSeparator } from "../../_lib/Separators";
 import { useSessionStream } from "@/lib/useSessionStream";
 import type { Task, AgentDetail, Goal } from "@/lib/types";
@@ -82,7 +82,6 @@ type ViewId =
   | "files"
   | "diffs"
   | "changes"
-  | "preview"
   | "metrics"
   | "costs";
 
@@ -104,7 +103,6 @@ const VIEWS: ViewSpec[] = [
   { id: "files", label: "Files", glyph: "▤" },
   { id: "diffs", label: "Diffs", glyph: "⎇" },
   { id: "changes", label: "Changes", glyph: "Δ" },
-  { id: "preview", label: "Preview", glyph: "◳" },
   { id: "metrics", label: "Metrics", glyph: "▬" },
   { id: "costs", label: "Costs", glyph: "◍" },
 ];
@@ -119,8 +117,10 @@ export default function ProjectV2Page() {
   // Layout persistence keys mirror the VSCode-style regions:
   //   shell-h        = sidebar | editor | inspector horizontal split
   //   shell-v        = upper | bottom-panel vertical split
+  //   files-split    = explorer-tree | preview horizontal split (VSCode pattern)
   const [shellH, setShellH] = useStoredLayout("shell-h");
   const [shellV, setShellV] = useStoredLayout("shell-v");
+  const [filesSplit, setFilesSplit] = useStoredLayout("files-split");
 
   // VSCode-style chrome toggles (Cmd+B / Cmd+Alt+B / Cmd+J). Each region
   // has an imperative Panel handle so the boolean state can drive
@@ -157,19 +157,15 @@ export default function ProjectV2Page() {
     view === "metrics",
   );
 
-  // Preview path is owned at the page level so the Files view can request a
-  // file → switch to Preview without round-tripping through localStorage. The
-  // Preview view itself is the canonical writer to localStorage; this state is
-  // seeded from there on first render and the view keeps it in sync.
+  // Preview path is owned at the page level so the Explorer (left half of
+  // the Files view) can hand a selected path to the preview pane (right
+  // half) without re-fetching. The Preview view itself is the canonical
+  // writer to localStorage; this state is seeded from there on first
+  // render and the view keeps it in sync.
   const [previewPath, setPreviewPath] = useState<string>(() => {
     if (typeof window === "undefined" || projectName === "__fallback") return "";
     return window.localStorage.getItem(`${PREVIEW_LAST_PATH_KEY}:${projectName}`) ?? "";
   });
-
-  function openInPreview(path: string) {
-    setPreviewPath(path);
-    setView("preview");
-  }
 
   // Command-palette → page-view bridge. The Solid CommandPalette dispatches
   // a window-scoped CustomEvent("tmuxide.palette-select-view", detail=ViewId)
@@ -254,7 +250,8 @@ export default function ProjectV2Page() {
                           metrics={metrics}
                           previewPath={previewPath}
                           setPreviewPath={setPreviewPath}
-                          openInPreview={openInPreview}
+                          filesSplit={filesSplit}
+                          setFilesSplit={setFilesSplit}
                         />
                       </div>
                     </div>
@@ -463,7 +460,9 @@ interface MainContentProps {
   metrics: MetricsData | null;
   previewPath: string;
   setPreviewPath: (path: string) => void;
-  openInPreview: (path: string) => void;
+  /** Persisted "files-split" layout (explorer | preview horizontal split). */
+  filesSplit: Layout | undefined;
+  setFilesSplit: (layout: Layout) => void;
 }
 
 function MainContent(props: MainContentProps) {
@@ -487,14 +486,44 @@ function MainContent(props: MainContentProps) {
     case "tasks":
       return <TasksTabContainer projectName={props.projectName} tasks={props.tasks} goals={props.goals} />;
     case "files":
-      return <V2ExplorerIsland projectName={props.projectName} onOpenFile={props.openInPreview} />;
-    case "preview":
+      // VSCode-style Explorer: tree on the left, preview on the right.
+      // One V2ActivityBar entry ("Files") drives both halves. Selecting
+      // a file in the tree updates the preview inline — no view switch.
+      // The right pane is collapsible so users who only want the tree
+      // can drag the separator to 0 (or use the Panel API later).
       return (
-        <PreviewView
-          projectName={props.projectName}
-          path={props.previewPath}
-          onPathChange={props.setPreviewPath}
-        />
+        <Group
+          orientation="horizontal"
+          defaultLayout={props.filesSplit}
+          onLayoutChange={props.setFilesSplit}
+        >
+          <Panel
+            id="explorer-tree"
+            defaultSize={30}
+            minSize={15}
+            collapsible
+            collapsedSize={0}
+          >
+            <V2ExplorerIsland
+              projectName={props.projectName}
+              onOpenFile={props.setPreviewPath}
+            />
+          </Panel>
+          <VSeparator />
+          <Panel
+            id="explorer-preview"
+            defaultSize={70}
+            minSize={20}
+            collapsible
+            collapsedSize={0}
+          >
+            <PreviewView
+              projectName={props.projectName}
+              path={props.previewPath}
+              onPathChange={props.setPreviewPath}
+            />
+          </Panel>
+        </Group>
       );
     case "skills":
       return <SkillsViewBridge projectName={props.projectName} />;
