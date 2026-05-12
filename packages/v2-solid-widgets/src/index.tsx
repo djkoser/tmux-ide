@@ -2,11 +2,14 @@ import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
 import { ChangesView } from "./widgets/Changes";
 import { CostsView } from "./widgets/Costs";
+import { DiffsViewerView } from "./widgets/DiffsViewer";
 import { ExplorerView } from "./widgets/Explorer";
 import { MissionControlView } from "./widgets/MissionControl";
 import { PlansRailView } from "./widgets/PlansRail";
 import type {
   BaseMountOptions,
+  DiffsViewerMountHandle,
+  DiffsViewerMountOptions,
   ExplorerMountHandle,
   ExplorerMountOptions,
   MountHandle,
@@ -16,6 +19,8 @@ import type {
 
 export type {
   BaseMountOptions,
+  DiffsViewerMountHandle,
+  DiffsViewerMountOptions,
   ExplorerMountHandle,
   ExplorerMountOptions,
   MountHandle,
@@ -104,6 +109,37 @@ export function mountMissionControl(container: HTMLElement, opts: BaseMountOptio
   const [options, setOpts] = createSignal(opts);
   container.classList.add("v2-solid-widget");
   const dispose = render(() => <MissionControlView options={options} />, container);
+
+  return {
+    unmount() {
+      dispose();
+      container.classList.remove("v2-solid-widget");
+    },
+    setOptions(next) {
+      setOpts((current) => ({ ...current, ...next }));
+    },
+  };
+}
+
+/**
+ * Mount the Diffs viewer — production replacement for
+ * dashboard/components/diffs/DiffPanel.tsx. File rail on the left,
+ * unified-diff body on the right, toolbar with file count + +adds /
+ * −dels summary + unified/split toggle.
+ *
+ * Fetches the project-wide diff summary from /api/project/:name/diff
+ * (polled every 5s) and per-file patches on selection. Visual language
+ * is t3-aligned — semantic data-* hooks (`data-diffs-header`,
+ * `data-diff-file-path`, `data-diff-line-kind`) and a color-mix() based
+ * palette mirror context/t3code/apps/web/src/components/DiffPanel.tsx.
+ */
+export function mountDiffsViewer(
+  container: HTMLElement,
+  opts: DiffsViewerMountOptions,
+): DiffsViewerMountHandle {
+  const [options, setOpts] = createSignal(opts);
+  container.classList.add("v2-solid-widget");
+  const dispose = render(() => <DiffsViewerView options={options} />, container);
 
   return {
     unmount() {

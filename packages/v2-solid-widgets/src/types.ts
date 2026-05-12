@@ -46,3 +46,13 @@ export interface PlansRailMountHandle {
   unmount(): void;
   setOptions(next: Partial<PlansRailMountOptions>): void;
 }
+
+export interface DiffsViewerMountOptions extends BaseMountOptions {
+  /** Initial diff view style; the toolbar can override. */
+  initialDiffStyle?: "unified" | "split";
+}
+
+export interface DiffsViewerMountHandle {
+  unmount(): void;
+  setOptions(next: Partial<DiffsViewerMountOptions>): void;
+}
