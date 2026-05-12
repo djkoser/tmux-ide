@@ -6,6 +6,11 @@ vi.mock("@/lib/api", () => ({
   chatThreadCreate: vi.fn(async () => ({ thread: null, state: null })),
   chatThreadDelete: vi.fn(async () => ({})),
   chatSessionSend: vi.fn(async () => ({ accepted: true as const, promptId: "p-1" })),
+  fetchProjectFiles: vi.fn(async () => []),
+}));
+
+vi.mock("@/lib/useSessionStream", () => ({
+  useSessionStream: () => ({ snapshot: null }),
 }));
 
 import * as api from "@/lib/api";

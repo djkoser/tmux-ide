@@ -10,6 +10,7 @@ import { ExplorerDashboardView } from "./widgets/ExplorerDashboard";
 import { KanbanBoardView } from "./widgets/KanbanBoard";
 import { MissionControlView } from "./widgets/MissionControl";
 import { MissionControlDashboardView } from "./widgets/MissionControlDashboard";
+import { CommandPaletteView } from "./widgets/CommandPalette";
 import { PlansPanelView } from "./widgets/PlansPanel";
 import { PlansRailView } from "./widgets/PlansRail";
 import { SkillsViewView } from "./widgets/SkillsView";
@@ -18,6 +19,8 @@ import type {
   ActivityMountHandle,
   ActivityMountOptions,
   BaseMountOptions,
+  CommandPaletteMountHandle,
+  CommandPaletteMountOptions,
   CostsDashboardMountHandle,
   CostsDashboardMountOptions,
   DiffsViewerMountHandle,
@@ -46,6 +49,11 @@ export type {
   ActivityMountHandle,
   ActivityMountOptions,
   BaseMountOptions,
+  CommandPaletteMountHandle,
+  CommandPaletteMountOptions,
+  PaletteCategory,
+  PaletteCategoryDef,
+  PaletteItem,
   CostsAgentEntry,
   CostsDashboardMountHandle,
   CostsDashboardMountOptions,
@@ -466,6 +474,34 @@ export function mountSkillsView(
   const [options, setOpts] = createSignal(opts);
   container.classList.add("v2-solid-widget");
   const dispose = render(() => <SkillsViewView options={options} />, container);
+
+  return {
+    unmount() {
+      dispose();
+      container.classList.remove("v2-solid-widget");
+    },
+    setOptions(next) {
+      setOpts((current) => ({ ...current, ...next }));
+    },
+  };
+}
+
+/**
+ * Mount the Command Palette — unified-search overlay extending the t3
+ * `providerSkillSearch` pattern to span Providers / Skills / Tasks /
+ * Threads / Views / Commands. Prop-driven: the React host owns `open`
+ * (toggled via openCommandPalette) and all data; the widget owns the
+ * query and active-row index. Selection flows out via
+ * `onSelect(category, id)` so the host can route per-category; dismiss
+ * (Escape / outside-click) fires `onDismiss()`.
+ */
+export function mountCommandPalette(
+  container: HTMLElement,
+  opts: CommandPaletteMountOptions,
+): CommandPaletteMountHandle {
+  const [options, setOpts] = createSignal(opts);
+  container.classList.add("v2-solid-widget");
+  const dispose = render(() => <CommandPaletteView options={options} />, container);
 
   return {
     unmount() {

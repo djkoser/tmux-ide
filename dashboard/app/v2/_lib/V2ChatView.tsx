@@ -18,17 +18,21 @@
  * …are gone with this commit.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   chatProvidersList,
   chatSessionSend,
   chatThreadCreate,
   chatThreadDelete,
   chatThreadList,
+  fetchProjectFiles,
+  type ProjectFileNode,
   type ProviderInfo,
 } from "@/lib/api";
+import type { MentionCandidate } from "@tmux-ide/chat-solid";
 import type { AgentProvider, ThreadIndexEntry } from "@/components/chat-v2/types";
 import { ChatV2Root } from "@/components/chat-v2";
+import { useSessionStream } from "@/lib/useSessionStream";
 import { subscribeSession, type ServerFrame } from "@/lib/wsBus";
 
 interface V2ChatViewProps {
@@ -40,6 +44,8 @@ export function V2ChatView({ projectName }: V2ChatViewProps) {
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [files, setFiles] = useState<ProjectFileNode[]>([]);
+  const { snapshot } = useSessionStream(projectName);
 
   // Initial load: threads + providers
   useEffect(() => {
@@ -60,6 +66,61 @@ export function V2ChatView({ projectName }: V2ChatViewProps) {
       active = false;
     };
   }, []);
+
+  // One-shot fetch of the project file tree for the @-mention menu. The
+  // tree is large; we don't re-fetch on every keystroke — only when the
+  // project changes. A future PR can subscribe to file-tree changes via
+  // the WS bus (`fs.changed` frames don't exist yet — that's the gate).
+  useEffect(() => {
+    if (!projectName || projectName === "__fallback") {
+      setFiles([]);
+      return;
+    }
+    let cancelled = false;
+    fetchProjectFiles(projectName)
+      .then((tree) => {
+        if (!cancelled) setFiles(tree);
+      })
+      .catch(() => {
+        // Mention menu degrades gracefully when files are unavailable.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectName]);
+
+  // Compose mention candidates: files (flattened) + sibling threads +
+  // active agent panes + project skills. Pure derived state — memoized
+  // so the chat-v2 composer doesn't re-render on every snapshot tick.
+  const mentionCandidates = useMemo<MentionCandidate[]>(() => {
+    const out: MentionCandidate[] = [];
+    flattenFileNodes(files, out);
+    for (const t of threads) {
+      out.push({
+        kind: "thread",
+        value: t.id,
+        label: t.title || "untitled",
+        hint: `${t.providerKind} · ${t.messageCount} msgs`,
+      });
+    }
+    for (const agent of snapshot?.agents ?? []) {
+      out.push({
+        kind: "agent",
+        value: agent.paneId,
+        label: agent.paneTitle,
+        hint: agent.isBusy ? "busy" : "idle",
+      });
+    }
+    for (const skill of snapshot?.skills ?? []) {
+      out.push({
+        kind: "agent",
+        value: `skill:${skill.name}`,
+        label: `skill: ${skill.name}`,
+        hint: skill.role || skill.specialties?.join(", ") || undefined,
+      });
+    }
+    return out;
+  }, [files, threads, snapshot?.agents, snapshot?.skills]);
 
   // WebSocket: react to chat.thread.index pushes (server tells us when the
   // index changes — e.g. another client created/deleted/renamed a thread).
@@ -118,6 +179,7 @@ export function V2ChatView({ projectName }: V2ChatViewProps) {
         projectName={projectName}
         threads={threads}
         activeThreadId={activeThreadId}
+        mentionCandidates={mentionCandidates}
         onPickThread={setActiveThreadId}
         onNewThread={handleNewThread}
         onDeleteThread={handleDelete}
@@ -131,4 +193,20 @@ export function V2ChatView({ projectName }: V2ChatViewProps) {
       />
     </div>
   );
+}
+
+/**
+ * Depth-first walk of the project file tree. Only emits non-directory
+ * leaves (mentioning a folder isn't useful). The label is the path
+ * relative to the project root; the value matches so `@<path>` lands
+ * verbatim in the prompt.
+ */
+function flattenFileNodes(nodes: ReadonlyArray<ProjectFileNode>, out: MentionCandidate[]): void {
+  for (const node of nodes) {
+    if (node.isDirectory) {
+      if (node.children) flattenFileNodes(node.children, out);
+      continue;
+    }
+    out.push({ kind: "file", value: node.path, label: node.path });
+  }
 }

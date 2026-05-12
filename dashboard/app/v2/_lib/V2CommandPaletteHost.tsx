@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { CommandPalette, openCommandPalette } from "@/components/CommandPalette";
+import { useParams, useRouter } from "next/navigation";
+import { openCommandPalette } from "@/components/CommandPalette";
+import { CommandPaletteBridge } from "@/components/command-palette-bridge";
 import { registerAction } from "@/lib/actions";
 import { useKeybind } from "@/lib/useKeybinds";
 
 export function V2CommandPaletteHost() {
   const router = useRouter();
+  const params = useParams<{ name?: string }>();
+  const projectName = (params?.name as string | undefined) ?? null;
 
   useKeybind("Mod+k", openCommandPalette);
 
@@ -35,5 +38,5 @@ export function V2CommandPaletteHost() {
     };
   }, [router]);
 
-  return <CommandPalette />;
+  return <CommandPaletteBridge projectName={projectName} />;
 }

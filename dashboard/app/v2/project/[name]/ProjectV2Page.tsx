@@ -90,6 +90,7 @@ const VIEWS: ViewSpec[] = [
   { id: "metrics", label: "Metrics", glyph: "▬" },
   { id: "costs", label: "Costs", glyph: "◍" },
 ];
+const VIEW_IDS = new Set<string>(VIEWS.map((v) => v.id));
 
 export default function ProjectV2Page() {
   const params = useParams<{ name: string }>();
@@ -119,6 +120,22 @@ export default function ProjectV2Page() {
     setPreviewPath(path);
     setView("preview");
   }
+
+  // Command-palette → page-view bridge. The Solid CommandPalette dispatches
+  // a window-scoped CustomEvent("tmuxide.palette-select-view", detail=ViewId)
+  // when the user picks a view/skill/task/thread result; we listen here so
+  // selection routes to the local view state without a layout-level store.
+  useEffect(() => {
+    function onPaletteView(ev: Event) {
+      const id = (ev as CustomEvent<string>).detail;
+      if (typeof id === "string" && VIEW_IDS.has(id)) {
+        setView(id as ViewId);
+      }
+    }
+    window.addEventListener("tmuxide.palette-select-view", onPaletteView);
+    return () =>
+      window.removeEventListener("tmuxide.palette-select-view", onPaletteView);
+  }, []);
 
   const mission = snapshot?.mission?.mission ?? null;
   const milestones = snapshot?.milestones ?? [];

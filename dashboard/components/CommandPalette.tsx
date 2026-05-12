@@ -11,12 +11,12 @@ function emitPalette(): void {
   for (const listener of paletteListeners) listener();
 }
 
-function subscribePalette(listener: () => void): () => void {
+export function subscribePalette(listener: () => void): () => void {
   paletteListeners.add(listener);
   return () => paletteListeners.delete(listener);
 }
 
-function getPaletteSnapshot(): boolean {
+export function getPaletteSnapshot(): boolean {
   return paletteOpen;
 }
 

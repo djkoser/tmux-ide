@@ -6,6 +6,14 @@ import type { ChatHandle, ChatMountOptions } from "./types";
 
 export type { ChatHandle, ChatMountOptions } from "./types";
 export type { MentionCandidate, MentionSearchResult } from "./lib/mentionSearch";
+export { detectMentionContext, type MentionContext } from "./lib/mentionCursor";
+export { searchMentions } from "./lib/mentionSearch";
+export {
+  loadDraft,
+  saveDraft,
+  clearDraft,
+  flushDrafts,
+} from "./lib/composerDraftStore";
 
 export function mount(container: HTMLElement, opts: ChatMountOptions): ChatHandle {
   const [options, setOptions] = createSignal(opts);

@@ -12,6 +12,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { MentionCandidate } from "@tmux-ide/chat-solid";
 import type { ThreadIndexEntry } from "./types";
 import { fetchThreadTurnDiffs, type TurnDiffEntry } from "@/lib/api";
 import { ThreadListRail } from "./ThreadListRail";
@@ -30,6 +31,12 @@ export interface ChatV2RootProps {
   onSend(threadId: string, text: string): void;
   /** Revert the active thread to a checkpoint. Wired by T076/T075. */
   onRevert?(threadId: string, checkpointRef: string): void;
+  /**
+   * Candidates surfaced by the composer's @-mention autocomplete. Host
+   * (V2ChatView) composes files + threads + agents + skills and pushes
+   * the merged array here. Falsy / empty suppresses the menu.
+   */
+  mentionCandidates?: ReadonlyArray<MentionCandidate>;
 }
 
 // Stable empty references so selectors don't return new literals each render —
@@ -116,6 +123,7 @@ export function ChatV2Root(props: ChatV2RootProps) {
         checkpointsByTurn={checkpoints}
         plansById={plans}
         diffsByTurn={diffsByTurn}
+        mentionCandidates={props.mentionCandidates}
         onSubmit={(text) => {
           if (props.activeThreadId) props.onSend(props.activeThreadId, text);
         }}

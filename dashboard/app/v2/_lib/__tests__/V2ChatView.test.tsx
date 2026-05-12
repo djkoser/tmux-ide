@@ -19,11 +19,18 @@ vi.mock("@/lib/api", () => ({
     thread: { id: "t-1", title: "x", providerKind: "claude-code", messageCount: 0 },
   })),
   chatThreadDelete: vi.fn(async () => ({})),
+  fetchProjectFiles: vi.fn(async () => []),
 }));
 
 // Stub the WebSocket bus so subscribeSession is a no-op.
 vi.mock("@/lib/wsBus", () => ({
   subscribeSession: vi.fn(() => () => undefined),
+}));
+
+// Stub useSessionStream so V2ChatView's snapshot read for agents/skills
+// resolves to an empty snapshot during the shell-only assertions.
+vi.mock("@/lib/useSessionStream", () => ({
+  useSessionStream: () => ({ snapshot: null }),
 }));
 
 // Stub ChatV2Root so we don't exercise the useChatStore-derived state

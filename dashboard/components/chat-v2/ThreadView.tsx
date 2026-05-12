@@ -7,6 +7,7 @@
  */
 
 import { useMemo } from "react";
+import type { MentionCandidate } from "@tmux-ide/chat-solid";
 import type { ThreadIndexEntry } from "./types";
 import type { TurnDiffEntry } from "@/lib/api";
 
@@ -47,6 +48,8 @@ export interface ThreadViewProps {
    * exactly as it did pre-T101a.
    */
   diffsByTurn?: Readonly<Record<string, ReadonlyArray<TurnDiffEntry>>>;
+  /** Candidates surfaced by the @-mention autocomplete in the composer. */
+  mentionCandidates?: ReadonlyArray<MentionCandidate>;
   onSubmit(text: string): void;
   onRevert?(checkpointRef: string): void;
   onApprovePlan?: (input: { threadId: string; planId: string }) => Promise<void> | void;
@@ -130,7 +133,12 @@ export function ThreadView(props: ThreadViewProps) {
         )}
       </div>
 
-      <ComposerInput disabled={composerDisabled} onSubmit={props.onSubmit} />
+      <ComposerInput
+        disabled={composerDisabled}
+        threadId={props.thread.id}
+        mentionCandidates={props.mentionCandidates}
+        onSubmit={props.onSubmit}
+      />
     </div>
   );
 }

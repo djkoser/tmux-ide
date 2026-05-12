@@ -508,3 +508,62 @@ export interface SkillsViewMountHandle {
   unmount(): void;
   setOptions(next: Partial<SkillsViewMountOptions>): void;
 }
+
+// ---------------------------------------------------------------------------
+// CommandPalette — prop-driven Solid port of the React command palette,
+// extended with t3's providerSkillSearch pattern: unified ranked search
+// across Providers / Skills / Tasks / Threads / Views / Commands. The
+// React host owns ALL data (fetched from the daemon) + the open/close
+// state. The widget owns the search query + selected-index. Selection
+// fires `onSelect(category, id)` so the host can route per-category.
+// ---------------------------------------------------------------------------
+
+export type PaletteCategory =
+  | "providers"
+  | "skills"
+  | "tasks"
+  | "threads"
+  | "views"
+  | "commands";
+
+export interface PaletteItem {
+  /** Stable id within (category, items). */
+  id: string;
+  /** Display label — primary string we match against. */
+  label: string;
+  /** Optional second-line description; included in match scoring. */
+  description?: string | null;
+  /** Optional extra keywords; scored last but enable shortcut matches. */
+  keywords?: ReadonlyArray<string>;
+  /** Optional formatted keybind hint (e.g. "⌘K"). Renders right-aligned. */
+  keybind?: string;
+  /** Marks the item disabled — still rendered but greyed + not actionable. */
+  disabled?: boolean;
+}
+
+export interface PaletteCategoryDef {
+  category: PaletteCategory;
+  /** Section header label rendered above the group. */
+  label: string;
+  items: ReadonlyArray<PaletteItem>;
+}
+
+export interface CommandPaletteMountOptions {
+  /** When true, the widget renders the overlay; otherwise it renders null. */
+  open?: boolean;
+  /** Result groups — each scored independently then merged into a ranked list. */
+  categories?: ReadonlyArray<PaletteCategoryDef>;
+  /** Optional initial query; useful for deep-link scopes (e.g. "/skills "). */
+  initialQuery?: string;
+  /** Max results per category. Defaults to 6. */
+  perCategoryLimit?: number;
+  /** Fired when the user activates a row (Enter / click). */
+  onSelect?: (category: PaletteCategory, id: string) => void;
+  /** Fired when the user presses Escape or clicks outside the panel. */
+  onDismiss?: () => void;
+}
+
+export interface CommandPaletteMountHandle {
+  unmount(): void;
+  setOptions(next: Partial<CommandPaletteMountOptions>): void;
+}
