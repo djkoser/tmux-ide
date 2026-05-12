@@ -1,4 +1,25 @@
 import type { SessionOverview, ProjectDetail, Task, Mark, AuthorshipStats } from "./types";
+import type { AgentProvider, ThreadIndexEntry, ThreadState } from "@/components/chat/types";
+
+/**
+ * Provider discovery summary served by the daemon at `/api/chat/providers`.
+ *
+ * This is the ACP-discoverable provider shape (claude-code / codex binaries
+ * found on PATH) — NOT the redacted T079 `ProviderInstanceSummary` for
+ * user-configured provider instances (those are served separately at
+ * `/api/providers` and shown in the ProvidersPanel). The two surfaces stay
+ * distinct on purpose: this one drives the new-chat picker; the other
+ * drives provider-instance management.
+ */
+export interface ProviderInfo {
+  kind: "claude-code" | "codex";
+  name: string;
+  description: string;
+  available: boolean;
+  binary?: string;
+  version?: string;
+  error?: string;
+}
 
 /**
  * Project registry contract — mirrors the frozen REST + WS protocol that
@@ -48,6 +69,105 @@ export async function fetchSessions(): Promise<SessionOverview[]> {
   if (!res.ok) return [];
   const data = (await res.json()) as { sessions: SessionOverview[] };
   return data.sessions;
+}
+
+// ---------------------------------------------------------------------------
+// Chat thread + provider client — talks to /api/threads and /api/chat/providers
+// on the daemon. Used by V2ChatView (thread rail / chrome) and NewChatPicker.
+// ---------------------------------------------------------------------------
+
+export async function chatThreadList(): Promise<{ threads: ThreadIndexEntry[] }> {
+  const res = await fetch(`${API_BASE}/api/threads`, { cache: "no-store" });
+  if (!res.ok) {
+    throw new ProjectApiError(
+      await readErrorMessage(res, `Failed to list threads (HTTP ${res.status})`),
+      res.status,
+    );
+  }
+  const data = (await res.json()) as { threads?: ThreadIndexEntry[] };
+  return { threads: Array.isArray(data.threads) ? data.threads : [] };
+}
+
+export interface ChatThreadCreateInput {
+  provider: AgentProvider;
+  title?: string;
+  projectDir?: string;
+}
+
+export async function chatThreadCreate(
+  input: ChatThreadCreateInput,
+): Promise<{ thread: ThreadIndexEntry; state: ThreadState }> {
+  const res = await fetch(`${API_BASE}/api/threads`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    throw new ProjectApiError(
+      await readErrorMessage(res, `Failed to create thread (HTTP ${res.status})`),
+      res.status,
+    );
+  }
+  const data = (await res.json()) as { thread: ThreadIndexEntry; state: ThreadState };
+  return { thread: data.thread, state: data.state };
+}
+
+export async function chatThreadDelete(input: { id: string }): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/threads/${encodeURIComponent(input.id)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    throw new ProjectApiError(
+      await readErrorMessage(res, `Failed to delete thread (HTTP ${res.status})`),
+      res.status,
+    );
+  }
+}
+
+// Send a user prompt to a thread. Mirrors the daemon action contract
+// (chat.session.send): { threadId, content: ContentBlock[] }. The composer
+// passes plain text; we wrap it in a single text content block.
+export async function chatSessionSend(input: {
+  threadId: string;
+  text: string;
+}): Promise<{ accepted: true; promptId: string }> {
+  const res = await fetch(
+    `${API_BASE}/api/v2/action/chat.session.send`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        threadId: input.threadId,
+        content: [{ type: "text", text: input.text }],
+      }),
+    },
+  );
+  if (!res.ok) {
+    throw new ProjectApiError(
+      await readErrorMessage(res, `Failed to send (HTTP ${res.status})`),
+      res.status,
+    );
+  }
+  const envelope = (await res.json()) as
+    | { ok: true; result: { accepted: true; promptId: string } }
+    | { ok: false; error: { message: string } };
+  if ("ok" in envelope && envelope.ok === false) {
+    throw new ProjectApiError(envelope.error.message, res.status);
+  }
+  return (envelope as { ok: true; result: { accepted: true; promptId: string } })
+    .result;
+}
+
+export async function chatProvidersList(): Promise<{ providers: ProviderInfo[] }> {
+  const res = await fetch(`${API_BASE}/api/chat/providers`, { cache: "no-store" });
+  if (!res.ok) {
+    throw new ProjectApiError(
+      await readErrorMessage(res, `Failed to list providers (HTTP ${res.status})`),
+      res.status,
+    );
+  }
+  const data = (await res.json()) as { providers?: ProviderInfo[] };
+  return { providers: Array.isArray(data.providers) ? data.providers : [] };
 }
 
 export interface PaneData {
@@ -889,4 +1009,77 @@ export async function fetchFilesystem(
     );
   }
   return (await res.json()) as FilesystemBrowseResult;
+}
+
+// ---------------------------------------------------------------------------
+// Files + Preview (v2 widgets)
+// ---------------------------------------------------------------------------
+
+export interface ProjectFileNode {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  children?: ProjectFileNode[];
+  truncated?: true;
+}
+
+export async function fetchProjectFiles(name: string): Promise<ProjectFileNode[]> {
+  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/files`, {
+    cache: "no-store",
+  });
+  if (!res.ok) return [];
+  const data = (await res.json()) as { tree?: ProjectFileNode[] };
+  return data.tree ?? [];
+}
+
+export interface FilePreview {
+  file: string;
+  exists: boolean;
+  content: string;
+  size?: number;
+  mtimeMs?: number;
+}
+
+export async function fetchFilePreview(
+  name: string,
+  filePath: string,
+): Promise<FilePreview | null> {
+  const res = await fetch(
+    `${API_BASE}/api/project/${encodeURIComponent(name)}/preview/${filePath.split("/").map(encodeURIComponent).join("/")}`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) return null;
+  return (await res.json()) as FilePreview;
+}
+
+// ---------------------------------------------------------------------------
+// Widget spawn — used by /v2/widget/[name] mirror page to ask the daemon
+// where the widget binary lives + how to invoke it. The page then drives a
+// Terminal via the same protocol the tmux panes use.
+// ---------------------------------------------------------------------------
+
+export interface WidgetSpawnSpec {
+  cwd: string;
+  cmd: string[];
+}
+
+export async function fetchWidgetSpawn(
+  name: string,
+  query: { session: string; dir: string; target?: string | null; theme?: unknown },
+): Promise<WidgetSpawnSpec> {
+  const params = new URLSearchParams();
+  params.set("session", query.session);
+  params.set("dir", query.dir);
+  if (query.target) params.set("target", query.target);
+  if (query.theme !== undefined) params.set("theme", JSON.stringify(query.theme));
+  const res = await fetch(
+    `${API_BASE}/api/widget/${encodeURIComponent(name)}/spawn?${params.toString()}`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) {
+    throw new Error(
+      await readErrorMessage(res, `Failed to spawn widget ${name} (HTTP ${res.status})`),
+    );
+  }
+  return (await res.json()) as WidgetSpawnSpec;
 }

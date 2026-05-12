@@ -1,6 +1,16 @@
 @import "tailwindcss";
 
 /*
+ * TUI styles (goal-13 dashboard rebuild). Order matters:
+ *  1. tui-fonts.css       — @font-face declarations
+ *  2. tui-global.css      — base resets + TUI color/font primitives
+ *  3. tui-bridge.css      — maps TUI --theme-* tokens to dashboard --bg/--fg/...
+ */
+@import "./tui-fonts.css";
+@import "./tui-global.css";
+@import "./tui-bridge.css";
+
+/*
  * Sidebar primitive layout — declare these as plain CSS so the Sidebar's
  * collapse/expand width and icon-mode reveals are not at the mercy of
  * Tailwind v4's arbitrary-value JIT compilation (`w-[var(...)]`,

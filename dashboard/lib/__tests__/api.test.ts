@@ -181,3 +181,179 @@ describe("updateTask", () => {
     expect(result).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Chat thread/provider client (talks to /api/threads + /api/chat/providers)
+// ---------------------------------------------------------------------------
+
+describe("chatThreadList", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("unwraps the daemon's { threads } envelope and returns it as-is", async () => {
+    const threads = [
+      { id: "t1", title: "First", providerKind: "claude-code" },
+      { id: "t2", title: "Second", providerKind: "codex" },
+    ];
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({ threads }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { chatThreadList } = await import("../api");
+    const result = await chatThreadList();
+
+    expect(result.threads).toEqual(threads);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/threads$/),
+      expect.objectContaining({ cache: "no-store" }),
+    );
+  });
+
+  it("throws ProjectApiError on non-OK responses", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: () => Promise.resolve({ error: "boom" }),
+      }),
+    );
+
+    const { chatThreadList, ProjectApiError } = await import("../api");
+    await expect(chatThreadList()).rejects.toBeInstanceOf(ProjectApiError);
+  });
+});
+
+describe("chatThreadCreate", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("POSTs the provider+title body and returns { thread, state }", async () => {
+    const thread = { id: "t1", title: "New chat", providerKind: "claude-code" };
+    const state = { id: "t1", title: "New chat", provider: { kind: "claude-code" }, messages: [] };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ thread, state }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { chatThreadCreate } = await import("../api");
+    const result = await chatThreadCreate({
+      provider: { kind: "claude-code" },
+      title: "New chat",
+    });
+
+    expect(result.thread).toEqual(thread);
+    expect(result.state).toEqual(state);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toMatch(/\/api\/threads$/);
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body)).toEqual({
+      provider: { kind: "claude-code" },
+      title: "New chat",
+    });
+  });
+
+  it("throws ProjectApiError on validation failure (HTTP 400)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: () => Promise.resolve({ error: "Invalid provider" }),
+      }),
+    );
+
+    const { chatThreadCreate, ProjectApiError } = await import("../api");
+    await expect(
+      chatThreadCreate({ provider: { kind: "claude-code" } }),
+    ).rejects.toBeInstanceOf(ProjectApiError);
+  });
+});
+
+describe("chatThreadDelete", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("issues DELETE /api/threads/:id and resolves to void on 200", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({ deleted: true }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { chatThreadDelete } = await import("../api");
+    await chatThreadDelete({ id: "t-abc/with slash" });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    // The id must be URL-encoded so a "/" in a thread id doesn't change the route.
+    expect(url).toMatch(/\/api\/threads\/t-abc%2Fwith%20slash$/);
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("throws ProjectApiError when the thread does not exist (HTTP 404)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        json: () => Promise.resolve({ error: "Thread missing not found" }),
+      }),
+    );
+
+    const { chatThreadDelete, ProjectApiError } = await import("../api");
+    await expect(chatThreadDelete({ id: "missing" })).rejects.toBeInstanceOf(
+      ProjectApiError,
+    );
+  });
+});
+
+describe("chatProvidersList", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns { providers } from /api/chat/providers", async () => {
+    const providers = [
+      {
+        kind: "claude-code",
+        name: "Claude Code",
+        description: "...",
+        available: true,
+        binary: "/usr/local/bin/claude",
+        version: "1.2.3",
+      },
+      {
+        kind: "codex",
+        name: "Codex",
+        description: "...",
+        available: false,
+        error: "not found on PATH",
+      },
+    ];
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({ providers }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { chatProvidersList } = await import("../api");
+    const result = await chatProvidersList();
+
+    expect(result.providers).toEqual(providers);
+    expect(fetchMock.mock.calls[0][0]).toMatch(/\/api\/chat\/providers$/);
+  });
+
+  it("normalizes a missing providers field to an empty array", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) }),
+    );
+
+    const { chatProvidersList } = await import("../api");
+    const result = await chatProvidersList();
+    expect(result.providers).toEqual([]);
+  });
+});

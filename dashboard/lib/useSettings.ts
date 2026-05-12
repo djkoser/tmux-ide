@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { Persist } from "@/lib/persist";
 import type { ActivitySection } from "@/lib/useLayoutState";
+import { OLD_CHAT_STORAGE_KEY } from "@/lib/chatVersion";
 
 export type ThemeId =
   | "dark"
@@ -50,6 +51,13 @@ export interface Settings {
      * global because tmux-ide is single-user.
      */
     addProjectBaseDirectory: string;
+    /**
+     * Force the legacy chat UI (?chat=v1) for users who hit issues with
+     * the t3-style ChatV2Root that became default in T080. Mirrored into
+     * localStorage under {@link OLD_CHAT_STORAGE_KEY} so the same key
+     * also serves as the URL-param fallback in `resolveChatVersion()`.
+     */
+    useOldChat: boolean;
   };
   keybinds: Record<string, string>;
 }
@@ -72,6 +80,7 @@ export const defaultSettings: Settings = {
     defaultProjectTab: "kanban",
     showNotifications: true,
     addProjectBaseDirectory: "~/",
+    useOldChat: false,
   },
   keybinds: {},
 };
@@ -174,6 +183,10 @@ function normalizeSettings(value: unknown): Settings {
         general.addProjectBaseDirectory.trim().length > 0
           ? general.addProjectBaseDirectory
           : defaultSettings.general.addProjectBaseDirectory,
+      useOldChat:
+        typeof general.useOldChat === "boolean"
+          ? general.useOldChat
+          : defaultSettings.general.useOldChat,
     },
     keybinds: Object.fromEntries(
       Object.entries(keybinds).filter(
@@ -189,7 +202,21 @@ export function applyTheme(themeId: ThemeId): void {
   document.documentElement.dataset.theme = themeId;
 }
 
+function mirrorUseOldChat(value: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (value) {
+      window.localStorage?.setItem(OLD_CHAT_STORAGE_KEY, "true");
+    } else {
+      window.localStorage?.removeItem(OLD_CHAT_STORAGE_KEY);
+    }
+  } catch {
+    // localStorage unavailable — the toggle still works in-memory.
+  }
+}
+
 if (typeof document !== "undefined") applyTheme(state.themeId);
+if (typeof window !== "undefined") mirrorUseOldChat(state.general.useOldChat);
 
 function emit(): void {
   for (const listener of listeners) listener();
@@ -208,6 +235,7 @@ function write(next: Settings): void {
   state = normalizeSettings(next);
   persist.write(state);
   applyTheme(state.themeId);
+  mirrorUseOldChat(state.general.useOldChat);
   emit();
 }
 

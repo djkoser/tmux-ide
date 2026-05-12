@@ -5,6 +5,7 @@ import { Terminal as XTerm, type IDisposable, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { getSettingsSnapshot, useSettings } from "@/lib/useSettings";
+import { withWsBase } from "@/lib/appProtocol";
 import "@xterm/xterm/css/xterm.css";
 
 function readTerminalTheme(): ITheme {
@@ -242,11 +243,12 @@ export function Terminal({
           }
         });
 
-        const port = process.env.NEXT_PUBLIC_TMUX_IDE_SERVER_PORT ?? "6070";
-        const wsHost = typeof window !== "undefined" ? window.location.hostname : "localhost";
-        const wsProto =
-          typeof window !== "undefined" && window.location.protocol === "https:" ? "wss" : "ws";
-        socket = new WebSocket(`${wsProto}://${wsHost}:${port}/ws/pty/${encodeURIComponent(id)}`);
+        // Resolve the WS endpoint from the shared protocol resolver — it
+        // handles auth-token query injection (?token=…), Electron-injected
+        // runtime ports, NEXT_PUBLIC_API_URL/PORT overrides, and the browser
+        // fallback in one place. Don't reinvent the URL here.
+        const wsUrl = withWsBase(`/ws/pty/${encodeURIComponent(id)}`);
+        socket = new WebSocket(wsUrl);
         socket.binaryType = "arraybuffer";
         setState("connecting");
         setMessage("connecting");

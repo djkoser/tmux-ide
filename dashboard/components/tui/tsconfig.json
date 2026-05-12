@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "strict": false,
+    "strictNullChecks": false,
+    "noImplicitAny": false
+  },
+  "include": ["**/*.ts", "**/*.tsx", "../../next-env.d.ts"],
+  "exclude": ["node_modules"]
+}
