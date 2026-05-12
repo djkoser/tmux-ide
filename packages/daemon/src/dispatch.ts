@@ -4,7 +4,12 @@ import { loadMission, loadGoal, loadTask } from "./lib/task-store.ts";
 import { IdeError } from "./lib/errors.ts";
 
 interface DispatchOptions {
-  taskId: string;
+  /**
+   * Task id from the CLI positional. Optional in the type so callers can
+   * pass `positionals[1]` directly; the runtime check below raises a usage
+   * error when missing.
+   */
+  taskId: string | undefined;
   json?: boolean;
 }
 

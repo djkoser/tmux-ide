@@ -499,7 +499,7 @@ ${bold("Flags:")}
             break;
           }
 
-          await config(undefined, { json, action, args: configArgs });
+          await config(null, { json, action, args: configArgs });
           break;
         }
 
