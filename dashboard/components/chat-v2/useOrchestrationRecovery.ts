@@ -17,7 +17,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { chatThreadGet } from "@/lib/api";
+import { getOrFetchThread } from "@/lib/threadPrefetch";
 import {
   OrchestrationRecoveryRegistry,
   type OrchestrationRecoveryState,
@@ -78,7 +78,7 @@ export function useOrchestrationRecovery(
     });
 
     let cancelled = false;
-    chatThreadGet(activeThreadId)
+    getOrFetchThread(activeThreadId)
       .then((threadState) => {
         if (cancelled) return;
         if (!threadState) {

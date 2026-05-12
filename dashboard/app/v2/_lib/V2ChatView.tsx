@@ -25,6 +25,9 @@ import {
   chatThreadCreate,
   chatThreadDelete,
   chatThreadList,
+} from "@/lib/api";
+import { bootstrapPrefetchFromList } from "@/lib/threadPrefetch";
+import {
   fetchProjectFiles,
   type ProjectFileNode,
   type ProviderInfo,
@@ -57,6 +60,10 @@ export function V2ChatView({ projectName }: V2ChatViewProps) {
         if (res.threads.length > 0) {
           setActiveThreadId((current) => current ?? res.threads[0].id);
         }
+        // Eagerly warm the top-N most-recently-updated threads so thread
+        // switches render instantly (cache hit) instead of waiting on a
+        // /api/threads/:id round-trip. See dashboard/lib/threadPrefetch.ts.
+        void bootstrapPrefetchFromList(res.threads);
       })
       .catch((e) => active && setError(e instanceof Error ? e.message : String(e)));
     chatProvidersList()
