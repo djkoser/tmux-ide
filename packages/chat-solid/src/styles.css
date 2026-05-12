@@ -140,6 +140,35 @@
   text-decoration: underline;
 }
 
+.chat-solid-markdown a.chat-file-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  height: 18px;
+  border: 1px solid var(--border-weak, var(--border));
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--accent);
+  font-family: var(--font-family-mono, var(--font-mono));
+  font-size: 11px;
+  vertical-align: baseline;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.chat-solid-markdown a.chat-file-link::before {
+  content: "▤";
+  color: var(--dim);
+  font-size: 10px;
+}
+
+.chat-solid-markdown a.chat-file-link:hover {
+  border-color: var(--accent);
+  background: var(--surface-hover, var(--surface));
+  text-decoration: none;
+}
+
 .chat-solid-markdown blockquote {
   margin: 6px 0;
   padding-left: 10px;

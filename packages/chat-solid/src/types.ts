@@ -1,4 +1,5 @@
 import type { MentionCandidate } from "./lib/mentionSearch";
+import type { MarkdownFileLinkMeta } from "./lib/markdownLinks";
 
 export type ContentBlock =
   | { type: "text"; text: string }
@@ -217,8 +218,19 @@ export interface ChatMountOptions {
    * disable the autocomplete (the `@` token still types through).
    */
   mentionCandidates?: ReadonlyArray<MentionCandidate>;
+  /**
+   * Invoked when the user clicks a file-link `[text](path)` or
+   * `[text](file://path)` rendered inside a chat message. The host
+   * routes to its file preview / editor view. When omitted, file
+   * links still render as styled chips but clicks fall through to
+   * the default browser behavior (which is benign — the href is a
+   * bare path that the browser won't navigate to).
+   */
+  onOpenFile?: (meta: MarkdownFileLinkMeta) => void;
   onClose?: () => void;
 }
+
+export type { MarkdownFileLinkMeta } from "./lib/markdownLinks";
 
 export interface ChatHandle {
   unmount(): void;

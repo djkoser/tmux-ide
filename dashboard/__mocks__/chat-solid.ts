@@ -63,6 +63,31 @@ export function detectMentionContext(value: string, caret: number): MentionConte
   return { active: true, atIndex, query };
 }
 
+export type MarkdownFileLinkMeta = {
+  filePath: string;
+  targetPath: string;
+  displayPath: string;
+  basename: string;
+  line?: number;
+  column?: number;
+};
+
+export function resolveMarkdownFileLinkTarget(): null {
+  return null;
+}
+
+export function resolveMarkdownFileLinkMeta(): null {
+  return null;
+}
+
+export function rewriteMarkdownFileUriHref(): null {
+  return null;
+}
+
+export function renderMarkdown(input: string): string {
+  return input;
+}
+
 export function searchMentions(
   candidates: ReadonlyArray<MentionCandidate>,
   query: string,

@@ -1,7 +1,7 @@
 import { createMemo, createSignal, For, Show, type Accessor } from "solid-js";
 import { useAutoScroll } from "../hooks/useAutoScroll";
 import { deriveChangedFiles } from "../lib/changedFiles";
-import type { MessagesTimelineRow, ThreadMessage } from "../types";
+import type { MarkdownFileLinkMeta, MessagesTimelineRow, ThreadMessage } from "../types";
 import { ChangedFilesTree } from "./ChangedFilesTree";
 import { MessageBubble } from "./MessageBubble";
 import { PlanCard } from "./PlanCard";
@@ -11,6 +11,10 @@ export function MessagesTimeline(props: {
   rows: Accessor<MessagesTimelineRow[]>;
   messages: Accessor<ThreadMessage[]>;
   providerName: Accessor<string>;
+  /** Project dir used by the markdown renderer to resolve relative file links. */
+  cwd?: Accessor<string | undefined>;
+  /** Fired when the user clicks a markdown file link rendered inside a message. */
+  onOpenFile?: (meta: MarkdownFileLinkMeta) => void;
   onSendPlanRequest?: (markdown: string) => void;
 }) {
   const [container, setContainer] = createSignal<HTMLElement>();
@@ -36,6 +40,8 @@ export function MessagesTimeline(props: {
               <TimelineRow
                 row={row}
                 providerName={props.providerName}
+                cwd={props.cwd}
+                onOpenFile={props.onOpenFile}
                 onSendPlanRequest={props.onSendPlanRequest}
               />
             )}
@@ -50,10 +56,19 @@ export function MessagesTimeline(props: {
 function TimelineRow(props: {
   row: MessagesTimelineRow;
   providerName: Accessor<string>;
+  cwd?: Accessor<string | undefined>;
+  onOpenFile?: (meta: MarkdownFileLinkMeta) => void;
   onSendPlanRequest?: (markdown: string) => void;
 }) {
   if (props.row.kind === "message")
-    return <MessageBubble message={props.row.message} providerName={props.providerName} />;
+    return (
+      <MessageBubble
+        message={props.row.message}
+        providerName={props.providerName}
+        cwd={props.cwd}
+        onOpenFile={props.onOpenFile}
+      />
+    );
   if (props.row.kind === "plan")
     return <PlanCard entries={props.row.entries} onSendPlanRequest={props.onSendPlanRequest} />;
   return <WorkingIndicator />;

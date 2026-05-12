@@ -44,6 +44,8 @@ export function ChatThreadView(props: { options: Accessor<ChatMountOptions> }) {
             rows={chat.rows}
             messages={chat.messages}
             providerName={providerName}
+            cwd={() => chat.thread()?.projectDir}
+            onOpenFile={props.options().onOpenFile}
             onSendPlanRequest={chat.prefillPrompt}
           />
           <ChatComposer
