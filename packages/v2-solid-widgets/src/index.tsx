@@ -5,6 +5,7 @@ import { CostsView } from "./widgets/Costs";
 import { CostsDashboardView } from "./widgets/CostsDashboard";
 import { DiffsViewerView } from "./widgets/DiffsViewer";
 import { ExplorerView } from "./widgets/Explorer";
+import { ExplorerDashboardView } from "./widgets/ExplorerDashboard";
 import { MissionControlView } from "./widgets/MissionControl";
 import { MissionControlDashboardView } from "./widgets/MissionControlDashboard";
 import { PlansRailView } from "./widgets/PlansRail";
@@ -15,8 +16,11 @@ import type {
   CostsDashboardSnapshot,
   DiffsViewerMountHandle,
   DiffsViewerMountOptions,
+  ExplorerDashboardMountHandle,
+  ExplorerDashboardMountOptions,
   ExplorerMountHandle,
   ExplorerMountOptions,
+  ExplorerNode,
   MissionControlDashboardMountHandle,
   MissionControlDashboardMountOptions,
   MissionControlDashboardSnapshot,
@@ -41,8 +45,11 @@ export type {
   DashboardValidationSummary,
   DiffsViewerMountHandle,
   DiffsViewerMountOptions,
+  ExplorerDashboardMountHandle,
+  ExplorerDashboardMountOptions,
   ExplorerMountHandle,
   ExplorerMountOptions,
+  ExplorerNode,
   MissionControlDashboardMountHandle,
   MissionControlDashboardMountOptions,
   MissionControlDashboardSnapshot,
@@ -132,6 +139,34 @@ export function mountMissionControl(container: HTMLElement, opts: BaseMountOptio
   const [options, setOpts] = createSignal(opts);
   container.classList.add("v2-solid-widget");
   const dispose = render(() => <MissionControlView options={options} />, container);
+
+  return {
+    unmount() {
+      dispose();
+      container.classList.remove("v2-solid-widget");
+    },
+    setOptions(next) {
+      setOpts((current) => ({ ...current, ...next }));
+    },
+  };
+}
+
+/**
+ * Mount the Explorer dashboard — prop-driven Solid port of
+ * dashboard/components/tui-tree/FileTree.tsx. Recursive file-tree
+ * renderer; the React host pushes the fetched tree + selectedPath via
+ * `setOptions`. The widget owns expand/collapse state internally
+ * (single `Set<string>` signal) so toggling one folder re-renders only
+ * that subtree — the recursive Solid case the silo investment was
+ * supposed to make cheap.
+ */
+export function mountExplorerDashboard(
+  container: HTMLElement,
+  opts: ExplorerDashboardMountOptions,
+): ExplorerDashboardMountHandle {
+  const [options, setOpts] = createSignal(opts);
+  container.classList.add("v2-solid-widget");
+  const dispose = render(() => <ExplorerDashboardView options={options} />, container);
 
   return {
     unmount() {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Panel, Group } from "react-resizable-panels";
 import { VSeparator, HSeparator } from "../../_lib/Separators";
@@ -41,6 +41,7 @@ import { DiffPanel as ChangesPanel } from "@/components/diffs";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { MainTabsBar } from "@/components/app-shell/MainTabsBar";
 import { FileTree, type FileTreeEntry } from "@/components/tui-tree/FileTree";
+import { ExplorerBridge } from "@/components/explorer-bridge";
 import { CreateTaskDialog } from "@/components/kanban";
 import { openCommandPalette } from "@/components/CommandPalette";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui";
@@ -1637,6 +1638,12 @@ interface FilesViewProps {
 }
 
 function FilesView({ projectName, onOpenFile }: FilesViewProps) {
+  // Feature flag: `?explorer=solid` swaps the React FileTree for the
+  // Solid widget at @tmux-ide/v2-solid-widgets. Same data source +
+  // same onSelect contract; the Solid version uses fine-grained
+  // signals so toggling one folder only re-renders that subtree.
+  const searchParams = useSearchParams();
+  const useSolid = searchParams?.get("explorer") === "solid";
   const [tree, setTree] = useState<FileTreeEntry[]>([]);
   const [truncated, setTruncated] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
@@ -1702,13 +1709,23 @@ function FilesView({ projectName, onOpenFile }: FilesViewProps) {
 
       {!error && tree.length > 0 && (
         <div className="min-h-0 flex-1 overflow-auto rounded border border-[var(--border)] bg-[var(--bg-strong)] p-2 font-mono text-[12px] text-[var(--fg)]">
-          <FileTree
-            rootEntries={tree}
-            selectedPath={selectedPath}
-            onSelect={handleSelect}
-            gitignoreFilter={gitignoreFilter}
-            defaultExpanded={false}
-          />
+          {useSolid ? (
+            <ExplorerBridge
+              rootEntries={tree}
+              selectedPath={selectedPath}
+              onSelect={handleSelect}
+              gitignoreFilter={gitignoreFilter}
+              defaultExpanded={false}
+            />
+          ) : (
+            <FileTree
+              rootEntries={tree}
+              selectedPath={selectedPath}
+              onSelect={handleSelect}
+              gitignoreFilter={gitignoreFilter}
+              defaultExpanded={false}
+            />
+          )}
         </div>
       )}
 

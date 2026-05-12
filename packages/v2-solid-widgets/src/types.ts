@@ -220,3 +220,52 @@ export interface CostsDashboardMountHandle {
   unmount(): void;
   setOptions(next: Partial<CostsDashboardMountOptions>): void;
 }
+
+// ---------------------------------------------------------------------------
+// ExplorerDashboard — prop-driven Solid port of
+// dashboard/components/tui-tree/FileTree.tsx. Recursive nested-tree
+// renderer with per-node expand/collapse, gitignore filter, selection
+// state, and a file-vs-dir click contract. The React host owns the
+// fetched tree + the current selection; the widget owns expanded-set
+// state internally (so its reactivity is fine-grained — expanding one
+// folder only re-renders that subtree, not the whole tree).
+// ---------------------------------------------------------------------------
+
+export interface ExplorerNode {
+  /** Display name (the path's last segment). */
+  name: string;
+  /** Path relative to the project root — unique identifier per node. */
+  path: string;
+  /** True for directories, false for regular files. */
+  isDir: boolean;
+  /** Optional; when true the entry is gitignored. Hidden by default. */
+  ignored?: boolean;
+  /**
+   * Loaded children. `undefined` means "not yet expanded / not yet loaded".
+   * An empty array means "expanded, confirmed empty". Only meaningful when
+   * `isDir` is true.
+   */
+  children?: ExplorerNode[];
+}
+
+export interface ExplorerDashboardMountOptions {
+  /** Root-level entries. Falsy = empty / loading. */
+  rootEntries?: ReadonlyArray<ExplorerNode>;
+  /** Currently-selected path. Pass null for no selection highlight. */
+  selectedPath?: string | null;
+  /** When true (default) gitignored entries are hidden. */
+  gitignoreFilter?: boolean;
+  /** Open all directories on first render. Defaults to false. */
+  defaultExpanded?: boolean;
+  /**
+   * Fired when the user clicks a node (file or directory). For directories
+   * the widget *also* toggles expand internally; this callback exists so
+   * the host can track selectedPath + open files in a preview pane.
+   */
+  onSelect?: (path: string, isDir: boolean) => void;
+}
+
+export interface ExplorerDashboardMountHandle {
+  unmount(): void;
+  setOptions(next: Partial<ExplorerDashboardMountOptions>): void;
+}
