@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { Panel, Group } from "react-resizable-panels";
+import { Panel, Group, type PanelImperativeHandle } from "react-resizable-panels";
 import { VSeparator, HSeparator } from "../../_lib/Separators";
 import { useSessionStream } from "@/lib/useSessionStream";
 import type { Task, AgentDetail, Goal } from "@/lib/types";
@@ -63,6 +63,8 @@ import { TasksViewBridge } from "@/components/tasks-view-bridge";
 import { StatusBar } from "@/components/StatusBar";
 import { InspectorBridge } from "@/components/inspector-bridge";
 import { BottomPanel } from "@/components/BottomPanel";
+import { useChromeLayout, setLeftSidebarOpen, setRightInspectorOpen, setBottomPanelOpen } from "@/lib/useChromeLayout";
+import { useChromeShortcuts } from "@/lib/useChromeShortcuts";
 import { TooltipProvider } from "@/components/ui";
 import { V2ActivityBar, type ActivityBarViewId } from "../../_lib/V2ActivityBar";
 import { useStoredLayout } from "../../_lib/useStoredLayout";
@@ -119,6 +121,37 @@ export default function ProjectV2Page() {
   //   shell-v        = upper | bottom-panel vertical split
   const [shellH, setShellH] = useStoredLayout("shell-h");
   const [shellV, setShellV] = useStoredLayout("shell-v");
+
+  // VSCode-style chrome toggles (Cmd+B / Cmd+Alt+B / Cmd+J). Each region
+  // has an imperative Panel handle so the boolean state can drive
+  // collapse/expand without remounting the panel content. The Solid
+  // bridges + xterm stay mounted while collapsed.
+  const chrome = useChromeLayout();
+  useChromeShortcuts();
+  const leftSidebarRef = useRef<PanelImperativeHandle>(null);
+  const rightInspectorRef = useRef<PanelImperativeHandle>(null);
+  const bottomPanelRef = useRef<PanelImperativeHandle>(null);
+
+  useEffect(() => {
+    const p = leftSidebarRef.current;
+    if (!p) return;
+    if (chrome.leftSidebarOpen && p.isCollapsed()) p.expand();
+    else if (!chrome.leftSidebarOpen && !p.isCollapsed()) p.collapse();
+  }, [chrome.leftSidebarOpen]);
+
+  useEffect(() => {
+    const p = rightInspectorRef.current;
+    if (!p) return;
+    if (chrome.rightInspectorOpen && p.isCollapsed()) p.expand();
+    else if (!chrome.rightInspectorOpen && !p.isCollapsed()) p.collapse();
+  }, [chrome.rightInspectorOpen]);
+
+  useEffect(() => {
+    const p = bottomPanelRef.current;
+    if (!p) return;
+    if (chrome.bottomPanelOpen && p.isCollapsed()) p.expand();
+    else if (!chrome.bottomPanelOpen && !p.isCollapsed()) p.collapse();
+  }, [chrome.bottomPanelOpen]);
   const metrics = useMetricsPoll(
     projectName === "__fallback" ? null : projectName,
     view === "metrics",
@@ -184,11 +217,16 @@ export default function ProjectV2Page() {
                 <Group orientation="horizontal" defaultLayout={shellH} onLayoutChange={setShellH}>
                   <Panel
                     id="left-sidebar"
+                    panelRef={leftSidebarRef}
                     defaultSize={18}
                     minSize={10}
                     collapsible
                     collapsedSize={0}
                     className="border-r border-[var(--border)]"
+                    onResize={(size) => {
+                      const open = (size?.asPercentage ?? 0) > 0.5;
+                      if (open !== chrome.leftSidebarOpen) setLeftSidebarOpen(open);
+                    }}
                   >
                     <ProjectSidebar
                       projectName={projectName}
@@ -226,11 +264,16 @@ export default function ProjectV2Page() {
 
                   <Panel
                     id="inspector"
+                    panelRef={rightInspectorRef}
                     defaultSize={24}
                     minSize={12}
                     collapsible
                     collapsedSize={0}
                     className="border-l border-[var(--border)]"
+                    onResize={(size) => {
+                      const open = (size?.asPercentage ?? 0) > 0.5;
+                      if (open !== chrome.rightInspectorOpen) setRightInspectorOpen(open);
+                    }}
                   >
                     <InspectorBridge projectName={projectName} currentView={view} />
                   </Panel>
@@ -241,11 +284,16 @@ export default function ProjectV2Page() {
 
               <Panel
                 id="bottom-panel"
+                panelRef={bottomPanelRef}
                 defaultSize={25}
                 minSize={6}
                 collapsible
-                collapsedSize={6}
+                collapsedSize={0}
                 className="border-t border-[var(--border)]"
+                onResize={(size) => {
+                  const open = (size?.asPercentage ?? 0) > 0.5;
+                  if (open !== chrome.bottomPanelOpen) setBottomPanelOpen(open);
+                }}
               >
                 <BottomPanel projectName={projectName} />
               </Panel>

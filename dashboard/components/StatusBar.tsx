@@ -16,16 +16,34 @@
  */
 
 import { useEffect, useState } from "react";
-import { GitBranch } from "lucide-react";
+import {
+  GitBranch,
+  PanelLeft,
+  PanelBottom,
+  PanelRight,
+  type LucideIcon,
+} from "lucide-react";
 import { openCommandPalette } from "@/components/CommandPalette";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import type { EventData } from "@/lib/api";
+import {
+  toggleBottomPanel,
+  toggleLeftSidebar,
+  toggleRightInspector,
+  useChromeLayout,
+} from "@/lib/useChromeLayout";
 
 interface StatusBarProps {
   projectName: string;
   running: boolean;
   agentCount: number;
   events: ReadonlyArray<EventData>;
+  /**
+   * Optional unread badge count for the Bottom Panel toggle — when the
+   * bottom panel is hidden and new problems land, the host can surface
+   * the count here to draw attention. 0 / undefined renders no badge.
+   */
+  bottomPanelUnread?: number;
 }
 
 function formatRelative(iso: string | undefined | null): string {
@@ -39,8 +57,15 @@ function formatRelative(iso: string | undefined | null): string {
   return `${Math.floor(ms / 86_400_000)}d ago`;
 }
 
-export function StatusBar({ projectName, running, agentCount, events }: StatusBarProps) {
+export function StatusBar({
+  projectName,
+  running,
+  agentCount,
+  events,
+  bottomPanelUnread = 0,
+}: StatusBarProps) {
   const [branch, setBranch] = useState<string | null>(null);
+  const chrome = useChromeLayout();
 
   // Fetch the project registry on mount + window focus for the branch hint.
   // /api/projects returns RegisteredProject[] (the live row carries the
@@ -131,7 +156,82 @@ export function StatusBar({ projectName, running, agentCount, events }: StatusBa
 
       <span className="flex-1" />
 
+      {/* IDE chrome toggles — mirror VSCode's lower-right cluster. */}
+      <ChromeToggle
+        icon={PanelLeft}
+        active={chrome.leftSidebarOpen}
+        onClick={toggleLeftSidebar}
+        ariaLabel="Toggle Primary Sidebar"
+        title="Toggle Primary Sidebar (⌘B)"
+        testId="status-bar-toggle-left"
+      />
+      <ChromeToggle
+        icon={PanelBottom}
+        active={chrome.bottomPanelOpen}
+        onClick={toggleBottomPanel}
+        ariaLabel="Toggle Panel"
+        title="Toggle Panel (⌘J)"
+        testId="status-bar-toggle-bottom"
+        badge={!chrome.bottomPanelOpen && bottomPanelUnread > 0 ? bottomPanelUnread : 0}
+      />
+      <ChromeToggle
+        icon={PanelRight}
+        active={chrome.rightInspectorOpen}
+        onClick={toggleRightInspector}
+        ariaLabel="Toggle Secondary Sidebar"
+        title="Toggle Secondary Sidebar (⌘⌥B)"
+        testId="status-bar-toggle-right"
+      />
+
       <ThemeToggle />
     </footer>
+  );
+}
+
+interface ChromeToggleProps {
+  icon: LucideIcon;
+  active: boolean;
+  onClick: () => void;
+  ariaLabel: string;
+  title: string;
+  testId: string;
+  /** Numeric badge for the bottom-panel "unread problems" hint. 0 = hide. */
+  badge?: number;
+}
+
+function ChromeToggle({
+  icon: Icon,
+  active,
+  onClick,
+  ariaLabel,
+  title,
+  testId,
+  badge = 0,
+}: ChromeToggleProps) {
+  return (
+    <button
+      type="button"
+      data-testid={testId}
+      data-active={active ? "true" : "false"}
+      onClick={onClick}
+      aria-label={ariaLabel}
+      aria-pressed={active}
+      title={title}
+      className={
+        "relative inline-flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-[var(--surface-hover)] " +
+        (active ? "text-[var(--fg)]" : "text-[var(--dim)]")
+      }
+    >
+      <Icon aria-hidden="true" size={14} />
+      {badge > 0 && (
+        <span
+          aria-hidden="true"
+          data-testid={`${testId}-badge`}
+          className="absolute -right-0.5 -top-0.5 flex h-3 min-w-3 items-center justify-center rounded-full bg-[var(--red,var(--accent))] px-1 text-[9px] font-medium text-white"
+        >
+          {badge > 9 ? "9+" : badge}
+        </span>
+      )}
+    </button>
   );
 }
