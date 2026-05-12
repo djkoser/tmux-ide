@@ -2,3 +2,5 @@ packages:
   - .
   - docs
   - dashboard
+  - app-electron
+  - packages/*

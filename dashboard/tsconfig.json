@@ -18,8 +18,10 @@
     "incremental": true,
     "paths": {
       "@/*": ["./*"],
-      "@tmux-ide/schemas": ["../src/schemas/index.ts"],
-      "@tmux-ide/ws-v3-protocol": ["../src/lib/ws-v3/protocol.ts"]
+      "@tmux-ide/contracts": ["../packages/contracts/src/index.ts"],
+      "@components/*": ["./components/tui/*"],
+      "@common/*": ["./components/tui/common/*"],
+      "@modules/*": ["./components/tui/modules/*"]
     },
     "plugins": [
       {

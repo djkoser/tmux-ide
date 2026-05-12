@@ -1,0 +1,9 @@
+# Paths that are still permitted under repo-root src/.
+#
+# Format: one repo-relative path per line. Blank lines and lines starting
+# with `#` are ignored. Compared with grep -Fx (full-line literal match).
+#
+# Keep this file small and shrinking. Every line is a deletion target.
+# When you remove a path here, also delete the file from src/.
+#
+# (currently empty — repo-root src/ is fully retired as of T041)
