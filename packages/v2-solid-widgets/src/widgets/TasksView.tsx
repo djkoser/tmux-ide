@@ -83,10 +83,6 @@ const STATUS_ORDER: Record<string, number> = {
   done: 3,
 };
 
-function isStatus(value: string): value is TasksTaskStatus {
-  return TASK_STATUSES.includes(value as TasksTaskStatus);
-}
-
 function fmtDate(iso?: string): string {
   if (!iso) return "—";
   const d = new Date(iso);

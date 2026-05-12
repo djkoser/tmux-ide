@@ -6,7 +6,8 @@
 # someone copy-pasted the snippet and is now spawning silo lifetimes from
 # arbitrary components. See ADR-0001 §1.4 Rule 4.
 #
-# Convention: bridge files match `*Bridge.tsx` or `*Island.tsx`. The
+# Convention: bridge files match `*Bridge.tsx`, `*-bridge.tsx`, or
+# `*Island.tsx`. The
 # `.silo-mount-allowlist` file at the repo root holds pre-existing exceptions
 # (paths to refactor in a follow-up); new violations are blocked.
 #
@@ -62,6 +63,7 @@ while IFS= read -r abs_path; do
 
   # Files that match the bridge convention are allowed.
   if [[ "$base" == *Bridge.tsx || "$base" == *Bridge.ts ||
+        "$base" == *-bridge.tsx || "$base" == *-bridge.ts ||
         "$base" == *Island.tsx || "$base" == *Island.ts ]]; then
     continue
   fi
@@ -80,7 +82,7 @@ while IFS= read -r abs_path; do
   fi
 
   echo "ERROR: silo mount() called outside a Bridge/Island file: $rel_path"
-  echo "       Either rename the file to *Bridge.tsx / *Island.tsx, or"
+  echo "       Either rename the file to *Bridge.tsx / *-bridge.tsx / *Island.tsx, or"
   echo "       add it to .silo-mount-allowlist with a tracking note."
   fail=1
 done <<< "$matches"

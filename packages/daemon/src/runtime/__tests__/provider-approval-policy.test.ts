@@ -19,7 +19,7 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
 
 import {
   makeProviderApprovalPolicy,
