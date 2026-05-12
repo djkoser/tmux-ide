@@ -1,8 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { resolve } from "node:path";
 
-const INTERVAL = 1000;
 const SPINNERS = /^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏⠂⠒⠢⠆⠐⠠⠄◐◓◑◒|/\\-] /;
 
 interface MonitorPane {
@@ -113,172 +110,13 @@ export function computeAgentStates(panes: MonitorPane[]): Map<string, "busy" | "
   return states;
 }
 
-// --- Main loop (only runs when executed directly) ---
-
-const isMainModule = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-
-if (isMainModule) {
-  const session: string = process.argv[2]!;
-  if (!session) process.exit(1);
-
-  function tmux(...args: string[]): string {
-    return execFileSync("tmux", args, { encoding: "utf-8" }).trim();
-  }
-
-  function tmuxSilent(...args: string[]): string {
-    try {
-      return tmux(...args);
-    } catch {
-      return "";
-    }
-  }
-
-  function sessionExists(): boolean {
-    try {
-      tmux("has-session", "-t", session);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  function hasClients(): boolean {
-    return tmuxSilent("list-clients").length > 0;
-  }
-
-  function listPanes(): MonitorPane[] {
-    const raw = tmuxSilent(
-      "list-panes",
-      "-t",
-      session,
-      "-F",
-      "#{pane_id}\t#{pane_pid}\t#{pane_current_command}\t#{pane_title}\t#{@ide_role}\t#{@ide_type}\t#{@ide_name}",
-    );
-    if (!raw) return [];
-    return raw.split("\n").map((line) => {
-      const [id, pid, cmd, title, role, type, name] = line.split("\t");
-      return {
-        id: id!,
-        pid: pid!,
-        cmd,
-        title,
-        role: role || undefined,
-        type: type || undefined,
-        name: name || undefined,
-      };
-    });
-  }
-
-  let lastState = "";
-
-  function tick(): void {
-    if (!sessionExists()) process.exit(0);
-    if (!hasClients()) return; // skip when nobody is watching
-
-    const panes = listPanes();
-    if (panes.length === 0) return;
-
-    const portPanes = computePortPanes(panes);
-    const agentStates = computeAgentStates(panes);
-
-    // Build state fingerprint for change detection (includes title drift)
-    const stateKey = panes
-      .map((p) => {
-        const port = portPanes.has(p.id) ? "1" : "0";
-        const agent = agentStates.get(p.id) ?? "-";
-        const titleDrift = p.name && p.title !== p.name ? "d" : "ok";
-        return `${p.id}:${port}:${agent}:${titleDrift}`;
-      })
-      .join("|");
-
-    if (stateKey === lastState) return;
-
-    // Apply changes
-    for (const pane of panes) {
-      const hasPort = portPanes.has(pane.id) ? "1" : "0";
-      const agent = agentStates.get(pane.id);
-
-      tmuxSilent("set-option", "-pqt", pane.id, "@has_port", hasPort);
-      tmuxSilent("set-option", "-pqt", pane.id, "@agent_busy", agent === "busy" ? "1" : "0");
-      tmuxSilent("set-option", "-pqt", pane.id, "@agent_idle", agent === "idle" ? "1" : "0");
-
-      // Restore configured pane title if Claude Code changed it
-      if (pane.name && pane.title !== pane.name) {
-        tmuxSilent("select-pane", "-t", pane.id, "-T", pane.name);
-      }
-    }
-
-    tmuxSilent("refresh-client", "-S");
-    lastState = stateKey;
-  }
-
-  const monitorInterval = setInterval(tick, INTERVAL);
-  tick(); // run immediately
-
-  // Unified shutdown handler — cleans up everything on SIGTERM/SIGINT
-  let stopOrchestrator: (() => void) | null = null;
-
-  function shutdown() {
-    clearInterval(monitorInterval);
-    if (stopOrchestrator) stopOrchestrator();
-    process.exit(0);
-  }
-
-  process.on("SIGTERM", shutdown);
-  process.on("SIGINT", shutdown);
-
-  // Start orchestrator if enabled in config
-  (async () => {
-    try {
-      const { readConfig } = await import("./yaml-io.ts");
-      const { config } = readConfig(process.cwd());
-
-      if (config.orchestrator?.enabled) {
-        try {
-          const { createOrchestrator } = await import("./orchestrator.ts");
-
-          // Configure webhooks for event delivery
-          if (config.orchestrator.webhooks?.length) {
-            const { setWebhookConfig } = await import("./event-log.ts");
-            setWebhookConfig(config.orchestrator.webhooks);
-          }
-
-          const orch = config.orchestrator;
-
-          // Build pane specialty map from ide.yml config
-          const paneSpecialties = new Map<string, string[]>();
-          for (const row of config.rows) {
-            for (const pane of row.panes) {
-              if (pane.specialty && pane.title) {
-                paneSpecialties.set(
-                  pane.title,
-                  pane.specialty.split(",").map((s: string) => s.trim().toLowerCase()),
-                );
-              }
-            }
-          }
-
-          stopOrchestrator = createOrchestrator({
-            session,
-            dir: process.cwd(),
-            autoDispatch: orch.auto_dispatch ?? true,
-            stallTimeout: orch.stall_timeout ?? 300000,
-            pollInterval: orch.poll_interval ?? 5000,
-            masterPane: orch.master_pane ?? null,
-            beforeRun: orch.before_run ?? null,
-            afterRun: orch.after_run ?? null,
-            maxConcurrentAgents: orch.max_concurrent_agents ?? 10,
-            dispatchMode: orch.dispatch_mode ?? "tasks",
-            paneSpecialties,
-            services: orch.services ?? {},
-            research: orch.research,
-          });
-        } catch {
-          // Orchestrator module not available yet
-        }
-      }
-    } catch {
-      // Config not readable — skip orchestrator
-    }
-  })();
-}
+// The per-session tick loop / orchestrator bootstrap that used to live
+// here was orphaned by the canonical-tree fold — `daemon-embed.ts` owns
+// both responsibilities now (see `startEmbeddedDaemon` + its
+// orchestrator branch). Removing the legacy CLI block also fixes the
+// esbuild-bundle case where `import.meta.url`-vs-`process.argv[1]`
+// resolved to true at the bin/cli.js entry, causing the daemon's
+// session monitor to hijack every CLI invocation (see N1 of
+// docs/npm-distribution-audit.md). The pure exports above
+// (`computeAgentStates`, `computePortPanes`) remain — that's what
+// `daemon-embed.ts` actually imports.
