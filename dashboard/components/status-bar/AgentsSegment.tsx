@@ -36,10 +36,7 @@ export function AgentsSegment({ snapshot }: { snapshot: SessionSnapshot | null }
           <div className="text-[var(--accent)]">agents</div>
           <div className="space-y-1.5">
             {agents.map((agent) => (
-              <div
-                key={agent.paneId}
-                className="grid grid-cols-[auto_1fr_auto] items-center gap-2"
-              >
+              <div key={agent.paneId} className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
                 <span
                   aria-hidden="true"
                   className="h-1.5 w-1.5 rounded-full"

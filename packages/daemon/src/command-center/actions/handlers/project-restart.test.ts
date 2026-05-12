@@ -28,10 +28,7 @@ describe("projectRestartHandler", () => {
 
   it("raises project_not_found for unknown projects", async () => {
     await expect(
-      projectRestartHandler(
-        { name: "ghost" },
-        { getProject: () => null, restart: async () => {} },
-      ),
+      projectRestartHandler({ name: "ghost" }, { getProject: () => null, restart: async () => {} }),
     ).rejects.toMatchObject({ code: "project_not_found" });
   });
 

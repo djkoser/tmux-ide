@@ -2,11 +2,7 @@ import { mkdirSync } from "node:fs";
 import { basename, join } from "node:path";
 import { StructuredEventSchemaZ } from "../schemas/domain.ts";
 import { openDatabase, type SqliteDb } from "./sqlite-adapter.ts";
-import {
-  formatEventMessage,
-  type OrchestratorEvent,
-  type StructuredEvent,
-} from "./event-log.ts";
+import { formatEventMessage, type OrchestratorEvent, type StructuredEvent } from "./event-log.ts";
 
 interface Migration {
   id: number;
@@ -51,13 +47,9 @@ function runMigrations(db: SqliteDb): void {
     id INTEGER PRIMARY KEY,
     applied_at TEXT NOT NULL
   );`);
-  const appliedRows = db
-    .prepare("SELECT id FROM _migrations")
-    .all<{ id: number }>();
+  const appliedRows = db.prepare("SELECT id FROM _migrations").all<{ id: number }>();
   const applied = new Set(appliedRows.map((r) => r.id));
-  const insert = db.prepare(
-    "INSERT INTO _migrations (id, applied_at) VALUES (?, ?)",
-  );
+  const insert = db.prepare("INSERT INTO _migrations (id, applied_at) VALUES (?, ?)");
   for (const migration of MIGRATIONS) {
     if (applied.has(migration.id)) continue;
     db.exec(migration.sql);
@@ -73,16 +65,16 @@ export interface EventQuery {
   limit?: number;
 }
 
-export function appendEventSqlite(
-  dir: string,
-  event: OrchestratorEvent | StructuredEvent,
-): void {
+export function appendEventSqlite(dir: string, event: OrchestratorEvent | StructuredEvent): void {
   const db = ensureDb(dir);
   const ts = (event as { timestamp?: string }).timestamp ?? new Date().toISOString();
   const kind = (event as { type?: string }).type ?? "unknown";
-  db.prepare(
-    "INSERT INTO events (ts, kind, payload, session) VALUES (?, ?, ?, ?)",
-  ).run(ts, kind, JSON.stringify(event), basename(dir));
+  db.prepare("INSERT INTO events (ts, kind, payload, session) VALUES (?, ?, ?, ?)").run(
+    ts,
+    kind,
+    JSON.stringify(event),
+    basename(dir),
+  );
 }
 
 function rehydrate(payload: string): OrchestratorEvent | null {
@@ -124,10 +116,7 @@ export function readEventsSqlite(dir: string): OrchestratorEvent[] {
     .filter((event): event is OrchestratorEvent => event !== null);
 }
 
-export function queryEventsSqlite(
-  dir: string,
-  query: EventQuery = {},
-): OrchestratorEvent[] {
+export function queryEventsSqlite(dir: string, query: EventQuery = {}): OrchestratorEvent[] {
   const db = ensureDb(dir);
   const clauses: string[] = [];
   const params: unknown[] = [];

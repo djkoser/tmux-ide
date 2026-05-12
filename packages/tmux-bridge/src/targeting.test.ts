@@ -22,15 +22,13 @@ describe("resolveTarget — byId", () => {
   });
 
   it("throws for non-numeric, non-%N ids", () => {
-    expect(() =>
-      resolveTarget(PANES, { kind: "byId", id: "not-a-number" }, "sess"),
-    ).toThrow(/Invalid pane id/);
+    expect(() => resolveTarget(PANES, { kind: "byId", id: "not-a-number" }, "sess")).toThrow(
+      /Invalid pane id/,
+    );
   });
 
   it("throws when bare-numeric id doesn't match any pane", () => {
-    expect(() =>
-      resolveTarget(PANES, { kind: "byId", id: "99" }, "sess"),
-    ).toThrow(/not found/i);
+    expect(() => resolveTarget(PANES, { kind: "byId", id: "99" }, "sess")).toThrow(/not found/i);
   });
 });
 
@@ -42,9 +40,9 @@ describe("resolveTarget — byIndex", () => {
   });
 
   it("throws when index is missing", () => {
-    expect(() =>
-      resolveTarget(PANES, { kind: "byIndex", index: 99 }, "sess"),
-    ).toThrow(/not found/i);
+    expect(() => resolveTarget(PANES, { kind: "byIndex", index: 99 }, "sess")).toThrow(
+      /not found/i,
+    );
   });
 
   it("omits the session prefix when no session is supplied", () => {
@@ -61,23 +59,23 @@ describe("resolveTarget — byTitle", () => {
   });
 
   it("throws on ambiguous titles", () => {
-    expect(() =>
-      resolveTarget(PANES, { kind: "byTitle", title: "Reviewer" }, "sess"),
-    ).toThrow(/ambiguous/i);
+    expect(() => resolveTarget(PANES, { kind: "byTitle", title: "Reviewer" }, "sess")).toThrow(
+      /ambiguous/i,
+    );
   });
 
   it("throws when no pane matches", () => {
-    expect(() =>
-      resolveTarget(PANES, { kind: "byTitle", title: "Nonexistent" }, "sess"),
-    ).toThrow(/not found/i);
+    expect(() => resolveTarget(PANES, { kind: "byTitle", title: "Nonexistent" }, "sess")).toThrow(
+      /not found/i,
+    );
   });
 });
 
 describe("resolveTarget — byRole", () => {
   it("throws because byRole must be resolved by the daemon, not the bridge", () => {
-    expect(() =>
-      resolveTarget(PANES, { kind: "byRole", role: "lead" }, "sess"),
-    ).toThrow(/byRole.*daemon/i);
+    expect(() => resolveTarget(PANES, { kind: "byRole", role: "lead" }, "sess")).toThrow(
+      /byRole.*daemon/i,
+    );
   });
 });
 

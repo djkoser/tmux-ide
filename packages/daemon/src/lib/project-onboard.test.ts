@@ -99,9 +99,9 @@ describe("composeIdeYmlConfig", () => {
     expect(() =>
       composeIdeYmlConfig({ name: "alpha", agents: 2, agentNames: ["Only one"] }),
     ).toThrow(OnboardInvalidInputError);
-    expect(() =>
-      composeIdeYmlConfig({ name: "alpha", agents: 1, agentNames: ["A", "B"] }),
-    ).toThrow(OnboardInvalidInputError);
+    expect(() => composeIdeYmlConfig({ name: "alpha", agents: 1, agentNames: ["A", "B"] })).toThrow(
+      OnboardInvalidInputError,
+    );
   });
 
   it("rejects agentNames containing empty strings", () => {

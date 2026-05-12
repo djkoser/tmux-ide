@@ -62,7 +62,10 @@ assert(hasMacTarget(builder, "zip"), "electron-builder mac.target must include z
 assert(builder?.publish?.provider === "github", "electron-builder publish.provider must be github");
 assert(builder?.publish?.owner === "wavyrai", "electron-builder publish.owner must be wavyrai");
 assert(builder?.publish?.repo === "tmux-ide", "electron-builder publish.repo must be tmux-ide");
-assert(builder?.publish?.releaseType === "prerelease", "electron-builder publish.releaseType must be prerelease before v1.0");
+assert(
+  builder?.publish?.releaseType === "prerelease",
+  "electron-builder publish.releaseType must be prerelease before v1.0",
+);
 
 assert(existsSync(entitlementsPath), "entitlements plist is missing");
 const entitlementKeys = parseEntitlements(entitlementsPath);

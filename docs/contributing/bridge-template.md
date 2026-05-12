@@ -90,7 +90,7 @@ export function mount(el: HTMLElement, initial: InitialProps): SiloMountHandle;
 ```
 
 The setter convention (`setThreadId`, `setSessionName`, …) is part of
-the *silo public API*. Adding a new prop is a visible API change in
+the _silo public API_. Adding a new prop is a visible API change in
 the silo package — that is the entire point of the boundary.
 
 ## Why the dependency array is `[]`, not `[props.threadId]`
@@ -105,7 +105,7 @@ unmount → re-mount on every thread switch, which:
 - Sometimes leaks event listeners if the silo's `unmount()` is
   imperfect.
 
-Driving prop changes through *handle setters* keeps the silo alive
+Driving prop changes through _handle setters_ keeps the silo alive
 across prop changes. The silo decides what to do with the new value
 (e.g. re-fetch the thread, swap content) without re-running its
 bootstrap.

@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import styles from '@components/DataTable.module.css';
+import styles from "@components/DataTable.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
 interface TableProps {
   data: string[][];
@@ -33,9 +33,9 @@ const DataTable: React.FC<TableProps> = ({ data }) => {
   const prevDataRef = React.useRef<string[][]>(data);
 
   React.useEffect(() => {
-    const rows = tableRef.current?.querySelectorAll<HTMLTableRowElement>('tr') || [];
+    const rows = tableRef.current?.querySelectorAll<HTMLTableRowElement>("tr") || [];
     for (let i = 1; i < data.length; i++) {
-      const cells = rows[i]?.querySelectorAll<HTMLTableCellElement>('td');
+      const cells = rows[i]?.querySelectorAll<HTMLTableCellElement>("td");
       if (!cells) continue;
       for (let j = 0; j < data[i].length; j++) {
         const cell = cells[j];
@@ -54,24 +54,27 @@ const DataTable: React.FC<TableProps> = ({ data }) => {
     const activeElement = document.activeElement;
     if (!activeElement) return;
     switch (event.key) {
-      case 'Enter':
+      case "Enter":
         event.preventDefault();
         if (activeElement instanceof HTMLTableCellElement) {
           activeElement.click();
         }
         break;
-      case 'ArrowUp':
-      case 'ArrowDown':
-      case 'ArrowLeft':
-      case 'ArrowRight':
+      case "ArrowUp":
+      case "ArrowDown":
+      case "ArrowLeft":
+      case "ArrowRight":
         event.preventDefault();
         if (!(activeElement instanceof HTMLTableCellElement)) return;
-        const direction = event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? 'previous' : 'next';
-        const allCells = Array.from(tableRef.current?.querySelectorAll<HTMLTableCellElement>('td') || []);
+        const direction =
+          event.key === "ArrowUp" || event.key === "ArrowLeft" ? "previous" : "next";
+        const allCells = Array.from(
+          tableRef.current?.querySelectorAll<HTMLTableCellElement>("td") || [],
+        );
         const currentIndex = allCells.indexOf(activeElement);
         if (currentIndex === -1) return;
-        let nextIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
-        if (direction === 'previous') {
+        let nextIndex = direction === "next" ? currentIndex + 1 : currentIndex - 1;
+        if (direction === "previous") {
           if (nextIndex < 0) nextIndex = allCells.length - 1;
         } else {
           if (nextIndex >= allCells.length) nextIndex = 0;
@@ -88,19 +91,27 @@ const DataTable: React.FC<TableProps> = ({ data }) => {
     <table className={styles.root} ref={tableRef} onKeyDown={handleKeyDown}>
       <tbody className={styles.body}>
         {data.map((row, rowIndex) => (
-          <tr key={rowIndex} className={styles.row} tabIndex={0} onClick={() => alert('testing')}>
+          <tr key={rowIndex} className={styles.row} tabIndex={0} onClick={() => alert("testing")}>
             {row.map((cellContent, colIndex) => {
               let backgroundColor: string;
               if (rowIndex === 0) {
                 const lightnessFactor = row.length > 1 ? colIndex / (row.length - 1) : 0;
-                const newColor = interpolateColor(BASE_FOREGROUND_RGBA, targetColorHeader, lightnessFactor);
+                const newColor = interpolateColor(
+                  BASE_FOREGROUND_RGBA,
+                  targetColorHeader,
+                  lightnessFactor,
+                );
                 backgroundColor = `rgba(${newColor.r}, ${newColor.g}, ${newColor.b}, ${newColor.a.toFixed(2)})`;
               } else {
                 const numRows = data.length - 1;
                 const maxIndexSum = numRows - 1 + (row.length - 1) || 1;
                 const indexSum = rowIndex - 1 + colIndex;
                 const lightnessFactor = indexSum / maxIndexSum;
-                const newColor = interpolateColor(BASE_BACKGROUND_RGBA, targetColorData, lightnessFactor);
+                const newColor = interpolateColor(
+                  BASE_BACKGROUND_RGBA,
+                  targetColorData,
+                  lightnessFactor,
+                );
                 backgroundColor = `rgba(${newColor.r}, ${newColor.g}, ${newColor.b}, ${newColor.a.toFixed(2)})`;
               }
               return (

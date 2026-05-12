@@ -12,11 +12,7 @@
  *   - CheckpointFile (path, kind, additions, deletions)
  */
 
-import type {
-  ChatThreadEvent,
-  CheckpointStatus,
-  CheckpointSummary,
-} from "@tmux-ide/contracts";
+import type { ChatThreadEvent, CheckpointStatus, CheckpointSummary } from "@tmux-ide/contracts";
 
 export interface CheckpointStore {
   upsert(threadId: string, summary: CheckpointSummary): CheckpointSummary;
@@ -79,9 +75,7 @@ export function makeCheckpointStore(opts: MakeCheckpointStoreOptions = {}): Chec
       if (!b) return [];
       // Sort by checkpointTurnCount for deterministic ordering — that's
       // the natural per-thread sequence the t3 schema imposes.
-      return [...b.values()].sort(
-        (a, b2) => a.checkpointTurnCount - b2.checkpointTurnCount,
-      );
+      return [...b.values()].sort((a, b2) => a.checkpointTurnCount - b2.checkpointTurnCount);
     },
     remove(threadId, turnId) {
       const b = byThread.get(threadId);

@@ -87,8 +87,7 @@ export function PanelResizeSash({
 
       const handleMouseMove = (ev: MouseEvent) => {
         const delta = ev.clientX - startXRef.current;
-        const combinedWidth =
-          startLeftWidthRef.current + startRightWidthRef.current;
+        const combinedWidth = startLeftWidthRef.current + startRightWidthRef.current;
 
         // Compute new pixel widths, clamped to PANEL_MIN_WIDTH
         let newLeftWidth = startLeftWidthRef.current + delta;

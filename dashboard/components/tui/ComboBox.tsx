@@ -1,13 +1,13 @@
-'use client';
+"use client";
 
-import styles from '@components/ComboBox.module.css';
+import styles from "@components/ComboBox.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
-import AlertBanner from '@components/AlertBanner';
-import ButtonGroup from '@components/ButtonGroup';
-import CardDouble from '@components/CardDouble';
-import Input from '@components/Input';
+import AlertBanner from "@components/AlertBanner";
+import ButtonGroup from "@components/ButtonGroup";
+import CardDouble from "@components/CardDouble";
+import Input from "@components/Input";
 
 interface ComboBoxProps {
   data: string[][];
@@ -15,7 +15,7 @@ interface ComboBoxProps {
 }
 
 function ComboBox({ data, label }: ComboBoxProps) {
-  const [searchTerm, setSearchTerm] = React.useState('');
+  const [searchTerm, setSearchTerm] = React.useState("");
 
   const filtered = React.useMemo(() => {
     const sliced = data.slice(1);
@@ -42,13 +42,23 @@ function ComboBox({ data, label }: ComboBoxProps) {
   return (
     <>
       <div className={styles.root}>
-        <Input autoComplete="off" isBlink label={label} name="input_test_blink" value={searchTerm} onChange={handleChange} />
+        <Input
+          autoComplete="off"
+          isBlink
+          label={label}
+          name="input_test_blink"
+          value={searchTerm}
+          onChange={handleChange}
+        />
       </div>
       {displayed.map((entry) => (
         <CardDouble key={entry[0]} title={entry[0]}>
           <AlertBanner>{entry[1]}</AlertBanner>
           <br />
-          <ButtonGroup isFull items={[{ body: 'FAVORITE' }, { body: 'DONATE' }, { body: 'LEARN MORE' }]} />
+          <ButtonGroup
+            isFull
+            items={[{ body: "FAVORITE" }, { body: "DONATE" }, { body: "LEARN MORE" }]}
+          />
         </CardDouble>
       ))}
     </>

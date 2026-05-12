@@ -252,7 +252,8 @@ export const CLIENT_METHODS = {
   item_plan_delta: CODEX_METHODS.item_plan_delta,
   command_exec_output_delta: CODEX_METHODS.command_exec_output_delta,
   item_command_execution_output_delta: CODEX_METHODS.item_command_execution_output_delta,
-  item_command_execution_terminal_interaction: CODEX_METHODS.item_command_execution_terminal_interaction,
+  item_command_execution_terminal_interaction:
+    CODEX_METHODS.item_command_execution_terminal_interaction,
   item_file_change_output_delta: CODEX_METHODS.item_file_change_output_delta,
   item_file_change_patch_updated: CODEX_METHODS.item_file_change_patch_updated,
   server_request_resolved: CODEX_METHODS.server_request_resolved,

@@ -33,11 +33,7 @@ const electronBinary = require("electron");
 // runtime without pre-building the contracts package.
 const env = {
   ...process.env,
-  NODE_OPTIONS: [
-    process.env.NODE_OPTIONS ?? "",
-    "--experimental-transform-types",
-    "--no-warnings",
-  ]
+  NODE_OPTIONS: [process.env.NODE_OPTIONS ?? "", "--experimental-transform-types", "--no-warnings"]
     .filter(Boolean)
     .join(" "),
 };

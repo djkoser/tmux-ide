@@ -101,8 +101,7 @@ function resolveRespawnCwd(
   if (!last) {
     throw new ActionError({
       code: "internal",
-      message:
-        "Cannot respawn terminal without an explicit cwd: bridge has no recorded cwd",
+      message: "Cannot respawn terminal without an explicit cwd: bridge has no recorded cwd",
       details: { terminalId: input.terminalId },
     });
   }

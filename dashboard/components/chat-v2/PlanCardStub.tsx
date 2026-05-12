@@ -17,11 +17,7 @@ export interface PlanCardStubProps {
   plan: ProposedPlanView;
   threadId: string;
   onApprove?: (input: { threadId: string; planId: string }) => Promise<void> | void;
-  onReject?: (input: {
-    threadId: string;
-    planId: string;
-    reason?: string;
-  }) => Promise<void> | void;
+  onReject?: (input: { threadId: string; planId: string; reason?: string }) => Promise<void> | void;
 }
 
 type CardStatus = "pending" | "implemented" | "rejected";
@@ -79,14 +75,9 @@ export function PlanCardStub({ plan, threadId, onApprove, onReject }: PlanCardSt
         {plan.planMarkdown}
       </pre>
       {plan.rejected?.reason ? (
-        <div className="mt-1 text-[10px] text-[var(--dim)]">
-          Reason: {plan.rejected.reason}
-        </div>
+        <div className="mt-1 text-[10px] text-[var(--dim)]">Reason: {plan.rejected.reason}</div>
       ) : null}
-      <div
-        data-testid="plan-card-stub-actions"
-        className="mt-2 flex items-center gap-2"
-      >
+      <div data-testid="plan-card-stub-actions" className="mt-2 flex items-center gap-2">
         <button
           type="button"
           disabled={!canAct || busy || !onApprove}

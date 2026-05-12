@@ -6,15 +6,15 @@ Picking up from a long orchestration session. Read this first; act second.
 
 **Goals 01–11 closed.** Goal 12 at 4/5; goal 13 (chat overhaul) sketched, not started.
 
-| Goal | Status |
-|---|---|
-| 01–07 | ✅ (v2 shell, widgets, cleanup, cutover, sidebar migration, diffs fold, FileTree) |
-| 08 Audit + relocate to single canonical tree | ✅ |
-| 09 Real-IDE feel (diffs, file tree, activity bar) | ✅ |
-| 10 t3-style consolidation | ✅ |
-| 11 Boundary enforcement + tmux-bridge | ✅ |
-| 12 Singleton daemon + multi-workspace registry | 🔄 (T065/T066/T067 done; T068 + T069 queued) |
-| 13 Full t3 chat with tmux-as-a-tool | 📐 sketched, T070 schemas need design before any agent touches |
+| Goal                                              | Status                                                                            |
+| ------------------------------------------------- | --------------------------------------------------------------------------------- |
+| 01–07                                             | ✅ (v2 shell, widgets, cleanup, cutover, sidebar migration, diffs fold, FileTree) |
+| 08 Audit + relocate to single canonical tree      | ✅                                                                                |
+| 09 Real-IDE feel (diffs, file tree, activity bar) | ✅                                                                                |
+| 10 t3-style consolidation                         | ✅                                                                                |
+| 11 Boundary enforcement + tmux-bridge             | ✅                                                                                |
+| 12 Singleton daemon + multi-workspace registry    | 🔄 (T065/T066/T067 done; T068 + T069 queued)                                      |
+| 13 Full t3 chat with tmux-as-a-tool               | 📐 sketched, T070 schemas need design before any agent touches                    |
 
 ## What's broken right now
 
@@ -43,6 +43,7 @@ Picking up from a long orchestration session. Read this first; act second.
    - pane 3 = Validator
 
    Hand off via manual dispatch (CLI is broken):
+
    ```bash
    cat > /tmp/dispatch.txt <<'EOF'
    <prompt body>
@@ -51,11 +52,12 @@ Picking up from a long orchestration session. Read this first; act second.
    tmux paste-buffer -b dx -t new-name:0.<pane> -p
    tmux send-keys -t new-name:0.<pane> Enter
    ```
+
 5. **Sit down with the user on T070 schemas** before goal 13 dispatches. The Thread/Turn/Message/Plan/ActivityItem/Checkpoint shape is load-bearing. Don't let an agent invent it.
 
 ## Key facts the user has stated (paraphrased)
 
-- **Chat = full t3 feature parity.** All of: thread/turn/plan/activity-stream, plan-approve-execute, turn-level checkpoint+revert, multi-agent threads, provider abstraction. *Not* a simple Claude.ai-with-tools.
+- **Chat = full t3 feature parity.** All of: thread/turn/plan/activity-stream, plan-approve-execute, turn-level checkpoint+revert, multi-agent threads, provider abstraction. _Not_ a simple Claude.ai-with-tools.
 - **BUT tmux operations show up in the chat as tool calls**, rendered as activity items in the turn stream like any other tool (`read_file`, `bash`, `send_to_pane`).
 - **No migration needed** for existing chat data — clean break is fine.
 - **tmux remains the agent execution substrate.** Lead/Frontend/Backend/Validator stay as Claude Code panes. The chat just has a `send_to_pane` (and friends) tool.
@@ -65,6 +67,7 @@ Picking up from a long orchestration session. Read this first; act second.
 ## Architectural state of the repo
 
 Just landed (mostly today):
+
 - One canonical daemon tree at `packages/daemon` (no more `src/` divergence)
 - CLI co-located in `packages/daemon/src/cli.ts` + `bin.ts`
 - `@tmux-ide/contracts` owns all wire schemas (Zod)

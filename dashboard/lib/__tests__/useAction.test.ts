@@ -41,9 +41,7 @@ describe("useAction", () => {
 
     // resolve the in-flight request
     act(() => {
-      resolveFetch!(
-        jsonResponse({ ok: true, result: { sessionName: "alpha", started: true } }),
-      );
+      resolveFetch!(jsonResponse({ ok: true, result: { sessionName: "alpha", started: true } }));
     });
 
     await dispatched!;
@@ -88,10 +86,7 @@ describe("useAction", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        jsonResponse(
-          { ok: false, error: { code: "internal", message: "boom" } },
-          500,
-        ),
+        jsonResponse({ ok: false, error: { code: "internal", message: "boom" } }, 500),
       )
       .mockResolvedValueOnce(
         jsonResponse({ ok: true, result: { sessionName: "alpha", stopped: true } }),

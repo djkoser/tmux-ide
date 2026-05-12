@@ -19,9 +19,15 @@ import {
 import { makeTurnProjection } from "../turn-projection.ts";
 
 interface FakeEventReader extends ChatEventReader {
-  append(event: ChatThreadEvent, opts?: { occurredAt?: string; streamId?: string }): PersistedChatEvent;
+  append(
+    event: ChatThreadEvent,
+    opts?: { occurredAt?: string; streamId?: string },
+  ): PersistedChatEvent;
   /** Append directly without notifying subscribers — simulates historical writes. */
-  appendSilent(event: ChatThreadEvent, opts?: { occurredAt?: string; streamId?: string }): PersistedChatEvent;
+  appendSilent(
+    event: ChatThreadEvent,
+    opts?: { occurredAt?: string; streamId?: string },
+  ): PersistedChatEvent;
   /** Force-inject an envelope with a chosen sequence (gap-injection tests). */
   injectRaw(envelope: PersistedChatEvent, opts?: { notify?: boolean }): void;
 }
@@ -36,7 +42,7 @@ function makeFakeReader(): FakeEventReader {
     event: ChatThreadEvent,
     opts?: { occurredAt?: string; streamId?: string; sequence?: number },
   ): PersistedChatEvent {
-    const streamId = opts?.streamId ?? (("threadId" in event) ? event.threadId : "default");
+    const streamId = opts?.streamId ?? ("threadId" in event ? event.threadId : "default");
     const nextStreamVersion = (streamVersions.get(streamId) ?? 0) + 1;
     streamVersions.set(streamId, nextStreamVersion);
     const seq = opts?.sequence ?? nextSeq++;
@@ -314,9 +320,7 @@ describe("makeTurnProjection — read API", () => {
 
     expect(projection.list(THREAD_A)).toHaveLength(1);
     // First-write-wins: original requestedAt preserved.
-    expect(projection.get(THREAD_A, TURN_1)?.requestedAt).toBe(
-      "2025-01-01T00:00:01.000Z",
-    );
+    expect(projection.get(THREAD_A, TURN_1)?.requestedAt).toBe("2025-01-01T00:00:01.000Z");
     // Cursor still advances on the duplicate (event consumed, no state change).
     expect(projection.cursor()).toBe(2);
   });

@@ -1,14 +1,14 @@
-'use client';
+"use client";
 
-import styles from '@components/DropdownMenu.module.css';
+import styles from "@components/DropdownMenu.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
-import ActionButton from '@components/ActionButton';
-import ActionListItem from '@components/ActionListItem';
-import ModalTrigger from '@components/ModalTrigger';
+import ActionButton from "@components/ActionButton";
+import ActionListItem from "@components/ActionListItem";
+import ModalTrigger from "@components/ModalTrigger";
 
-import { useHotkeys } from '@modules/hotkeys';
+import { useHotkeys } from "@modules/hotkeys";
 
 interface DropdownMenuItemProps {
   children: React.ReactNode;
@@ -33,10 +33,10 @@ const DropdownMenu = React.forwardRef<HTMLDivElement, DropdownMenuProps>((props,
   const setRef = React.useCallback(
     (node: HTMLDivElement | null) => {
       (menuRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
-      if (typeof ref === 'function') ref(node);
+      if (typeof ref === "function") ref(node);
       else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
     },
-    [ref]
+    [ref],
   );
 
   const handleClose = React.useCallback(() => {
@@ -44,7 +44,7 @@ const DropdownMenu = React.forwardRef<HTMLDivElement, DropdownMenuProps>((props,
   }, [onClose]);
 
   //NOTE(jimmylee): Fallback for when focus is outside the menu container.
-  useHotkeys('Escape', handleClose);
+  useHotkeys("Escape", handleClose);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const menu = menuRef.current;
@@ -56,22 +56,22 @@ const DropdownMenu = React.forwardRef<HTMLDivElement, DropdownMenuProps>((props,
     const currentIndex = menuItems.indexOf(event.target as HTMLElement);
 
     switch (event.key) {
-      case 'ArrowDown': {
+      case "ArrowDown": {
         event.preventDefault();
         event.stopPropagation();
         const next = currentIndex < menuItems.length - 1 ? currentIndex + 1 : 0;
         menuItems[next].focus();
         break;
       }
-      case 'ArrowUp': {
+      case "ArrowUp": {
         event.preventDefault();
         event.stopPropagation();
         const prev = currentIndex > 0 ? currentIndex - 1 : menuItems.length - 1;
         menuItems[prev].focus();
         break;
       }
-      case 'Enter':
-      case ' ': {
+      case "Enter":
+      case " ": {
         event.preventDefault();
         event.stopPropagation();
         if (currentIndex >= 0) {
@@ -79,7 +79,7 @@ const DropdownMenu = React.forwardRef<HTMLDivElement, DropdownMenuProps>((props,
         }
         break;
       }
-      case 'Escape': {
+      case "Escape": {
         event.preventDefault();
         event.stopPropagation();
         handleClose();
@@ -89,12 +89,23 @@ const DropdownMenu = React.forwardRef<HTMLDivElement, DropdownMenuProps>((props,
   };
 
   return (
-    <div ref={setRef} className={styles.root} style={style} {...rest} role="menu" onKeyDown={handleKeyDown}>
+    <div
+      ref={setRef}
+      className={styles.root}
+      style={style}
+      {...rest}
+      role="menu"
+      onKeyDown={handleKeyDown}
+    >
       {items &&
         items.map((each, index) => {
           if (each.modal) {
             return (
-              <ModalTrigger key={`action-items-${index}`} modal={each.modal} modalProps={each.modalProps}>
+              <ModalTrigger
+                key={`action-items-${index}`}
+                modal={each.modal}
+                modalProps={each.modalProps}
+              >
                 <ActionListItem icon={each.icon} role="menuitem">
                   {each.children}
                 </ActionListItem>
@@ -125,7 +136,7 @@ const DropdownMenu = React.forwardRef<HTMLDivElement, DropdownMenuProps>((props,
         })}
 
       <footer className={styles.footer}>
-        Press escape to{' '}
+        Press escape to{" "}
         <ActionButton
           hotkey="Esc"
           onClick={() => {
@@ -139,6 +150,6 @@ const DropdownMenu = React.forwardRef<HTMLDivElement, DropdownMenuProps>((props,
   );
 });
 
-DropdownMenu.displayName = 'DropdownMenu';
+DropdownMenu.displayName = "DropdownMenu";
 
 export default DropdownMenu;

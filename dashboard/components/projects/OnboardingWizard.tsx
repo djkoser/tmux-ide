@@ -78,10 +78,7 @@ export function OnboardingWizard({
     [state, validateOpts],
   );
 
-  const overallValidation = useMemo(
-    () => validateAll(state, validateOpts),
-    [state, validateOpts],
-  );
+  const overallValidation = useMemo(() => validateAll(state, validateOpts), [state, validateOpts]);
 
   const stackSummary = useMemo(() => {
     const fws = inspect.detected.frameworks;
@@ -123,16 +120,18 @@ export function OnboardingWizard({
     ? "flex min-h-0 flex-1 flex-col"
     : "rounded-md border border-[var(--border-weak)] bg-[var(--surface)]";
 
-  const bodyWrapperClass = embedded
-    ? "flex min-h-0 flex-1"
-    : "flex min-h-[280px]";
+  const bodyWrapperClass = embedded ? "flex min-h-0 flex-1" : "flex min-h-[280px]";
 
   const footerClass = embedded
     ? "sticky bottom-0 -mx-4 mt-auto flex items-center justify-end gap-2 border-t border-[var(--border-weak)] bg-[var(--bg-strong)] px-4 py-3"
     : "flex items-center justify-end gap-2 border-t border-[var(--border-weak)] px-3 py-2";
 
   return (
-    <div data-testid="onboarding-wizard" data-embedded={embedded ? "true" : "false"} className={rootClass}>
+    <div
+      data-testid="onboarding-wizard"
+      data-embedded={embedded ? "true" : "false"}
+      className={rootClass}
+    >
       <div
         className={
           embedded
@@ -313,9 +312,7 @@ function BasicsStep({ state, setState, stackSummary, dir, error }: BasicsStepPro
           onChange={(e) => setState((s) => ({ ...s, name: e.target.value }))}
           className="mt-1 w-full rounded-md border border-[var(--border-weak)] bg-[var(--bg)] px-2 py-1.5 font-mono text-[11px] text-[var(--fg)] outline-none focus-visible:focus-ring"
         />
-        {error && (
-          <span className="mt-1 block text-[11px] text-[var(--red)]">{error}</span>
-        )}
+        {error && <span className="mt-1 block text-[11px] text-[var(--red)]">{error}</span>}
       </label>
 
       <div>
@@ -396,9 +393,7 @@ function AgentsStep({ state, setState, validation }: AgentsStepProps) {
                   data-testid={`onboarding-agent-name-${i}`}
                   type="text"
                   value={name}
-                  onChange={(e) =>
-                    setState((s) => setAgentName(s, i, e.target.value))
-                  }
+                  onChange={(e) => setState((s) => setAgentName(s, i, e.target.value))}
                   className="w-full rounded-md border border-[var(--border-weak)] bg-[var(--bg)] px-2 py-1.5 font-mono text-[11px] text-[var(--fg)] outline-none focus-visible:focus-ring"
                 />
                 {slotError && (
@@ -453,9 +448,7 @@ function ToolsStep({ state, setState, inspect, error }: ToolsStepProps) {
               placeholder="pnpm dev"
               className="mt-1 w-full rounded-md border border-[var(--border-weak)] bg-[var(--bg)] px-2 py-1.5 font-mono text-[11px] text-[var(--fg)] outline-none focus-visible:focus-ring"
             />
-            {error && (
-              <span className="mt-1 block text-[11px] text-[var(--red)]">{error}</span>
-            )}
+            {error && <span className="mt-1 block text-[11px] text-[var(--red)]">{error}</span>}
           </div>
         )}
       </div>

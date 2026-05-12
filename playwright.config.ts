@@ -14,7 +14,8 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: "NODE_OPTIONS=--no-warnings node --experimental-strip-types bin/cli.ts server --port 6070",
+      command:
+        "NODE_OPTIONS=--no-warnings node --experimental-strip-types bin/cli.ts server --port 6070",
       url: "http://127.0.0.1:6070/health",
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,

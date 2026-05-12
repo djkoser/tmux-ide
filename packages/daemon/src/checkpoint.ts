@@ -28,11 +28,7 @@ function fail(message: string, code: string, json: boolean): never {
 export async function checkpointCommand(opts: CheckpointCommandOptions): Promise<void> {
   const sub = opts.sub;
   if (!sub) {
-    fail(
-      "Missing subcommand. Usage: tmux-ide checkpoint <list|revert> ...",
-      "USAGE",
-      opts.json,
-    );
+    fail("Missing subcommand. Usage: tmux-ide checkpoint <list|revert> ...", "USAGE", opts.json);
   }
   const workspaceDir = resolve(opts.workspaceDir ?? ".");
   const engine = makeCheckpointEngine();
@@ -41,11 +37,7 @@ export async function checkpointCommand(opts: CheckpointCommandOptions): Promise
     case "list": {
       const threadId = opts.args[0];
       if (!threadId) {
-        fail(
-          "Missing thread id. Usage: tmux-ide checkpoint list <thread-id>",
-          "USAGE",
-          opts.json,
-        );
+        fail("Missing thread id. Usage: tmux-ide checkpoint list <thread-id>", "USAGE", opts.json);
       }
       try {
         const rows = await engine.listForThread({ threadId, workspaceDir });

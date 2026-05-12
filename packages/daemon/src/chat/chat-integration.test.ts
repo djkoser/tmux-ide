@@ -23,9 +23,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  execFile as execFileCallback,
-} from "node:child_process";
+import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -261,9 +259,7 @@ describe("scenario 1 — thread lifecycle (create → first turn → completion 
 
   it("supports many concurrently-created threads with distinct ids", async () => {
     const threads = await Promise.all(
-      Array.from({ length: 5 }, (_, i) =>
-        harness.createThread({ title: `t-${i}` }),
-      ),
+      Array.from({ length: 5 }, (_, i) => harness.createThread({ title: `t-${i}` })),
     );
     const ids = new Set(threads.map((t) => t.id));
     expect(ids.size).toBe(5);
@@ -395,12 +391,12 @@ describe("scenario 2 — turn lifecycle (start → activities → completion)", 
     });
     await harness.completeTurn({ threadId: thread.id, turnId: b.turnId });
 
-    expect(activitiesForTurn(harness.activityLog, thread.id, a.turnId).map((x) => x.summary)).toEqual(
-      ["turn-a"],
-    );
-    expect(activitiesForTurn(harness.activityLog, thread.id, b.turnId).map((x) => x.summary)).toEqual(
-      ["turn-b"],
-    );
+    expect(
+      activitiesForTurn(harness.activityLog, thread.id, a.turnId).map((x) => x.summary),
+    ).toEqual(["turn-a"]);
+    expect(
+      activitiesForTurn(harness.activityLog, thread.id, b.turnId).map((x) => x.summary),
+    ).toEqual(["turn-b"]);
   });
 
   it("supports filtered queries by sinceSeq for incremental dashboard hydration", async () => {
@@ -572,9 +568,10 @@ describe("scenario 4 — permission flow", () => {
     });
     expect(result.approvalActivity?.tone).toBe("approval");
     expect(result.toolActivity.tone).toBe("tool");
-    expect(
-      harness.activityLog.listByTurn(thread.id, turn.turnId).map((a) => a.tone),
-    ).toEqual(["approval", "tool"]);
+    expect(harness.activityLog.listByTurn(thread.id, turn.turnId).map((a) => a.tone)).toEqual([
+      "approval",
+      "tool",
+    ]);
   });
 
   it("links the approval activity to the same turn as the tool call", async () => {
@@ -615,9 +612,9 @@ describe("scenario 4 — permission flow", () => {
       input: { target: "lead", text: "ls" },
     });
     expect(result.approvalActivity).toBeUndefined();
-    expect(
-      harness.activityLog.listByTurn(thread.id, turn.turnId).map((a) => a.tone),
-    ).toEqual(["tool"]);
+    expect(harness.activityLog.listByTurn(thread.id, turn.turnId).map((a) => a.tone)).toEqual([
+      "tool",
+    ]);
   });
 
   it("still produces a tool-tone follow-up activity when the approved tool fails", async () => {
@@ -988,9 +985,7 @@ describe("scenario 6 — checkpoint flow", () => {
     writeFileSync(join(harness.workspaceDir, "untracked.txt"), "keep me\n");
 
     await harness.revertCheckpoint({ threadId: thread.id, turnId: turn.turnId });
-    expect(readFileSync(join(harness.workspaceDir, "untracked.txt"), "utf8")).toBe(
-      "keep me\n",
-    );
+    expect(readFileSync(join(harness.workspaceDir, "untracked.txt"), "utf8")).toBe("keep me\n");
   });
 
   it("logs an info-tone 'checkpoint.reverted' activity on the turn", async () => {
@@ -1095,9 +1090,7 @@ describe("scenario 7 — per-turn diff isolation across multiple snapshots", () 
     // Turn 2 just adds an untracked file.
     writeFileSync(join(harness.workspaceDir, "scratch.txt"), "scratch\n");
     await harness.revertCheckpoint({ threadId: thread.id, turnId: t1.turnId });
-    expect(readFileSync(join(harness.workspaceDir, "scratch.txt"), "utf8")).toBe(
-      "scratch\n",
-    );
+    expect(readFileSync(join(harness.workspaceDir, "scratch.txt"), "utf8")).toBe("scratch\n");
   });
 
   it("listForThread returns refs in stable order matching insertion", async () => {
@@ -1127,9 +1120,9 @@ describe("scenario 7 — per-turn diff isolation across multiple snapshots", () 
       await gitOutput(harness.workspaceDir, "commit", "--quiet", "-m", `c${i}`);
       await harness.completeTurn({ threadId: thread.id, turnId: t.turnId });
     }
-    expect(
-      harness.checkpointStore.list(thread.id).map((c) => c.checkpointTurnCount),
-    ).toEqual([1, 2, 3, 4]);
+    expect(harness.checkpointStore.list(thread.id).map((c) => c.checkpointTurnCount)).toEqual([
+      1, 2, 3, 4,
+    ]);
   });
 
   it("turn-2's checkpoint does NOT include files that were only touched in turn-1", async () => {
@@ -1274,7 +1267,10 @@ describe("scenario 8 — compat shim", () => {
       harness.bus.emit({
         type: "chat.thread.update",
         threadId: thread.id,
-        update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: String(i) } },
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text: String(i) },
+        },
         seq: i,
       });
     }
@@ -1513,9 +1509,9 @@ describe("scenario 10 — error paths", () => {
   it("a duplicate turnId start throws a TurnStoreError(duplicate)", async () => {
     const thread = await harness.createThread();
     await harness.startTurn({ threadId: thread.id, turnId: "fixed" });
-    await expect(
-      harness.startTurn({ threadId: thread.id, turnId: "fixed" }),
-    ).rejects.toMatchObject({ code: "duplicate" });
+    await expect(harness.startTurn({ threadId: thread.id, turnId: "fixed" })).rejects.toMatchObject(
+      { code: "duplicate" },
+    );
   });
 
   it("transitioning a missing turn throws a TurnStoreError(not_found)", async () => {
@@ -1620,12 +1616,14 @@ describe("multi-agent", () => {
     expect(all.map((a) => a.sessionId)).toEqual([lead.id, planner.id, lead.id, planner.id]);
 
     // Per-session views partition cleanly.
-    expect(
-      harness.activityLog.listBySession(thread.id, lead.id).map((a) => a.summary),
-    ).toEqual(["lead step 1", "lead step 2"]);
-    expect(
-      harness.activityLog.listBySession(thread.id, planner.id).map((a) => a.summary),
-    ).toEqual(["planner step 1", "planner step 2"]);
+    expect(harness.activityLog.listBySession(thread.id, lead.id).map((a) => a.summary)).toEqual([
+      "lead step 1",
+      "lead step 2",
+    ]);
+    expect(harness.activityLog.listBySession(thread.id, planner.id).map((a) => a.summary)).toEqual([
+      "planner step 1",
+      "planner step 2",
+    ]);
   });
 
   it("(b) one session completes while the other is still streaming — partial-progress rendering", async () => {
@@ -1680,9 +1678,9 @@ describe("multi-agent", () => {
       kind: "agent.text",
       summary: "teammate second chunk",
     });
-    expect(
-      harness.activityLog.listBySession(thread.id, teammate.id).map((a) => a.summary),
-    ).toEqual(["teammate first chunk", "teammate second chunk"]);
+    expect(harness.activityLog.listBySession(thread.id, teammate.id).map((a) => a.summary)).toEqual(
+      ["teammate first chunk", "teammate second chunk"],
+    );
   });
 
   it("(c) remove session mid-turn — activities preserved, no orphan record", async () => {
@@ -1723,9 +1721,7 @@ describe("multi-agent", () => {
     expect(harness.sessionStore.get(thread.id, lead.id)?.status).toBe("idle");
 
     // A session.removed event was emitted.
-    expect(
-      harness.bus.ofType("session.removed").map((e) => e.sessionId),
-    ).toContain(teammate.id);
+    expect(harness.bus.ofType("session.removed").map((e) => e.sessionId)).toContain(teammate.id);
   });
 
   it("(d) a session adopts a ProposedPlan from another session (sourceProposedPlan cross-session)", async () => {
@@ -1845,10 +1841,7 @@ describe("multi-agent", () => {
     // The other session's activities exist on the full thread stream but the
     // compat consumer simply does not see them.
     const fullView = harness.activityLog.list({ threadId: thread.id });
-    expect(fullView.map((a) => a.summary)).toEqual([
-      "lead said hi",
-      "teammate said hi",
-    ]);
+    expect(fullView.map((a) => a.summary)).toEqual(["lead said hi", "teammate said hi"]);
   });
 
   it("(g) per-session token usage aggregation", async () => {

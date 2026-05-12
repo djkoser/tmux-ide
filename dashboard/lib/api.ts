@@ -131,17 +131,14 @@ export async function chatSessionSend(input: {
   threadId: string;
   text: string;
 }): Promise<{ accepted: true; promptId: string }> {
-  const res = await fetch(
-    `${API_BASE}/api/v2/action/chat.session.send`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        threadId: input.threadId,
-        content: [{ type: "text", text: input.text }],
-      }),
-    },
-  );
+  const res = await fetch(`${API_BASE}/api/v2/action/chat.session.send`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      threadId: input.threadId,
+      content: [{ type: "text", text: input.text }],
+    }),
+  });
   if (!res.ok) {
     throw new ProjectApiError(
       await readErrorMessage(res, `Failed to send (HTTP ${res.status})`),
@@ -154,8 +151,7 @@ export async function chatSessionSend(input: {
   if ("ok" in envelope && envelope.ok === false) {
     throw new ProjectApiError(envelope.error.message, res.status);
   }
-  return (envelope as { ok: true; result: { accepted: true; promptId: string } })
-    .result;
+  return (envelope as { ok: true; result: { accepted: true; promptId: string } }).result;
 }
 
 export async function chatProvidersList(): Promise<{ providers: ProviderInfo[] }> {

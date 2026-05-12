@@ -1,13 +1,13 @@
-'use client';
+"use client";
 
-import styles from '@components/examples/PageConceptTwo.module.css';
+import styles from "@components/examples/PageConceptTwo.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
-import Card from '@components/Card';
-import DataTable from '@components/DataTable';
-import Dialog from '@components/Dialog';
-import MessagesInterface from '@components/examples/MessagesInterface';
+import Card from "@components/Card";
+import DataTable from "@components/DataTable";
+import Dialog from "@components/Dialog";
+import MessagesInterface from "@components/examples/MessagesInterface";
 
 const PageConceptTwo = (props) => {
   return (
@@ -18,12 +18,12 @@ const PageConceptTwo = (props) => {
             <Card title="SECTION A">
               <DataTable
                 data={[
-                  ['HEADING A', 'HEADING B'],
-                  ['DATA 1', 'DATA 2'],
-                  ['DATA 3', 'DATA 4'],
-                  ['DATA 5', 'DATA 6'],
-                  ['DATA 7', 'DATA 8'],
-                  ['DATA 9', 'DATA 10'],
+                  ["HEADING A", "HEADING B"],
+                  ["DATA 1", "DATA 2"],
+                  ["DATA 3", "DATA 4"],
+                  ["DATA 5", "DATA 6"],
+                  ["DATA 7", "DATA 8"],
+                  ["DATA 9", "DATA 10"],
                 ]}
               />
             </Card>
@@ -33,12 +33,12 @@ const PageConceptTwo = (props) => {
             <Card title="SECTION B">
               <DataTable
                 data={[
-                  ['HEADING A', 'HEADING B'],
-                  ['DATA 1', 'DATA 2'],
-                  ['DATA 3', 'DATA 4'],
-                  ['DATA 5', 'DATA 6'],
-                  ['DATA 7', 'DATA 8'],
-                  ['DATA 9', 'DATA 10'],
+                  ["HEADING A", "HEADING B"],
+                  ["DATA 1", "DATA 2"],
+                  ["DATA 3", "DATA 4"],
+                  ["DATA 5", "DATA 6"],
+                  ["DATA 7", "DATA 8"],
+                  ["DATA 9", "DATA 10"],
                 ]}
               />
             </Card>
@@ -58,12 +58,12 @@ const PageConceptTwo = (props) => {
             <Card title="SECTION C">
               <DataTable
                 data={[
-                  ['HEADING A', 'HEADING B'],
-                  ['DATA 1', 'DATA 2'],
-                  ['DATA 3', 'DATA 4'],
-                  ['DATA 5', 'DATA 6'],
-                  ['DATA 7', 'DATA 8'],
-                  ['DATA 9', 'DATA 10'],
+                  ["HEADING A", "HEADING B"],
+                  ["DATA 1", "DATA 2"],
+                  ["DATA 3", "DATA 4"],
+                  ["DATA 5", "DATA 6"],
+                  ["DATA 7", "DATA 8"],
+                  ["DATA 9", "DATA 10"],
                 ]}
               />
             </Card>
@@ -73,12 +73,12 @@ const PageConceptTwo = (props) => {
             <Card title="SECTION D">
               <DataTable
                 data={[
-                  ['HEADING A', 'HEADING B'],
-                  ['DATA 1', 'DATA 2'],
-                  ['DATA 3', 'DATA 4'],
-                  ['DATA 5', 'DATA 6'],
-                  ['DATA 7', 'DATA 8'],
-                  ['DATA 9', 'DATA 10'],
+                  ["HEADING A", "HEADING B"],
+                  ["DATA 1", "DATA 2"],
+                  ["DATA 3", "DATA 4"],
+                  ["DATA 5", "DATA 6"],
+                  ["DATA 7", "DATA 8"],
+                  ["DATA 9", "DATA 10"],
                 ]}
               />
             </Card>
@@ -90,36 +90,36 @@ const PageConceptTwo = (props) => {
           <Card title="SECTION E">
             <DataTable
               data={[
-                ['HEADING A', 'HEADING B'],
-                ['DATA 1', 'DATA 2'],
-                ['DATA 3', 'DATA 4'],
-                ['DATA 5', 'DATA 6'],
-                ['DATA 7', 'DATA 8'],
-                ['DATA 9', 'DATA 10'],
-                ['DATA 11', 'DATA 12'],
+                ["HEADING A", "HEADING B"],
+                ["DATA 1", "DATA 2"],
+                ["DATA 3", "DATA 4"],
+                ["DATA 5", "DATA 6"],
+                ["DATA 7", "DATA 8"],
+                ["DATA 9", "DATA 10"],
+                ["DATA 11", "DATA 12"],
               ]}
             />
           </Card>
           <Card title="SECTION F">
             <DataTable
               data={[
-                ['HEADING A', 'HEADING B'],
-                ['DATA 1', 'DATA 2'],
-                ['DATA 3', 'DATA 4'],
-                ['DATA 5', 'DATA 6'],
-                ['DATA 7', 'DATA 8'],
-                ['DATA 9', 'DATA 10'],
-                ['DATA 11', 'DATA 12'],
-                ['DATA 13', 'DATA 14'],
-                ['DATA 15', 'DATA 16'],
-                ['DATA 17', 'DATA 18'],
-                ['DATA 19', 'DATA 20'],
-                ['DATA 21', 'DATA 22'],
-                ['DATA 23', 'DATA 24'],
-                ['DATA 25', 'DATA 26'],
-                ['DATA 27', 'DATA 28'],
-                ['DATA 29', 'DATA 30'],
-                ['DATA 31', 'DATA 32'],
+                ["HEADING A", "HEADING B"],
+                ["DATA 1", "DATA 2"],
+                ["DATA 3", "DATA 4"],
+                ["DATA 5", "DATA 6"],
+                ["DATA 7", "DATA 8"],
+                ["DATA 9", "DATA 10"],
+                ["DATA 11", "DATA 12"],
+                ["DATA 13", "DATA 14"],
+                ["DATA 15", "DATA 16"],
+                ["DATA 17", "DATA 18"],
+                ["DATA 19", "DATA 20"],
+                ["DATA 21", "DATA 22"],
+                ["DATA 23", "DATA 24"],
+                ["DATA 25", "DATA 26"],
+                ["DATA 27", "DATA 28"],
+                ["DATA 29", "DATA 30"],
+                ["DATA 31", "DATA 32"],
               ]}
             />
           </Card>
@@ -128,36 +128,36 @@ const PageConceptTwo = (props) => {
           <Card title="SECTION G">
             <DataTable
               data={[
-                ['HEADING A', 'HEADING B'],
-                ['DATA 1', 'DATA 2'],
-                ['DATA 3', 'DATA 4'],
-                ['DATA 5', 'DATA 6'],
-                ['DATA 7', 'DATA 8'],
-                ['DATA 9', 'DATA 10'],
-                ['DATA 11', 'DATA 12'],
+                ["HEADING A", "HEADING B"],
+                ["DATA 1", "DATA 2"],
+                ["DATA 3", "DATA 4"],
+                ["DATA 5", "DATA 6"],
+                ["DATA 7", "DATA 8"],
+                ["DATA 9", "DATA 10"],
+                ["DATA 11", "DATA 12"],
               ]}
             />
           </Card>
           <Card title="SECTION H">
             <DataTable
               data={[
-                ['HEADING A', 'HEADING B'],
-                ['DATA 1', 'DATA 2'],
-                ['DATA 3', 'DATA 4'],
-                ['DATA 5', 'DATA 6'],
-                ['DATA 7', 'DATA 8'],
-                ['DATA 9', 'DATA 10'],
-                ['DATA 11', 'DATA 12'],
-                ['DATA 13', 'DATA 14'],
-                ['DATA 15', 'DATA 16'],
-                ['DATA 17', 'DATA 18'],
-                ['DATA 19', 'DATA 20'],
-                ['DATA 21', 'DATA 22'],
-                ['DATA 23', 'DATA 24'],
-                ['DATA 25', 'DATA 26'],
-                ['DATA 27', 'DATA 28'],
-                ['DATA 29', 'DATA 30'],
-                ['DATA 31', 'DATA 32'],
+                ["HEADING A", "HEADING B"],
+                ["DATA 1", "DATA 2"],
+                ["DATA 3", "DATA 4"],
+                ["DATA 5", "DATA 6"],
+                ["DATA 7", "DATA 8"],
+                ["DATA 9", "DATA 10"],
+                ["DATA 11", "DATA 12"],
+                ["DATA 13", "DATA 14"],
+                ["DATA 15", "DATA 16"],
+                ["DATA 17", "DATA 18"],
+                ["DATA 19", "DATA 20"],
+                ["DATA 21", "DATA 22"],
+                ["DATA 23", "DATA 24"],
+                ["DATA 25", "DATA 26"],
+                ["DATA 27", "DATA 28"],
+                ["DATA 29", "DATA 30"],
+                ["DATA 31", "DATA 32"],
               ]}
             />
           </Card>

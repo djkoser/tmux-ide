@@ -4,10 +4,7 @@ import { setByPath } from "./lib/dot-path.ts";
 import { outputError } from "./lib/output.ts";
 import { IdeConfigSchema } from "./schemas/ide-config.ts";
 import type { IdeConfig, Pane, Row } from "./types.ts";
-import {
-  CliActionInvocationError,
-  tryDispatchAction,
-} from "./lib/cli-action-bridge.ts";
+import { CliActionInvocationError, tryDispatchAction } from "./lib/cli-action-bridge.ts";
 
 /**
  * Read config safely (read-only, no write). Returns config or undefined on error.
@@ -246,11 +243,7 @@ async function tryDispatchConfigAction(
       const [dotpath, ...rest] = args;
       if (!dotpath || rest.length === 0) return false;
       const value = coerceConfigValue(rest.join(" "));
-      const result = await tryDispatchAction(
-        "config.set",
-        { path: dotpath, value },
-        { cwd: dir },
-      );
+      const result = await tryDispatchAction("config.set", { path: dotpath, value }, { cwd: dir });
       if (!result) return false;
       if (json) console.log(JSON.stringify({ ok: true, path: dotpath, value }, null, 2));
       else console.log(`Set ${dotpath} = ${JSON.stringify(value)}`);

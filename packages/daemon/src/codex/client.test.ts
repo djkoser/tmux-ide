@@ -212,8 +212,8 @@ describe("Codex client", () => {
     const dir = mkdtempSync(join(tmpdir(), "tmux-ide-codex-missing-"));
     tempDirs.push(dir);
     const missing = join(dir, "missing-codex");
-    await expect(spawnCodexClient({ provider: { kind: "codex", binary: missing } })).rejects.toBeInstanceOf(
-      CodexAgentSpawnError,
-    );
+    await expect(
+      spawnCodexClient({ provider: { kind: "codex", binary: missing } }),
+    ).rejects.toBeInstanceOf(CodexAgentSpawnError);
   });
 });

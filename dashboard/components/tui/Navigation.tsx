@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import styles from '@components/Navigation.module.css';
+import styles from "@components/Navigation.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
 interface NavigationProps extends React.HTMLAttributes<HTMLElement> {
   children?: React.ReactNode;
@@ -14,7 +14,15 @@ interface NavigationProps extends React.HTMLAttributes<HTMLElement> {
   right?: React.ReactNode;
 }
 
-const Navigation: React.FC<NavigationProps> = ({ children, logoHref, logoTarget, onClickLogo, logo, left, right }) => {
+const Navigation: React.FC<NavigationProps> = ({
+  children,
+  logoHref,
+  logoTarget,
+  onClickLogo,
+  logo,
+  left,
+  right,
+}) => {
   let logoElement = <button className={styles.logo}>{logo}</button>;
 
   if (onClickLogo) {

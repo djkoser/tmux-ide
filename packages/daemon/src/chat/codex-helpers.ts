@@ -38,9 +38,7 @@ export function stopReasonFromResponse(value: unknown): StopReason {
   return "end_turn";
 }
 
-export function codexInputFromContent(
-  content: ReadonlyArray<ContentBlock>,
-): UserInput[] {
+export function codexInputFromContent(content: ReadonlyArray<ContentBlock>): UserInput[] {
   return content.map((block) => {
     if (block.type === "text") return { type: "text", text: block.text };
     if (block.type === "image" && block.uri) return { type: "image", url: block.uri };
@@ -165,9 +163,7 @@ export function translateCodexItemCompleted(
     status: item.status === "failed" ? "failed" : "completed",
     rawInput: item,
     _meta: codexMeta({ threadId: event.params.threadId, turnId: event.params.turnId, item }),
-    ...(output
-      ? { content: [{ type: "content", content: { type: "text", text: output } }] }
-      : {}),
+    ...(output ? { content: [{ type: "content", content: { type: "text", text: output } }] } : {}),
   };
 }
 
@@ -176,9 +172,6 @@ export function isCodexFinalAgentMessageItem(item: Record<string, unknown>): boo
   const phase = typeof item.phase === "string" ? item.phase : null;
   const status = typeof item.status === "string" ? item.status : null;
   return (
-    phase === "final" ||
-    phase === "final_answer" ||
-    phase === "completed" ||
-    status === "completed"
+    phase === "final" || phase === "final_answer" || phase === "completed" || status === "completed"
   );
 }

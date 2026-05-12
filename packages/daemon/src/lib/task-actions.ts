@@ -119,7 +119,10 @@ export interface CreateTaskInput {
   fulfills?: string[] | string;
 }
 
-export function createTaskRecord(dir: string, input: CreateTaskInput): { taskId: string; task: Task } {
+export function createTaskRecord(
+  dir: string,
+  input: CreateTaskInput,
+): { taskId: string; task: Task } {
   const title = input.title.trim();
   if (!title) {
     throw new TaskActionError({ code: "validation_failed", message: "Task title is required" });
@@ -310,7 +313,10 @@ export interface CreateGoalInput {
   specialty?: string | null;
 }
 
-export function createGoalRecord(dir: string, input: CreateGoalInput): { goalId: string; goal: Goal } {
+export function createGoalRecord(
+  dir: string,
+  input: CreateGoalInput,
+): { goalId: string; goal: Goal } {
   const title = input.title.trim();
   if (!title) {
     throw new TaskActionError({ code: "validation_failed", message: "Goal title is required" });
@@ -400,7 +406,10 @@ export function createMilestoneRecord(
 ): { milestoneId: string; milestone: Milestone } {
   const title = input.title.trim();
   if (!title) {
-    throw new TaskActionError({ code: "validation_failed", message: "Milestone title is required" });
+    throw new TaskActionError({
+      code: "validation_failed",
+      message: "Milestone title is required",
+    });
   }
 
   const mission = loadMission(dir);
@@ -497,7 +506,10 @@ export function setMissionRecord(
   return { mission };
 }
 
-export function completeMissionPlanRecord(dir: string): { mission: Mission; coverageGaps: string[] } {
+export function completeMissionPlanRecord(dir: string): {
+  mission: Mission;
+  coverageGaps: string[];
+} {
   const mission = loadMission(dir);
   if (!mission) {
     throw new TaskActionError({ code: "mission_not_set", message: "No mission set" });

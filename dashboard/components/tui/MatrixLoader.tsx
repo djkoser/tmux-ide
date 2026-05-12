@@ -1,30 +1,38 @@
-'use client';
+"use client";
 
 //NOTE(jimmylee): Matrix rain effect rendered via pre/span grid instead of canvas.
 //NOTE(jimmylee): Same DOM diffing, IntersectionObserver, and ResizeObserver patterns as ASCIICanvas.
 
-import styles from '@components/MatrixLoader.module.css';
+import styles from "@components/MatrixLoader.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
 interface MatrixLoaderProps {
   rows?: number;
-  direction?: undefined | 'top-to-bottom' | 'left-to-right';
-  mode?: undefined | 'greek' | 'katakana';
+  direction?: undefined | "top-to-bottom" | "left-to-right";
+  mode?: undefined | "greek" | "katakana";
 }
 
 function randomChar(mode: string): string {
-  if (mode === 'greek') {
+  if (mode === "greek") {
     const isUppercase = Math.random() < 0.5;
-    return String.fromCharCode(isUppercase ? 0x0391 + Math.floor(Math.random() * (0x03a9 - 0x0391 + 1)) : 0x03b1 + Math.floor(Math.random() * (0x03c9 - 0x03b1 + 1)));
+    return String.fromCharCode(
+      isUppercase
+        ? 0x0391 + Math.floor(Math.random() * (0x03a9 - 0x0391 + 1))
+        : 0x03b1 + Math.floor(Math.random() * (0x03c9 - 0x03b1 + 1)),
+    );
   }
-  if (mode === 'katakana') {
+  if (mode === "katakana") {
     return String.fromCharCode(0x30a0 + Math.floor(Math.random() * (0x30ff - 0x30a0 + 1)));
   }
-  return '0';
+  return "0";
 }
 
-const MatrixLoader: React.FC<MatrixLoaderProps> = ({ rows = 25, direction = 'top-to-bottom', mode = 'greek' }) => {
+const MatrixLoader: React.FC<MatrixLoaderProps> = ({
+  rows = 25,
+  direction = "top-to-bottom",
+  mode = "greek",
+}) => {
   const preRef = React.useRef<HTMLPreElement>(null);
   const frameRef = React.useRef<number>(0);
   const colsRef = React.useRef<number>(40);
@@ -40,14 +48,14 @@ const MatrixLoader: React.FC<MatrixLoaderProps> = ({ rows = 25, direction = 'top
 
     let cancelled = false;
 
-    const measure = document.createElement('span');
-    measure.style.visibility = 'hidden';
-    measure.style.position = 'absolute';
-    measure.style.whiteSpace = 'pre';
-    measure.textContent = 'X';
+    const measure = document.createElement("span");
+    measure.style.visibility = "hidden";
+    measure.style.position = "absolute";
+    measure.style.whiteSpace = "pre";
+    measure.textContent = "X";
     el.appendChild(measure);
 
-    const themeTextColor = getComputedStyle(document.body).getPropertyValue('--theme-text').trim();
+    const themeTextColor = getComputedStyle(document.body).getPropertyValue("--theme-text").trim();
 
     //NOTE(jimmylee): Track head positions for the rain streams. Each column (or row for LTR) has a
     //NOTE(jimmylee): head position that advances, leaving a fading trail behind it.
@@ -68,21 +76,21 @@ const MatrixLoader: React.FC<MatrixLoaderProps> = ({ rows = 25, direction = 'top
 
       for (let y = 0; y < rows; y++) {
         for (let x = 0; x < cols; x++) {
-          const s = document.createElement('span');
-          s.textContent = ' ';
+          const s = document.createElement("span");
+          s.textContent = " ";
           spans.push(s);
           frag.appendChild(s);
         }
-        if (y < rows - 1) frag.appendChild(document.createTextNode('\n'));
+        if (y < rows - 1) frag.appendChild(document.createTextNode("\n"));
       }
 
       el.insertBefore(frag, measure);
       gridRef.current = spans;
-      prevCharsRef.current = new Array(cols * rows).fill('');
-      prevColorsRef.current = new Array(cols * rows).fill('');
+      prevCharsRef.current = new Array(cols * rows).fill("");
+      prevColorsRef.current = new Array(cols * rows).fill("");
       cellBrightness = new Float64Array(cols * rows);
 
-      if (direction === 'top-to-bottom') {
+      if (direction === "top-to-bottom") {
         headPositions = new Array(cols).fill(0);
       } else {
         headPositions = new Array(rows).fill(0);
@@ -110,7 +118,7 @@ const MatrixLoader: React.FC<MatrixLoaderProps> = ({ rows = 25, direction = 'top
           frameRef.current = requestAnimationFrame(loop);
         }
       },
-      { threshold: 0 }
+      { threshold: 0 },
     );
     interObs.observe(el);
 
@@ -128,7 +136,7 @@ const MatrixLoader: React.FC<MatrixLoaderProps> = ({ rows = 25, direction = 'top
         cellBrightness[i] *= 0.92;
       }
 
-      if (direction === 'top-to-bottom') {
+      if (direction === "top-to-bottom") {
         for (let col = 0; col < cols; col++) {
           const y = headPositions[col];
           if (y < rows) {
@@ -159,13 +167,13 @@ const MatrixLoader: React.FC<MatrixLoaderProps> = ({ rows = 25, direction = 'top
         const s = grid[idx];
 
         if (b < 0.02) {
-          if (pChars[idx] !== ' ') {
-            s.textContent = ' ';
-            pChars[idx] = ' ';
+          if (pChars[idx] !== " ") {
+            s.textContent = " ";
+            pChars[idx] = " ";
           }
-          if (pColors[idx] !== '') {
-            s.style.color = '';
-            pColors[idx] = '';
+          if (pColors[idx] !== "") {
+            s.style.color = "";
+            pColors[idx] = "";
           }
           continue;
         }
@@ -202,7 +210,9 @@ const MatrixLoader: React.FC<MatrixLoaderProps> = ({ rows = 25, direction = 'top
     };
   }, [rows, direction, mode]);
 
-  const heightStyle = { height: `calc(var(--font-size) * var(--theme-line-height-base) * ${rows})` };
+  const heightStyle = {
+    height: `calc(var(--font-size) * var(--theme-line-height-base) * ${rows})`,
+  };
 
   return (
     <div className={styles.container}>

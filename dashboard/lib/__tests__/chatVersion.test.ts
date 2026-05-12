@@ -47,9 +47,7 @@ describe("feature-flag-cutover :: resolveChatVersion (pure)", () => {
   });
 
   it("banner copy is the contract text (no surprise renames)", () => {
-    expect(CHAT_V1_BANNER_TEXT).toMatch(
-      /Chat v1 will be removed in the next release/,
-    );
+    expect(CHAT_V1_BANNER_TEXT).toMatch(/Chat v1 will be removed in the next release/);
     expect(CHAT_V1_BANNER_TEXT).toContain("github.com/wavyrai/tmux-ide/issues");
   });
 });

@@ -15,7 +15,7 @@ function makeProject(config = "name: inspect-session\nrows:\n  - panes:\n      -
 }
 
 function runCli(args, cwd) {
-  return spawnSync("node", [cli, ...args], {
+  return spawnSync("bun", [cli, ...args], {
     cwd,
     encoding: "utf-8",
   });

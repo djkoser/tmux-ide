@@ -1,7 +1,7 @@
-import styles from '@components/RadioButton.module.css';
+import styles from "@components/RadioButton.module.css";
 
-import * as React from 'react';
-import * as Utilities from '@common/utilities';
+import * as React from "react";
+import * as Utilities from "@common/utilities";
 
 interface RadioButtonProps {
   style?: React.CSSProperties;
@@ -12,7 +12,14 @@ interface RadioButtonProps {
   children?: React.ReactNode;
 }
 
-const RadioButton: React.FC<RadioButtonProps> = ({ style, name, value, selected = false, onSelect, children }) => {
+const RadioButton: React.FC<RadioButtonProps> = ({
+  style,
+  name,
+  value,
+  selected = false,
+  onSelect,
+  children,
+}) => {
   const radioId = `${name}-${value}-radio`;
   const [isFocused, setIsFocused] = React.useState(false);
 
@@ -21,20 +28,20 @@ const RadioButton: React.FC<RadioButtonProps> = ({ style, name, value, selected 
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     switch (event.key) {
-      case 'Enter':
+      case "Enter":
         event.preventDefault();
         onSelect?.(value);
         break;
-      case 'ArrowUp':
-      case 'ArrowLeft':
+      case "ArrowUp":
+      case "ArrowLeft":
         event.preventDefault();
-        Utilities.findNextFocusable(document.activeElement, 'previous')?.focus();
+        Utilities.findNextFocusable(document.activeElement, "previous")?.focus();
         break;
-      case 'Tab':
-      case 'ArrowDown':
-      case 'ArrowRight':
+      case "Tab":
+      case "ArrowDown":
+      case "ArrowRight":
         event.preventDefault();
-        Utilities.findNextFocusable(document.activeElement, 'next')?.focus();
+        Utilities.findNextFocusable(document.activeElement, "next")?.focus();
         break;
       default:
         break;
@@ -53,7 +60,18 @@ const RadioButton: React.FC<RadioButtonProps> = ({ style, name, value, selected 
       })}
       style={style}
     >
-      <input className={styles.input} id={radioId} type="radio" name={name} value={value} checked={selected} onFocus={handleFocus} onBlur={handleBlur} onKeyDown={handleKeyDown} onChange={handleChange} />
+      <input
+        className={styles.input}
+        id={radioId}
+        type="radio"
+        name={name}
+        value={value}
+        checked={selected}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        onChange={handleChange}
+      />
       <div className={styles.relative}>
         <label className={styles.figure} htmlFor={radioId}>
           {selected ? <span aria-hidden="true" className={styles.dot} /> : null}

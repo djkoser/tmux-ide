@@ -1,6 +1,6 @@
-import styles from '@components/Divider.module.css';
+import styles from "@components/Divider.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
 interface DividerProps extends React.HTMLAttributes<HTMLSpanElement> {
   children?: React.ReactNode;
@@ -9,11 +9,11 @@ interface DividerProps extends React.HTMLAttributes<HTMLSpanElement> {
 }
 
 const Divider: React.FC<DividerProps> = ({ children, style, type }) => {
-  if (type === 'GRADIENT') {
+  if (type === "GRADIENT") {
     return <div className={styles.gradient} style={style} />;
   }
 
-  if (type === 'DOUBLE') {
+  if (type === "DOUBLE") {
     return (
       <div className={styles.divider} style={style}>
         <div className={styles.line} style={{ marginBottom: `2px` }} />

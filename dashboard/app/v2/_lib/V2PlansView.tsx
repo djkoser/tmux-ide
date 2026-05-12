@@ -17,12 +17,7 @@ import Badge from "@components/Badge";
 import Card from "@components/Card";
 import CodeBlock from "@components/CodeBlock";
 import RowSpaceBetween from "@components/RowSpaceBetween";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui";
 import {
   fetchPlan,
   fetchPlans,
@@ -51,12 +46,7 @@ const STATUS_GLYPH: Record<string, string> = {
   done: "●",
 };
 
-const PLAN_STATUSES: ReadonlyArray<PlanStatus | "all"> = [
-  "all",
-  "in-progress",
-  "pending",
-  "done",
-];
+const PLAN_STATUSES: ReadonlyArray<PlanStatus | "all"> = ["all", "in-progress", "pending", "done"];
 
 const PROGRESS_CELLS = 16;
 const TASK_REF_RE = /\bT(\d{3})\b|\bTask\s+(\d{3})\b/g;
@@ -250,9 +240,7 @@ export function V2PlansView({ sessionName, tasks }: V2PlansViewProps) {
           <span className="font-medium text-[var(--fg)] truncate">
             {selectedPlan?.title || selectedPlan?.name || "Plans"}
           </span>
-          {selectedPlan && (
-            <Badge>{selectedPlan.status}</Badge>
-          )}
+          {selectedPlan && <Badge>{selectedPlan.status}</Badge>}
           <span
             aria-hidden="true"
             className="font-mono text-[var(--accent)]"
@@ -261,9 +249,7 @@ export function V2PlansView({ sessionName, tasks }: V2PlansViewProps) {
             {progressBar(filled)}
           </span>
           <span className="text-[10px] text-[var(--dim)]">
-            {linkedTasks.length === 0
-              ? "no linked tasks"
-              : `${doneCount}/${linkedTasks.length}`}
+            {linkedTasks.length === 0 ? "no linked tasks" : `${doneCount}/${linkedTasks.length}`}
           </span>
           <span className="flex-1" />
           {selectedPlan && (
@@ -342,7 +328,10 @@ export function V2PlansView({ sessionName, tasks }: V2PlansViewProps) {
                               : "flex w-full items-center gap-1.5 border-l-2 border-transparent px-2 py-1 text-left text-[12px] text-[var(--fg)] hover:bg-[var(--surface-hover)]"
                           }
                         >
-                          <span aria-hidden="true" className="font-mono text-[10px] text-[var(--dim)]">
+                          <span
+                            aria-hidden="true"
+                            className="font-mono text-[10px] text-[var(--dim)]"
+                          >
                             {p.status === "done" ? "✓" : p.status === "in-progress" ? "●" : "○"}
                           </span>
                           <span className="min-w-0 flex-1 truncate">{p.title || p.name}</span>
@@ -485,7 +474,15 @@ function buildMarkdownComponents(
       }
       return <li>{linkifyChildren(children, tasks)}</li>;
     },
-    code({ inline, className, children }: { inline?: boolean; className?: string; children?: ReactNode }) {
+    code({
+      inline,
+      className,
+      children,
+    }: {
+      inline?: boolean;
+      className?: string;
+      children?: ReactNode;
+    }) {
       if (inline) {
         return <code className={className}>{children}</code>;
       }
@@ -553,9 +550,7 @@ function PlanHistory({ plan }: { plan: PlanSummary | null }) {
           {owner ? <> · {owner}</> : null} updated
         </li>
       )}
-      {!completed && !updated && (
-        <li>{plan.status === "done" ? "completed" : "in progress"}</li>
-      )}
+      {!completed && !updated && <li>{plan.status === "done" ? "completed" : "in progress"}</li>}
     </ul>
   );
 }

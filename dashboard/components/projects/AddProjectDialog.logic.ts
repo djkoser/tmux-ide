@@ -36,12 +36,7 @@ export interface AddProjectFlowState {
   inspect: ProjectInspect | null;
 }
 
-export type FooterKind =
-  | "pick"
-  | "confirm"
-  | "init"
-  | "wizard-internal"
-  | "clone";
+export type FooterKind = "pick" | "confirm" | "init" | "wizard-internal" | "clone";
 
 export function defaultFlowState(tab: AddProjectTab = "open"): AddProjectFlowState {
   return { tab, step: "pick", selectedDir: null, inspect: null };
@@ -56,10 +51,7 @@ export function gotoPick(state: AddProjectFlowState): AddProjectFlowState {
  * Switch tabs — always lands on the pick panel for the new tab and forgets
  * the prior tab's selection.
  */
-export function gotoTab(
-  state: AddProjectFlowState,
-  tab: AddProjectTab,
-): AddProjectFlowState {
+export function gotoTab(state: AddProjectFlowState, tab: AddProjectTab): AddProjectFlowState {
   if (state.tab === tab) return state;
   return { tab, step: "pick", selectedDir: null, inspect: null };
 }
@@ -85,10 +77,7 @@ export function gotoNextAfterInspect(
   };
 }
 
-export function commitDir(
-  state: AddProjectFlowState,
-  dir: string,
-): AddProjectFlowState {
+export function commitDir(state: AddProjectFlowState, dir: string): AddProjectFlowState {
   // For the init tab we step to the init panel directly. Open tab waits for
   // inspect to resolve before advancing.
   if (state.tab === "init") {
@@ -247,23 +236,16 @@ export function initJobReducer(state: InitJobState, action: InitJobAction): Init
  * dialog stores. Trusts the server schema; defensive for the runtime case
  * where types and frames diverge.
  */
-export function parseInitOutputFrame(
-  frame: unknown,
-  expectedJobId: string,
-): InitJobChunk | null {
+export function parseInitOutputFrame(frame: unknown, expectedJobId: string): InitJobChunk | null {
   if (!frame || typeof frame !== "object") return null;
   const f = frame as { jobId?: unknown; chunk?: unknown; stream?: unknown };
   if (typeof f.jobId !== "string" || f.jobId !== expectedJobId) return null;
   if (typeof f.chunk !== "string") return null;
-  const stream =
-    f.stream === "stderr" ? "stderr" : f.stream === "system" ? "system" : "stdout";
+  const stream = f.stream === "stderr" ? "stderr" : f.stream === "system" ? "system" : "stdout";
   return { at: Date.now(), text: f.chunk, stream };
 }
 
-export function isInitDoneFrame(
-  frame: unknown,
-  expectedJobId: string,
-): boolean {
+export function isInitDoneFrame(frame: unknown, expectedJobId: string): boolean {
   if (!frame || typeof frame !== "object") return false;
   const f = frame as { type?: unknown; jobId?: unknown; done?: unknown };
   return f.type === "init.output" && f.jobId === expectedJobId && f.done === true;

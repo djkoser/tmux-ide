@@ -75,9 +75,7 @@ export function MissionEditDialog({
 
         <div className="mt-4 space-y-3">
           <label className="block">
-            <span className="text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]">
-              Title
-            </span>
+            <span className="text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]">Title</span>
             <input
               data-testid="mission-edit-title"
               value={title}

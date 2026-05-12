@@ -51,17 +51,16 @@ describe("task action handlers", () => {
       expect(result.task.title).toBe("After");
       expect(result.task.status).toBe("review");
       expect(result.task.proof?.notes).toBe("checked");
-      expect(() => taskUpdateHandler({ taskId: "404" }, { dir: project.dir })).toThrow(
-        /not found/,
-      );
+      expect(() => taskUpdateHandler({ taskId: "404" }, { dir: project.dir })).toThrow(/not found/);
     }));
 
   it("task.claim claims unblocked tasks and reports blocked tasks", () =>
     withProject((project) => {
       project.addTask({ id: "001", depends_on: ["000"] });
       project.addTask({ id: "000", status: "todo" });
-      expect(() => taskClaimHandler({ taskId: "001", assign: "Agent" }, { dir: project.dir }))
-        .toThrow(/unmet dependencies/);
+      expect(() =>
+        taskClaimHandler({ taskId: "001", assign: "Agent" }, { dir: project.dir }),
+      ).toThrow(/unmet dependencies/);
 
       saveTask(project.dir, makeTask({ id: "000", status: "done" }));
       const result = taskClaimHandler({ taskId: "001", assign: "Agent" }, { dir: project.dir });
@@ -72,9 +71,10 @@ describe("task action handlers", () => {
   it("task.done marks a task done and task.delete removes one", () =>
     withProject((project) => {
       project.addTask({ id: "001" });
-      expect(taskDoneHandler({ taskId: "001", proof: { notes: "done" } }, { dir: project.dir }).task.status).toBe(
-        "done",
-      );
+      expect(
+        taskDoneHandler({ taskId: "001", proof: { notes: "done" } }, { dir: project.dir }).task
+          .status,
+      ).toBe("done");
       expect(taskDeleteHandler({ taskId: "001" }, { dir: project.dir })).toEqual({
         deleted: true,
       });
@@ -96,8 +96,9 @@ describe("goal action handlers", () => {
   it("goal.update and goal.done update existing goals", () =>
     withProject((project) => {
       project.addGoal(makeGoal({ id: "01", title: "Before" }));
-      expect(goalUpdateHandler({ goalId: "01", title: "After" }, { dir: project.dir }).goal.title)
-        .toBe("After");
+      expect(
+        goalUpdateHandler({ goalId: "01", title: "After" }, { dir: project.dir }).goal.title,
+      ).toBe("After");
       expect(goalDoneHandler({ goalId: "01" }, { dir: project.dir }).goal.status).toBe("done");
       expect(() => goalUpdateHandler({ goalId: "99" }, { dir: project.dir })).toThrow(/not found/);
     }));

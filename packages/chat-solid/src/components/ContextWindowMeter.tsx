@@ -40,7 +40,10 @@ export function ContextWindowMeter(props: { usage: Accessor<ChatThreadUsageSumma
   const progress = () => {
     const usage = props.usage();
     if (!usage?.contextWindowMaxTokens || usage.contextWindowUsedTokens === undefined) return 0;
-    return Math.max(0, Math.min(100, (usage.contextWindowUsedTokens / usage.contextWindowMaxTokens) * 100));
+    return Math.max(
+      0,
+      Math.min(100, (usage.contextWindowUsedTokens / usage.contextWindowMaxTokens) * 100),
+    );
   };
 
   return (
@@ -69,7 +72,9 @@ export function ContextWindowMeter(props: { usage: Accessor<ChatThreadUsageSumma
             <span class="whitespace-nowrap">{percent()}</span>
           </Show>
           <Show when={usage().totalCostUsd !== undefined}>
-            <span class="whitespace-nowrap text-fg-secondary">${usage().totalCostUsd?.toFixed(4)}</span>
+            <span class="whitespace-nowrap text-fg-secondary">
+              ${usage().totalCostUsd?.toFixed(4)}
+            </span>
           </Show>
         </span>
       )}

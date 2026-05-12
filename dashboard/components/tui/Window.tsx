@@ -1,6 +1,6 @@
-import styles from '@components/Window.module.css';
+import styles from "@components/Window.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
 //NOTE(jimmylee): React Window component — terminal-window frame for TUI. Mirrors the CLI
 //NOTE(jimmylee): framework's window primitive (scripts/cli/lib/window.js): a 2ch horizontal margin,

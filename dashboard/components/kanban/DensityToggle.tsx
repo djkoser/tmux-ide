@@ -28,7 +28,9 @@ export function DensityToggle({ value, onChange }: DensityToggleProps) {
           </Button>
         }
       />
-      <TooltipContent side="bottom">{value === "comfortable" ? "Comfortable" : "Compact"}</TooltipContent>
+      <TooltipContent side="bottom">
+        {value === "comfortable" ? "Comfortable" : "Compact"}
+      </TooltipContent>
     </Tooltip>
   );
 }

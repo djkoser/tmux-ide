@@ -30,7 +30,8 @@ export function TerminalsHost() {
   const { openTabs, activeTabId } = useNavigation();
 
   const terminalTabs = useMemo(
-    () => openTabs.filter((tab): tab is Extract<Tab, { kind: "terminal" }> => tab.kind === "terminal"),
+    () =>
+      openTabs.filter((tab): tab is Extract<Tab, { kind: "terminal" }> => tab.kind === "terminal"),
     [openTabs],
   );
 

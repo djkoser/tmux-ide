@@ -79,10 +79,7 @@ export function AddProjectDialog() {
     if (open) setFlow(defaultFlowState(initialTab));
   }, [open, initialTab]);
 
-  const onTabChange = useCallback(
-    (tab: AddProjectTab) => setFlow((s) => gotoTab(s, tab)),
-    [],
-  );
+  const onTabChange = useCallback((tab: AddProjectTab) => setFlow((s) => gotoTab(s, tab)), []);
 
   return (
     <Dialog open={open} onOpenChange={setAddProjectDialogOpen}>
@@ -476,10 +473,7 @@ function InitializeTab({ flow, setFlow }: TabPanelProps) {
   // ----- pick panel -----
   if (flow.step === "pick") {
     return (
-      <div
-        data-testid="add-project-panel-init-pick"
-        className="flex min-h-0 flex-1 flex-col gap-3"
-      >
+      <div data-testid="add-project-panel-init-pick" className="flex min-h-0 flex-1 flex-col gap-3">
         <DirectoryBrowserSlot
           value={rawDir}
           onChange={setRawDir}
@@ -501,10 +495,7 @@ function InitializeTab({ flow, setFlow }: TabPanelProps) {
 
   // ----- init panel (template + console) -----
   return (
-    <div
-      data-testid="add-project-panel-init"
-      className="flex min-h-0 flex-1 flex-col gap-3"
-    >
+    <div data-testid="add-project-panel-init" className="flex min-h-0 flex-1 flex-col gap-3">
       <label className="block">
         <span className="text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]">Template</span>
         <select
@@ -591,11 +582,7 @@ function CloneTab() {
 function PickFooter() {
   return (
     <FooterRow testId="add-project-footer-pick">
-      <Button
-        variant="ghost"
-        onClick={closeAddProjectDialog}
-        data-testid="add-project-cancel"
-      >
+      <Button variant="ghost" onClick={closeAddProjectDialog} data-testid="add-project-cancel">
         Cancel
       </Button>
     </FooterRow>
@@ -667,11 +654,7 @@ function InitFooter({
           Back
         </Button>
       )}
-      <Button
-        variant="ghost"
-        onClick={closeAddProjectDialog}
-        data-testid="add-project-cancel"
-      >
+      <Button variant="ghost" onClick={closeAddProjectDialog} data-testid="add-project-cancel">
         {succeeded ? "Close" : "Cancel"}
       </Button>
       {!succeeded && (

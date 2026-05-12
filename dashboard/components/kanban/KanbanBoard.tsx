@@ -23,18 +23,9 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
-import {
-  Button,
-  Panel,
-  PanelBody,
-  PanelHeader,
-} from "@/components/ui";
+import { Button, Panel, PanelBody, PanelHeader } from "@/components/ui";
 import { NavigatorPortal } from "@/lib/useNavigatorSlot";
-import {
-  deleteTaskApi,
-  updateTask,
-  type EventData,
-} from "@/lib/api";
+import { deleteTaskApi, updateTask, type EventData } from "@/lib/api";
 import type { AgentDetail, Goal, Task } from "@/lib/types";
 import { useToasts } from "@/lib/useToasts";
 import { BulkActionsBar } from "./BulkActionsBar";
@@ -197,7 +188,9 @@ export function KanbanBoard({
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
 
-    const overData = over.data.current as { type?: string; columnId?: string; status?: TaskStatus } | undefined;
+    const overData = over.data.current as
+      | { type?: string; columnId?: string; status?: TaskStatus }
+      | undefined;
     let targetColumnId: string | null = null;
     if (overData?.type === "column" && overData.columnId) {
       targetColumnId = overData.columnId;
@@ -373,8 +366,8 @@ export function KanbanBoard({
   // Render
   // ------------------------------------------------------------------
 
-  const activeTask = activeDragId ? tasks.find((t) => t.id === activeDragId) ?? null : null;
-  const openTask = openTaskId ? tasks.find((t) => t.id === openTaskId) ?? null : null;
+  const activeTask = activeDragId ? (tasks.find((t) => t.id === activeDragId) ?? null) : null;
+  const openTask = openTaskId ? (tasks.find((t) => t.id === openTaskId) ?? null) : null;
 
   // Reset selection / open when a missing task disappears (eg deleted).
   useEffect(() => {

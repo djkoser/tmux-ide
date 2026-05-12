@@ -39,9 +39,7 @@ export interface AttachOrStartOptions {
   /** Injection points for tests. */
   readInfo?: () => CanonicalDaemonInfo | null;
   isAlive?: (info: CanonicalDaemonInfo) => Promise<boolean>;
-  embed?: (opts: {
-    bindHostname?: string;
-  }) => Promise<EmbeddedDaemonHandle>;
+  embed?: (opts: { bindHostname?: string }) => Promise<EmbeddedDaemonHandle>;
 }
 
 export async function attachOrStartDaemon(

@@ -280,16 +280,8 @@ export interface PlanStore {
   upsert(threadId: string, plan: ProposedPlan): ProposedPlan;
   get(threadId: string, planId: string): ProposedPlan | null;
   list(threadId: string): ProposedPlan[];
-  markImplemented(
-    threadId: string,
-    planId: string,
-    implementationThreadId: string,
-  ): ProposedPlan;
-  markRejected(
-    threadId: string,
-    planId: string,
-    opts?: { reason?: string },
-  ): ProposedPlan;
+  markImplemented(threadId: string, planId: string, implementationThreadId: string): ProposedPlan;
+  markRejected(threadId: string, planId: string, opts?: { reason?: string }): ProposedPlan;
 }
 
 function makePlanStore(): PlanStore {
@@ -428,11 +420,7 @@ export interface ChatIntegrationHarness {
     childTurn: HarnessTurn;
     plan: ProposedPlan;
   }>;
-  rejectPlan(input: {
-    threadId: string;
-    planId: string;
-    reason?: string;
-  }): ProposedPlan;
+  rejectPlan(input: { threadId: string; planId: string; reason?: string }): ProposedPlan;
   snapshotCheckpoint(input: { threadId: string; turnId: string }): Promise<CheckpointSummary>;
   revertCheckpoint(input: { threadId: string; turnId: string }): Promise<{
     summary: CheckpointSummary;
@@ -628,9 +616,7 @@ export async function createHarness(
     return null;
   }
 
-  async function createThread(
-    input: Partial<CreateThreadInput> = {},
-  ): Promise<HarnessThread> {
+  async function createThread(input: Partial<CreateThreadInput> = {}): Promise<HarnessThread> {
     const state = await threadStore.create({
       provider: input.provider ?? { kind: "claude-code" },
       projectDir: input.projectDir ?? workspaceDir,
@@ -838,31 +824,26 @@ export async function createHarness(
     }
     const latest = turnStore.latest(input.threadId);
     if (latest && latest.state === "running") {
-      throw new Error(
-        `conflict: a turn is already running on thread ${input.threadId}`,
-      );
+      throw new Error(`conflict: a turn is already running on thread ${input.threadId}`);
     }
     const childTurn = await startTurn({
       threadId: input.threadId,
       sourceProposedPlan: { threadId: input.threadId, planId: input.planId },
     });
-    const stamped = planStore.markImplemented(
-      input.threadId,
-      input.planId,
-      input.threadId,
-    );
+    const stamped = planStore.markImplemented(input.threadId, input.planId, input.threadId);
     // Re-emit plan.upserted with the implementation metadata so serialize()
     // reflects the post-approval state. (Approval also emits its own event.)
     bus.emit({ type: "plan.upserted", threadId: input.threadId, plan: stamped });
-    bus.emit({ type: "plan.approved", threadId: input.threadId, plan: stamped, childTurnId: childTurn.turnId });
+    bus.emit({
+      type: "plan.approved",
+      threadId: input.threadId,
+      plan: stamped,
+      childTurnId: childTurn.turnId,
+    });
     return { childTurn, plan: stamped };
   }
 
-  function rejectPlan(input: {
-    threadId: string;
-    planId: string;
-    reason?: string;
-  }): ProposedPlan {
+  function rejectPlan(input: { threadId: string; planId: string; reason?: string }): ProposedPlan {
     const original = planStore.get(input.threadId, input.planId);
     if (!original) throw new Error(`Plan ${input.planId} not found`);
     if (original.implementedAt) {
@@ -936,9 +917,7 @@ export async function createHarness(
   }): Promise<{ summary: CheckpointSummary; refreshedStatus: CheckpointStatus }> {
     const summary = checkpointStore.get(input.threadId, input.turnId);
     if (!summary) {
-      throw new Error(
-        `No checkpoint for thread=${input.threadId} turn=${input.turnId}`,
-      );
+      throw new Error(`No checkpoint for thread=${input.threadId} turn=${input.turnId}`);
     }
     await checkpointEngine.revert({
       checkpointRef: summary.checkpointRef,

@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import styles from '@components/Table.module.css';
+import styles from "@components/Table.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
 type TableProps = React.HTMLAttributes<HTMLElement> & {
   children?: React.ReactNode;
@@ -16,6 +16,6 @@ const Table = ({ children, ...rest }) => {
   );
 };
 
-Table.displayName = 'Table';
+Table.displayName = "Table";
 
 export default Table;

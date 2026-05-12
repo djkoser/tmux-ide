@@ -55,9 +55,7 @@ describe("PanelStack", () => {
     expect(slot.style.minWidth).toBe("0");
 
     // No sashes rendered for single panel
-    expect(
-      document.querySelectorAll('[data-slot="panel-resize-sash"]'),
-    ).toHaveLength(0);
+    expect(document.querySelectorAll('[data-slot="panel-resize-sash"]')).toHaveLength(0);
   });
 
   it("renders two panels with a sash between them", () => {
@@ -80,13 +78,9 @@ describe("PanelStack", () => {
     expect(slots).toHaveLength(2);
     expect((slots[0] as HTMLElement).style.flexGrow).toBe("0.3");
     expect((slots[1] as HTMLElement).style.flexGrow).toBe("0.7");
-    expect((slots[0] as HTMLElement).style.minWidth).toBe(
-      `${PANEL_MIN_WIDTH}px`,
-    );
+    expect((slots[0] as HTMLElement).style.minWidth).toBe(`${PANEL_MIN_WIDTH}px`);
 
-    const sashes = document.querySelectorAll(
-      '[data-slot="panel-resize-sash"]',
-    );
+    const sashes = document.querySelectorAll('[data-slot="panel-resize-sash"]');
     expect(sashes).toHaveLength(1);
   });
 
@@ -99,9 +93,7 @@ describe("PanelStack", () => {
 
     render(<PanelStack panels={panels} />);
 
-    const sashes = document.querySelectorAll(
-      '[data-slot="panel-resize-sash"]',
-    );
+    const sashes = document.querySelectorAll('[data-slot="panel-resize-sash"]');
     expect(sashes).toHaveLength(2);
   });
 
@@ -122,9 +114,7 @@ describe("PanelStack", () => {
 
     render(<PanelStack panels={panels} onResize={onResize} />);
 
-    const sash = document.querySelector(
-      '[data-slot="panel-resize-sash"]',
-    ) as HTMLElement;
+    const sash = document.querySelector('[data-slot="panel-resize-sash"]') as HTMLElement;
     expect(sash).toBeTruthy();
 
     fireEvent.mouseDown(sash, { clientX: 600 });
@@ -159,9 +149,7 @@ describe("PanelStack", () => {
 
     render(<PanelStack panels={panels} onResize={onResize} />);
 
-    const sash = document.querySelector(
-      '[data-slot="panel-resize-sash"]',
-    ) as HTMLElement;
+    const sash = document.querySelector('[data-slot="panel-resize-sash"]') as HTMLElement;
 
     fireEvent.mouseDown(sash, { clientX: 500 });
     fireEvent.mouseMove(document, { clientX: 700 });
@@ -184,9 +172,7 @@ describe("PanelStack", () => {
 
     render(<PanelStack panels={panels} onResize={onResize} />);
 
-    const sash = document.querySelector(
-      '[data-slot="panel-resize-sash"]',
-    ) as HTMLElement;
+    const sash = document.querySelector('[data-slot="panel-resize-sash"]') as HTMLElement;
 
     fireEvent.doubleClick(sash);
 
@@ -200,9 +186,7 @@ describe("PanelStack", () => {
   it("renders empty container when panels is empty", () => {
     render(<PanelStack panels={[]} testId="stack" />);
     expect(screen.getByTestId("stack")).toBeTruthy();
-    expect(
-      document.querySelectorAll('[data-slot="panel-stack-slot"]'),
-    ).toHaveLength(0);
+    expect(document.querySelectorAll('[data-slot="panel-stack-slot"]')).toHaveLength(0);
   });
 
   // Guards: ensure we restore body styles after drag ends
@@ -222,9 +206,7 @@ describe("PanelStack", () => {
 
       render(<PanelStack panels={panels} onResize={() => {}} />);
 
-      const sash = document.querySelector(
-        '[data-slot="panel-resize-sash"]',
-      ) as HTMLElement;
+      const sash = document.querySelector('[data-slot="panel-resize-sash"]') as HTMLElement;
 
       fireEvent.mouseDown(sash, { clientX: 400 });
       expect(document.body.style.userSelect).toBe("none");

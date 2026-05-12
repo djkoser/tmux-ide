@@ -49,10 +49,7 @@ describe("checkpoint-store", () => {
 
   it("updateStatus mutates only the status field", () => {
     const store = makeCheckpointStore();
-    store.upsert(
-      T,
-      summary({ turnId: "turn_01", status: "ready", checkpointRef: "abc" }),
-    );
+    store.upsert(T, summary({ turnId: "turn_01", status: "ready", checkpointRef: "abc" }));
     const next = store.updateStatus(T, "turn_01", "missing");
     expect(next.status).toBe("missing");
     expect(next.checkpointRef).toBe("abc");

@@ -139,9 +139,7 @@ const makeReactorCore = <TEvent>(opts: MakeReactorOptions<TEvent>) =>
             Effect.sync(() =>
               log({
                 level: "error",
-                msg: `[${opts.name}] onFailure handler threw: ${
-                  (handlerErr as Error).message
-                }`,
+                msg: `[${opts.name}] onFailure handler threw: ${(handlerErr as Error).message}`,
                 cause: handlerErr,
               }),
             ),

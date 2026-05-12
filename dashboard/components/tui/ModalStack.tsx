@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import styles from '@components/ModalStack.module.css';
+import styles from "@components/ModalStack.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
-import { useModals } from '@components/page/ModalContext';
+import { useModals } from "@components/page/ModalContext";
 
 interface ModalStackProps {}
 

@@ -1,16 +1,16 @@
-'use client';
+"use client";
 
-import styles from '@components/modals/ModalChess.module.css';
+import styles from "@components/modals/ModalChess.module.css";
 
-import * as React from 'react';
-import * as Utilities from '@common/utilities';
+import * as React from "react";
+import * as Utilities from "@common/utilities";
 
-import { useHotkeys } from '@modules/hotkeys';
-import { useModals } from '@components/page/ModalContext';
+import { useHotkeys } from "@modules/hotkeys";
+import { useModals } from "@components/page/ModalContext";
 
-import Button from '@components/Button';
-import CardDouble from '@components/CardDouble';
-import Chessboard from '@components/Chessboard';
+import Button from "@components/Button";
+import CardDouble from "@components/CardDouble";
+import Chessboard from "@components/Chessboard";
 
 interface ModalErrorProps {
   buttonText?: string | any;
@@ -21,15 +21,17 @@ interface ModalErrorProps {
 function ModalChess({ board, buttonText, title }: ModalErrorProps) {
   const { close } = useModals();
 
-  useHotkeys('enter', () => close());
+  useHotkeys("enter", () => close());
 
   return (
     <div className={styles.root}>
-      <CardDouble title={title} style={{ textAlign: 'center' }}>
+      <CardDouble title={title} style={{ textAlign: "center" }}>
         <Chessboard board={board} />
         <br />
         <br />
-        <Button onClick={() => close()}>{Utilities.isEmpty(buttonText) ? 'CLOSE' : buttonText}</Button>
+        <Button onClick={() => close()}>
+          {Utilities.isEmpty(buttonText) ? "CLOSE" : buttonText}
+        </Button>
       </CardDouble>
     </div>
   );

@@ -67,9 +67,9 @@ describe("turn-store", () => {
 
   it("throws not_found when transitioning a missing turn", () => {
     const store = makeTurnStore();
-    expect(() =>
-      store.transition({ threadId: T, turnId: "no-such", state: "completed" }),
-    ).toThrow(TurnStoreError);
+    expect(() => store.transition({ threadId: T, turnId: "no-such", state: "completed" })).toThrow(
+      TurnStoreError,
+    );
   });
 
   it("pins assistantMessageId on transition without erasing prior values", () => {

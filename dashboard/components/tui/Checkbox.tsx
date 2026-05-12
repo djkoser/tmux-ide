@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import styles from '@components/Checkbox.module.css';
-import * as React from 'react';
-import * as Utilities from '@common/utilities';
+import styles from "@components/Checkbox.module.css";
+import * as React from "react";
+import * as Utilities from "@common/utilities";
 
 interface CheckboxProps {
   style?: React.CSSProperties;
@@ -14,7 +14,13 @@ interface CheckboxProps {
   children?: React.ReactNode;
 }
 
-const Checkbox: React.FC<CheckboxProps> = ({ style, name, defaultChecked = false, onChange, children }) => {
+const Checkbox: React.FC<CheckboxProps> = ({
+  style,
+  name,
+  defaultChecked = false,
+  onChange,
+  children,
+}) => {
   const checkboxId = `${name}-checkbox`;
   const inputRef = React.useRef<HTMLInputElement>(null);
 
@@ -23,21 +29,21 @@ const Checkbox: React.FC<CheckboxProps> = ({ style, name, defaultChecked = false
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     switch (event.key) {
-      case 'Enter':
+      case "Enter":
         event.preventDefault();
         inputRef.current?.click();
         break;
-      case 'ArrowUp':
-      case 'ArrowLeft': {
+      case "ArrowUp":
+      case "ArrowLeft": {
         event.preventDefault();
-        const previousFocusable = Utilities.findNextFocusable(document.activeElement, 'previous');
+        const previousFocusable = Utilities.findNextFocusable(document.activeElement, "previous");
         previousFocusable?.focus();
         break;
       }
-      case 'ArrowDown':
-      case 'ArrowRight': {
+      case "ArrowDown":
+      case "ArrowRight": {
         event.preventDefault();
-        const nextFocusable = Utilities.findNextFocusable(document.activeElement, 'next');
+        const nextFocusable = Utilities.findNextFocusable(document.activeElement, "next");
         nextFocusable?.focus();
         break;
       }
@@ -66,9 +72,21 @@ const Checkbox: React.FC<CheckboxProps> = ({ style, name, defaultChecked = false
       style={style}
     >
       <div className={styles.relative}>
-        <input className={styles.input} id={checkboxId} type="checkbox" name={name} defaultChecked={defaultChecked} onChange={handleChange} onKeyDown={handleKeyDown} onFocus={handleFocus} onBlur={handleBlur} tabIndex={0} ref={inputRef} />
+        <input
+          className={styles.input}
+          id={checkboxId}
+          type="checkbox"
+          name={name}
+          defaultChecked={defaultChecked}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+          tabIndex={0}
+          ref={inputRef}
+        />
         <label className={styles.figure} htmlFor={checkboxId}>
-          {isChecked ? '╳' : '\u00A0'}
+          {isChecked ? "╳" : "\u00A0"}
         </label>
       </div>
       <div className={styles.right}>&nbsp;&nbsp;{children}</div>

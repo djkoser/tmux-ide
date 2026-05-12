@@ -139,9 +139,7 @@ class FakeCodexClient implements CodexClient {
     | ((req: ApplyPatchApprovalRequest) => Promise<ApplyPatchApprovalResponse>)
     | null = null;
   private tokenRefreshHandler:
-    | ((
-        req: ChatgptAuthTokensRefreshRequest,
-      ) => Promise<ChatgptAuthTokensRefreshResponse>)
+    | ((req: ChatgptAuthTokensRefreshRequest) => Promise<ChatgptAuthTokensRefreshResponse>)
     | null = null;
 
   async initialize(): Promise<CodexInitializeResponse> {
@@ -191,9 +189,7 @@ class FakeCodexClient implements CodexClient {
   }
 
   onChatgptTokenRefresh(
-    handler: (
-      req: ChatgptAuthTokensRefreshRequest,
-    ) => Promise<ChatgptAuthTokensRefreshResponse>,
+    handler: (req: ChatgptAuthTokensRefreshRequest) => Promise<ChatgptAuthTokensRefreshResponse>,
   ): () => void {
     this.tokenRefreshHandler = handler;
     return () => {
@@ -576,7 +572,9 @@ describe("makeThreadManager", () => {
         contextWindowUsedTokens: 1350,
       },
     });
-    await waitFor(async () => (await store.get(thread.id))?.usage?.contextWindowMaxTokens === 200_000);
+    await waitFor(
+      async () => (await store.get(thread.id))?.usage?.contextWindowMaxTokens === 200_000,
+    );
   });
 
   it("emits permission requests and defaults to reject_once after timeout", async () => {

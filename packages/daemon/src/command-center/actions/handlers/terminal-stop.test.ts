@@ -22,10 +22,7 @@ describe("terminalStopHandler", () => {
     const registry = new PtyBridgeRegistry();
     const bridge = new StubBridge();
     registry.acquire("term-1", () => bridge, { idleMs: 0 });
-    const result = terminalStopHandler(
-      { sessionName: "demo", terminalId: "term-1" },
-      { registry },
-    );
+    const result = terminalStopHandler({ sessionName: "demo", terminalId: "term-1" }, { registry });
     expect(result).toEqual({ stopped: true });
     expect(bridge.killed).toBe(1);
     expect(registry.size()).toBe(0);

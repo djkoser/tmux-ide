@@ -84,9 +84,7 @@ describe("session-store", () => {
     const removed = store.remove(T, session.id!);
     expect(removed?.id).toBe(session.id);
     expect(store.get(T, session.id!)).toBeNull();
-    expect(events).toEqual([
-      { type: "chat.session.removed", threadId: T, sessionId: session.id },
-    ]);
+    expect(events).toEqual([{ type: "chat.session.removed", threadId: T, sessionId: session.id }]);
   });
 
   it("remove on unknown id returns null without emitting", () => {
@@ -146,9 +144,9 @@ describe("session-store", () => {
 
   it("updateStatus on unknown session throws SessionStoreError", () => {
     const { store } = makeStore();
-    expect(() =>
-      store.updateStatus({ threadId: T, sessionId: "ghost", status: "ready" }),
-    ).toThrow(SessionStoreError);
+    expect(() => store.updateStatus({ threadId: T, sessionId: "ghost", status: "ready" })).toThrow(
+      SessionStoreError,
+    );
   });
 
   it("clear empties the thread bucket", () => {
@@ -195,8 +193,6 @@ describe("session-store", () => {
     store.add({ threadId: T, id: "ephemeral", providerName: null });
     store.updateStatus({ threadId: T, sessionId: "ephemeral", status: "running" });
     store.remove(T, "ephemeral");
-    expect(() =>
-      store.add({ threadId: T, id: "ephemeral", providerName: null }),
-    ).not.toThrow();
+    expect(() => store.add({ threadId: T, id: "ephemeral", providerName: null })).not.toThrow();
   });
 });

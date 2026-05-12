@@ -124,7 +124,10 @@ The catalog is the **what**. The four `skills/port-tui-to-*/SKILL.md` files rema
 - **Purpose:** Square portrait image (or initials placeholder) with optional inline label and external link.
 - **Props:**
   ```ts
-  interface AvatarProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'style' | 'className' | 'children'> {
+  interface AvatarProps extends Omit<
+    React.HTMLAttributes<HTMLDivElement>,
+    "style" | "className" | "children"
+  > {
     src?: string;
     href?: string;
     target?: string;
@@ -201,7 +204,7 @@ The catalog is the **what**. The four `skills/port-tui-to-*/SKILL.md` files rema
 - **Purpose:** Single-glyph spinner cycling through a Unicode box-drawing or block animation sequence.
 - **Props:**
   ```ts
-  interface BlockLoaderProps extends Omit<React.HTMLAttributes<HTMLSpanElement>, 'children'> {
+  interface BlockLoaderProps extends Omit<React.HTMLAttributes<HTMLSpanElement>, "children"> {
     mode?: number;
   }
   ```
@@ -230,7 +233,7 @@ The catalog is the **what**. The four `skills/port-tui-to-*/SKILL.md` files rema
 - **Props:**
   ```ts
   interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-    theme?: 'PRIMARY' | 'SECONDARY';
+    theme?: "PRIMARY" | "SECONDARY";
     isDisabled?: boolean;
     children?: React.ReactNode;
   }
@@ -489,7 +492,7 @@ The catalog is the **what**. The four `skills/port-tui-to-*/SKILL.md` files rema
 - **Purpose:** Collapsible sidebar drawer with a single toggle button and an animated hide/show state.
 - **Props:**
   ```ts
-  interface DrawerProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'defaultValue'> {
+  interface DrawerProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "defaultValue"> {
     children?: React.ReactNode;
     defaultValue?: boolean;
   }
@@ -552,7 +555,7 @@ The catalog is the **what**. The four `skills/port-tui-to-*/SKILL.md` files rema
   interface HoverComponentTriggerProps {
     children: React.ReactElement<React.HTMLAttributes<HTMLElement>>;
     text: string;
-    component: 'popover' | 'tooltip';
+    component: "popover" | "tooltip";
   }
   ```
 - **Theming tokens:** `--z-index-page-popover`, `--z-index-page-tooltips`
@@ -606,8 +609,8 @@ The catalog is the **what**. The four `skills/port-tui-to-*/SKILL.md` files rema
   ```ts
   interface MatrixLoaderProps {
     rows?: number;
-    direction?: undefined | 'top-to-bottom' | 'left-to-right';
-    mode?: undefined | 'greek' | 'katakana';
+    direction?: undefined | "top-to-bottom" | "left-to-right";
+    mode?: undefined | "greek" | "katakana";
   }
   ```
 - **Theming tokens:** `--theme-text`, `--font-size`, `--theme-line-height-base`
@@ -820,7 +823,7 @@ The catalog is the **what**. The four `skills/port-tui-to-*/SKILL.md` files rema
 - **Purpose:** Two-column layout with a draggable sidebar handle and optional reversed column order.
 - **Props:**
   ```ts
-  interface SidebarLayoutProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'defaultValue'> {
+  interface SidebarLayoutProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "defaultValue"> {
     children?: React.ReactNode;
     sidebar?: React.ReactNode;
     defaultSidebarWidth?: number;
@@ -840,7 +843,7 @@ The catalog is the **what**. The four `skills/port-tui-to-*/SKILL.md` files rema
   ```ts
   interface SimpleTableProps {
     data: string[][];
-    align?: ('left' | 'right')[];
+    align?: ("left" | "right")[];
   }
   ```
 - **Theming tokens:** `--ansi-10-lime`, `--ansi-240-gray-35`, `--ansi-248-gray-66`, `--color-white`

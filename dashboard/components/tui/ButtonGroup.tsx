@@ -1,12 +1,12 @@
-'use client';
+"use client";
 
-import styles from '@components/ButtonGroup.module.css';
+import styles from "@components/ButtonGroup.module.css";
 
-import * as React from 'react';
-import * as Utilities from '@common/utilities';
+import * as React from "react";
+import * as Utilities from "@common/utilities";
 
-import ActionButton from '@components/ActionButton';
-import DropdownMenuTrigger from '@components/DropdownMenuTrigger';
+import ActionButton from "@components/ActionButton";
+import DropdownMenuTrigger from "@components/DropdownMenuTrigger";
 
 const ButtonGroup = (props) => {
   if (!props.items) {
@@ -27,7 +27,12 @@ const ButtonGroup = (props) => {
         }
 
         return (
-          <ActionButton key={each.body} onClick={each.onClick} hotkey={each.hotkey} isSelected={each.selected}>
+          <ActionButton
+            key={each.body}
+            onClick={each.onClick}
+            hotkey={each.hotkey}
+            isSelected={each.selected}
+          >
             {each.body}
           </ActionButton>
         );

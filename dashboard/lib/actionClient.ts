@@ -19,19 +19,9 @@
  */
 import { API_BASE } from "./api";
 import { authHeaders } from "./appProtocol";
-import type {
-  ActionInput,
-  ActionName,
-  ActionResult,
-  ActionErrorCode,
-} from "@tmux-ide/contracts";
+import type { ActionInput, ActionName, ActionResult, ActionErrorCode } from "@tmux-ide/contracts";
 
-export type {
-  ActionErrorCode,
-  ActionName,
-  ActionInput,
-  ActionResult,
-} from "@tmux-ide/contracts";
+export type { ActionErrorCode, ActionName, ActionInput, ActionResult } from "@tmux-ide/contracts";
 
 /**
  * Typed error thrown when the server returns `{ ok: false, error }`.

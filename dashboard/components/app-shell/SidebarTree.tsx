@@ -329,14 +329,10 @@ function SidebarLinkRow({ item }: { item: SidebarLink }) {
   );
 }
 
-function renderIcon(
-  icon: ReactElement | LucideIcon | undefined,
-  size?: number,
-): ReactNode {
+function renderIcon(icon: ReactElement | LucideIcon | undefined, size?: number): ReactNode {
   if (!icon) return null;
   if (isValidElement(icon)) return icon;
   const IconComponent = icon as LucideIcon;
   if (size !== undefined) return <IconComponent aria-hidden="true" size={size} />;
   return <IconComponent aria-hidden="true" />;
 }
-

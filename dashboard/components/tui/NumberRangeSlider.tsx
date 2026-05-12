@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import styles from '@components/NumberRangeSlider.module.css';
+import styles from "@components/NumberRangeSlider.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
 interface RangerProps {
   defaultValue?: number;
@@ -11,14 +11,19 @@ interface RangerProps {
   step?: number;
 }
 
-const NumberRangeSlider: React.FC<RangerProps> = ({ defaultValue = 0, max = 5000, min = 0, step = 1 }) => {
+const NumberRangeSlider: React.FC<RangerProps> = ({
+  defaultValue = 0,
+  max = 5000,
+  min = 0,
+  step = 1,
+}) => {
   const sliderRef = React.useRef<HTMLInputElement>(null);
   const [displayValue, setDisplayValue] = React.useState<number>(defaultValue);
 
   const maxDigits = max.toString().length;
 
   const padValue = (value: number): string => {
-    return value.toString().padStart(maxDigits, '0');
+    return value.toString().padStart(maxDigits, "0");
   };
 
   React.useEffect(() => {
@@ -38,7 +43,18 @@ const NumberRangeSlider: React.FC<RangerProps> = ({ defaultValue = 0, max = 5000
       <label className={styles.left}>
         <div className={styles.amount}>{padValue(displayValue)}</div>
       </label>
-      <input className={styles.slider} defaultValue={defaultValue} max={max} min={min} onChange={scrub} ref={sliderRef} role="slider" step={step} tabIndex={0} type="range" />
+      <input
+        className={styles.slider}
+        defaultValue={defaultValue}
+        max={max}
+        min={min}
+        onChange={scrub}
+        ref={sliderRef}
+        role="slider"
+        step={step}
+        tabIndex={0}
+        type="range"
+      />
     </div>
   );
 };

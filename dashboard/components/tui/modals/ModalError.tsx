@@ -1,17 +1,17 @@
-'use client';
+"use client";
 
-import styles from '@components/modals/ModalError.module.css';
+import styles from "@components/modals/ModalError.module.css";
 
-import * as React from 'react';
-import * as Utilities from '@common/utilities';
+import * as React from "react";
+import * as Utilities from "@common/utilities";
 
-import { useHotkeys } from '@modules/hotkeys';
-import { useModals } from '@components/page/ModalContext';
+import { useHotkeys } from "@modules/hotkeys";
+import { useModals } from "@components/page/ModalContext";
 
-import ActionButton from '@components/ActionButton';
-import Button from '@components/Button';
-import CardDouble from '@components/CardDouble';
-import Grid from '@components/Grid';
+import ActionButton from "@components/ActionButton";
+import Button from "@components/Button";
+import CardDouble from "@components/CardDouble";
+import Grid from "@components/Grid";
 
 interface ModalErrorProps {
   buttonText?: string | any;
@@ -23,7 +23,7 @@ interface ModalErrorProps {
 function ModalError({ message, buttonText, title }: ModalErrorProps) {
   const { close } = useModals();
 
-  useHotkeys('enter', () => close());
+  useHotkeys("enter", () => close());
 
   return (
     <div className={styles.root}>
@@ -33,10 +33,10 @@ function ModalError({ message, buttonText, title }: ModalErrorProps) {
         <Grid>
           <ul>
             <li>
-              Press{' '}
+              Press{" "}
               <ActionButton hotkey="⏎" onClick={() => close()}>
                 ENTER
-              </ActionButton>{' '}
+              </ActionButton>{" "}
               to continue.
             </li>
           </ul>

@@ -87,9 +87,23 @@ export function CostsView(props: CostsViewProps) {
         }}
       >
         <div style={{ "font-weight": "500", "margin-bottom": "4px" }}>Session Costs</div>
-        <Show when={data()} fallback={<div style={{ color: "var(--theme-focused-foreground-subdued, var(--dim))" }}>… loading</div>}>
+        <Show
+          when={data()}
+          fallback={
+            <div style={{ color: "var(--theme-focused-foreground-subdued, var(--dim))" }}>
+              … loading
+            </div>
+          }
+        >
           {(d) => (
-            <div style={{ display: "flex", gap: "16px", color: "var(--theme-focused-foreground-subdued, var(--dim))", "font-size": "11px" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: "16px",
+                color: "var(--theme-focused-foreground-subdued, var(--dim))",
+                "font-size": "11px",
+              }}
+            >
               <span>Elapsed: {formatDurationMs(d().sessionElapsedMs)}</span>
               <span>Agent time: {formatDurationMs(d().totalTimeMs)}</span>
               <span>Tasks: {d().totalTasks}</span>
@@ -117,7 +131,12 @@ export function CostsView(props: CostsViewProps) {
         <Show
           when={sortedAgents().length > 0}
           fallback={
-            <div style={{ padding: "12px", color: "var(--theme-focused-foreground-subdued, var(--dim))" }}>
+            <div
+              style={{
+                padding: "12px",
+                color: "var(--theme-focused-foreground-subdued, var(--dim))",
+              }}
+            >
               — no task activity recorded yet —
             </div>
           }
@@ -152,16 +171,20 @@ export function CostsView(props: CostsViewProps) {
                   gap: "8px",
                   padding: "4px 12px",
                   "border-left":
-                    i() === selectedRow()
-                      ? "2px solid var(--accent)"
-                      : "2px solid transparent",
+                    i() === selectedRow() ? "2px solid var(--accent)" : "2px solid transparent",
                   "background-color":
                     i() === selectedRow() ? "var(--surface-hover)" : "transparent",
                   cursor: "pointer",
                 }}
                 onClick={() => setSelectedRow(i())}
               >
-                <span style={{ overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                <span
+                  style={{
+                    overflow: "hidden",
+                    "text-overflow": "ellipsis",
+                    "white-space": "nowrap",
+                  }}
+                >
                   {agent.name}
                 </span>
                 <span style={{ "text-align": "right", "font-variant-numeric": "tabular-nums" }}>
@@ -171,7 +194,9 @@ export function CostsView(props: CostsViewProps) {
                   {formatDurationMs(agent.totalTimeMs)}
                 </span>
                 <span style={{ "text-align": "right", "font-variant-numeric": "tabular-nums" }}>
-                  {agent.taskCount > 0 ? formatDurationMs(agent.totalTimeMs / agent.taskCount) : "—"}
+                  {agent.taskCount > 0
+                    ? formatDurationMs(agent.totalTimeMs / agent.taskCount)
+                    : "—"}
                 </span>
                 <span style={{ "text-align": "right", "font-variant-numeric": "tabular-nums" }}>
                   {formatPct(agent.utilization)}

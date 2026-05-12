@@ -17,7 +17,9 @@ const DAEMON_INFO_FILE = "daemon.json";
 
 export function getCanonicalDaemonInfoPath(): string {
   const dir =
-    process.env[DAEMON_INFO_DIR_ENV] ?? process.env[REGISTRY_DIR_ENV] ?? join(homedir(), ".tmux-ide");
+    process.env[DAEMON_INFO_DIR_ENV] ??
+    process.env[REGISTRY_DIR_ENV] ??
+    join(homedir(), ".tmux-ide");
   return join(dir, DAEMON_INFO_FILE);
 }
 

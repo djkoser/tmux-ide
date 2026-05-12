@@ -1,24 +1,11 @@
 "use client";
 
 import { Popover } from "@base-ui/react/popover";
-import {
-  ChevronDown,
-  Folder,
-  LayoutDashboard,
-  Plus,
-  Settings,
-  Sparkles,
-} from "lucide-react";
+import { ChevronDown, Folder, LayoutDashboard, Plus, Settings, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchSessions } from "@/lib/api";
 import { openAddProjectDialog } from "@/lib/addProjectDialogStore";
-import {
-  isSessions,
-  isSettings,
-  isSkills,
-  setNavigation,
-  useNavigation,
-} from "@/lib/navigation";
+import { isSessions, isSettings, isSkills, setNavigation, useNavigation } from "@/lib/navigation";
 import { useKeybind } from "@/lib/useKeybinds";
 import type { SessionOverview } from "@/lib/types";
 
@@ -49,8 +36,7 @@ export function ProjectSwitcher() {
   // Active session is whatever the navigation state points at — when the
   // user is on a session or its skills sub-view we show the session name;
   // overview/settings/skills-without-session show a generic label.
-  const activeSession =
-    isSessions(nav) || isSkills(nav) ? (nav.sessionName ?? null) : null;
+  const activeSession = isSessions(nav) || isSkills(nav) ? (nav.sessionName ?? null) : null;
 
   const label = useMemo(() => {
     if (activeSession) return activeSession;
@@ -150,9 +136,7 @@ export function ProjectSwitcher() {
                         <Folder
                           aria-hidden="true"
                           size={12}
-                          className={
-                            isActive ? "text-[var(--accent)]" : "text-[var(--dim)]"
-                          }
+                          className={isActive ? "text-[var(--accent)]" : "text-[var(--dim)]"}
                         />
                         <span className="flex min-w-0 flex-1 flex-col">
                           <span className="truncate">{session.name}</span>

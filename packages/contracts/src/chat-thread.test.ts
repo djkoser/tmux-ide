@@ -698,9 +698,9 @@ describe("ChatThreadEventZ (discriminated union)", () => {
   });
 
   it("rejects events with an unknown discriminant", () => {
-    expect(
-      ChatThreadEventZ.safeParse({ type: "chat.unknown.event", threadId: "t" }).success,
-    ).toBe(false);
+    expect(ChatThreadEventZ.safeParse({ type: "chat.unknown.event", threadId: "t" }).success).toBe(
+      false,
+    );
   });
 });
 

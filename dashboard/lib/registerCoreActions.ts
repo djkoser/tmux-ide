@@ -13,10 +13,7 @@ import type { LayoutActions } from "@/lib/useLayoutState";
 
 interface RegisterCoreActionsInput {
   currentProject: string;
-  layout: Pick<
-    LayoutActions,
-    "toggleTerminal" | "setActivitySection" | "openWorkspaceTab"
-  >;
+  layout: Pick<LayoutActions, "toggleTerminal" | "setActivitySection" | "openWorkspaceTab">;
   toggleSidebar(): void;
   toggleTheme(): void;
 }
@@ -157,4 +154,3 @@ function activeSessionFor(currentProject: string): string | null {
   if (currentProject && currentProject !== "default") return currentProject;
   return null;
 }
-

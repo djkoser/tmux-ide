@@ -105,7 +105,9 @@ function CopyButton({ value, label }: { value: string; label: string }) {
       onClick={() => void navigator.clipboard?.writeText(value)}
       className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border)] text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
     >
-      <span aria-hidden="true" style={{ fontSize: 14, lineHeight: 1 }}>⎘</span>
+      <span aria-hidden="true" style={{ fontSize: 14, lineHeight: 1 }}>
+        ⎘
+      </span>
     </button>
   );
 }

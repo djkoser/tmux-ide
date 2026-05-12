@@ -16,12 +16,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type ProviderKind =
-  | "anthropic"
-  | "openai"
-  | "local-ollama"
-  | "local-lmstudio"
-  | "generic-acp";
+type ProviderKind = "anthropic" | "openai" | "local-ollama" | "local-lmstudio" | "generic-acp";
 
 interface ProviderInstance {
   id: string;

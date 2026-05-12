@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { ThreadView } from "../ThreadView";
-import type { ActivityView, CheckpointSummaryView, ProposedPlanView, TurnSummary } from "../useChatStore";
+import type {
+  ActivityView,
+  CheckpointSummaryView,
+  ProposedPlanView,
+  TurnSummary,
+} from "../useChatStore";
 import type { ThreadIndexEntry } from "@/components/chat/types";
 
 const THREAD: ThreadIndexEntry = {

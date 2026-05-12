@@ -34,8 +34,16 @@ export function buildMenuTemplate({
   const fileMenu: MenuItemConstructorOptions = {
     label: "File",
     submenu: [
-      { label: "New Project...", accelerator: "CmdOrCtrl+N", click: () => send("menu:add-project") },
-      { label: "Open Project...", accelerator: "CmdOrCtrl+O", click: () => send("menu:add-project") },
+      {
+        label: "New Project...",
+        accelerator: "CmdOrCtrl+N",
+        click: () => send("menu:add-project"),
+      },
+      {
+        label: "Open Project...",
+        accelerator: "CmdOrCtrl+O",
+        click: () => send("menu:add-project"),
+      },
       { type: "separator" },
       isMac ? { role: "close", label: "Close Window", accelerator: "Cmd+W" } : { role: "quit" },
     ],

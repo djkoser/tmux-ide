@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import styles from '@components/Drawer.module.css';
+import styles from "@components/Drawer.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
-interface DrawerProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'defaultValue'> {
+interface DrawerProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "defaultValue"> {
   children?: React.ReactNode;
   defaultValue?: boolean;
 }
@@ -17,7 +17,7 @@ const Drawer: React.FC<DrawerProps> = ({ children, defaultValue = false, ...rest
       {expand ? <div className={styles.side}>{children}</div> : null}
       <div className={styles.right}>
         <button className={styles.action} onClick={() => setExpand(!expand)}>
-          {expand ? '⭠' : '⭢'}
+          {expand ? "⭠" : "⭢"}
         </button>
       </div>
     </div>

@@ -36,12 +36,7 @@ import type { ChatEventReader, PersistedChatEvent } from "./types.ts";
 
 export type ChatEventActorKind = "user" | "provider" | "system";
 
-export type ChatEventAggregateKind =
-  | "thread"
-  | "turn"
-  | "session"
-  | "checkpoint"
-  | "plan";
+export type ChatEventAggregateKind = "thread" | "turn" | "session" | "checkpoint" | "plan";
 
 export type { PersistedChatEvent } from "./types.ts";
 
@@ -273,9 +268,7 @@ export function runChatStoreMigrations(db: SqliteDb): void {
       .all<{ id: number }>()
       .map((r) => r.id),
   );
-  const insert = db.prepare(
-    "INSERT INTO _chat_migrations (id, name, applied_at) VALUES (?, ?, ?)",
-  );
+  const insert = db.prepare("INSERT INTO _chat_migrations (id, name, applied_at) VALUES (?, ?, ?)");
   const now = new Date().toISOString();
   for (const migration of CHAT_MIGRATIONS) {
     if (applied.has(migration.id)) continue;

@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import * as React from 'react';
+import * as React from "react";
 
-import styles from '@components/BarLoader.module.css';
+import styles from "@components/BarLoader.module.css";
 
 interface BarLoaderProps {
   intervalRate?: number;

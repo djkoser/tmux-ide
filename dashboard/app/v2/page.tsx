@@ -73,7 +73,10 @@ export default function V2OverviewPage() {
     <div className="flex h-screen flex-col bg-[var(--bg)] text-[var(--fg)]">
       <TooltipProvider delay={200}>
         <header className="flex h-7 shrink-0 items-center border-b border-[var(--border)] bg-[var(--bg-strong)] pl-3 text-[11px] tabular-nums">
-          <Link href="/v2" className="mr-2 inline-flex items-center gap-1 text-[var(--fg)] hover:text-[var(--accent)]">
+          <Link
+            href="/v2"
+            className="mr-2 inline-flex items-center gap-1 text-[var(--fg)] hover:text-[var(--accent)]"
+          >
             <span aria-hidden="true">◇</span>
             <span className="font-medium">tmux-ide</span>
           </Link>
@@ -104,8 +107,19 @@ export default function V2OverviewPage() {
 
       <div className="flex-1 min-h-0">
         <Group orientation="horizontal" defaultLayout={hLayout} onLayoutChange={setHLayout}>
-          <Panel id="sidebar" defaultSize={20} minSize={14} collapsible collapsedSize={4} className="border-r border-[var(--border)]">
-            <SidebarPane merged={merged} loading={projectsLoading || sessionsLoading} error={apiUnreachable} />
+          <Panel
+            id="sidebar"
+            defaultSize={20}
+            minSize={14}
+            collapsible
+            collapsedSize={4}
+            className="border-r border-[var(--border)]"
+          >
+            <SidebarPane
+              merged={merged}
+              loading={projectsLoading || sessionsLoading}
+              error={apiUnreachable}
+            />
           </Panel>
 
           <VSeparator />
@@ -113,7 +127,11 @@ export default function V2OverviewPage() {
           <Panel id="center" defaultSize={56} minSize={30}>
             <Group orientation="vertical" defaultLayout={vLayout} onLayoutChange={setVLayout}>
               <Panel id="main" defaultSize={70} minSize={20}>
-                <MainPane merged={merged} loading={projectsLoading || sessionsLoading} error={apiUnreachable} />
+                <MainPane
+                  merged={merged}
+                  loading={projectsLoading || sessionsLoading}
+                  error={apiUnreachable}
+                />
               </Panel>
 
               <HSeparator />
@@ -126,7 +144,14 @@ export default function V2OverviewPage() {
 
           <VSeparator />
 
-          <Panel id="inspector" defaultSize={24} minSize={12} collapsible collapsedSize={4} className="border-l border-[var(--border)]">
+          <Panel
+            id="inspector"
+            defaultSize={24}
+            minSize={12}
+            collapsible
+            collapsedSize={4}
+            className="border-l border-[var(--border)]"
+          >
             <InspectorPane merged={merged} apiUnreachable={apiUnreachable} />
           </Panel>
         </Group>
@@ -221,11 +246,14 @@ interface SidebarPaneProps {
 }
 
 function SidebarPane({ merged, loading, error }: SidebarPaneProps) {
-  const rowCls = "flex w-full items-center gap-2 px-2 py-1 text-left text-[12px] transition-colors hover:bg-[var(--surface-hover)]";
+  const rowCls =
+    "flex w-full items-center gap-2 px-2 py-1 text-left text-[12px] transition-colors hover:bg-[var(--surface-hover)]";
   const rowStyle: React.CSSProperties = { borderLeft: "2px solid transparent" };
   return (
     <nav className="flex h-full flex-col overflow-y-auto py-2 text-[12px]">
-      <div className="mb-1 px-3 text-[10px] uppercase tracking-wider text-[var(--dim)]">projects</div>
+      <div className="mb-1 px-3 text-[10px] uppercase tracking-wider text-[var(--dim)]">
+        projects
+      </div>
       {error ? (
         <div className="px-3 py-1 text-[10px] text-[var(--red)]">api unreachable</div>
       ) : loading && merged.length === 0 ? (
@@ -234,8 +262,16 @@ function SidebarPane({ merged, loading, error }: SidebarPaneProps) {
         <div className="px-3 py-1 text-[10px] text-[var(--dim)]">no projects yet</div>
       ) : (
         merged.map((p) => (
-          <Link key={p.name} href={`/v2/project/${encodeURIComponent(p.name)}`} style={rowStyle} className={`${rowCls} text-[var(--fg)]`}>
-            <span aria-hidden="true" className={`w-4 text-center ${p.session ? "text-[var(--green)]" : "text-[var(--dim)]"}`}>
+          <Link
+            key={p.name}
+            href={`/v2/project/${encodeURIComponent(p.name)}`}
+            style={rowStyle}
+            className={`${rowCls} text-[var(--fg)]`}
+          >
+            <span
+              aria-hidden="true"
+              className={`w-4 text-center ${p.session ? "text-[var(--green)]" : "text-[var(--dim)]"}`}
+            >
               {p.session ? "●" : "○"}
             </span>
             <span className="truncate">{p.name}</span>
@@ -243,13 +279,23 @@ function SidebarPane({ merged, loading, error }: SidebarPaneProps) {
         ))
       )}
 
-      <div className="mb-1 mt-3 border-t border-[var(--border-weak)] pt-2 px-3 text-[10px] uppercase tracking-wider text-[var(--dim)]">tools</div>
+      <div className="mb-1 mt-3 border-t border-[var(--border-weak)] pt-2 px-3 text-[10px] uppercase tracking-wider text-[var(--dim)]">
+        tools
+      </div>
       <Link href="/tui-demo" style={rowStyle} className={`${rowCls} text-[var(--fg)]`}>
-        <span aria-hidden="true" className="w-4 text-center">◆</span>
+        <span aria-hidden="true" className="w-4 text-center">
+          ◆
+        </span>
         <span>TUI Kitchen Sink</span>
       </Link>
-      <Link href="/" style={rowStyle} className={`${rowCls} text-[var(--dim)] hover:text-[var(--fg)]`}>
-        <span aria-hidden="true" className="w-4 text-center">◂</span>
+      <Link
+        href="/"
+        style={rowStyle}
+        className={`${rowCls} text-[var(--dim)] hover:text-[var(--fg)]`}
+      >
+        <span aria-hidden="true" className="w-4 text-center">
+          ◂
+        </span>
         <span>Old dashboard</span>
       </Link>
     </nav>
@@ -272,9 +318,7 @@ function MainPane({ merged, loading, error }: MainPaneProps) {
       p.name,
       p.session ? "running" : "stopped",
       p.session?.mission?.title ?? "—",
-      p.session?.stats
-        ? `${p.session.stats.doneTasks}/${p.session.stats.totalTasks}`
-        : "—",
+      p.session?.stats ? `${p.session.stats.doneTasks}/${p.session.stats.totalTasks}` : "—",
     ]);
     return [head, ...body];
   }, [merged, loading, error]);
@@ -317,11 +361,13 @@ function TerminalPane({ runningCount }: { runningCount: number }) {
   return (
     <div className="h-full overflow-hidden bg-[var(--bg-strong)] p-3 text-[11px] leading-tight">
       <div className="mb-2 flex items-center text-[10px] text-[var(--dim)]">
-        <span aria-hidden="true" className="mr-1">{">_"}</span>
+        <span aria-hidden="true" className="mr-1">
+          {">_"}
+        </span>
         <span>terminal · v2 overview</span>
       </div>
       <pre className="whitespace-pre-wrap text-[var(--fg)]">
-{`$ tmux-ide ls
+        {`$ tmux-ide ls
 ${runningCount === 0 ? "no sessions running" : `${runningCount} session${runningCount === 1 ? "" : "s"} running`}
 $ █`}
       </pre>
@@ -379,9 +425,15 @@ function InspectorPane({ merged, apiUnreachable }: InspectorPaneProps) {
       <br />
       <Card title="HOTKEYS" mode="left">
         <div className="space-y-1 text-[var(--dim)]">
-          <div><kbd className="text-[var(--fg)]">⌘K</kbd> command palette</div>
-          <div><kbd className="text-[var(--fg)]">⌘J</kbd> toggle terminal</div>
-          <div><kbd className="text-[var(--fg)]">⌘\</kbd> toggle sidebar</div>
+          <div>
+            <kbd className="text-[var(--fg)]">⌘K</kbd> command palette
+          </div>
+          <div>
+            <kbd className="text-[var(--fg)]">⌘J</kbd> toggle terminal
+          </div>
+          <div>
+            <kbd className="text-[var(--fg)]">⌘\</kbd> toggle sidebar
+          </div>
         </div>
       </Card>
     </aside>

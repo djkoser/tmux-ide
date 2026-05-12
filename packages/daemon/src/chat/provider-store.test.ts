@@ -150,11 +150,7 @@ describe("provider-store", () => {
   });
 
   it("throws ProviderStoreError on a schema-invalid file", () => {
-    writeFileSync(
-      filePath,
-      JSON.stringify({ version: 1, providers: [{ id: "x" }] }),
-      "utf8",
-    );
+    writeFileSync(filePath, JSON.stringify({ version: 1, providers: [{ id: "x" }] }), "utf8");
     expect(() => makeProviderStore({ filePath })).toThrow(ProviderStoreError);
   });
 

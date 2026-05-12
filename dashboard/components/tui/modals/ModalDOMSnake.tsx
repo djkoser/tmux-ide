@@ -1,15 +1,15 @@
-'use client';
+"use client";
 
-import styles from '@components/modals/ModalCanvasSnake.module.css';
+import styles from "@components/modals/ModalCanvasSnake.module.css";
 
-import * as React from 'react';
-import * as Utilities from '@common/utilities';
+import * as React from "react";
+import * as Utilities from "@common/utilities";
 
-import { useModals } from '@components/page/ModalContext';
+import { useModals } from "@components/page/ModalContext";
 
-import Button from '@components/Button';
-import Card from '@components/Card';
-import DOMSnake from '@components/DOMSnake';
+import Button from "@components/Button";
+import Card from "@components/Card";
+import DOMSnake from "@components/DOMSnake";
 
 interface ModalDOMSnakeProps {
   buttonText?: string | any;
@@ -24,7 +24,9 @@ function ModalDOMSnake({ buttonText }: ModalDOMSnakeProps) {
         <DOMSnake height={14} width={34} />
         <br />
         <br />
-        <Button onClick={() => close()}>{Utilities.isEmpty(buttonText) ? 'Close' : buttonText}</Button>
+        <Button onClick={() => close()}>
+          {Utilities.isEmpty(buttonText) ? "Close" : buttonText}
+        </Button>
       </Card>
     </div>
   );

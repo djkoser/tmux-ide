@@ -59,7 +59,11 @@ export interface NewConversationResponse {
 }
 
 export type UserInput =
-  | { readonly type: "text"; readonly text: string; readonly text_elements?: ReadonlyArray<unknown> }
+  | {
+      readonly type: "text";
+      readonly text: string;
+      readonly text_elements?: ReadonlyArray<unknown>;
+    }
   | { readonly type: "image"; readonly url: string }
   | { readonly type: "localImage"; readonly path: string }
   | { readonly type: "skill"; readonly name: string; readonly path: string }
@@ -117,8 +121,19 @@ export type ApplyPatchApprovalDecision =
   | "denied"
   | "timed_out"
   | "abort"
-  | { readonly approved_execpolicy_amendment: { readonly proposed_execpolicy_amendment: ReadonlyArray<string> } }
-  | { readonly network_policy_amendment: { readonly network_policy_amendment: { readonly action: "allow" | "deny"; readonly host: string } } };
+  | {
+      readonly approved_execpolicy_amendment: {
+        readonly proposed_execpolicy_amendment: ReadonlyArray<string>;
+      };
+    }
+  | {
+      readonly network_policy_amendment: {
+        readonly network_policy_amendment: {
+          readonly action: "allow" | "deny";
+          readonly host: string;
+        };
+      };
+    };
 
 export interface ApplyPatchApprovalResponse {
   readonly decision: ApplyPatchApprovalDecision;
@@ -243,7 +258,9 @@ export const ChatgptAuthTokensRefreshResponseZ = z.object({
   chatgptPlanType: z.string().nullable().optional(),
 }) satisfies z.ZodType<ChatgptAuthTokensRefreshResponse>;
 
-const TurnSummaryZ = z.object({ id: z.string(), status: z.string().optional() }).catchall(z.unknown());
+const TurnSummaryZ = z
+  .object({ id: z.string(), status: z.string().optional() })
+  .catchall(z.unknown());
 const AgentMessageDeltaZ = z.object({
   delta: z.string(),
   itemId: z.string(),
@@ -262,12 +279,18 @@ const TurnNotificationZ = z.object({ threadId: z.string(), turn: TurnSummaryZ })
 const ItemCompletedZ = z.object({ item: JsonObjectZ, threadId: z.string(), turnId: z.string() });
 
 export const CodexAgentEventZ = z.discriminatedUnion("method", [
-  z.object({ method: z.literal(CLIENT_METHODS.item_agent_message_delta), params: AgentMessageDeltaZ }),
+  z.object({
+    method: z.literal(CLIENT_METHODS.item_agent_message_delta),
+    params: AgentMessageDeltaZ,
+  }),
   z.object({
     method: z.literal(CLIENT_METHODS.item_reasoning_summary_text_delta),
     params: ReasoningSummaryTextDeltaZ,
   }),
-  z.object({ method: z.literal(CLIENT_METHODS.item_reasoning_text_delta), params: ReasoningTextDeltaZ }),
+  z.object({
+    method: z.literal(CLIENT_METHODS.item_reasoning_text_delta),
+    params: ReasoningTextDeltaZ,
+  }),
   z.object({
     method: z.literal(CLIENT_METHODS.item_reasoning_summary_part_added),
     params: ReasoningSummaryPartAddedZ,

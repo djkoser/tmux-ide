@@ -9,13 +9,7 @@
  * the dashboard.
  */
 
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { randomBytes } from "node:crypto";
@@ -52,11 +46,7 @@ function toSummary(instance: ProviderInstance): ProviderInstanceSummary {
 }
 
 export class ProviderStoreError extends Error {
-  readonly code:
-    | "invalid_file"
-    | "not_found"
-    | "duplicate_id"
-    | "io_error";
+  readonly code: "invalid_file" | "not_found" | "duplicate_id" | "io_error";
   constructor(message: string, code: ProviderStoreError["code"]) {
     super(message);
     this.name = "ProviderStoreError";
@@ -83,10 +73,7 @@ export interface MakeProviderStoreOptions {
 }
 
 export function defaultProvidersFilePath(): string {
-  return (
-    process.env.TMUX_IDE_PROVIDERS_FILE ??
-    join(homedir(), ".tmux-ide", "providers.json")
-  );
+  return process.env.TMUX_IDE_PROVIDERS_FILE ?? join(homedir(), ".tmux-ide", "providers.json");
 }
 
 function readProvidersFile(filePath: string): ProvidersFile {
@@ -133,9 +120,7 @@ function writeProvidersFile(filePath: string, data: ProvidersFile): void {
   renameSync(tmp, filePath);
 }
 
-export function makeProviderStore(
-  opts: MakeProviderStoreOptions = {},
-): ProviderStore {
+export function makeProviderStore(opts: MakeProviderStoreOptions = {}): ProviderStore {
   const filePath = opts.filePath ?? defaultProvidersFilePath();
   const now = opts.now ?? (() => new Date());
   const randomId = opts.randomId ?? (() => randomBytes(6).toString("hex"));
@@ -175,10 +160,7 @@ export function makeProviderStore(
       }
       const id = validated.data.id || randomId();
       if (cache.providers.some((p) => p.id === id)) {
-        throw new ProviderStoreError(
-          `Provider id already exists: ${id}`,
-          "duplicate_id",
-        );
+        throw new ProviderStoreError(`Provider id already exists: ${id}`, "duplicate_id");
       }
       // Round-trip through the registry so the config side is also typed.
       try {

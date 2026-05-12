@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import styles from '@components/SidebarLayout.module.css';
-import * as React from 'react';
+import styles from "@components/SidebarLayout.module.css";
+import * as React from "react";
 
-interface SidebarLayoutProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'defaultValue'> {
+interface SidebarLayoutProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "defaultValue"> {
   children?: React.ReactNode;
   sidebar?: React.ReactNode;
   defaultSidebarWidth?: number;
@@ -14,7 +14,14 @@ interface SidebarLayoutProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 
 const LINE_HEIGHT = 20;
 const CHARACTER_WIDTH = 9.6;
 
-const SidebarLayout: React.FC<SidebarLayoutProps> = ({ defaultSidebarWidth = 20, children, sidebar, isShowingHandle = false, isReversed = false, ...rest }) => {
+const SidebarLayout: React.FC<SidebarLayoutProps> = ({
+  defaultSidebarWidth = 20,
+  children,
+  sidebar,
+  isShowingHandle = false,
+  isReversed = false,
+  ...rest
+}) => {
   const [sidebarWidth, setSidebarWidth] = React.useState(defaultSidebarWidth);
   const handleRef = React.useRef<HTMLDivElement>(null);
 
@@ -29,12 +36,12 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ defaultSidebarWidth = 20,
     };
 
     const onMouseUp = () => {
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
     };
 
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
   };
 
   if (isReversed) {
@@ -65,7 +72,14 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ defaultSidebarWidth = 20,
         {sidebar}
       </div>
       {isShowingHandle ? (
-        <div className={styles.handle} ref={handleRef} role="button" tabIndex={0} onMouseDown={handleMouseDown} style={isShowingHandle ? {} : { width: `0.5ch` }}>
+        <div
+          className={styles.handle}
+          ref={handleRef}
+          role="button"
+          tabIndex={0}
+          onMouseDown={handleMouseDown}
+          style={isShowingHandle ? {} : { width: `0.5ch` }}
+        >
           <>
             <div className={styles.line} />
             <div className={styles.line} />

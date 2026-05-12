@@ -1,9 +1,12 @@
-import styles from '@components/Avatar.module.css';
+import styles from "@components/Avatar.module.css";
 
-import * as React from 'react';
-import * as Utilities from '@common/utilities';
+import * as React from "react";
+import * as Utilities from "@common/utilities";
 
-interface AvatarProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'style' | 'className' | 'children'> {
+interface AvatarProps extends Omit<
+  React.HTMLAttributes<HTMLDivElement>,
+  "style" | "className" | "children"
+> {
   src?: string;
   href?: string;
   target?: string;
@@ -21,9 +24,23 @@ const Avatar: React.FC<AvatarProps> = (props) => {
   let avatarElement: React.ReactElement;
 
   if (href) {
-    avatarElement = <a className={Utilities.classNames(src ? styles.root : styles.placeholder)} style={combinedStyle} href={href} target={target} tabIndex={0} role="link" />;
+    avatarElement = (
+      <a
+        className={Utilities.classNames(src ? styles.root : styles.placeholder)}
+        style={combinedStyle}
+        href={href}
+        target={target}
+        tabIndex={0}
+        role="link"
+      />
+    );
   } else {
-    avatarElement = <figure className={Utilities.classNames(src ? styles.root : styles.placeholder)} style={combinedStyle} />;
+    avatarElement = (
+      <figure
+        className={Utilities.classNames(src ? styles.root : styles.placeholder)}
+        style={combinedStyle}
+      />
+    );
   }
 
   if (!children) {

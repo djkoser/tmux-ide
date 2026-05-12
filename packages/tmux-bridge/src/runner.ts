@@ -3,11 +3,7 @@ import { TmuxError } from "./errors.ts";
 
 const DEBUG = process.env.TMUX_IDE_DEBUG === "1";
 
-const SESSION_NOT_FOUND_PATTERNS = [
-  "can't find session",
-  "can't find window",
-  "unknown target",
-];
+const SESSION_NOT_FOUND_PATTERNS = ["can't find session", "can't find window", "unknown target"];
 
 const TMUX_UNAVAILABLE_PATTERNS = [
   "failed to connect to server",
@@ -50,10 +46,7 @@ export function _getSpawner(): Spawner {
   return _spawner;
 }
 
-export function runTmux(
-  args: string[],
-  options: ExecFileSyncOptions = {},
-): string | Buffer {
+export function runTmux(args: string[], options: ExecFileSyncOptions = {}): string | Buffer {
   if (DEBUG || globalThis.__tmuxIdeVerbose) {
     console.error(`  [tmux] ${args.join(" ")}`);
   }
@@ -80,11 +73,9 @@ function classifyTmuxError(error: unknown): TmuxError {
   }
 
   if (TMUX_UNAVAILABLE_PATTERNS.some((pattern) => detail.includes(pattern))) {
-    return new TmuxError(
-      "tmux is unavailable or its socket is inaccessible",
-      "TMUX_UNAVAILABLE",
-      { cause: error as Error },
-    );
+    return new TmuxError("tmux is unavailable or its socket is inaccessible", "TMUX_UNAVAILABLE", {
+      cause: error as Error,
+    });
   }
 
   return new TmuxError("tmux command failed", "TMUX_ERROR", {

@@ -44,11 +44,7 @@ describe("lock", () => {
   });
 
   it("readLock returns null when types are wrong", () => {
-    writeFileSync(
-      lockPath,
-      JSON.stringify({ ...SAMPLE, pid: "string-pid" }),
-      "utf8",
-    );
+    writeFileSync(lockPath, JSON.stringify({ ...SAMPLE, pid: "string-pid" }), "utf8");
     expect(readLock(lockPath)).toBeNull();
   });
 

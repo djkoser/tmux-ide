@@ -296,13 +296,11 @@ export function handleWsEventsConnection(socket: WebSocket | WsLike): void {
   // Resolved at connection time so test overrides via
   // `_setDefaultWorkspaceRegistryForTests` are picked up. Cleaned up on close.
   const workspaceRegistry = getDefaultWorkspaceRegistry();
-  const unsubWorkspaceAdded = workspaceRegistry.on(
-    "workspace.added",
-    (workspace) => send({ type: "workspace.added", workspace: workspace as Workspace }),
+  const unsubWorkspaceAdded = workspaceRegistry.on("workspace.added", (workspace) =>
+    send({ type: "workspace.added", workspace: workspace as Workspace }),
   );
-  const unsubWorkspaceRemoved = workspaceRegistry.on(
-    "workspace.removed",
-    (name) => send({ type: "workspace.removed", name: name as string }),
+  const unsubWorkspaceRemoved = workspaceRegistry.on("workspace.removed", (name) =>
+    send({ type: "workspace.removed", name: name as string }),
   );
 
   // Track this client globally for "sessions.changed" / "projects.changed"

@@ -65,8 +65,8 @@ export function SessionsNavigator() {
     >
       {error ? (
         <div className="px-3 py-3 text-[11px] text-[var(--red)]">
-          api unreachable — is{" "}
-          <span className="text-[var(--accent)]">tmux-ide command-center</span> running?
+          api unreachable — is <span className="text-[var(--accent)]">tmux-ide command-center</span>{" "}
+          running?
         </div>
       ) : loading ? (
         <div className="space-y-1 p-2">
@@ -108,9 +108,7 @@ export function SessionsNavigator() {
                     closeMobile();
                   }}
                   className={`block px-3 py-2 transition-colors ${
-                    selected
-                      ? "bg-[var(--surface-active)]"
-                      : "hover:bg-[var(--surface-hover)]"
+                    selected ? "bg-[var(--surface-active)]" : "hover:bg-[var(--surface-hover)]"
                   }`}
                 >
                   <div className="flex items-center gap-2">

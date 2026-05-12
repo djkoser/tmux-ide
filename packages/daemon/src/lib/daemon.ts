@@ -11,7 +11,8 @@ import { resolve } from "node:path";
 import { startEmbeddedDaemon, type EmbeddedDaemonHandle } from "./daemon-embed.ts";
 
 async function main(): Promise<void> {
-  const rawPort = process.argv[2] && /^\d+$/.test(process.argv[2]) ? process.argv[2] : process.argv[3];
+  const rawPort =
+    process.argv[2] && /^\d+$/.test(process.argv[2]) ? process.argv[2] : process.argv[3];
   const port = rawPort === undefined || rawPort === "0" ? undefined : Number.parseInt(rawPort, 10);
   let handle: EmbeddedDaemonHandle;
   try {

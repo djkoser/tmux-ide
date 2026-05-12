@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import styles from '@components/Select.module.css';
+import styles from "@components/Select.module.css";
 
-import * as React from 'react';
-import * as Utilities from '@common/utilities';
+import * as React from "react";
+import * as Utilities from "@common/utilities";
 
 interface SelectProps {
   name: string;
@@ -13,7 +13,13 @@ interface SelectProps {
   onChange?: (selectedValue: string) => void;
 }
 
-const Select: React.FC<SelectProps> = ({ name, options, placeholder, defaultValue = '', onChange }) => {
+const Select: React.FC<SelectProps> = ({
+  name,
+  options,
+  placeholder,
+  defaultValue = "",
+  onChange,
+}) => {
   const [isOpen, setIsOpen] = React.useState(false);
   const [index, setIndex] = React.useState(-1);
   const [selectedValue, setSelectedValue] = React.useState(defaultValue);
@@ -59,7 +65,7 @@ const Select: React.FC<SelectProps> = ({ name, options, placeholder, defaultValu
   //NOTE(jimmylee): Enter and Space rely on the button's native click activation via onClick.
   const handleButtonKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
     switch (event.key) {
-      case 'ArrowDown': {
+      case "ArrowDown": {
         event.preventDefault();
         if (!isOpen) {
           handleOpen();
@@ -69,7 +75,7 @@ const Select: React.FC<SelectProps> = ({ name, options, placeholder, defaultValu
         }
         break;
       }
-      case 'ArrowUp': {
+      case "ArrowUp": {
         event.preventDefault();
         if (!isOpen) {
           handleOpen();
@@ -79,7 +85,7 @@ const Select: React.FC<SelectProps> = ({ name, options, placeholder, defaultValu
         }
         break;
       }
-      case 'Escape': {
+      case "Escape": {
         if (isOpen) {
           event.preventDefault();
           handleClose();
@@ -89,27 +95,31 @@ const Select: React.FC<SelectProps> = ({ name, options, placeholder, defaultValu
     }
   };
 
-  const handleOptionKeyDown = (event: React.KeyboardEvent<HTMLLIElement>, option: string, idx: number) => {
+  const handleOptionKeyDown = (
+    event: React.KeyboardEvent<HTMLLIElement>,
+    option: string,
+    idx: number,
+  ) => {
     switch (event.key) {
-      case 'Enter':
-      case ' ': {
+      case "Enter":
+      case " ": {
         event.preventDefault();
         handleSelect(option);
         break;
       }
-      case 'ArrowDown': {
+      case "ArrowDown": {
         event.preventDefault();
         const next = Math.min(idx + 1, options.length - 1);
         focusOption(next);
         break;
       }
-      case 'ArrowUp': {
+      case "ArrowUp": {
         event.preventDefault();
         const prev = Math.max(idx - 1, 0);
         focusOption(prev);
         break;
       }
-      case 'Escape': {
+      case "Escape": {
         event.preventDefault();
         handleClose();
         break;
@@ -147,7 +157,15 @@ const Select: React.FC<SelectProps> = ({ name, options, placeholder, defaultValu
         <ul className={styles.menu} role="listbox" ref={listRef}>
           {options.map((option, idx) => {
             return (
-              <li key={option} role="option" tabIndex={0} className={Utilities.classNames(styles.item)} aria-selected={idx === index} onClick={() => handleSelect(option)} onKeyDown={(e) => handleOptionKeyDown(e, option, idx)}>
+              <li
+                key={option}
+                role="option"
+                tabIndex={0}
+                className={Utilities.classNames(styles.item)}
+                aria-selected={idx === index}
+                onClick={() => handleSelect(option)}
+                onKeyDown={(e) => handleOptionKeyDown(e, option, idx)}
+              >
                 {option}
               </li>
             );

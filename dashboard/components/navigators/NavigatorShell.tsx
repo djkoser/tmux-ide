@@ -27,10 +27,7 @@ export function NavigatorShell({
   testId,
 }: NavigatorShellProps) {
   return (
-    <div
-      data-testid={testId}
-      className="flex h-full min-h-0 w-full flex-col bg-[var(--bg-weak)]"
-    >
+    <div data-testid={testId} className="flex h-full min-h-0 w-full flex-col bg-[var(--bg-weak)]">
       <PanelHeader title={title} subtitle={subtitle} actions={actions} badge={badge} />
       <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
     </div>

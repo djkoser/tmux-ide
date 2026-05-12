@@ -256,7 +256,8 @@ describe("task-store", () => {
     ensureTasksDir(tmpDir);
     const finalPath = join(tmpDir, ".tasks", "tasks", "001-replayed.json");
     const tempPath = `${finalPath}.tmp`;
-    const body = JSON.stringify({ _version: 1, ...makeTask({ title: "Replayed" }) }, null, 2) + "\n";
+    const body =
+      JSON.stringify({ _version: 1, ...makeTask({ title: "Replayed" }) }, null, 2) + "\n";
     writeFileSync(tempPath, body);
     writeFileSync(
       getTaskStoreWalPath(tmpDir),

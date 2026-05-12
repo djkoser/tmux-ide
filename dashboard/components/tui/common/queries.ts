@@ -1,12 +1,12 @@
-import * as Constants from '@common/constants';
-import * as Utilities from '@common/utilities';
+import * as Constants from "@common/constants";
+import * as Utilities from "@common/utilities";
 
-export async function getData({ route, key, body }, qualifier = 'data') {
+export async function getData({ route, key, body }, qualifier = "data") {
   let result;
   try {
     const response = await fetch(route, {
-      method: 'POST',
-      headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "X-API-KEY": key, "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
     result = await response.json();
@@ -74,13 +74,13 @@ export async function onUpdateDocumentById({ id, key, data }) {
 export async function onPublicUserAuthenticate({ email, password }) {
   const route = `${Constants.API}/users/authenticate`;
   const body = { email, password };
-  return getData({ route, key: null, body }, 'user');
+  return getData({ route, key: null, body }, "user");
 }
 
 export async function onPublicUserForgotPassword({ email }) {
   const route = `${Constants.API}/users/reset-password`;
-  const body = { email, source: 'wireframes.internet.dev' };
-  return getData({ route, key: null, body }, 'success');
+  const body = { email, source: "wireframes.internet.dev" };
+  return getData({ route, key: null, body }, "success");
 }
 
 export async function onUserChangePassword({ key, password }) {
@@ -92,13 +92,13 @@ export async function onUserChangePassword({ key, password }) {
 export async function onUserRegenerateAPIKey({ email, password }) {
   const route = `${Constants.API}/users/regenerate-key`;
   const body = { email, password };
-  return getData({ route, key: null, body }, 'user');
+  return getData({ route, key: null, body }, "user");
 }
 
 export async function onUserUnsubscribeServices({ key }) {
   const route = `${Constants.API}/users/subscriptions/unsubscribe`;
   const body = null;
-  return getData({ route, key, body }, 'user');
+  return getData({ route, key, body }, "user");
 }
 
 export async function onRefreshPosts({ key, type, user_id }) {
@@ -144,22 +144,22 @@ export async function onUserUploadDataGCS({ domain, file, key }) {
   const size = file.size;
 
   if (size > Constants.MAX_SIZE_BYTES) {
-    return { error: 'File size exceeds 15mb limit' };
+    return { error: "File size exceeds 15mb limit" };
   }
 
   try {
     const route = `${Constants.API}/data/generate-presigned-url-gcs`;
     const body = { domain, type, file: name, size };
-    signedResult = await getData({ route, key, body }, 'uploadURL');
+    signedResult = await getData({ route, key, body }, "uploadURL");
   } catch (e) {
     return null;
   }
 
   try {
     fetch(signedResult.uploadURL, {
-      method: 'PUT',
+      method: "PUT",
       headers: {
-        'Content-Type': 'application/octet-stream',
+        "Content-Type": "application/octet-stream",
       },
       body: file,
     });
@@ -177,20 +177,20 @@ export async function onUserUploadDataS3({ domain, file, key }) {
   const size = file.size;
 
   if (size > Constants.MAX_SIZE_BYTES) {
-    return { error: 'File size exceeds 15mb limit' };
+    return { error: "File size exceeds 15mb limit" };
   }
 
   try {
     const route = `${Constants.API}/data/generate-presigned-url`;
     const body = { domain, type, file: name, size };
-    signedResult = await getData({ route, key, body }, 'uploadURL');
+    signedResult = await getData({ route, key, body }, "uploadURL");
   } catch (e) {
     return null;
   }
 
   try {
     fetch(signedResult.uploadURL, {
-      method: 'PUT',
+      method: "PUT",
       body: file,
     });
   } catch (e) {

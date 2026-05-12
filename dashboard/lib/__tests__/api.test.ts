@@ -268,9 +268,9 @@ describe("chatThreadCreate", () => {
     );
 
     const { chatThreadCreate, ProjectApiError } = await import("../api");
-    await expect(
-      chatThreadCreate({ provider: { kind: "claude-code" } }),
-    ).rejects.toBeInstanceOf(ProjectApiError);
+    await expect(chatThreadCreate({ provider: { kind: "claude-code" } })).rejects.toBeInstanceOf(
+      ProjectApiError,
+    );
   });
 });
 
@@ -305,9 +305,7 @@ describe("chatThreadDelete", () => {
     );
 
     const { chatThreadDelete, ProjectApiError } = await import("../api");
-    await expect(chatThreadDelete({ id: "missing" })).rejects.toBeInstanceOf(
-      ProjectApiError,
-    );
+    await expect(chatThreadDelete({ id: "missing" })).rejects.toBeInstanceOf(ProjectApiError);
   });
 });
 

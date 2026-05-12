@@ -25,7 +25,8 @@
 .cross {
   width: 9ch;
   height: calc(var(--theme-line-height-base) * (var(--font-size) * 7));
-  margin: calc(var(--theme-line-height-base) * (var(--font-size) * 0.5)) 0 calc(var(--theme-line-height-base) * (var(--font-size) * 0.5)) 0;
+  margin: calc(var(--theme-line-height-base) * (var(--font-size) * 0.5)) 0
+    calc(var(--theme-line-height-base) * (var(--font-size) * 0.5)) 0;
   display: flex;
   justify-content: space-between;
   flex-direction: column;

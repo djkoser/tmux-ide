@@ -10,3 +10,8 @@ plans
 package-lock.json
 pnpm-lock.yaml
 docs/pnpm-lock.yaml
+
+# .mjs file authored with inline TypeScript annotations (`: void`) — prettier
+# can't parse it as ESM and choking blocks the rest of the suite. Fix by
+# renaming to .mts or stripping the annotations, then remove this line.
+app-electron/scripts/build-icon.mjs

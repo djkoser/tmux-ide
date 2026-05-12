@@ -73,9 +73,7 @@ describe("chat-event-store", () => {
     runChatStoreMigrations(db);
     runChatStoreMigrations(db);
     const tables = db
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
-      )
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
       .all<{ name: string }>()
       .map((r) => r.name);
     for (const required of [
@@ -91,9 +89,7 @@ describe("chat-event-store", () => {
       expect(tables).toContain(required);
     }
     // The bookkeeping table records exactly 7 migrations.
-    const count = db
-      .prepare("SELECT COUNT(*) AS n FROM _chat_migrations")
-      .get?.<{ n: number }>();
+    const count = db.prepare("SELECT COUNT(*) AS n FROM _chat_migrations").get?.<{ n: number }>();
     expect(count?.n).toBe(7);
   });
 

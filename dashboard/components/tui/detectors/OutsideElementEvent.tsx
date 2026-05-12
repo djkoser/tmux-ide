@@ -1,4 +1,4 @@
-import * as React from 'react';
+import * as React from "react";
 
 interface OutsideElementEventProps {
   className?: string;
@@ -7,14 +7,19 @@ interface OutsideElementEventProps {
   style?: React.CSSProperties;
 }
 
-const OutsideElementEvent: React.FC<OutsideElementEventProps> = ({ className, children, onOutsideEvent, style }) => {
+const OutsideElementEvent: React.FC<OutsideElementEventProps> = ({
+  className,
+  children,
+  onOutsideEvent,
+  style,
+}) => {
   const ref = React.useRef<HTMLDivElement>(null);
 
   const handleOutsideEvent = React.useCallback(
     (event: MouseEvent | TouchEvent) => {
       if (!(event.target instanceof Element)) return;
 
-      if (event.target.hasAttribute('data-detector-ignore')) {
+      if (event.target.hasAttribute("data-detector-ignore")) {
         return;
       }
 
@@ -22,16 +27,16 @@ const OutsideElementEvent: React.FC<OutsideElementEventProps> = ({ className, ch
         onOutsideEvent(event);
       }
     },
-    [onOutsideEvent]
+    [onOutsideEvent],
   );
 
   React.useEffect(() => {
-    document.addEventListener('mousedown', handleOutsideEvent);
-    document.addEventListener('touchstart', handleOutsideEvent);
+    document.addEventListener("mousedown", handleOutsideEvent);
+    document.addEventListener("touchstart", handleOutsideEvent);
 
     return () => {
-      document.removeEventListener('mousedown', handleOutsideEvent);
-      document.removeEventListener('touchstart', handleOutsideEvent);
+      document.removeEventListener("mousedown", handleOutsideEvent);
+      document.removeEventListener("touchstart", handleOutsideEvent);
     };
   }, [handleOutsideEvent]);
 

@@ -1,9 +1,9 @@
-import styles from '@components/Dialog.module.css';
+import styles from "@components/Dialog.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
-import Block from '@components/Block';
-import Button from '@components/Button';
+import Block from "@components/Block";
+import Button from "@components/Button";
 
 interface DialogProps {
   title?: React.ReactNode;
@@ -18,7 +18,14 @@ const Dialog: React.FC<DialogProps> = ({ title, children, style, onConfirm, onCa
   const descId = React.useId();
 
   return (
-    <div className={styles.root} style={style} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descId}>
+    <div
+      className={styles.root}
+      style={style}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      aria-describedby={descId}
+    >
       <header className={styles.header}>{title}</header>
       <br />
       <article className={styles.message} id={descId}>

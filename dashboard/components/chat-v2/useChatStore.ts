@@ -131,30 +131,12 @@ export const useChatStore = create<ChatV2State & ChatV2Actions>()((set, get) => 
 
   removeThread(threadId) {
     set((s) => {
-      const {
-        [threadId]: _a,
-        ...activitiesByThread
-      } = s.activitiesByThread;
-      const {
-        [threadId]: _t,
-        ...turnsByThread
-      } = s.turnsByThread;
-      const {
-        [threadId]: _c,
-        ...checkpointsByThread
-      } = s.checkpointsByThread;
-      const {
-        [threadId]: _p,
-        ...plansByThread
-      } = s.plansByThread;
-      const {
-        [threadId]: _u,
-        ...unreadByThread
-      } = s.unreadByThread;
-      const {
-        [threadId]: _s,
-        ...lastSeqByThread
-      } = s.lastSeqByThread;
+      const { [threadId]: _a, ...activitiesByThread } = s.activitiesByThread;
+      const { [threadId]: _t, ...turnsByThread } = s.turnsByThread;
+      const { [threadId]: _c, ...checkpointsByThread } = s.checkpointsByThread;
+      const { [threadId]: _p, ...plansByThread } = s.plansByThread;
+      const { [threadId]: _u, ...unreadByThread } = s.unreadByThread;
+      const { [threadId]: _s, ...lastSeqByThread } = s.lastSeqByThread;
       void _a;
       void _t;
       void _c;
@@ -233,7 +215,10 @@ function applyActivityAppended(set: SetFn, get: GetFn, event: ChatActivityAppend
   if (prior.some((a) => a.id === activity.id)) return;
   set({
     activitiesByThread: { ...state.activitiesByThread, [threadId]: [...prior, activity] },
-    lastSeqByThread: { ...state.lastSeqByThread, [threadId]: Math.max(state.lastSeqByThread[threadId] ?? -1, seq) },
+    lastSeqByThread: {
+      ...state.lastSeqByThread,
+      [threadId]: Math.max(state.lastSeqByThread[threadId] ?? -1, seq),
+    },
     unreadByThread:
       state.activeThreadId === threadId
         ? state.unreadByThread

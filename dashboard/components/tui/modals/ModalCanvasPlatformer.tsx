@@ -1,15 +1,15 @@
-'use client';
+"use client";
 
-import styles from '@components/modals/ModalCanvasPlatformer.module.css';
+import styles from "@components/modals/ModalCanvasPlatformer.module.css";
 
-import * as React from 'react';
-import * as Utilities from '@common/utilities';
+import * as React from "react";
+import * as Utilities from "@common/utilities";
 
-import { useModals } from '@components/page/ModalContext';
+import { useModals } from "@components/page/ModalContext";
 
-import Button from '@components/Button';
-import CanvasPlatformer from '@components/CanvasPlatformer';
-import Card from '@components/Card';
+import Button from "@components/Button";
+import CanvasPlatformer from "@components/CanvasPlatformer";
+import Card from "@components/Card";
 
 interface ModalCanvasPlatformerProps {
   buttonText?: string | any;
@@ -24,7 +24,9 @@ function ModalCanvasPlatformer({ buttonText }: ModalCanvasPlatformerProps) {
         <CanvasPlatformer rows={12} />
         <br />
         <br />
-        <Button onClick={() => close()}>{Utilities.isEmpty(buttonText) ? 'Close' : buttonText}</Button>
+        <Button onClick={() => close()}>
+          {Utilities.isEmpty(buttonText) ? "Close" : buttonText}
+        </Button>
       </Card>
     </div>
   );

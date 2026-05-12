@@ -1,10 +1,7 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { NavigatorSlot } from "../NavigatorSlot";
-import {
-  NavigatorPortal,
-  __resetNavigatorSlotForTests,
-} from "@/lib/useNavigatorSlot";
+import { NavigatorPortal, __resetNavigatorSlotForTests } from "@/lib/useNavigatorSlot";
 
 /**
  * After the AppShell refactor, NavigatorSlot is a deprecated no-op shim.

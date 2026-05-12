@@ -56,16 +56,9 @@ export function ThreadListRail({
           + new
         </button>
       </header>
-      <ul
-        data-testid="thread-list-items"
-        role="listbox"
-        className="flex-1 overflow-y-auto py-1"
-      >
+      <ul data-testid="thread-list-items" role="listbox" className="flex-1 overflow-y-auto py-1">
         {threads.length === 0 ? (
-          <li
-            data-testid="thread-list-empty"
-            className="px-3 py-2 text-[11px] text-[var(--dim)]"
-          >
+          <li data-testid="thread-list-empty" className="px-3 py-2 text-[11px] text-[var(--dim)]">
             — no threads —
           </li>
         ) : (
@@ -87,9 +80,7 @@ export function ThreadListRail({
                   onClick={() => onPick(t.id)}
                   className="flex w-full flex-col px-3 py-1.5 text-left text-[11px] transition-colors hover:bg-[var(--surface-hover)]"
                   style={{
-                    borderLeft: active
-                      ? "2px solid var(--accent)"
-                      : "2px solid transparent",
+                    borderLeft: active ? "2px solid var(--accent)" : "2px solid transparent",
                     color: active ? "var(--accent)" : "var(--fg)",
                   }}
                 >

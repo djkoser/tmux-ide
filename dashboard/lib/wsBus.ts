@@ -7,13 +7,7 @@ import {
   type MissionDetail,
   type SkillData,
 } from "@/lib/api";
-import type {
-  AgentDetail,
-  Goal,
-  ProjectDetail,
-  SessionOverview,
-  Task,
-} from "@/lib/types";
+import type { AgentDetail, Goal, ProjectDetail, SessionOverview, Task } from "@/lib/types";
 
 /**
  * Snapshot payload carried by the `snapshot` server frame. Defined here (not

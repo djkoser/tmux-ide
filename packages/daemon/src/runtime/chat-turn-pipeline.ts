@@ -24,11 +24,7 @@ import { Effect } from "effect";
 import type { ChatThreadEvent, LatestTurn } from "@tmux-ide/contracts";
 
 import type { PersistedChatEvent } from "../persistence/chat-event-store.ts";
-import {
-  ChatEventStoreService,
-  ChatReactorService,
-  TurnProjectionService,
-} from "./services.ts";
+import { ChatEventStoreService, ChatReactorService, TurnProjectionService } from "./services.ts";
 import type { ChatEventStoreError, ProjectionError } from "./errors.ts";
 
 export interface RunChatTurnPipelineInput {
@@ -95,12 +91,9 @@ export const runChatTurnPipeline = (
     }
 
     const targetThreadId =
-      input.threadId ??
-      (input.events.length > 0 ? input.events[0]!.event.threadId : null);
+      input.threadId ?? (input.events.length > 0 ? input.events[0]!.event.threadId : null);
 
-    const latest = targetThreadId
-      ? yield* projection.latest(targetThreadId)
-      : null;
+    const latest = targetThreadId ? yield* projection.latest(targetThreadId) : null;
     const cursor = yield* projection.cursor;
 
     return { appended, latest, cursor } satisfies RunChatTurnPipelineOutput;

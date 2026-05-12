@@ -205,9 +205,7 @@ export function ExplorerView(props: ExplorerViewProps) {
         }}
         data-testid="v2-explorer-list"
       >
-        <Show
-          when={!loading() && rows().length === 0 && !error()}
-        >
+        <Show when={!loading() && rows().length === 0 && !error()}>
           <div
             style={{
               padding: "12px",
@@ -231,8 +229,7 @@ export function ExplorerView(props: ExplorerViewProps) {
           {(row, i) => {
             const isSel = () => i() === selected();
             const indent = () => row.depth * 12;
-            const glyph = () =>
-              row.node.isDirectory ? (row.expanded ? "▾" : "▸") : "·";
+            const glyph = () => (row.node.isDirectory ? (row.expanded ? "▾" : "▸") : "·");
             return (
               <div
                 data-row-index={i()}
@@ -243,9 +240,7 @@ export function ExplorerView(props: ExplorerViewProps) {
                   "align-items": "center",
                   gap: "6px",
                   padding: "2px 12px 2px 6px",
-                  "border-left": isSel()
-                    ? "2px solid var(--accent)"
-                    : "2px solid transparent",
+                  "border-left": isSel() ? "2px solid var(--accent)" : "2px solid transparent",
                   "background-color": isSel() ? "var(--surface-hover)" : "transparent",
                   cursor: "pointer",
                   "white-space": "nowrap",

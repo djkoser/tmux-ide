@@ -1,15 +1,17 @@
-import styles from '@components/Popover.module.css';
+import styles from "@components/Popover.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
 interface PopoverProps extends React.HTMLAttributes<HTMLDivElement> {}
 
-const Popover = React.forwardRef<HTMLDivElement, PopoverProps>(({ style: propStyle, ...rest }, ref) => {
-  const style: React.CSSProperties = { ...propStyle };
+const Popover = React.forwardRef<HTMLDivElement, PopoverProps>(
+  ({ style: propStyle, ...rest }, ref) => {
+    const style: React.CSSProperties = { ...propStyle };
 
-  return <div ref={ref} className={styles.root} {...rest} style={style} />;
-});
+    return <div ref={ref} className={styles.root} {...rest} style={style} />;
+  },
+);
 
-Popover.displayName = 'Popover';
+Popover.displayName = "Popover";
 
 export default Popover;

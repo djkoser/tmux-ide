@@ -1,19 +1,29 @@
-'use client';
+"use client";
 
-import styles from '@components/DatePicker.module.css';
+import styles from "@components/DatePicker.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
 interface DatePickerProps {
   year?: number;
   month?: number;
 }
 
-const WEEKDAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+const WEEKDAYS = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
 
 const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 const MAX_CELLS = 42;
@@ -34,16 +44,16 @@ const DatePicker: React.FC<DatePickerProps> = ({ year, month }) => {
   }
 
   for (let day = 1; day <= daysInMonth; day++) {
-    const presentationDay = String(day).padStart(2, '0');
+    const presentationDay = String(day).padStart(2, "0");
     cells.push(
       <div
         key={day}
         className={styles.cell}
         tabIndex={0}
-        aria-label={`${currentYear}-${String(currentMonth).padStart(2, '0')}-${presentationDay}`}
+        aria-label={`${currentYear}-${String(currentMonth).padStart(2, "0")}-${presentationDay}`}
       >
         {presentationDay}
-      </div>
+      </div>,
     );
   }
 
@@ -76,13 +86,23 @@ const DatePicker: React.FC<DatePickerProps> = ({ year, month }) => {
   return (
     <div className={styles.root}>
       <div className={styles.controls}>
-        <button type="button" className={styles.button} onClick={onSwitchPreviousMonth} aria-label="Previous month">
+        <button
+          type="button"
+          className={styles.button}
+          onClick={onSwitchPreviousMonth}
+          aria-label="Previous month"
+        >
           ▲
         </button>
         <div className={styles.date}>
           {currentYear} {MONTH_NAMES[currentMonth - 1].toUpperCase()}
         </div>
-        <button type="button" className={styles.button} onClick={onSwitchNextMonth} aria-label="Next month">
+        <button
+          type="button"
+          className={styles.button}
+          onClick={onSwitchNextMonth}
+          aria-label="Next month"
+        >
           ▼
         </button>
       </div>

@@ -76,11 +76,7 @@ export interface SendKeysOptions {
  * Send literal text to a pane. When `enter` is false, the text is delivered
  * without a trailing Enter — useful for staging input for the user.
  */
-export function sendKeys(
-  targetPane: string,
-  text: string,
-  options: SendKeysOptions = {},
-): void {
+export function sendKeys(targetPane: string, text: string, options: SendKeysOptions = {}): void {
   const { enter = true } = options;
   runTmux(["send-keys", "-t", targetPane, "-l", "--", text], { stdio: "inherit" });
   if (enter) {
@@ -102,10 +98,7 @@ export interface CapturePaneOptions {
  * - `scrollback: N` returns N scrollback lines back to the bottom.
  * - With no options, captures only the visible viewport.
  */
-export function capturePane(
-  targetPane: string,
-  options: CapturePaneOptions = {},
-): string {
+export function capturePane(targetPane: string, options: CapturePaneOptions = {}): string {
   const args = ["capture-pane", "-t", targetPane, "-p", "-J"];
   if (typeof options.scrollback === "number") {
     args.push("-S", `-${options.scrollback}`);
@@ -124,10 +117,9 @@ export function captureRecent(targetPane: string, lines = 50): string {
 
 export function getPaneCurrentCommand(targetPane: string): string {
   return (
-    runTmux(
-      ["display-message", "-p", "-t", targetPane, "#{pane_current_command}"],
-      { encoding: "utf-8" },
-    ) as string
+    runTmux(["display-message", "-p", "-t", targetPane, "#{pane_current_command}"], {
+      encoding: "utf-8",
+    }) as string
   ).trim();
 }
 
@@ -139,10 +131,6 @@ export function setPaneTitle(targetPane: string, title: string): void {
   runTmux(["select-pane", "-t", targetPane, "-T", title], { stdio: "inherit" });
 }
 
-export function setPaneOption(
-  targetPane: string,
-  option: string,
-  value: string,
-): void {
+export function setPaneOption(targetPane: string, option: string, value: string): void {
   runTmux(["set-option", "-pqt", targetPane, option, value]);
 }

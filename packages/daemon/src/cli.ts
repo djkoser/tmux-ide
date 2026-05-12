@@ -22,8 +22,59 @@ import { tryDispatchAction } from "./lib/cli-action-bridge.ts";
 import { startEmbeddedDaemon, type EmbeddedDaemonHandle } from "./index.ts";
 import type { ActionResult } from "./command-center/actions/contract.ts";
 
+/**
+ * Typed view of parseArgs values. parseArgs runs with `strict: false` so its
+ * declared return type widens every option to `string | boolean | undefined`,
+ * losing the per-option type that's already declared in the `options` config
+ * below. Cast `values` to this interface so call sites get the intended
+ * shape without sprinkling assertions everywhere.
+ */
+interface CliFlags {
+  json?: boolean;
+  headless?: boolean;
+  tasks?: boolean;
+  fix?: boolean;
+  row?: string;
+  pane?: string;
+  title?: string;
+  command?: string;
+  size?: string;
+  write?: boolean;
+  template?: string;
+  name?: string;
+  verbose?: boolean;
+  help?: boolean;
+  version?: boolean;
+  description?: string;
+  acceptance?: string;
+  priority?: string;
+  status?: string;
+  assign?: string;
+  goal?: string;
+  tags?: string;
+  proof?: string;
+  depends?: string;
+  pr?: boolean;
+  specialty?: string;
+  milestone?: string;
+  fulfills?: string;
+  summary?: string;
+  sequence?: string;
+  evidence?: string;
+  port?: string;
+  provider?: string;
+  domain?: string;
+  authtoken?: string;
+  edit?: boolean;
+  wizard?: boolean;
+  url?: string;
+  "hq-url"?: string;
+  to?: string;
+  "no-enter"?: boolean;
+}
+
 export async function main(): Promise<void> {
-  const { positionals, values } = parseArgs({
+  const { positionals, values: rawValues } = parseArgs({
     allowPositionals: true,
     strict: false,
     options: {
@@ -75,6 +126,7 @@ export async function main(): Promise<void> {
       "no-enter": { type: "boolean" },
     },
   });
+  const values = rawValues as CliFlags;
 
   const knownCommands = new Set([
     "start",
@@ -116,7 +168,7 @@ export async function main(): Promise<void> {
   // --version / -v
   if (values.version) {
     const pkg = await import("../../../package.json");
-    console.log(`tmux-ide v${pkg.version}`);
+    console.log(`tmux-ide v${pkg.default.version}`);
     process.exit(0);
   }
 
@@ -134,7 +186,7 @@ export async function main(): Promise<void> {
     met: "metrics",
   };
   const firstPositional = positionals[0];
-  const resolved = ALIASES[firstPositional] ?? firstPositional;
+  const resolved = firstPositional ? (ALIASES[firstPositional] ?? firstPositional) : undefined;
   const hasKnownCommand = resolved ? knownCommands.has(resolved) : false;
   const command = hasKnownCommand ? resolved : "start";
   const startTargetDir = hasKnownCommand ? positionals[1] : firstPositional;
@@ -387,7 +439,7 @@ ${bold("Flags:")}
             valSub === "coverage" ||
             valSub === "help"
           ) {
-            await taskCommand(null, {
+            await taskCommand(undefined, {
               json,
               action: "validate",
               sub: valSub,
@@ -447,13 +499,13 @@ ${bold("Flags:")}
             break;
           }
 
-          await config(null, { json, action, args: configArgs });
+          await config(undefined, { json, action, args: configArgs });
           break;
         }
 
         case "mission": {
           const sub = positionals[1];
-          await taskCommand(null, {
+          await taskCommand(undefined, {
             json,
             action: "mission",
             sub,
@@ -465,7 +517,7 @@ ${bold("Flags:")}
 
         case "milestone": {
           const sub = positionals[1];
-          await taskCommand(null, {
+          await taskCommand(undefined, {
             json,
             action: "milestone",
             sub,
@@ -481,7 +533,7 @@ ${bold("Flags:")}
 
         case "goal": {
           const sub = positionals[1];
-          await taskCommand(null, {
+          await taskCommand(undefined, {
             json,
             action: "goal",
             sub,
@@ -499,7 +551,7 @@ ${bold("Flags:")}
 
         case "task": {
           const sub = positionals[1];
-          await taskCommand(null, {
+          await taskCommand(undefined, {
             json,
             action: "task",
             sub,
@@ -526,7 +578,7 @@ ${bold("Flags:")}
 
         case "research": {
           const sub = positionals[1];
-          await taskCommand(null, {
+          await taskCommand(undefined, {
             json,
             action: "research",
             sub,
@@ -538,7 +590,7 @@ ${bold("Flags:")}
 
         case "plan": {
           const { planCommand } = await import("./plan.ts");
-          await planCommand(null, {
+          await planCommand(undefined, {
             json,
             sub: positionals[1],
             args: positionals.slice(2),
@@ -549,7 +601,7 @@ ${bold("Flags:")}
 
         case "skill": {
           const { skillCommand } = await import("./skill.ts");
-          await skillCommand(null, {
+          await skillCommand(undefined, {
             json,
             sub: positionals[1],
             args: positionals.slice(2),
@@ -559,7 +611,7 @@ ${bold("Flags:")}
 
         case "metrics": {
           const { metricsCommand } = await import("./metrics-cli.ts");
-          await metricsCommand(null, {
+          await metricsCommand(undefined, {
             json,
             sub: positionals[1],
           });
@@ -583,21 +635,21 @@ ${bold("Flags:")}
             const { readFileSync } = await import("node:fs");
             message = readFileSync(0, "utf-8").trim();
           }
-          await send(null, { json, to: target, message, noEnter: values["no-enter"] });
+          await send(undefined, { json, to: target, message, noEnter: values["no-enter"] });
           break;
         }
 
         case "dispatch": {
           const { dispatch: dispatchCmd } = await import("./dispatch.ts");
           const taskId = positionals[1];
-          await dispatchCmd(null, { taskId, json });
+          await dispatchCmd(undefined, { taskId, json });
           break;
         }
 
         case "notify": {
           const { notify: notifyCmd } = await import("./notify.ts");
           const notifyMessage = positionals.slice(1).join(" ");
-          await notifyCmd(null, { message: notifyMessage || undefined, json });
+          await notifyCmd(undefined, { message: notifyMessage || undefined, json });
           break;
         }
 
@@ -629,7 +681,7 @@ ${bold("Flags:")}
 
         case "tunnel": {
           const { tunnelCommand } = await import("./tunnel.ts");
-          await tunnelCommand(null, {
+          await tunnelCommand(undefined, {
             json,
             sub: positionals[1],
             args: positionals.slice(2),
@@ -645,7 +697,7 @@ ${bold("Flags:")}
 
         case "remote": {
           const { remoteCommand } = await import("./remote.ts");
-          await remoteCommand(null, {
+          await remoteCommand(undefined, {
             json,
             sub: positionals[1],
             args: positionals.slice(2),

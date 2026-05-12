@@ -93,7 +93,7 @@ export function setAgents(state: OnboardState, n: AgentsCount): OnboardState {
     // changes the meaning of slot 0, so reset to defaults instead of
     // dragging the old name forward. Going from 2→3, slot 0/1 still mean
     // Lead/Teammate-1, so preserve.
-    const sameSemantics = (state.agents > 1) === (n > 1);
+    const sameSemantics = state.agents > 1 === n > 1;
     const prior = state.agentNames[i];
     if (sameSemantics && prior !== undefined && prior.trim().length > 0) {
       next.push(prior);
@@ -230,7 +230,10 @@ export function prevStep(state: OnboardState): OnboardStep | null {
  * Build the `POST /api/projects/onboard` payload. Pure: never throws,
  * never reads. The component should call `validateAll` first.
  */
-export function buildOnboardInput(state: OnboardState, inspect: ProjectInspect): OnboardProjectInput {
+export function buildOnboardInput(
+  state: OnboardState,
+  inspect: ProjectInspect,
+): OnboardProjectInput {
   const trimmedName = state.name.trim();
   const trimmedDev = state.devCommand.trim();
   const trimmedTest = state.testCommand.trim();
@@ -252,9 +255,7 @@ export function buildOnboardInput(state: OnboardState, inspect: ProjectInspect):
   // Only send agentNames if the user customized at least one — otherwise
   // let the server pick defaults so the wire payload stays minimal.
   const defaults = defaultAgentNames(state.agents);
-  const customized = state.agentNames.some(
-    (name, i) => name.trim() !== defaults[i]!.trim(),
-  );
+  const customized = state.agentNames.some((name, i) => name.trim() !== defaults[i]!.trim());
   if (customized) {
     payload.agentNames = state.agentNames.map((n) => n.trim());
   }
@@ -265,10 +266,7 @@ export function buildOnboardInput(state: OnboardState, inspect: ProjectInspect):
  * Convenience: extract the validation error for a given field. Returns
  * `null` when the field has no error.
  */
-export function fieldError(
-  result: OnboardValidationResult,
-  field: string,
-): string | null {
+export function fieldError(result: OnboardValidationResult, field: string): string | null {
   return result.errors[field] ?? null;
 }
 
@@ -338,10 +336,7 @@ export function previewIdeConfig(state: OnboardState): PreviewConfig {
 
   const config: PreviewConfig = {
     name: trimmedName,
-    rows: [
-      { size: "70%", panes: topPanes },
-      { panes: bottomPanes },
-    ],
+    rows: [{ size: "70%", panes: topPanes }, { panes: bottomPanes }],
   };
   if (useTeam) {
     config.team = { name: trimmedName };

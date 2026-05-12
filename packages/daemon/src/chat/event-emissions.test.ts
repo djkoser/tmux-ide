@@ -10,11 +10,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type {
-  ChatThreadEvent,
-  CheckpointSummary,
-  ProposedPlan,
-} from "@tmux-ide/contracts";
+import type { ChatThreadEvent, CheckpointSummary, ProposedPlan } from "@tmux-ide/contracts";
 
 import { makeActivityLog } from "./activity-log.ts";
 import { makeCheckpointStore } from "./checkpoint-store.ts";
@@ -188,10 +184,7 @@ describe("plan-store emissions", () => {
     const p = plan({ id: "plan_01" });
     store.upsert(T, p);
     store.upsert(T, plan({ id: "plan_01", planMarkdown: "## Plan v2" }));
-    expect(events.map((e) => e.type)).toEqual([
-      "chat.plan.upserted",
-      "chat.plan.upserted",
-    ]);
+    expect(events.map((e) => e.type)).toEqual(["chat.plan.upserted", "chat.plan.upserted"]);
   });
 
   it("carries the full plan payload through the event", () => {
@@ -287,10 +280,7 @@ describe("cross-store integration via a shared subscriber", () => {
 
     turns.start({ threadId: T, turnId: "turn_01", requestedAt: "2026-05-11T10:00:00.000Z" });
     activities.append({ threadId: T, tone: "info", kind: "k", summary: "x" });
-    expect(bus.map((e) => e.type)).toEqual([
-      "chat.turn.started",
-      "chat.activity.appended",
-    ]);
+    expect(bus.map((e) => e.type)).toEqual(["chat.turn.started", "chat.activity.appended"]);
   });
 
   it("subscriber can branch on type for type-safe dispatch", () => {

@@ -261,11 +261,7 @@ function isLoopbackRequest(req: import("node:http").IncomingMessage): boolean {
 }
 
 function isLoopbackBind(bindHostname: string | null | undefined): boolean {
-  return (
-    bindHostname === "127.0.0.1" ||
-    bindHostname === "::1" ||
-    bindHostname === "localhost"
-  );
+  return bindHostname === "127.0.0.1" || bindHostname === "::1" || bindHostname === "localhost";
 }
 
 function isUpgradeAuthorized(

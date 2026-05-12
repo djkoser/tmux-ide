@@ -1,15 +1,15 @@
-'use client';
+"use client";
 
 //NOTE(jimmylee): Platformer game rendered via pre/span grid instead of canvas.
 //NOTE(jimmylee): Same DOM diffing, IntersectionObserver, and ResizeObserver patterns as ASCIICanvas.
 //NOTE(jimmylee): Physics run in sub-cell floating point; rendering quantizes to grid cells.
 //NOTE(jimmylee): Click to toggle platform blocks on the grid.
 
-import styles from '@components/CanvasPlatformer.module.css';
+import styles from "@components/CanvasPlatformer.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
-import ActionButton from '@components/ActionButton';
+import ActionButton from "@components/ActionButton";
 
 interface PlatformerProps {
   rows?: number;
@@ -61,15 +61,17 @@ const CanvasPlatformer: React.FC<PlatformerProps> = ({ rows = 25 }) => {
 
     let cancelled = false;
 
-    const measure = document.createElement('span');
-    measure.style.visibility = 'hidden';
-    measure.style.position = 'absolute';
-    measure.style.whiteSpace = 'pre';
-    measure.textContent = 'X';
+    const measure = document.createElement("span");
+    measure.style.visibility = "hidden";
+    measure.style.position = "absolute";
+    measure.style.whiteSpace = "pre";
+    measure.textContent = "X";
     el.appendChild(measure);
 
-    const themeBorderColor = getComputedStyle(document.body).getPropertyValue('--theme-border').trim();
-    const themeTextColor = getComputedStyle(document.body).getPropertyValue('--theme-text').trim();
+    const themeBorderColor = getComputedStyle(document.body)
+      .getPropertyValue("--theme-border")
+      .trim();
+    const themeTextColor = getComputedStyle(document.body).getPropertyValue("--theme-text").trim();
 
     const initPlatform = (cols: number) => {
       const platformY = rows - 2;
@@ -95,18 +97,18 @@ const CanvasPlatformer: React.FC<PlatformerProps> = ({ rows = 25 }) => {
 
       for (let y = 0; y < rows; y++) {
         for (let x = 0; x < cols; x++) {
-          const s = document.createElement('span');
-          s.textContent = ' ';
+          const s = document.createElement("span");
+          s.textContent = " ";
           spans.push(s);
           frag.appendChild(s);
         }
-        if (y < rows - 1) frag.appendChild(document.createTextNode('\n'));
+        if (y < rows - 1) frag.appendChild(document.createTextNode("\n"));
       }
 
       el.insertBefore(frag, measure);
       gridRef.current = spans;
-      prevCharsRef.current = new Array(cols * rows).fill('');
-      prevColorsRef.current = new Array(cols * rows).fill('');
+      prevCharsRef.current = new Array(cols * rows).fill("");
+      prevColorsRef.current = new Array(cols * rows).fill("");
       initPlatform(cols);
     };
 
@@ -130,7 +132,7 @@ const CanvasPlatformer: React.FC<PlatformerProps> = ({ rows = 25 }) => {
           frameRef.current = requestAnimationFrame(loop);
         }
       },
-      { threshold: 0 }
+      { threshold: 0 },
     );
     interObs.observe(el);
 
@@ -152,7 +154,7 @@ const CanvasPlatformer: React.FC<PlatformerProps> = ({ rows = 25 }) => {
         blocks.add(key);
       }
     };
-    el.addEventListener('click', handleClick);
+    el.addEventListener("click", handleClick);
 
     const loop = () => {
       if (!visibleRef.current || cancelled) return;
@@ -217,14 +219,14 @@ const CanvasPlatformer: React.FC<PlatformerProps> = ({ rows = 25 }) => {
         let color: string;
 
         if (gx === playerGX && gy === playerGY) {
-          ch = '█';
+          ch = "█";
           color = themeTextColor;
         } else if (blocks.has(`${gx},${gy}`)) {
-          ch = '░';
+          ch = "░";
           color = themeBorderColor;
         } else {
-          ch = ' ';
-          color = '';
+          ch = " ";
+          color = "";
         }
 
         if (ch !== pChars[idx]) {
@@ -247,7 +249,7 @@ const CanvasPlatformer: React.FC<PlatformerProps> = ({ rows = 25 }) => {
       cancelAnimationFrame(frameRef.current);
       resizeObs.disconnect();
       interObs.disconnect();
-      el.removeEventListener('click', handleClick);
+      el.removeEventListener("click", handleClick);
       if (measure.parentNode) measure.parentNode.removeChild(measure);
     };
   }, [rows]);
@@ -267,44 +269,44 @@ const CanvasPlatformer: React.FC<PlatformerProps> = ({ rows = 25 }) => {
     };
 
     el.tabIndex = 0;
-    el.addEventListener('focus', onFocus);
-    el.addEventListener('blur', onBlur);
+    el.addEventListener("focus", onFocus);
+    el.addEventListener("blur", onBlur);
 
     return () => {
-      el.removeEventListener('focus', onFocus);
-      el.removeEventListener('blur', onBlur);
+      el.removeEventListener("focus", onFocus);
+      el.removeEventListener("blur", onBlur);
     };
   }, []);
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!focusedRef.current) return;
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.code === 'Space') {
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.code === "Space") {
         e.preventDefault();
         e.stopPropagation();
       }
-      if (e.key === 'ArrowLeft') keysRef.current.left = true;
-      if (e.key === 'ArrowRight') keysRef.current.right = true;
-      if (e.code === 'Space') keysRef.current.jump = true;
+      if (e.key === "ArrowLeft") keysRef.current.left = true;
+      if (e.key === "ArrowRight") keysRef.current.right = true;
+      if (e.code === "Space") keysRef.current.jump = true;
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
       if (!focusedRef.current) return;
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.code === 'Space') {
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.code === "Space") {
         e.preventDefault();
         e.stopPropagation();
       }
-      if (e.key === 'ArrowLeft') keysRef.current.left = false;
-      if (e.key === 'ArrowRight') keysRef.current.right = false;
-      if (e.code === 'Space') keysRef.current.jump = false;
+      if (e.key === "ArrowLeft") keysRef.current.left = false;
+      if (e.key === "ArrowRight") keysRef.current.right = false;
+      if (e.code === "Space") keysRef.current.jump = false;
     };
 
-    window.addEventListener('keydown', handleKeyDown, { capture: true });
-    window.addEventListener('keyup', handleKeyUp, { capture: true });
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    window.addEventListener("keyup", handleKeyUp, { capture: true });
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown, { capture: true });
-      window.removeEventListener('keyup', handleKeyUp, { capture: true });
+      window.removeEventListener("keydown", handleKeyDown, { capture: true });
+      window.removeEventListener("keyup", handleKeyUp, { capture: true });
     };
   }, []);
 
@@ -320,16 +322,16 @@ const CanvasPlatformer: React.FC<PlatformerProps> = ({ rows = 25 }) => {
       const rect = el.getBoundingClientRect();
       const x = touch.clientX - rect.left;
       const third = rect.width / 3;
-      if (x < third) return 'left';
-      if (x > third * 2) return 'right';
-      return 'center';
+      if (x < third) return "left";
+      if (x > third * 2) return "right";
+      return "center";
     };
 
     const updateKeysFromTouch = () => {
       const regions = new Set(activeTouches.values());
-      keysRef.current.left = regions.has('left');
-      keysRef.current.right = regions.has('right');
-      keysRef.current.jump = regions.has('center');
+      keysRef.current.left = regions.has("left");
+      keysRef.current.right = regions.has("right");
+      keysRef.current.jump = regions.has("center");
     };
 
     const onTouchStart = (e: TouchEvent) => {
@@ -364,16 +366,16 @@ const CanvasPlatformer: React.FC<PlatformerProps> = ({ rows = 25 }) => {
       }
     };
 
-    el.addEventListener('touchstart', onTouchStart, { passive: true });
-    el.addEventListener('touchmove', onTouchMove, { passive: true });
-    el.addEventListener('touchend', onTouchEnd, { passive: true });
-    el.addEventListener('touchcancel', onTouchEnd, { passive: true });
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: true });
+    el.addEventListener("touchend", onTouchEnd, { passive: true });
+    el.addEventListener("touchcancel", onTouchEnd, { passive: true });
 
     return () => {
-      el.removeEventListener('touchstart', onTouchStart);
-      el.removeEventListener('touchmove', onTouchMove);
-      el.removeEventListener('touchend', onTouchEnd);
-      el.removeEventListener('touchcancel', onTouchEnd);
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchcancel", onTouchEnd);
     };
   }, []);
 
@@ -403,7 +405,9 @@ const CanvasPlatformer: React.FC<PlatformerProps> = ({ rows = 25 }) => {
     if (positionRef.current.x > cols - 1) positionRef.current.x = cols - 1;
   };
 
-  const heightStyle = { height: `calc(var(--font-size) * var(--theme-line-height-base) * ${rows})` };
+  const heightStyle = {
+    height: `calc(var(--font-size) * var(--theme-line-height-base) * ${rows})`,
+  };
 
   return (
     <>

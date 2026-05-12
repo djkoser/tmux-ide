@@ -67,8 +67,10 @@ function makeRegistry(id: string, bridge: PtyBridgeLike): PtyBridgeRegistry {
   return registry;
 }
 
-const stat = (isDir: boolean): ((cwd: string) => Stats) =>
-  () => ({ isDirectory: () => isDir }) as Stats;
+const stat =
+  (isDir: boolean): ((cwd: string) => Stats) =>
+  () =>
+    ({ isDirectory: () => isDir }) as Stats;
 
 describe("terminalRespawnHandler", () => {
   it("respawns at the supplied cwd after validating it", () => {

@@ -1,20 +1,29 @@
-'use client';
+"use client";
 
-import styles from '@components/TextArea.module.css';
+import styles from "@components/TextArea.module.css";
 
-import * as React from 'react';
-import * as Utilities from '@common/utilities';
+import * as React from "react";
+import * as Utilities from "@common/utilities";
 
 type TextAreaProps = React.TextareaHTMLAttributes<HTMLTextAreaElement> & {
   autoPlay?: string;
   autoPlaySpeedMS?: number;
   isBlink?: boolean;
 };
-function TextArea({ autoPlay, autoPlaySpeedMS = 40, isBlink, placeholder, onChange, ...rest }: TextAreaProps) {
+function TextArea({
+  autoPlay,
+  autoPlaySpeedMS = 40,
+  isBlink,
+  placeholder,
+  onChange,
+  ...rest
+}: TextAreaProps) {
   const textAreaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const measurementRef = React.useRef<HTMLDivElement | null>(null);
 
-  const [text, setText] = React.useState<string>(rest.defaultValue?.toString() || rest.value?.toString() || '');
+  const [text, setText] = React.useState<string>(
+    rest.defaultValue?.toString() || rest.value?.toString() || "",
+  );
   const [isAutoPlaying, setIsAutoPlaying] = React.useState<boolean>(!!autoPlay);
   const [isFocused, setIsFocused] = React.useState<boolean>(false);
   const [selectionStart, setSelectionStart] = React.useState<number>(0);
@@ -47,7 +56,7 @@ function TextArea({ autoPlay, autoPlaySpeedMS = 40, isBlink, placeholder, onChan
     if (autoPlay && !rest.value && !rest.defaultValue) {
       setIsAutoPlaying(true);
       autoPlayIndexRef.current = 0;
-      setText('');
+      setText("");
       if (autoPlayIntervalRef.current) clearInterval(autoPlayIntervalRef.current);
 
       autoPlayIntervalRef.current = setInterval(() => {
@@ -71,14 +80,14 @@ function TextArea({ autoPlay, autoPlaySpeedMS = 40, isBlink, placeholder, onChan
 
   const resizeTextArea = React.useCallback(() => {
     if (!textAreaRef.current) return;
-    textAreaRef.current.style.height = 'auto';
+    textAreaRef.current.style.height = "auto";
     textAreaRef.current.style.height = `${textAreaRef.current.scrollHeight}px`;
   }, []);
 
   React.useEffect(() => {
     resizeTextArea();
-    window.addEventListener('resize', resizeTextArea);
-    return () => window.removeEventListener('resize', resizeTextArea);
+    window.addEventListener("resize", resizeTextArea);
+    return () => window.removeEventListener("resize", resizeTextArea);
   }, [resizeTextArea]);
 
   const onHandleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -124,17 +133,17 @@ function TextArea({ autoPlay, autoPlaySpeedMS = 40, isBlink, placeholder, onChan
     const computedStyle = window.getComputedStyle(measurementEl);
     const lineHeightStr = computedStyle.lineHeight;
     let lineHeight = 20;
-    if (lineHeightStr.endsWith('px')) {
+    if (lineHeightStr.endsWith("px")) {
       lineHeight = parseFloat(lineHeightStr);
     }
 
     const countLines = (content: string) => {
-      measurementEl.textContent = content || '\u00A0';
+      measurementEl.textContent = content || "\u00A0";
       const height = measurementEl.offsetHeight;
       return Math.round(height / lineHeight);
     };
 
-    const displayString = text || placeholder || '';
+    const displayString = text || placeholder || "";
 
     const textBeforeCaret = text.substring(0, selectionStart);
     const textAfterCaret = text.substring(selectionStart);
@@ -147,13 +156,13 @@ function TextArea({ autoPlay, autoPlaySpeedMS = 40, isBlink, placeholder, onChan
   }, [text, selectionStart, placeholder]);
 
   const onHandleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'ArrowUp' && currentLineIndex === 0) {
+    if (e.key === "ArrowUp" && currentLineIndex === 0) {
       e.preventDefault();
-      const previousFocusable = Utilities.findNextFocusable(document.activeElement, 'previous');
+      const previousFocusable = Utilities.findNextFocusable(document.activeElement, "previous");
       previousFocusable?.focus();
-    } else if (e.key === 'ArrowDown' && currentLineIndex === totalLines) {
+    } else if (e.key === "ArrowDown" && currentLineIndex === totalLines) {
       e.preventDefault();
-      const nextFocusable = Utilities.findNextFocusable(document.activeElement, 'next');
+      const nextFocusable = Utilities.findNextFocusable(document.activeElement, "next");
       nextFocusable?.focus();
     }
   };
@@ -164,15 +173,34 @@ function TextArea({ autoPlay, autoPlaySpeedMS = 40, isBlink, placeholder, onChan
 
   return (
     <div className={containerClasses}>
-      <div className={Utilities.classNames(styles.displayed, isPlaceholderVisible && styles.placeholder)}>
+      <div
+        className={Utilities.classNames(
+          styles.displayed,
+          isPlaceholderVisible && styles.placeholder,
+        )}
+      >
         {isPlaceholderVisible ? placeholder : text.substring(0, selectionStart)}
-        {!isPlaceholderVisible && <span className={Utilities.classNames(styles.block, isBlink && styles.blink)}></span>}
+        {!isPlaceholderVisible && (
+          <span className={Utilities.classNames(styles.block, isBlink && styles.blink)}></span>
+        )}
         {!isPlaceholderVisible && text.substring(selectionStart)}
       </div>
 
       <div ref={measurementRef} className={styles.hidden}></div>
 
-      <textarea className={styles.hiddenElement} ref={textAreaRef} value={text} aria-placeholder={placeholder} onFocus={onHandleFocus} onBlur={onHandleBlur} onKeyDown={onHandleKeyDown} onChange={onHandleChange} onSelect={onHandleSelect} onClick={onHandleClick} {...rest} />
+      <textarea
+        className={styles.hiddenElement}
+        ref={textAreaRef}
+        value={text}
+        aria-placeholder={placeholder}
+        onFocus={onHandleFocus}
+        onBlur={onHandleBlur}
+        onKeyDown={onHandleKeyDown}
+        onChange={onHandleChange}
+        onSelect={onHandleSelect}
+        onClick={onHandleClick}
+        {...rest}
+      />
     </div>
   );
 }

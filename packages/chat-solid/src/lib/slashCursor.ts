@@ -1,6 +1,4 @@
-export type SlashContext =
-  | { active: false }
-  | { active: true; slashIndex: number; query: string };
+export type SlashContext = { active: false } | { active: true; slashIndex: number; query: string };
 
 export function detectSlashContext(value: string, caret: number): SlashContext {
   const boundedCaret = Math.max(0, Math.min(caret, value.length));

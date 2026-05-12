@@ -54,9 +54,7 @@ export function ensureNodePtySpawnHelperExecutable(
   if (process.platform === "win32") return;
   if (!options.force && !options.explicitPath && helperEnsured) return;
 
-  const candidates = options.explicitPath
-    ? [options.explicitPath]
-    : candidateSpawnHelperPaths();
+  const candidates = options.explicitPath ? [options.explicitPath] : candidateSpawnHelperPaths();
 
   for (const candidate of candidates) {
     if (!existsSync(candidate)) continue;
@@ -135,8 +133,10 @@ class NodePtyProcess implements PtyProcess {
 
   resize(cols: number, rows: number): void {
     if (this.exited) return;
-    if (!Number.isInteger(cols) || cols <= 0) throw new RangeError("cols must be a positive integer");
-    if (!Number.isInteger(rows) || rows <= 0) throw new RangeError("rows must be a positive integer");
+    if (!Number.isInteger(cols) || cols <= 0)
+      throw new RangeError("cols must be a positive integer");
+    if (!Number.isInteger(rows) || rows <= 0)
+      throw new RangeError("rows must be a positive integer");
     try {
       this.child.resize(cols, rows);
     } catch {

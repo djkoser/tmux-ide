@@ -56,10 +56,7 @@ export function ThreadView(props: ThreadViewProps) {
     [props.activities, props.turns],
   );
 
-  const composerDisabled = useMemo(
-    () => groups.some((g) => g.state === "running"),
-    [groups],
-  );
+  const composerDisabled = useMemo(() => groups.some((g) => g.state === "running"), [groups]);
 
   if (!props.thread) {
     return (
@@ -90,7 +87,8 @@ export function ThreadView(props: ThreadViewProps) {
             className="rounded border border-[var(--border-weak)] bg-[var(--surface)] px-2 py-0.5 text-[10px] text-[var(--fg-soft)]"
             title="Token usage"
           >
-            {props.usage.inputTokens.toLocaleString()} in · {props.usage.outputTokens.toLocaleString()} out
+            {props.usage.inputTokens.toLocaleString()} in ·{" "}
+            {props.usage.outputTokens.toLocaleString()} out
             {typeof props.usage.totalCostUsd === "number"
               ? ` · $${props.usage.totalCostUsd.toFixed(2)}`
               : ""}
@@ -98,10 +96,7 @@ export function ThreadView(props: ThreadViewProps) {
         ) : null}
       </header>
 
-      <div
-        data-testid="thread-view-stream"
-        className="min-h-0 flex-1 overflow-y-auto"
-      >
+      <div data-testid="thread-view-stream" className="min-h-0 flex-1 overflow-y-auto">
         {groups.length === 0 ? (
           <div
             data-testid="thread-view-stream-empty"
@@ -114,9 +109,7 @@ export function ThreadView(props: ThreadViewProps) {
             <TurnBlock
               key={g.turnId ?? "ambient"}
               group={g}
-              checkpoint={
-                g.turnId !== null ? props.checkpointsByTurn[g.turnId] : undefined
-              }
+              checkpoint={g.turnId !== null ? props.checkpointsByTurn[g.turnId] : undefined}
               plansById={props.plansById}
               onRevert={props.onRevert}
               threadId={props.thread!.id}

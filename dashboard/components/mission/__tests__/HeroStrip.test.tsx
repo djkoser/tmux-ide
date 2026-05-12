@@ -24,13 +24,7 @@ describe("HeroStrip", () => {
   it("enters edit mode when clicking the title and saves on Enter", async () => {
     const onSave = vi.fn();
     render(
-      <HeroStrip
-        title="Old"
-        description=""
-        status="planning"
-        branch={null}
-        onTitleSave={onSave}
-      />,
+      <HeroStrip title="Old" description="" status="planning" branch={null} onTitleSave={onSave} />,
     );
     await act(async () => {
       fireEvent.click(screen.getByTestId("mission-title"));

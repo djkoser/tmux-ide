@@ -56,11 +56,9 @@ test.describe("browser terminal", () => {
     await openTerminal(page);
     await typeCommand(page, "exit");
 
-    await expect(page.getByTestId("terminal-frame")).toHaveAttribute(
-      "data-state",
-      "disconnected",
-      { timeout: 30_000 },
-    );
+    await expect(page.getByTestId("terminal-frame")).toHaveAttribute("data-state", "disconnected", {
+      timeout: 30_000,
+    });
     await expect(page.getByTestId("terminal-transcript")).toContainText("session ended");
   });
 });

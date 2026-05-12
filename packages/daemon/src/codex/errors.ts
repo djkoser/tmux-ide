@@ -22,7 +22,10 @@ export class CodexAgentExitedError extends CodexError {
   readonly code: number | null;
   readonly signal: NodeJS.Signals | string | null;
 
-  constructor(message = "Codex agent exited", options?: { code?: number | null; signal?: string | null }) {
+  constructor(
+    message = "Codex agent exited",
+    options?: { code?: number | null; signal?: string | null },
+  ) {
     super(message);
     this.code = options?.code ?? null;
     this.signal = options?.signal ?? null;

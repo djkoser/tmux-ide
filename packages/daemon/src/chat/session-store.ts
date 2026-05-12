@@ -139,12 +139,8 @@ export function makeSessionStore(opts: MakeSessionStoreOptions = {}): SessionSto
       const next: Session = {
         ...existing,
         status: input.status,
-        lastError:
-          input.lastError !== undefined ? input.lastError : existing.lastError,
-        activeTurnId:
-          input.activeTurnId !== undefined
-            ? input.activeTurnId
-            : existing.activeTurnId,
+        lastError: input.lastError !== undefined ? input.lastError : existing.lastError,
+        activeTurnId: input.activeTurnId !== undefined ? input.activeTurnId : existing.activeTurnId,
         updatedAt: now().toISOString(),
       };
       b!.set(input.sessionId, next);

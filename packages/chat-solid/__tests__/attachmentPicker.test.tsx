@@ -38,13 +38,11 @@ describe("AttachmentPicker", () => {
     );
 
     expect(container.textContent).toContain("Dev Server");
-    container
-      .querySelectorAll<HTMLButtonElement>("button")
-      .forEach((button) => {
-        if (button.textContent?.includes("Dev Server")) {
-          button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        }
-      });
+    container.querySelectorAll<HTMLButtonElement>("button").forEach((button) => {
+      if (button.textContent?.includes("Dev Server")) {
+        button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      }
+    });
 
     expect(added).toEqual([
       { kind: "terminal", paneId: "%1", paneTitle: "Dev Server", sessionName: "alpha" },
@@ -72,21 +70,17 @@ describe("AttachmentPicker", () => {
       container,
     );
 
-    container
-      .querySelectorAll<HTMLButtonElement>("button")
-      .forEach((button) => {
-        if (button.textContent === "File") {
-          button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        }
-      });
+    container.querySelectorAll<HTMLButtonElement>("button").forEach((button) => {
+      if (button.textContent === "File") {
+        button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      }
+    });
     const input = container.querySelector<HTMLInputElement>("input[aria-label='File path']");
     expect(input).toBeTruthy();
     input!.value = "~/notes.md";
     input!.dispatchEvent(new InputEvent("input", { bubbles: true }));
     input!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
 
-    expect(added).toEqual([
-      { kind: "file", path: "/Users/thijs/notes.md", label: "notes.md" },
-    ]);
+    expect(added).toEqual([{ kind: "file", path: "/Users/thijs/notes.md", label: "notes.md" }]);
   });
 });

@@ -30,7 +30,13 @@ interface PatchDiffProps {
   preloaded?: Record<string, unknown>;
 }
 
-export function PatchDiff({ patch, diffStyle = "split", className, style, preloaded }: PatchDiffProps) {
+export function PatchDiff({
+  patch,
+  diffStyle = "split",
+  className,
+  style,
+  preloaded,
+}: PatchDiffProps) {
   registerTuiThemes();
   const { theme } = useTheme();
   const isDark = theme !== "light";

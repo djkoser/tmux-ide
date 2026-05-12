@@ -33,9 +33,7 @@ export function ChangedFilesTree(props: { files: Accessor<ChangedFile[]> }) {
           <span class="text-[12px] font-medium text-fg">Changed files</span>
           <span class="text-[11px] text-dim">
             {writeCount()} written
-            <Show when={readCount() > 0}> - {readCount()} read</Show>
-            {" "}
-            {open() ? "v" : ">"}
+            <Show when={readCount() > 0}> - {readCount()} read</Show> {open() ? "v" : ">"}
           </span>
         </button>
 
@@ -63,7 +61,10 @@ export function ChangedFilesTree(props: { files: Accessor<ChangedFile[]> }) {
                               when={file.kind === "write"}
                               fallback={<span class="text-dim">read</span>}
                             >
-                              <DiffStat additions={file.totalAdditions} deletions={file.totalDeletions} />
+                              <DiffStat
+                                additions={file.totalAdditions}
+                                deletions={file.totalDeletions}
+                              />
                             </Show>
                           </span>
                         </button>
@@ -71,7 +72,11 @@ export function ChangedFilesTree(props: { files: Accessor<ChangedFile[]> }) {
                           <div class="mb-2 rounded-md border border-border-weak bg-surface">
                             <Show
                               when={file.edits.length > 0}
-                              fallback={<div class="p-2 text-[12px] text-dim">No diff content captured.</div>}
+                              fallback={
+                                <div class="p-2 text-[12px] text-dim">
+                                  No diff content captured.
+                                </div>
+                              }
                             >
                               <For each={file.edits}>
                                 {(edit, index) => (
@@ -143,7 +148,9 @@ function basename(path: string): string {
 function formatDiff(oldText: string, newText: string): string {
   if (!oldText) return prefixLines(newText, "+");
   if (!newText) return prefixLines(oldText, "-");
-  return [`--- before`, prefixLines(oldText, "-"), `+++ after`, prefixLines(newText, "+")].join("\n");
+  return [`--- before`, prefixLines(oldText, "-"), `+++ after`, prefixLines(newText, "+")].join(
+    "\n",
+  );
 }
 
 function prefixLines(text: string, prefix: string): string {

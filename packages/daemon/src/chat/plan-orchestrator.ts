@@ -120,11 +120,7 @@ export function makePlanOrchestrator(opts: MakePlanOrchestratorOptions): PlanOrc
         ...(input.runtimeMode ? { runtimeMode: input.runtimeMode } : {}),
       });
 
-      const stamped = opts.planStore.markImplemented(
-        input.threadId,
-        input.planId,
-        input.threadId,
-      );
+      const stamped = opts.planStore.markImplemented(input.threadId, input.planId, input.threadId);
 
       return { plan: stamped, turnId };
     },

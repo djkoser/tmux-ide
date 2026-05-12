@@ -1,6 +1,6 @@
-import styles from '@components/ContentFluid.module.css';
+import styles from "@components/ContentFluid.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
 interface ContentFluidProps extends React.HTMLAttributes<HTMLSpanElement> {
   children?: React.ReactNode;

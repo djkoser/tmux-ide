@@ -37,10 +37,7 @@ function pidIsAlive(pid: number): boolean {
   }
 }
 
-export async function isDaemonAlive(
-  lock: LockData,
-  options: HealthOptions = {},
-): Promise<boolean> {
+export async function isDaemonAlive(lock: LockData, options: HealthOptions = {}): Promise<boolean> {
   if (!pidIsAlive(lock.pid)) return false;
 
   const fetchImpl = options.fetchImpl ?? globalThis.fetch?.bind(globalThis);

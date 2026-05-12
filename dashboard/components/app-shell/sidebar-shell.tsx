@@ -49,12 +49,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -100,9 +95,7 @@ export function useShellSidebar(): ShellSidebarContextValue {
 
 function readSidebarCookie(): boolean | null {
   if (typeof document === "undefined") return null;
-  const row = document.cookie
-    .split("; ")
-    .find((item) => item.startsWith(`${COOKIE_NAME}=`));
+  const row = document.cookie.split("; ").find((item) => item.startsWith(`${COOKIE_NAME}=`));
   if (!row) return null;
   const value = row.slice(COOKIE_NAME.length + 1);
   if (value === "true") return true;
@@ -270,7 +263,11 @@ export function ShellSidebarShell({
               {sidebar}
             </DialogContent>
           </Dialog>
-          <div data-shell-sidebar="mobile" className={cn("flex h-full min-h-0 flex-1", className)} style={style}>
+          <div
+            data-shell-sidebar="mobile"
+            className={cn("flex h-full min-h-0 flex-1", className)}
+            style={style}
+          >
             {children}
           </div>
         </TooltipProvider>

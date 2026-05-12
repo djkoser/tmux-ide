@@ -112,8 +112,7 @@ export function makeActivityLog(opts: MakeActivityLogOptions = {}): ActivityLog 
       if (!b) return [];
       return b.filter((a) => {
         if (query.turnId !== undefined && a.turnId !== query.turnId) return false;
-        if (query.sessionId !== undefined && a.sessionId !== query.sessionId)
-          return false;
+        if (query.sessionId !== undefined && a.sessionId !== query.sessionId) return false;
         if (
           query.sinceSeq !== undefined &&
           (a.sequence === undefined || a.sequence <= query.sinceSeq)

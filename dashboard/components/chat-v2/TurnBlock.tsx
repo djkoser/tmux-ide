@@ -8,11 +8,7 @@ import { ActivityRow } from "./ActivityRow";
 import { CheckpointChip } from "./CheckpointChip";
 import { PlanCardStub } from "./PlanCardStub";
 import type { TurnGroup } from "./turnGrouping";
-import type {
-  ActivityView,
-  CheckpointSummaryView,
-  ProposedPlanView,
-} from "./useChatStore";
+import type { ActivityView, CheckpointSummaryView, ProposedPlanView } from "./useChatStore";
 
 export interface TurnBlockProps {
   group: TurnGroup;
@@ -62,10 +58,7 @@ export function TurnBlock({
   if (group.turnId === null) {
     // Ambient activities — no header, no checkpoint chip.
     return (
-      <section
-        data-testid="turn-block-ambient"
-        className="flex flex-col gap-0.5 px-2 py-1"
-      >
+      <section data-testid="turn-block-ambient" className="flex flex-col gap-0.5 px-2 py-1">
         {group.activities.map((a) => (
           <ActivityRow key={a.id} activity={a} />
         ))}

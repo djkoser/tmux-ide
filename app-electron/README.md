@@ -6,7 +6,7 @@ Electron desktop shell for tmux-ide.
 
 - **Loader** (`src/loader.ts` → `dist-electron/loader.cjs`) — entry point
   declared in `package.json`'s `main` field. Installs persistent
-  log files at `~/Library/Logs/tmux-ide/{loader,app}.log` *before*
+  log files at `~/Library/Logs/tmux-ide/{loader,app}.log` _before_
   `require`ing the main bundle so silent-exit modes still leave a
   debuggable trail.
 - **Main process** (`src/main.ts` → `dist-electron/main.cjs`) —
@@ -56,15 +56,15 @@ it up via `~/.tmux-ide/daemon.json` and skip the embedded path.
 
 ## Environment variables
 
-| Var | Effect |
-| --- | --- |
-| `TMUX_IDE_DASHBOARD_DEV_URL` | Load the dashboard from this URL instead of `app://-/index.html`. `dev-electron.mjs` defaults this to `http://localhost:3000`. |
-| `TMUX_IDE_FORCE_EMBED` | When set to `1`, skip canonical-daemon discovery and always `startEmbeddedDaemon`. Used for isolated testing. |
-| `TMUX_IDE_BIND_HOSTNAME` | Set to `0.0.0.0` to bind the embedded daemon to all interfaces. Default is the daemon's choice based on `app-settings.json`. |
-| `TMUX_IDE_HIDE_DEVTOOLS` | When set, suppress the auto-open of DevTools on the main window. |
-| `TMUX_IDE_DAEMON_PORT` | Set by `main.ts` after daemon attach; read by `preload.ts`. **Do not set manually** — it is part of the main ↔ preload contract. |
-| `TMUX_IDE_LOCAL_BYPASS_TOKEN` | Same — set by main, read by preload. |
-| `TMUX_IDE_APP_VERSION` | Same. |
+| Var                           | Effect                                                                                                                           |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `TMUX_IDE_DASHBOARD_DEV_URL`  | Load the dashboard from this URL instead of `app://-/index.html`. `dev-electron.mjs` defaults this to `http://localhost:3000`.   |
+| `TMUX_IDE_FORCE_EMBED`        | When set to `1`, skip canonical-daemon discovery and always `startEmbeddedDaemon`. Used for isolated testing.                    |
+| `TMUX_IDE_BIND_HOSTNAME`      | Set to `0.0.0.0` to bind the embedded daemon to all interfaces. Default is the daemon's choice based on `app-settings.json`.     |
+| `TMUX_IDE_HIDE_DEVTOOLS`      | When set, suppress the auto-open of DevTools on the main window.                                                                 |
+| `TMUX_IDE_DAEMON_PORT`        | Set by `main.ts` after daemon attach; read by `preload.ts`. **Do not set manually** — it is part of the main ↔ preload contract. |
+| `TMUX_IDE_LOCAL_BYPASS_TOKEN` | Same — set by main, read by preload.                                                                                             |
+| `TMUX_IDE_APP_VERSION`        | Same.                                                                                                                            |
 
 ## IPC surface
 
@@ -72,11 +72,11 @@ Renderer-side (exposed as `window.__TMUX_IDE__` by `preload.ts`):
 
 ```ts
 interface TmuxIdePreload {
-  port: number;                                  // canonical daemon port
-  version: string;                               // app.getVersion()
-  localBypassToken: string | null;               // authorises localhost-only API calls
-  apiBaseUrl: string;                            // `http://127.0.0.1:<port>`
-  wsUrl: string;                                 // `ws://127.0.0.1:<port>/ws/events`
+  port: number; // canonical daemon port
+  version: string; // app.getVersion()
+  localBypassToken: string | null; // authorises localhost-only API calls
+  apiBaseUrl: string; // `http://127.0.0.1:<port>`
+  wsUrl: string; // `ws://127.0.0.1:<port>/ws/events`
   on(channel: MenuEventChannel, handler: () => void): () => void;
   checkForUpdates(): Promise<void>;
   onUpdateStatus(handler: (payload: AppUpdateStatusPayload) => void): () => void;

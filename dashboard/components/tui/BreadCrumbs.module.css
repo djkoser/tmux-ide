@@ -19,7 +19,7 @@
     color: var(--theme-text);
     background: var(--theme-focused-foreground);
   }
-  
+
   &:visited {
     color: var(--theme-text);
   }

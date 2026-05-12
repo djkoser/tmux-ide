@@ -154,7 +154,9 @@ describe("WS frames — workspace.added / workspace.removed", () => {
 
     registry.add({ name: "alpha", projectDir: "/tmp/alpha" });
 
-    const frames = ws.sent.map((s) => JSON.parse(s) as { type: string; workspace?: { name: string } });
+    const frames = ws.sent.map(
+      (s) => JSON.parse(s) as { type: string; workspace?: { name: string } },
+    );
     const added = frames.find((f) => f.type === "workspace.added");
     expect(added).toBeDefined();
     expect(added?.workspace?.name).toBe("alpha");
@@ -196,8 +198,20 @@ describe("WS frames — workspace.added / workspace.removed", () => {
     // calling remove() on the new registry (load() drops silently — no event;
     // removal events are documented via explicit remove()).
     reg2["workspaces" as keyof WorkspaceRegistry] = [
-      { name: "alpha", sessionName: "alpha", projectDir: "/tmp/alpha", ideConfigPath: null, addedAt: new Date().toISOString() },
-      { name: "beta", sessionName: "beta", projectDir: "/tmp/beta", ideConfigPath: null, addedAt: new Date().toISOString() },
+      {
+        name: "alpha",
+        sessionName: "alpha",
+        projectDir: "/tmp/alpha",
+        ideConfigPath: null,
+        addedAt: new Date().toISOString(),
+      },
+      {
+        name: "beta",
+        sessionName: "beta",
+        projectDir: "/tmp/beta",
+        ideConfigPath: null,
+        addedAt: new Date().toISOString(),
+      },
     ] as never;
     reg2.remove("beta");
 

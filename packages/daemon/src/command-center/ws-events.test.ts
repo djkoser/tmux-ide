@@ -47,9 +47,7 @@ function framesByType<T extends ServerFrame["type"]>(
   ws: MockWebSocket,
   type: T,
 ): Extract<ServerFrame, { type: T }>[] {
-  return frames(ws).filter(
-    (f): f is Extract<ServerFrame, { type: T }> => f.type === type,
-  );
+  return frames(ws).filter((f): f is Extract<ServerFrame, { type: T }> => f.type === type);
 }
 
 async function tick(ms = 10): Promise<void> {

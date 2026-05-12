@@ -56,7 +56,9 @@ async function loadNotarizeEnv() {
   if (hasNotarizationSecrets && hasSigningSecrets) {
     console.log("[notarize-local] signing and notarization secrets detected.");
   } else if (hasSigningSecrets) {
-    console.warn("[notarize-local] signing secrets detected, but notarization secrets are incomplete.");
+    console.warn(
+      "[notarize-local] signing secrets detected, but notarization secrets are incomplete.",
+    );
   } else {
     console.warn(
       "[notarize-local] signing secrets are incomplete; electron-builder will use local keychain identity or skip signing.",
@@ -86,4 +88,12 @@ function run(command, args, options = {}) {
 await loadNotarizeEnv();
 await run("pnpm", ["--filter", "@tmux-ide/dashboard", "build"]);
 await run("pnpm", ["--filter", "@tmux-ide/app-electron", "build"]);
-await run("pnpm", ["--filter", "@tmux-ide/app-electron", "exec", "electron-builder", "--mac", "--publish", "never"]);
+await run("pnpm", [
+  "--filter",
+  "@tmux-ide/app-electron",
+  "exec",
+  "electron-builder",
+  "--mac",
+  "--publish",
+  "never",
+]);

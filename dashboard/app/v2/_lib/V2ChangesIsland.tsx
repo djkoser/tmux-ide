@@ -18,7 +18,11 @@ export function V2ChangesIsland({ projectName }: V2ChangesIslandProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const handleRef = useRef<{
     unmount(): void;
-    setOptions(next: { sessionName?: string; apiBaseUrl?: string; bearerToken?: string | null }): void;
+    setOptions(next: {
+      sessionName?: string;
+      apiBaseUrl?: string;
+      bearerToken?: string | null;
+    }): void;
   } | null>(null);
 
   useEffect(() => {

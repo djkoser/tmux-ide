@@ -185,7 +185,9 @@ export async function fetchProjectMission(opts: BaseMountOptions): Promise<Missi
   return (data as MissionResponse | null) ?? null;
 }
 
-export async function fetchProjectDetail(opts: BaseMountOptions): Promise<ProjectDetailPayload | null> {
+export async function fetchProjectDetail(
+  opts: BaseMountOptions,
+): Promise<ProjectDetailPayload | null> {
   const data = await client(opts).call("project.detail", {
     params: { name: opts.sessionName },
   });

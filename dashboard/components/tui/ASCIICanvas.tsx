@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 //NOTE(jimmylee): ASCIICanvas — renders animated ASCII art in a <pre> element using per-cell <span> elements.
 //NOTE(jimmylee): Ported from the animation framework in workdir/www-financial-cli-ui.
@@ -6,21 +6,27 @@
 //NOTE(jimmylee): IntersectionObserver pauses animation when off-screen to save CPU.
 //NOTE(jimmylee): ResizeObserver recalculates column count on container resize.
 
-import styles from '@components/ASCIICanvas.module.css';
+import styles from "@components/ASCIICanvas.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
-const DENSITY = '10';
+const DENSITY = "10";
 
 //NOTE(jimmylee): Mode 2 animation — binary 1s and 0s with animated wave-based grayscale gradients.
-function animate(x: number, y: number, t: number, cols: number, rows: number): { char: string; color: string } {
+function animate(
+  x: number,
+  y: number,
+  t: number,
+  cols: number,
+  rows: number,
+): { char: string; color: string } {
   const speed = t * 8;
   const wave1 = Math.sin(x * 0.15 + speed) * Math.cos(y * 0.1 + speed * 0.7);
   const wave2 = Math.sin((x + y) * 0.08 + speed * 1.3);
   const v = wave1 + wave2;
   const digit = DENSITY[Math.floor(x * 0.5 + y * 0.3 + speed * 2) % DENSITY.length];
   const brightness = Math.floor(((Math.sin(v * 2) + 1) / 2) * 180 + 50);
-  const hex = brightness.toString(16).padStart(2, '0');
+  const hex = brightness.toString(16).padStart(2, "0");
   return { char: digit, color: `#${hex}${hex}${hex}` };
 }
 
@@ -41,11 +47,11 @@ const ASCIICanvas = ({ rows = 10 }: { rows?: number }) => {
     let cancelled = false;
 
     //NOTE(jimmylee): Invisible measurement span — single 'X' character to calculate column width.
-    const measure = document.createElement('span');
-    measure.style.visibility = 'hidden';
-    measure.style.position = 'absolute';
-    measure.style.whiteSpace = 'pre';
-    measure.textContent = 'X';
+    const measure = document.createElement("span");
+    measure.style.visibility = "hidden";
+    measure.style.position = "absolute";
+    measure.style.whiteSpace = "pre";
+    measure.textContent = "X";
     el.appendChild(measure);
 
     //NOTE(jimmylee): Pre-allocate span elements per cell. Only rebuilds when column count changes.
@@ -61,18 +67,18 @@ const ASCIICanvas = ({ rows = 10 }: { rows?: number }) => {
 
       for (let y = 0; y < rows; y++) {
         for (let x = 0; x < cols; x++) {
-          const s = document.createElement('span');
-          s.textContent = ' ';
+          const s = document.createElement("span");
+          s.textContent = " ";
           spans.push(s);
           frag.appendChild(s);
         }
-        if (y < rows - 1) frag.appendChild(document.createTextNode('\n'));
+        if (y < rows - 1) frag.appendChild(document.createTextNode("\n"));
       }
 
       el.insertBefore(frag, measure);
       gridRef.current = spans;
-      prevCharsRef.current = new Array(cols * rows).fill('');
-      prevColorsRef.current = new Array(cols * rows).fill('');
+      prevCharsRef.current = new Array(cols * rows).fill("");
+      prevColorsRef.current = new Array(cols * rows).fill("");
     };
 
     const updateCols = () => {
@@ -97,7 +103,7 @@ const ASCIICanvas = ({ rows = 10 }: { rows?: number }) => {
           frameRef.current = requestAnimationFrame(loop);
         }
       },
-      { threshold: 0 }
+      { threshold: 0 },
     );
     interObs.observe(el);
 
@@ -140,7 +146,9 @@ const ASCIICanvas = ({ rows = 10 }: { rows?: number }) => {
     };
   }, [rows]);
 
-  const heightStyle = { height: `calc(var(--font-size) * var(--theme-line-height-base) * ${rows})` };
+  const heightStyle = {
+    height: `calc(var(--font-size) * var(--theme-line-height-base) * ${rows})`,
+  };
 
   return <pre ref={preRef} className={styles.root} style={heightStyle} />;
 };

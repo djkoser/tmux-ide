@@ -9,12 +9,7 @@ import { Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import type { Task } from "@/lib/types";
 import { TaskCard } from "./TaskCard";
-import {
-  isBlocked,
-  type ColumnDef,
-  type Density,
-  type TaskStatus,
-} from "./kanban-types";
+import { isBlocked, type ColumnDef, type Density, type TaskStatus } from "./kanban-types";
 
 interface KanbanColumnProps {
   column: ColumnDef;

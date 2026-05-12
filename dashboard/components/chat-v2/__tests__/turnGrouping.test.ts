@@ -116,11 +116,7 @@ describe("groupActivitiesByTurn", () => {
 
   it("preserves activity insertion order inside a group", () => {
     const result = groupActivitiesByTurn({
-      activities: [
-        activity("t1", "a"),
-        activity("t1", "b"),
-        activity("t1", "c"),
-      ],
+      activities: [activity("t1", "a"), activity("t1", "b"), activity("t1", "c")],
       turns: {},
     });
     expect(result[0]?.activities.map((a) => a.id)).toEqual(["a", "b", "c"]);

@@ -93,7 +93,10 @@ interface Channel {
 
 const channels = new Map<string, Channel>();
 
-function setChannelState(channel: Channel, next: StreamState | ((prev: StreamState) => StreamState)) {
+function setChannelState(
+  channel: Channel,
+  next: StreamState | ((prev: StreamState) => StreamState),
+) {
   const resolved = typeof next === "function" ? next(channel.state) : next;
   if (resolved === channel.state) return;
   channel.state = resolved;
@@ -130,7 +133,11 @@ function handleFrame(channel: Channel, sessionName: string, frame: ServerFrame):
     case "goal.changed":
     case "milestone.changed":
     case "agent.changed": {
-      setChannelState(channel, (current) => ({ ...current, connected: true, lastEventAt: Date.now() }));
+      setChannelState(channel, (current) => ({
+        ...current,
+        connected: true,
+        lastEventAt: Date.now(),
+      }));
       void refreshChannelSnapshot(channel, sessionName);
       return;
     }

@@ -195,18 +195,12 @@ describe("parseInitOutputFrame", () => {
   });
 
   it("returns null when jobId mismatches", () => {
-    const chunk = parseInitOutputFrame(
-      { type: "init.output", jobId: "j2", chunk: "hello" },
-      "j1",
-    );
+    const chunk = parseInitOutputFrame({ type: "init.output", jobId: "j2", chunk: "hello" }, "j1");
     expect(chunk).toBeNull();
   });
 
   it("defaults stream to stdout when missing", () => {
-    const chunk = parseInitOutputFrame(
-      { type: "init.output", jobId: "j1", chunk: "hi" },
-      "j1",
-    );
+    const chunk = parseInitOutputFrame({ type: "init.output", jobId: "j1", chunk: "hi" }, "j1");
     expect(chunk!.stream).toBe("stdout");
   });
 
@@ -219,25 +213,18 @@ describe("parseInitOutputFrame", () => {
 
 describe("isInitDoneFrame", () => {
   it("returns true for the matching done frame", () => {
-    expect(
-      isInitDoneFrame({ type: "init.output", jobId: "j1", done: true }, "j1"),
-    ).toBe(true);
+    expect(isInitDoneFrame({ type: "init.output", jobId: "j1", done: true }, "j1")).toBe(true);
   });
 
   it("returns false when done is false or missing", () => {
     expect(isInitDoneFrame({ type: "init.output", jobId: "j1" }, "j1")).toBe(false);
-    expect(
-      isInitDoneFrame({ type: "init.output", jobId: "j1", done: false }, "j1"),
-    ).toBe(false);
+    expect(isInitDoneFrame({ type: "init.output", jobId: "j1", done: false }, "j1")).toBe(false);
   });
 });
 
 describe("isInitErrorFrame", () => {
   it("extracts the message", () => {
-    const err = isInitErrorFrame(
-      { type: "init.error", jobId: "j1", message: "bad config" },
-      "j1",
-    );
+    const err = isInitErrorFrame({ type: "init.error", jobId: "j1", message: "bad config" }, "j1");
     expect(err).toEqual({ message: "bad config" });
   });
 

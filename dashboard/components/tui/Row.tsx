@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import styles from '@components/Row.module.css';
+import styles from "@components/Row.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
 type RowProps = React.HTMLAttributes<HTMLElement> & {
   children?: React.ReactNode;
@@ -16,6 +16,6 @@ const Row = React.forwardRef<HTMLElement, RowProps>(({ children, ...rest }, ref)
   );
 });
 
-Row.displayName = 'Row';
+Row.displayName = "Row";
 
 export default Row;

@@ -44,10 +44,7 @@ import { getSessionState } from "@tmux-ide/tmux-bridge";
 import { listSessionPanes } from "./widgets/lib/pane-comms.ts";
 import { dispatchResearch, loadResearchState, type ResearchTrigger } from "./lib/research.ts";
 import { type OrchestratorState } from "./lib/orchestrator.ts";
-import {
-  CliActionInvocationError,
-  tryDispatchAction,
-} from "./lib/cli-action-bridge.ts";
+import { CliActionInvocationError, tryDispatchAction } from "./lib/cli-action-bridge.ts";
 
 interface TaskCommandValues {
   title?: string;
@@ -257,7 +254,10 @@ async function tryDispatchTaskAction(
         );
         if (!result) return false;
         if (json) console.log(JSON.stringify(result.milestone, null, 2));
-        else console.log(`Created milestone ${result.milestoneId}: ${id} [${result.milestone.status}]`);
+        else
+          console.log(
+            `Created milestone ${result.milestoneId}: ${id} [${result.milestone.status}]`,
+          );
         return true;
       }
 

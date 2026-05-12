@@ -72,7 +72,11 @@ async function flush() {
 describe("projectStore", () => {
   it("fetches the project list on first subscriber", async () => {
     const fetchMock = stubFetch([PROJECT_A]);
-    const { useProjects: _useProjects, refreshProjects, __resetProjectStoreForTests } = await load();
+    const {
+      useProjects: _useProjects,
+      refreshProjects,
+      __resetProjectStoreForTests,
+    } = await load();
     __resetProjectStoreForTests();
 
     // Drive the store via refreshProjects (avoids spinning up React).

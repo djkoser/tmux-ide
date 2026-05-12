@@ -25,9 +25,15 @@ function jot(line: string): void {
   }
 }
 
-jot(`loader: pid=${process.pid} cwd=${process.cwd()} electron=${process.versions.electron ?? "n/a"}`);
-process.on("uncaughtException", (e) => jot(`uncaughtException ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`));
-process.on("unhandledRejection", (r) => jot(`unhandledRejection ${r instanceof Error ? (r.stack ?? r.message) : String(r)}`));
+jot(
+  `loader: pid=${process.pid} cwd=${process.cwd()} electron=${process.versions.electron ?? "n/a"}`,
+);
+process.on("uncaughtException", (e) =>
+  jot(`uncaughtException ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`),
+);
+process.on("unhandledRejection", (r) =>
+  jot(`unhandledRejection ${r instanceof Error ? (r.stack ?? r.message) : String(r)}`),
+);
 process.on("exit", (code) => jot(`exit code=${code}`));
 
 try {

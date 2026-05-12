@@ -45,9 +45,7 @@ describe("ThreadListRail", () => {
     );
     const items = screen.getAllByTestId("thread-list-item");
     expect(items).toHaveLength(2);
-    expect(screen.getAllByTestId("thread-provider-chip")[0]?.textContent).toBe(
-      "claude-code",
-    );
+    expect(screen.getAllByTestId("thread-provider-chip")[0]?.textContent).toBe("claude-code");
   });
 
   it("calls onPick(id) when an item is clicked", () => {
@@ -90,9 +88,9 @@ describe("ThreadListRail", () => {
         onNew={() => {}}
       />,
     );
-    const t2 = screen.getAllByTestId("thread-list-item").find(
-      (el) => el.getAttribute("data-thread-id") === "t2",
-    );
+    const t2 = screen
+      .getAllByTestId("thread-list-item")
+      .find((el) => el.getAttribute("data-thread-id") === "t2");
     expect(t2?.getAttribute("data-active")).toBe("true");
     expect(t2?.getAttribute("aria-selected")).toBe("true");
   });

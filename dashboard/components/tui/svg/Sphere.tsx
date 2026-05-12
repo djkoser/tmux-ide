@@ -1,6 +1,10 @@
-import * as React from 'react';
+import * as React from "react";
 
-export default function Sphere(props: { size?: number; segments?: number; style?: React.CSSProperties }) {
+export default function Sphere(props: {
+  size?: number;
+  segments?: number;
+  style?: React.CSSProperties;
+}) {
   const size = props.size || 500;
   const segments = props.segments || 6;
   const radius = size * 0.4;

@@ -1,4 +1,4 @@
-import styles from '@components/MessageViewer.module.css';
+import styles from "@components/MessageViewer.module.css";
 
 export default function MessageViewer(props) {
   return (

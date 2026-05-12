@@ -8,7 +8,7 @@
 > from side effects, branded IDs that catch entire classes of bugs at the
 > type level, and a framework-silo rule that ends "mixed-and-matched" UI
 > code. We are not chasing features; goal 13 already shipped chat parity.
-> Goal 14 buys us the *foundations* that made t3code's chat parity look
+> Goal 14 buys us the _foundations_ that made t3code's chat parity look
 > easy — and that we noticed the hard way during T070-T083 (cross-package
 > dependencies, divergent serialization, accidental coupling across the
 > React/Solid line).
@@ -30,12 +30,13 @@ This document is long. If you only have ten minutes, read in this order:
 If you have an hour, also read **§2** (the t3-vs-us audit) and **§5**
 (silo audit of current files).
 
-If you are about to *implement* a task, the appendix §A maps every
+If you are about to _implement_ a task, the appendix §A maps every
 t3 source path quoted in this document to a corresponding tmux-ide
 file, so you can do the per-task source-of-truth lookup without
 re-deriving it.
 
 > **Sources consulted to write this document**:
+>
 > - `context/t3code/apps/server/src/{persistence,orchestration,provider}/` — t3 server architecture
 > - `context/t3code/packages/contracts/src/{baseSchemas,orchestration,settings,providerRuntime}.ts` — t3 schemas
 > - `context/t3code/apps/desktop/` — t3's Electron shell (analogue of our `app/`)
@@ -54,9 +55,9 @@ re-deriving it.
 > **The Next.js dashboard is rendered as React Server Components by
 > default. Interactive surfaces drop to React client components only
 > where state, refs, or browser APIs demand it. UI built in a foreign
-> framework (Solid, Lit, Preact, …) lives in a named *silo* package
+> framework (Solid, Lit, Preact, …) lives in a named _silo_ package
 > (`@tmux-ide/<silo-name>`) and is mounted from React through a single
-> *bridge component* per silo. Bridge components are the only place
+> _bridge component_ per silo. Bridge components are the only place
 > in the codebase that knows how to translate between React's
 > component model and a non-React DOM-mounting API. The data contract
 > between a silo and its bridge is a single `mount(el, props)` call
@@ -68,17 +69,18 @@ This sentence is load-bearing. Everything in §1.2–§1.5 enforces it.
 
 ## 1.2 Decision matrix — when to RSC vs Client vs Silo vs other
 
-| Surface | Choose | Reason | Examples (current code) |
-| --- | --- | --- | --- |
-| Static page chrome, project/thread index lists, anything that fetches once and renders | **RSC** | No interactive state; render-on-server is cheaper and avoids a hydration round-trip. | `app/(shell)/*` *should be* RSC (today most are `"use client"`; see §5). |
-| Form widgets, sortable tables, inline editing, command palette, anything driven by zustand or React state | **React Client** (`"use client"`) | Needs `useState`/`useEffect`/refs/browser APIs. | `dashboard/components/projects/AddProjectDialog.tsx`, `KeybindRoot.tsx`, `CommandPalette.tsx`. |
-| Anything that runs in a non-React framework — Solid DOM islands today, Lit/Preact/Vue tomorrow | **Silo package** mounted via bridge | Foreign framework owns its DOM subtree; React must not reach inside. | `@tmux-ide/chat-solid` mounted via `ChatTabPanel.tsx`; `@tmux-ide/v2-solid-widgets` mounted via `V2*Island.tsx`. |
-| Long-lived browser process attached to a backend stream (PTY, ANSI mirror) | **React Client + silo-shaped wrapper** | Treat the stream owner as a silo even though it's still React, so the rendering subtree is replaceable. | `Terminal*` xterm wrappers under `dashboard/components/terminals/`. |
-| Sub-window with its own runtime (Electron BrowserWindow, native Swift view via `app/`) | **Out-of-tree silo** | Different process entirely. Bridge is the IPC layer, not a React component. | `app/TmuxIde/` (Swift) and `app-electron/` (Electron). |
+| Surface                                                                                                   | Choose                                 | Reason                                                                                                  | Examples (current code)                                                                                          |
+| --------------------------------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Static page chrome, project/thread index lists, anything that fetches once and renders                    | **RSC**                                | No interactive state; render-on-server is cheaper and avoids a hydration round-trip.                    | `app/(shell)/*` _should be_ RSC (today most are `"use client"`; see §5).                                         |
+| Form widgets, sortable tables, inline editing, command palette, anything driven by zustand or React state | **React Client** (`"use client"`)      | Needs `useState`/`useEffect`/refs/browser APIs.                                                         | `dashboard/components/projects/AddProjectDialog.tsx`, `KeybindRoot.tsx`, `CommandPalette.tsx`.                   |
+| Anything that runs in a non-React framework — Solid DOM islands today, Lit/Preact/Vue tomorrow            | **Silo package** mounted via bridge    | Foreign framework owns its DOM subtree; React must not reach inside.                                    | `@tmux-ide/chat-solid` mounted via `ChatTabPanel.tsx`; `@tmux-ide/v2-solid-widgets` mounted via `V2*Island.tsx`. |
+| Long-lived browser process attached to a backend stream (PTY, ANSI mirror)                                | **React Client + silo-shaped wrapper** | Treat the stream owner as a silo even though it's still React, so the rendering subtree is replaceable. | `Terminal*` xterm wrappers under `dashboard/components/terminals/`.                                              |
+| Sub-window with its own runtime (Electron BrowserWindow, native Swift view via `app/`)                    | **Out-of-tree silo**                   | Different process entirely. Bridge is the IPC layer, not a React component.                             | `app/TmuxIde/` (Swift) and `app-electron/` (Electron).                                                           |
 
 **Tie-breaker for borderline cases**:
-- If you can answer the question "*does this component own a `useRef` to a DOM node?*" with **yes**, it is a Client component or a silo, not RSC.
-- If you can answer "*does this component need to pass live React state to a non-React UI?*" with **yes**, it is a silo with a bridge — never inline `dangerouslySetInnerHTML` or `useEffect`-glue inside an otherwise RSC tree.
+
+- If you can answer the question "_does this component own a `useRef` to a DOM node?_" with **yes**, it is a Client component or a silo, not RSC.
+- If you can answer "_does this component need to pass live React state to a non-React UI?_" with **yes**, it is a silo with a bridge — never inline `dangerouslySetInnerHTML` or `useEffect`-glue inside an otherwise RSC tree.
 
 **Next step**: turn the table above into an ADR
 (`docs/adr/0001-rsc-shell-and-siloed-blocks.md`) so it's referenced by
@@ -182,7 +184,7 @@ unmount → re-mount on every thread switch, which:
 - Sometimes leaks event listeners if the silo's `unmount()` is
   imperfect.
 
-Driving prop changes through *handle setters* keeps the silo alive
+Driving prop changes through _handle setters_ keeps the silo alive
 across prop changes. The silo decides what to do with the new value
 (e.g. re-fetch the thread, swap content) without re-running its
 bootstrap.
@@ -204,7 +206,7 @@ export function mount(el: HTMLElement, initial: InitialProps): SiloMountHandle;
 ```
 
 The setter convention (`setThreadId`, `setSessionName`, …) is part of
-the *silo public API*, not a free-form prop. Adding a new prop is a
+the _silo public API_, not a free-form prop. Adding a new prop is a
 visible API change in the silo package — that is the entire point of
 the boundary.
 
@@ -219,8 +221,8 @@ exist today; all are additive.
 
 ### Rule 1 — No deep imports across silo boundaries
 
-| Rule | Plugin | Config sketch |
-| --- | --- | --- |
+| Rule                                    | Plugin                     | Config sketch                                                                                                                                                                                                             |
+| --------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Dashboard may not import silo internals | `eslint-plugin-boundaries` | `elements: [{ type: "silo", pattern: "packages/{chat-solid,v2-solid-widgets}/src/**" }]` + a rule that the dashboard may only import the silo's package entry point (`@tmux-ide/<silo>`), not `@tmux-ide/<silo>/src/...`. |
 
 Today nothing enforces this — a careless `import {...} from
@@ -310,13 +312,13 @@ export default [
     plugins: { boundaries },
     settings: {
       "boundaries/elements": [
-        { type: "rsc-page",      pattern: "dashboard/app/**/page.tsx" },
-        { type: "client-comp",   pattern: "dashboard/components/**/*.tsx" },
-        { type: "silo-bridge",   pattern: "dashboard/**/*SiloBridge.tsx" },
-        { type: "silo-public",   pattern: "packages/{chat-solid,v2-solid-widgets}" },
+        { type: "rsc-page", pattern: "dashboard/app/**/page.tsx" },
+        { type: "client-comp", pattern: "dashboard/components/**/*.tsx" },
+        { type: "silo-bridge", pattern: "dashboard/**/*SiloBridge.tsx" },
+        { type: "silo-public", pattern: "packages/{chat-solid,v2-solid-widgets}" },
         { type: "silo-internal", pattern: "packages/{chat-solid,v2-solid-widgets}/src/**" },
-        { type: "contracts",     pattern: "packages/contracts/src/**" },
-        { type: "daemon",        pattern: "packages/daemon/src/**" },
+        { type: "contracts", pattern: "packages/contracts/src/**" },
+        { type: "daemon", pattern: "packages/daemon/src/**" },
         { type: "daemon-client", pattern: "packages/daemon-client/src/**" },
       ],
     },
@@ -327,33 +329,45 @@ export default [
           default: "disallow",
           rules: [
             // RSC pages can import client components and contracts but not silos or daemon.
-            { from: "rsc-page", allow: ["client-comp", "silo-bridge", "contracts", "daemon-client"] },
+            {
+              from: "rsc-page",
+              allow: ["client-comp", "silo-bridge", "contracts", "daemon-client"],
+            },
             // Client components can import other client components, bridges, contracts, daemon-client.
-            { from: "client-comp", allow: ["client-comp", "silo-bridge", "contracts", "daemon-client"] },
+            {
+              from: "client-comp",
+              allow: ["client-comp", "silo-bridge", "contracts", "daemon-client"],
+            },
             // Bridges import the silo's public surface and contracts only.
             { from: "silo-bridge", allow: ["silo-public", "contracts"] },
             // No-one imports a silo's internals.
-            { from: ["rsc-page", "client-comp", "silo-bridge"], disallow: ["silo-internal", "daemon"] },
+            {
+              from: ["rsc-page", "client-comp", "silo-bridge"],
+              disallow: ["silo-internal", "daemon"],
+            },
             // Daemon imports contracts only (existing rule, reasserted).
             { from: "daemon", allow: ["contracts"] },
           ],
         },
       ],
-      "no-restricted-imports": ["error", {
-        patterns: [
-          // Server actions / route handlers may not import silo runtime.
-          {
-            group: ["@tmux-ide/chat-solid*", "@tmux-ide/v2-solid-widgets*"],
-            message: "Server actions cannot import silo runtimes — silos are browser-only.",
-          },
-        ],
-      }],
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            // Server actions / route handlers may not import silo runtime.
+            {
+              group: ["@tmux-ide/chat-solid*", "@tmux-ide/v2-solid-widgets*"],
+              message: "Server actions cannot import silo runtimes — silos are browser-only.",
+            },
+          ],
+        },
+      ],
     },
   },
 ];
 ```
 
-This is a *sketch* — production wiring will require tweaking
+This is a _sketch_ — production wiring will require tweaking
 boundaries-plugin patterns and validating the path globs against
 actual workspace layout. Reviewers should expect ~30 min of glob
 tuning during G14-T03.
@@ -394,40 +408,41 @@ proposals below feed directly into the task breakdown in §3.
 
 ### t3 today
 
-| Layer | File | Shape |
-| --- | --- | --- |
-| Event store | `apps/server/src/persistence/Services/OrchestrationEventStore.ts` + `Layers/OrchestrationEventStore.ts` | `append(event)` → assigns monotonic `sequence`; `readFromSequence(seqExclusive, limit)` → `Stream<OrchestrationEvent>`; `readAll()` → `Stream<…>`. Backed by sqlite table `orchestration_events` with columns `(sequence, event_id, aggregate_kind, stream_id, stream_version, event_type, occurred_at, command_id, causation_event_id, correlation_id, actor_kind, payload_json, metadata_json)`. |
-| Command receipts | `apps/server/src/persistence/Services/OrchestrationCommandReceipts.ts` | A separate sqlite table that records every accepted *command* (the input that *produces* an event) — independent of events because a single command may produce many events, and a rejected command produces zero events but should still be auditable. |
-| Projection pipeline | `apps/server/src/orchestration/Services/ProjectionPipeline.ts` + `Layers/ProjectionPipeline.ts` | `bootstrap` → replays events into projection tables from each projector's stored cursor; `projectEvent(event)` → updates all projection tables for one event. |
-| Projection tables | `apps/server/src/persistence/Layers/Projection*.ts` (12 files: Projects, Threads, Turns, ThreadMessages, ThreadActivities, ThreadSessions, ThreadProposedPlans, Checkpoints, PendingApprovals, Repositories, ProjectionState, …) | One sqlite table per read model; each owns its own cursor in `projection_state`. |
-| Projection snapshot query | `apps/server/src/orchestration/Services/ProjectionSnapshotQuery.ts` | Read-side composition of the per-projection tables into denormalized snapshots that the UI consumes (e.g. the full `Thread` aggregate). |
-| Migrations | `apps/server/src/persistence/Migrations/` (28 numbered migrations) | Each migration is an `Effect.gen` returning `sql\`CREATE TABLE …\`` statements. Run via `effect/unstable/sql/Migrator`. |
+| Layer                     | File                                                                                                                                                                                                                             | Shape                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Event store               | `apps/server/src/persistence/Services/OrchestrationEventStore.ts` + `Layers/OrchestrationEventStore.ts`                                                                                                                          | `append(event)` → assigns monotonic `sequence`; `readFromSequence(seqExclusive, limit)` → `Stream<OrchestrationEvent>`; `readAll()` → `Stream<…>`. Backed by sqlite table `orchestration_events` with columns `(sequence, event_id, aggregate_kind, stream_id, stream_version, event_type, occurred_at, command_id, causation_event_id, correlation_id, actor_kind, payload_json, metadata_json)`. |
+| Command receipts          | `apps/server/src/persistence/Services/OrchestrationCommandReceipts.ts`                                                                                                                                                           | A separate sqlite table that records every accepted _command_ (the input that _produces_ an event) — independent of events because a single command may produce many events, and a rejected command produces zero events but should still be auditable.                                                                                                                                            |
+| Projection pipeline       | `apps/server/src/orchestration/Services/ProjectionPipeline.ts` + `Layers/ProjectionPipeline.ts`                                                                                                                                  | `bootstrap` → replays events into projection tables from each projector's stored cursor; `projectEvent(event)` → updates all projection tables for one event.                                                                                                                                                                                                                                      |
+| Projection tables         | `apps/server/src/persistence/Layers/Projection*.ts` (12 files: Projects, Threads, Turns, ThreadMessages, ThreadActivities, ThreadSessions, ThreadProposedPlans, Checkpoints, PendingApprovals, Repositories, ProjectionState, …) | One sqlite table per read model; each owns its own cursor in `projection_state`.                                                                                                                                                                                                                                                                                                                   |
+| Projection snapshot query | `apps/server/src/orchestration/Services/ProjectionSnapshotQuery.ts`                                                                                                                                                              | Read-side composition of the per-projection tables into denormalized snapshots that the UI consumes (e.g. the full `Thread` aggregate).                                                                                                                                                                                                                                                            |
+| Migrations                | `apps/server/src/persistence/Migrations/` (28 numbered migrations)                                                                                                                                                               | Each migration is an `Effect.gen` returning `sql\`CREATE TABLE …\``statements. Run via`effect/unstable/sql/Migrator`.                                                                                                                                                                                                                                                                              |
 
 ### tmux-ide today
 
-| Layer | File | Shape |
-| --- | --- | --- |
-| Threads | `packages/daemon/src/chat/thread-store.ts` | JSON: one `<threadId>.json` per thread + an `index.json`. Atomic temp-rename writes; debounced. |
-| Turns | `packages/daemon/src/chat/turn-store.ts` | Pure in-memory. No durability — turn state lives only in the running daemon. |
-| Activities | `packages/daemon/src/chat/activity-log.ts` | Pure in-memory. Sequence assigned per-thread; no replay window. |
-| Plans | `packages/daemon/src/chat/plan-store.ts` | JSON-backed via thread-store. |
-| Checkpoints | `packages/daemon/src/chat/checkpoint-store.ts` | Pure in-memory keyed by `(threadId, turnId)`. Persistence is provided by git refs (the actual checkpoint), but the metadata is volatile. |
-| Sessions (T078) | `packages/daemon/src/chat/session-store.ts` | Pure in-memory. |
-| Tasks/missions/goals/events | `.tasks/*.json` + `_events.jsonl` | Append-only JSONL event log; JSON-file projections. Closest thing we have to event sourcing today, but no replay, no read-model bootstrap, no per-projection cursors. |
+| Layer                       | File                                           | Shape                                                                                                                                                                 |
+| --------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Threads                     | `packages/daemon/src/chat/thread-store.ts`     | JSON: one `<threadId>.json` per thread + an `index.json`. Atomic temp-rename writes; debounced.                                                                       |
+| Turns                       | `packages/daemon/src/chat/turn-store.ts`       | Pure in-memory. No durability — turn state lives only in the running daemon.                                                                                          |
+| Activities                  | `packages/daemon/src/chat/activity-log.ts`     | Pure in-memory. Sequence assigned per-thread; no replay window.                                                                                                       |
+| Plans                       | `packages/daemon/src/chat/plan-store.ts`       | JSON-backed via thread-store.                                                                                                                                         |
+| Checkpoints                 | `packages/daemon/src/chat/checkpoint-store.ts` | Pure in-memory keyed by `(threadId, turnId)`. Persistence is provided by git refs (the actual checkpoint), but the metadata is volatile.                              |
+| Sessions (T078)             | `packages/daemon/src/chat/session-store.ts`    | Pure in-memory.                                                                                                                                                       |
+| Tasks/missions/goals/events | `.tasks/*.json` + `_events.jsonl`              | Append-only JSONL event log; JSON-file projections. Closest thing we have to event sourcing today, but no replay, no read-model bootstrap, no per-projection cursors. |
 
 ### Delta + cost
 
-| Aspect | t3 | tmux-ide | Cost to adopt |
-| --- | --- | --- | --- |
-| Durability across daemon restart | All chat state durable | Threads/plans yes; turns/activities/checkpoints/sessions **no** | Whole rebuild on restart — accepted today but stops being acceptable once chat threads start running multi-hour validator runs (goal 13+ usage). |
-| Replay from any seq | Yes via `readFromSequence(seq)` | No — `_events.jsonl` is read on boot and never again | Cannot rebuild a projection after a bug fix without daemon restart + manual file edit. |
-| Multi-projection from one event stream | Yes — projector cursors live in `projection_state` table | No — each store has its own ad-hoc persistence | New consumers of chat events (metrics, audit dashboard, billing) require copy-paste subscription code. |
-| Command receipts | Yes — separate audit table | No — accepted commands and their events are not distinguishable from each other | Debugging "why didn't this command produce an event?" is hard. |
-| Migrations | sqlite + `effect/sql/Migrator` | None — JSON schema versioned manually via `version: 1` keys | When the schema needs to change, every install rewrites a JSON file. No down-migration story. |
+| Aspect                                 | t3                                                       | tmux-ide                                                                        | Cost to adopt                                                                                                                                    |
+| -------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Durability across daemon restart       | All chat state durable                                   | Threads/plans yes; turns/activities/checkpoints/sessions **no**                 | Whole rebuild on restart — accepted today but stops being acceptable once chat threads start running multi-hour validator runs (goal 13+ usage). |
+| Replay from any seq                    | Yes via `readFromSequence(seq)`                          | No — `_events.jsonl` is read on boot and never again                            | Cannot rebuild a projection after a bug fix without daemon restart + manual file edit.                                                           |
+| Multi-projection from one event stream | Yes — projector cursors live in `projection_state` table | No — each store has its own ad-hoc persistence                                  | New consumers of chat events (metrics, audit dashboard, billing) require copy-paste subscription code.                                           |
+| Command receipts                       | Yes — separate audit table                               | No — accepted commands and their events are not distinguishable from each other | Debugging "why didn't this command produce an event?" is hard.                                                                                   |
+| Migrations                             | sqlite + `effect/sql/Migrator`                           | None — JSON schema versioned manually via `version: 1` keys                     | When the schema needs to change, every install rewrites a JSON file. No down-migration story.                                                    |
 
 ### Proposed adoption — phased
 
 **Phase 1 — Event log (sqlite, no projections)**.
+
 - New sqlite database at `${TMUX_IDE_DATA_DIR}/daemon.sqlite` (or under
   per-project lock dir from goal-12). Schema: one table
   `chat_events` with columns mirroring t3's `orchestration_events`
@@ -441,24 +456,27 @@ proposals below feed directly into the task breakdown in §3.
   `readAll()`. Test with bun's better-sqlite3 driver (we ship it).
 
 **Phase 2 — Projections from the event log**.
+
 - Re-implement turn-store / activity-log / checkpoint-store as
-  *projections* — they keep their current Map-based read API but their
+  _projections_ — they keep their current Map-based read API but their
   state is rebuilt by replaying events from sqlite at startup, then
   updated incrementally by subscribing to `append`.
 - Add a `projection_state` table that stores `(projection_name,
-  last_applied_sequence)`. Each projection refuses to advance past a
+last_applied_sequence)`. Each projection refuses to advance past a
   gap.
 - Bootstrap on daemon start: load `last_applied_sequence` for each
   projection, replay events `> last`, mark them caught up.
 
 **Phase 3 — Command receipts**.
+
 - Add a `chat_commands` table mirroring t3's
   `orchestration_command_receipts`. Every action handler (`chat.session.send`,
   `chat.thread.create`, `chat.permission.respond`, …) writes a receipt
-  *before* dispatching downstream side effects, so a rejected command
+  _before_ dispatching downstream side effects, so a rejected command
   is still auditable.
 
 **Phase 4 — Tasks/missions/goals on the same substrate**.
+
 - Migrate `.tasks/*.json` + `_events.jsonl` to the same sqlite
   database (a second event stream alongside `chat_events`, or a single
   unified stream keyed by `aggregate_kind`). At that point the
@@ -466,12 +484,12 @@ proposals below feed directly into the task breakdown in §3.
 
 ### Acceptance per phase
 
-| Phase | Test |
-| --- | --- |
-| P1 | `append` + `readFromSequence` round-trip 1000 events under 100 ms (sqlite + better-sqlite3). Schema-validated on read. |
-| P2 | Daemon restart with `chat_events` populated → projections rebuild deterministically and the dashboard reads the same state it saw before restart. |
-| P3 | `chat.session.send` produces a row in `chat_commands` even when the receiving permission flow rejects the prompt. |
-| P4 | One unified sqlite file holds chat + tasks; JSON files under `.tasks/` are removed. |
+| Phase | Test                                                                                                                                              |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1    | `append` + `readFromSequence` round-trip 1000 events under 100 ms (sqlite + better-sqlite3). Schema-validated on read.                            |
+| P2    | Daemon restart with `chat_events` populated → projections rebuild deterministically and the dashboard reads the same state it saw before restart. |
+| P3    | `chat.session.send` produces a row in `chat_commands` even when the receiving permission flow rejects the prompt.                                 |
+| P4    | One unified sqlite file holds chat + tasks; JSON files under `.tasks/` are removed.                                                               |
 
 ### Concrete sqlite DDL — our subset
 
@@ -597,7 +615,7 @@ CREATE TABLE IF NOT EXISTS projection_sessions (
 );
 ```
 
-Note the *denormalized* `session_id` column on `chat_events` and
+Note the _denormalized_ `session_id` column on `chat_events` and
 `projection_activities`. Multi-agent threads (T078) query
 "activities for session X" frequently, and an index on a denormalized
 column beats a JSON extraction every time.
@@ -637,7 +655,11 @@ export interface ChatEventStore {
 }
 
 export function makeChatEventStore(db: Database.Database): ChatEventStore {
-  const appendStmt = db.prepare<[ /* … */ ]>(`
+  const appendStmt = db.prepare<
+    [
+      /* … */
+    ]
+  >(`
     INSERT INTO chat_events (
       event_id, aggregate_kind, stream_id, stream_version,
       event_type, occurred_at, command_id, causation_event_id,
@@ -692,13 +714,13 @@ sees the latest version atomically).
 
 ### Delta
 
-| Aspect | t3 | tmux-ide | Cost to adopt | Win |
-| --- | --- | --- | --- | --- |
-| Type-safe error channels | `Effect<R, E, A>` | Throw + try/catch | Re-typing every handler signature | Compiler enforces that "this handler may throw `ThreadNotFoundError`" — today it's documented in comments. |
-| Structured concurrency | `Scope` + `Fiber` + `Stream` | Manual `AbortController`/cleanup | High — invasive | Resource leaks become *type errors*, not runtime regressions. |
-| Dependency injection | `Layer` + `Context.Service` | Closures over options objects | Medium — every store factory becomes a `Layer` | Test wiring becomes declarative: swap `Layer.succeed(Store, fake)` instead of plumbing fakes through 12 constructor args. |
-| Schema | `Schema` from `effect` | `Zod` | Re-derive every schema | Brand support is first-class (see §2.8); transforms (legacy-shape decoding) are more expressive than Zod's `.transform()`. |
-| Bundle size | Already includes Effect runtime (~50 KB gzip), `@effect/atom-react`, etc. | Zero Effect today; Zod is small | **~50 KB gzip added to dashboard if Effect lands there**; daemon-side cost is negligible (no shipping cost). | Daemon: just engineering rigor. Dashboard: Atom + Stream-friendly server-state. |
+| Aspect                   | t3                                                                        | tmux-ide                         | Cost to adopt                                                                                                | Win                                                                                                                        |
+| ------------------------ | ------------------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| Type-safe error channels | `Effect<R, E, A>`                                                         | Throw + try/catch                | Re-typing every handler signature                                                                            | Compiler enforces that "this handler may throw `ThreadNotFoundError`" — today it's documented in comments.                 |
+| Structured concurrency   | `Scope` + `Fiber` + `Stream`                                              | Manual `AbortController`/cleanup | High — invasive                                                                                              | Resource leaks become _type errors_, not runtime regressions.                                                              |
+| Dependency injection     | `Layer` + `Context.Service`                                               | Closures over options objects    | Medium — every store factory becomes a `Layer`                                                               | Test wiring becomes declarative: swap `Layer.succeed(Store, fake)` instead of plumbing fakes through 12 constructor args.  |
+| Schema                   | `Schema` from `effect`                                                    | `Zod`                            | Re-derive every schema                                                                                       | Brand support is first-class (see §2.8); transforms (legacy-shape decoding) are more expressive than Zod's `.transform()`. |
+| Bundle size              | Already includes Effect runtime (~50 KB gzip), `@effect/atom-react`, etc. | Zero Effect today; Zod is small  | **~50 KB gzip added to dashboard if Effect lands there**; daemon-side cost is negligible (no shipping cost). | Daemon: just engineering rigor. Dashboard: Atom + Stream-friendly server-state.                                            |
 
 ### Recommendation — phased, daemon-first, schema-edge
 
@@ -710,6 +732,7 @@ be either entirely Zod or entirely Effect Schema, because the
 discriminated union and the test fixtures assume one decoder. So:
 
 **Phase A — Effect Schema for new contracts only**.
+
 - New contract files under `packages/contracts/src/<new-aggregate>.ts`
   may use `Schema` from `effect`. Existing files (especially
   `chat-thread.ts`) stay Zod for now.
@@ -719,6 +742,7 @@ discriminated union and the test fixtures assume one decoder. So:
   noted in the PR description.
 
 **Phase B — Daemon services on `Effect.gen` + `Context.Service`**.
+
 - Pick the smallest service to migrate first — `provider-registry.ts`
   is a good first target because it has clear ports (read providers,
   write providers, watch for changes) and no live network.
@@ -729,20 +753,22 @@ discriminated union and the test fixtures assume one decoder. So:
   Both are exercised by tests. No regression in command-center handlers.
 
 **Phase C — Daemon-wide `ManagedRuntime`**.
+
 - Replace the daemon's `Promise<void>` boot path with `Effect.runFork`
   on a `ManagedRuntime` that composes every service Layer.
 - Acceptance: `bin/cli.ts` no longer reaches into a fan of imperative
   setup functions; instead it pulls one `Layer` and runs it.
 
 **Phase D — Dashboard adoption (optional, deferred)**.
-- Adopt `@effect/atom-react` *only if* we also adopt Effect on the
+
+- Adopt `@effect/atom-react` _only if_ we also adopt Effect on the
   dashboard's server-state path. See §6 open question.
 - Until then, keep zustand + (TanStack Query or hand-rolled WS hooks).
   The T050 research is unambiguous about the bundle cost.
 
 ### Open question — Schema-everywhere vs Schema-at-edge
 
-**Strong-form**: rewrite *every* contract in Effect Schema, port every
+**Strong-form**: rewrite _every_ contract in Effect Schema, port every
 runtime handler to `Effect.gen`. Cost: large, multi-week. Win: every
 service in the codebase composes through the same DI system.
 
@@ -763,18 +789,19 @@ to dashboard development.
 
 ### t3 today
 
-t3 separates *event emission* from *side effects* via reactor
+t3 separates _event emission_ from _side effects_ via reactor
 services:
 
-| Reactor | Source file | What it reacts to | What it does |
-| --- | --- | --- | --- |
-| `CheckpointReactor` | `apps/server/src/orchestration/Services/CheckpointReactor.ts` | Orchestration + provider-runtime events related to turn lifecycle | Captures baseline diffs, finalizes per-turn diffs, snapshots git refs |
-| `OrchestrationReactor` | `apps/server/src/orchestration/Services/OrchestrationReactor.ts` | Orchestration events | Updates aggregated read-model state, fans out to providers |
-| `ProviderCommandReactor` | `apps/server/src/orchestration/Services/ProviderCommandReactor.ts` | Provider-side events (tool calls, agent updates) | Translates provider output to orchestration commands |
-| `ProviderRuntimeIngestion` | `apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts` | Raw provider stream | Normalizes provider events into the canonical event shape |
-| `ThreadDeletionReactor` | `apps/server/src/orchestration/Services/ThreadDeletionReactor.ts` | `thread.deleted` events | Tears down provider sessions, removes checkpoint refs, GCs |
+| Reactor                    | Source file                                                        | What it reacts to                                                 | What it does                                                          |
+| -------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `CheckpointReactor`        | `apps/server/src/orchestration/Services/CheckpointReactor.ts`      | Orchestration + provider-runtime events related to turn lifecycle | Captures baseline diffs, finalizes per-turn diffs, snapshots git refs |
+| `OrchestrationReactor`     | `apps/server/src/orchestration/Services/OrchestrationReactor.ts`   | Orchestration events                                              | Updates aggregated read-model state, fans out to providers            |
+| `ProviderCommandReactor`   | `apps/server/src/orchestration/Services/ProviderCommandReactor.ts` | Provider-side events (tool calls, agent updates)                  | Translates provider output to orchestration commands                  |
+| `ProviderRuntimeIngestion` | `apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts` | Raw provider stream                                               | Normalizes provider events into the canonical event shape             |
+| `ThreadDeletionReactor`    | `apps/server/src/orchestration/Services/ThreadDeletionReactor.ts`  | `thread.deleted` events                                           | Tears down provider sessions, removes checkpoint refs, GCs            |
 
 Each reactor:
+
 - Owns a `Scope` for its workers.
 - Subscribes to an internal queue (`Queue.unbounded<…>`) that's fed by
   the event bus.
@@ -784,11 +811,11 @@ Each reactor:
 ### tmux-ide today
 
 The closest thing we have is `thread-manager.ts` itself — it does
-*everything*: spawning ACP/Codex clients, handling permission flow,
+_everything_: spawning ACP/Codex clients, handling permission flow,
 emitting events, recording usage. The result is a 425-line module
 that's hard to refactor (we already split it into `message-pipe.ts` +
 `permission-coordinator.ts` + `codex-event-handler.ts` during goal-13
-work, but those are extracted *helpers*, not first-class reactors).
+work, but those are extracted _helpers_, not first-class reactors).
 
 The orchestrator (`packages/daemon/src/lib/orchestrator.ts`) does
 have a tick-based dispatcher with side effects, but it pulls from the
@@ -796,17 +823,17 @@ task store, not from an event stream.
 
 ### Delta
 
-| Aspect | t3 | tmux-ide |
-| --- | --- | --- |
-| Side effects keyed off events | Yes — every reactor `consumer` for a queue | No — side effects fire inline from stores |
-| Drain-for-tests | First-class | Hand-rolled `waitFor(() => …)` in test helpers |
-| Bounded concurrency per reactor | Built into `Effect.Stream` | Manual |
-| Failure isolation | Reactor failures don't take down the daemon | Today an unhandled rejection in a chat handler can crash the daemon process |
+| Aspect                          | t3                                          | tmux-ide                                                                    |
+| ------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------- |
+| Side effects keyed off events   | Yes — every reactor `consumer` for a queue  | No — side effects fire inline from stores                                   |
+| Drain-for-tests                 | First-class                                 | Hand-rolled `waitFor(() => …)` in test helpers                              |
+| Bounded concurrency per reactor | Built into `Effect.Stream`                  | Manual                                                                      |
+| Failure isolation               | Reactor failures don't take down the daemon | Today an unhandled rejection in a chat handler can crash the daemon process |
 
 ### Proposed adoption
 
-Introduce three reactors that match t3's shape *but speak our existing
-event union*:
+Introduce three reactors that match t3's shape _but speak our existing
+event union_:
 
 1. `ChatCheckpointReactor` — consumes `chat.turn.completed`,
    `chat.thread.reverted`; calls `checkpoint-engine.snapshot` /
@@ -822,7 +849,7 @@ event union*:
    manages the timeout/cancel/reply cycle. Today this is
    `permission-coordinator.ts`.
 
-The three modules already exist as helpers. The migration is a *shape*
+The three modules already exist as helpers. The migration is a _shape_
 change: each becomes a service with `start()`/`drain` and consumes a
 real queue, rather than being driven by direct method calls from
 `thread-manager.ts`.
@@ -858,9 +885,7 @@ export interface MakeCheckpointReactorOptions {
   logger?: (event: { level: "info" | "warn" | "error"; msg: string }) => void;
 }
 
-export function makeCheckpointReactor(
-  opts: MakeCheckpointReactorOptions,
-): CheckpointReactor {
+export function makeCheckpointReactor(opts: MakeCheckpointReactorOptions): CheckpointReactor {
   const queue: ChatThreadEvent[] = [];
   let running = false;
   let drainResolvers: Array<() => void> = [];
@@ -919,10 +944,10 @@ export function makeCheckpointReactor(
   return {
     async start() {
       const unsub = opts.eventStore /* hypothetical subscribe API */
-        // For Phase 2: we subscribe to a Node EventEmitter that the
-        // event-store fires after every append. Implementation detail
-        // omitted here for brevity.
-        ? () => undefined
+        ? // For Phase 2: we subscribe to a Node EventEmitter that the
+          // event-store fires after every append. Implementation detail
+          // omitted here for brevity.
+          () => undefined
         : () => undefined;
       return async () => {
         unsub();
@@ -950,7 +975,7 @@ on Effect. When G14-T08/T09 land, the same module rewrites in
 - A new directory `packages/daemon/src/chat/reactors/` holds
   three reactor files plus tests.
 - `thread-manager.ts` shrinks because its responsibility is now
-  *boot the reactors and route the public action API*; the live event
+  _boot the reactors and route the public action API_; the live event
   flow happens in reactors.
 - The integration suite uses `.drain()` calls and stops importing
   `setTimeout`.
@@ -958,7 +983,7 @@ on Effect. When G14-T08/T09 land, the same module rewrites in
 ### Failure isolation
 
 Each reactor catches errors from its `process()` body and logs them.
-A failing reactor does *not* take down the daemon — it logs, records
+A failing reactor does _not_ take down the daemon — it logs, records
 the failure as a synthetic event (`chat.reactor.failure`) for audit,
 and continues consuming. This matches t3's design where a single bad
 event doesn't poison the whole queue.
@@ -969,21 +994,22 @@ event doesn't poison the whole queue.
 
 ### t3 today
 
-t3 splits the *checkpoint* from the *per-turn diff*:
+t3 splits the _checkpoint_ from the _per-turn diff_:
 
 - **CheckpointSummary** (in `chat-thread.ts` analogue) describes a git
   ref + file change list, used by the "revert this turn" affordance.
 - **TurnDiff** (`packages/contracts/src/orchestration.ts:1126`) is a
   separate read API exposed via `orchestration.getTurnDiff` that
-  returns the diff for a *range* of turn-counts (start, end). It's
+  returns the diff for a _range_ of turn-counts (start, end). It's
   used by the diff viewer in `apps/web` for the "what changed in this
   turn" pane, and by the dashboard's "show me the diff between turn 3
   and turn 5" UX.
 
 The split exists because:
-- CheckpointSummary is a snapshot *summary* — file paths + add/del
+
+- CheckpointSummary is a snapshot _summary_ — file paths + add/del
   counts; lightweight, embedded in every thread snapshot.
-- TurnDiff is a full *patch payload* — heavy, fetched on demand.
+- TurnDiff is a full _patch payload_ — heavy, fetched on demand.
 - TurnDiff supports a range (`getTurnDiff({ from: 3, to: 5 })`) which
   the lightweight summary cannot.
 
@@ -998,11 +1024,11 @@ shape for "diff between turn N and turn M".
 
 ### Delta
 
-| Aspect | t3 | tmux-ide |
-| --- | --- | --- |
-| Per-turn diff schema | Yes (`ThreadTurnDiff`) | Folded into `CheckpointSummary.files` (just summary, no patch text) |
-| Range query | Yes (`getTurnDiff({ from, to })`) | No |
-| Type-safe diff API | Yes via `OrchestrationGetTurnDiffResult` | No — `dashboard/lib/api.ts` returns untyped JSON |
+| Aspect               | t3                                       | tmux-ide                                                            |
+| -------------------- | ---------------------------------------- | ------------------------------------------------------------------- |
+| Per-turn diff schema | Yes (`ThreadTurnDiff`)                   | Folded into `CheckpointSummary.files` (just summary, no patch text) |
+| Range query          | Yes (`getTurnDiff({ from, to })`)        | No                                                                  |
+| Type-safe diff API   | Yes via `OrchestrationGetTurnDiffResult` | No — `dashboard/lib/api.ts` returns untyped JSON                    |
 
 ### Proposed adoption
 
@@ -1014,9 +1040,9 @@ export const CheckpointSummaryZ = z.object({
   turnId: TurnIdZ,
   checkpointRef: CheckpointRefZ,
   status: CheckpointStatusZ,
-  fileCount: NonNegativeIntZ,           // <- replaces the per-file array
-  additions: NonNegativeIntZ,           // <- aggregate
-  deletions: NonNegativeIntZ,           // <- aggregate
+  fileCount: NonNegativeIntZ, // <- replaces the per-file array
+  additions: NonNegativeIntZ, // <- aggregate
+  deletions: NonNegativeIntZ, // <- aggregate
   // … existing fields …
 });
 
@@ -1025,13 +1051,15 @@ export const TurnDiffZ = z.object({
   threadId: ThreadIdZ,
   turnCountFromInclusive: NonNegativeIntZ,
   turnCountToInclusive: NonNegativeIntZ,
-  files: z.array(z.object({
-    path: TrimmedNonEmptyStringZ,
-    kind: TrimmedNonEmptyStringZ,
-    additions: NonNegativeIntZ,
-    deletions: NonNegativeIntZ,
-    patch: z.string(),                  // full unified diff
-  })),
+  files: z.array(
+    z.object({
+      path: TrimmedNonEmptyStringZ,
+      kind: TrimmedNonEmptyStringZ,
+      additions: NonNegativeIntZ,
+      deletions: NonNegativeIntZ,
+      patch: z.string(), // full unified diff
+    }),
+  ),
 });
 ```
 
@@ -1074,12 +1102,13 @@ export const ProviderSandboxMode = Schema.Literals([
 ```
 
 Together these let a user say:
+
 - "Codex: always ask, danger-full-access" (curious user).
 - "Claude Code: never ask on read-only tools, ask only on
   workspace-write tools" (production).
 - "Local Ollama: untrusted everything" (just spawned, no policy yet).
 
-The policy is consulted by the permission coordinator before *every*
+The policy is consulted by the permission coordinator before _every_
 tool call, not just inline tools.
 
 ### tmux-ide today
@@ -1094,11 +1123,11 @@ not a contract.
 
 ### Delta
 
-| Aspect | t3 | tmux-ide |
-| --- | --- | --- |
-| Per-tool policy | Yes | No (per-thread `RuntimeMode` only) |
-| Per-tool-kind defaults (read-only vs workspace-write vs danger) | Yes (`ProviderSandboxMode`) | No |
-| User-configurable defaults at the provider-instance level | Yes (stored on `ProviderInstance`) | No |
+| Aspect                                                          | t3                                 | tmux-ide                           |
+| --------------------------------------------------------------- | ---------------------------------- | ---------------------------------- |
+| Per-tool policy                                                 | Yes                                | No (per-thread `RuntimeMode` only) |
+| Per-tool-kind defaults (read-only vs workspace-write vs danger) | Yes (`ProviderSandboxMode`)        | No                                 |
+| User-configurable defaults at the provider-instance level       | Yes (stored on `ProviderInstance`) | No                                 |
 
 ### Proposed adoption
 
@@ -1106,19 +1135,19 @@ not a contract.
 // packages/contracts/src/chat-thread.ts (proposal — Zod for now, Schema later)
 
 export const ToolKindZ = z.enum([
-  "read",            // read_pane, capture_pane, file reads
-  "send",            // send_to_pane (writes to a tmux pane)
+  "read", // read_pane, capture_pane, file reads
+  "send", // send_to_pane (writes to a tmux pane)
   "workspace-write", // edits to project files
-  "shell",           // arbitrary shell commands
-  "network",         // outbound network requests
-  "danger",          // anything else (catch-all)
+  "shell", // arbitrary shell commands
+  "network", // outbound network requests
+  "danger", // anything else (catch-all)
 ]);
 
 export const ApprovalPolicyZ = z.enum([
-  "untrusted",       // always ask, do not remember
-  "on-failure",      // run; if the tool errors, ask before retry
-  "on-request",      // run silently; ask only when explicitly required
-  "never",           // never ask — pure trust
+  "untrusted", // always ask, do not remember
+  "on-failure", // run; if the tool errors, ask before retry
+  "on-request", // run silently; ask only when explicitly required
+  "never", // never ask — pure trust
 ]);
 
 export const ProviderApprovalPolicyZ = z.object({
@@ -1133,6 +1162,7 @@ and overrideable on a `Session` (so a single multi-agent thread can
 have a validator on `untrusted` and a lead on `on-request`).
 
 Permission coordinator becomes:
+
 ```ts
 const policy = resolvePolicy(session, providerInstance);
 const decision = policy.perKind[toolKind] ?? policy.default;
@@ -1151,7 +1181,7 @@ a `kind`).
 
 **Next step**: G14-T12 (P2, S contract / M runtime). The schema can
 land in this round even though we said "no new schemas in this
-document" — the *plan* includes the schema; the *implementation*
+document" — the _plan_ includes the schema; the _implementation_
 follows in the task.
 
 ## 2.6 Provider adapter depth
@@ -1188,6 +1218,7 @@ about how to spawn a provider.
 ### tmux-ide today
 
 We have:
+
 ```
 packages/daemon/src/chat/
   provider-discovery.ts        # one-shot scan for installed providers
@@ -1206,23 +1237,24 @@ modules: `provider-registry.ts` (lazy adapter functions) and
 `provider-store.ts` (persisted instances).
 
 We don't have:
-- A *session directory* — a map of `(threadId, sessionId) → live
-  provider session` lookup that's the source of truth for "who owns
+
+- A _session directory_ — a map of `(threadId, sessionId) → live
+provider session` lookup that's the source of truth for "who owns
   this session?"
-- A *session reaper* — a worker that scans for orphan provider
+- A _session reaper_ — a worker that scans for orphan provider
   sessions and tears them down.
-- *Event loggers* — t3 logs every provider event to NDJSON on disk for
+- _Event loggers_ — t3 logs every provider event to NDJSON on disk for
   post-hoc analysis; we drop them.
 
 ### Delta
 
-| Aspect | t3 | tmux-ide |
-| --- | --- | --- |
-| Adapter registry as separate layer | Yes | Conflated with provider-registry.ts |
-| Session directory | Yes — first-class | No — every consumer maintains its own map |
-| Session reaper | Yes — bounded scope | No — relies on daemon-shutdown to clean up |
-| Event NDJSON logs | Yes | No |
-| Per-driver Layer composition | Yes — `ClaudeAdapter`, `CodexAdapter`, … | One `provider-registry.ts` with `if (kind === "codex") …` |
+| Aspect                             | t3                                       | tmux-ide                                                  |
+| ---------------------------------- | ---------------------------------------- | --------------------------------------------------------- |
+| Adapter registry as separate layer | Yes                                      | Conflated with provider-registry.ts                       |
+| Session directory                  | Yes — first-class                        | No — every consumer maintains its own map                 |
+| Session reaper                     | Yes — bounded scope                      | No — relies on daemon-shutdown to clean up                |
+| Event NDJSON logs                  | Yes                                      | No                                                        |
+| Per-driver Layer composition       | Yes — `ClaudeAdapter`, `CodexAdapter`, … | One `provider-registry.ts` with `if (kind === "codex") …` |
 
 ### Proposed adoption
 
@@ -1247,7 +1279,7 @@ packages/daemon/src/provider/
   codex/                          # moved from chat/
 ```
 
-The current `chat/` keeps only the *chat-aggregate* logic (turns,
+The current `chat/` keeps only the _chat-aggregate_ logic (turns,
 threads, sessions, plans, checkpoints, activities). Provider concerns
 live next door, providing the facade `ProviderService` that chat
 consumes.
@@ -1290,7 +1322,7 @@ bin/cli.ts            # CLI
 packages/daemon/      # daemon (akin to t3's apps/server)
 ```
 
-So we already have *two* desktop shells: a Swift one (`app/`) and an
+So we already have _two_ desktop shells: a Swift one (`app/`) and an
 Electron one (`app-electron/`). t3 has only Electron. The Swift one is
 the equivalent of t3's `apps/desktop` plus more: it embeds Ghostty
 (native terminal) and presents an infinite-canvas UI on macOS.
@@ -1300,16 +1332,16 @@ shape (Electron host, web inside).
 
 ### Delta
 
-| Aspect | t3 | tmux-ide |
-| --- | --- | --- |
-| Electron shell | First-class (`apps/desktop`) | In progress (`app-electron/`) |
-| Native macOS shell | None | `app/` (Swift, in development) |
-| Auto-update | Yes (`electron-updater`) | Partial in `app-electron/`; native auto-update story for `app/` is TBD |
-| Mobile | No | No |
+| Aspect             | t3                           | tmux-ide                                                               |
+| ------------------ | ---------------------------- | ---------------------------------------------------------------------- |
+| Electron shell     | First-class (`apps/desktop`) | In progress (`app-electron/`)                                          |
+| Native macOS shell | None                         | `app/` (Swift, in development)                                         |
+| Auto-update        | Yes (`electron-updater`)     | Partial in `app-electron/`; native auto-update story for `app/` is TBD |
+| Mobile             | No                           | No                                                                     |
 
 ### Proposed adoption
 
-**Pick one**: finish *either* the Electron shell *or* the Swift shell
+**Pick one**: finish _either_ the Electron shell _or_ the Swift shell
 as the canonical desktop surface, not both. The Swift one is the more
 distinctive (native, embedded terminal) — strong argument to finish
 that one and treat `app-electron/` as a fallback for non-macOS.
@@ -1319,6 +1351,7 @@ Swift gateway is the equivalent of t3 `apps/desktop` — finish that
 surface; defer `apps/mobile`."
 
 So:
+
 - `app/` (Swift) is the t3-`apps/desktop` analogue. Polish it.
 - `app-electron/` continues as the cross-platform fallback (Linux,
   Windows). Keep it in maintenance mode.
@@ -1362,11 +1395,11 @@ swapped. The bug compiles cleanly.
 
 ### Delta
 
-| Aspect | t3 | tmux-ide |
-| --- | --- | --- |
-| Branded IDs | Yes — five+ branded types | No — every ID is `string` |
-| Compile-time prevention of ID mix-up | Yes | No |
-| Refactor safety when renaming an ID type | Type system catches it | Manual grep |
+| Aspect                                   | t3                        | tmux-ide                  |
+| ---------------------------------------- | ------------------------- | ------------------------- |
+| Branded IDs                              | Yes — five+ branded types | No — every ID is `string` |
+| Compile-time prevention of ID mix-up     | Yes                       | No                        |
+| Refactor safety when renaming an ID type | Type system catches it    | Manual grep               |
 
 ### Proposed adoption — two options
 
@@ -1389,7 +1422,7 @@ is expected.
 
 **Option B — Migrate IDs to Effect Schema**.
 
-Becomes free *if* §2.2 phase A lands and we have Effect Schema in the
+Becomes free _if_ §2.2 phase A lands and we have Effect Schema in the
 contracts package. Better ergonomics inside Effect-using code.
 
 Cons: forces dashboard (which never sees Effect) to add a runtime
@@ -1401,6 +1434,7 @@ cost just to construct IDs.
 Revisit Option B only if we go strong-form Effect in §2.2.
 
 **Migration plan**:
+
 1. Mechanical edit: replace `z.string()` with `z.string().brand<"X">()`
    for the five IDs in `packages/contracts/src/chat-thread.ts`.
 2. tsc will surface every cast / constructor / cross-id-passing site.
@@ -1421,24 +1455,24 @@ across the whole daemon).
 > follows the dependency arrows; the table below is sorted by
 > dependency-aware order.
 
-| # | Title | P | Effort | Engineering rationale | Acceptance | Depends on |
-| --- | --- | --- | --- | --- | --- | --- |
-| **G14-T01** | **Architectural Rule ADR + ARCHITECTURE.md stub** | P1 | S | Codifies §1 of this document as a referenceable ADR so PR descriptions can cite `ADR-0001` instead of restating the rule. Cheapest possible reduction of mixed-and-matched code review noise. | `docs/adr/0001-rsc-shell-and-siloed-blocks.md` exists; `ARCHITECTURE.md` has a one-paragraph stub linking to it; `CONTRIBUTING.md` (if present) cross-links. | — |
-| **G14-T02** | **Silo audit cleanup (table-driven sweep)** | P1 | S | Walk every row of §5's silo audit; for each "needs cleanup" row, file a sub-task or fix inline. Closes out goal-13 cross-framework debt before goal-14 builds on top. | Every row in §5 is either ✅ clean or has a linked tracking task; no row left at "needs cleanup" with no owner. | G14-T01 |
-| **G14-T03** | **Silo boundary lint** | P1 | S | Adds the five ESLint rules from §1.4 + the CI grep for stray `mount()` calls. Prevents future "mixed-and-matched" regressions automatically. | `pnpm lint` enforces rules 1-5; deliberate violation reproduces a CI failure; `pnpm lint -- --fix` does not silently bypass the rules. | G14-T01 |
-| **G14-T04** | **Branded chat IDs (Zod brand)** | P1 | M | Catches whole bug class (`(threadId, turnId)` swap) at compile time. Cheap mechanically; high signal-to-noise. See §2.8 Option A. | `ThreadId`, `TurnId`, `CheckpointRef`, `EventId`, `MessageId`, `SessionId` all branded; tsc green; tests pass. | — |
-| **G14-T05** | **Sqlite event log (chat aggregate)** | P1 | M | Foundation for §2.1, §2.3 (reactors will consume from it), §2.4 (TurnDiff lives here). Replaces ephemeral turn/activity/checkpoint state with durable, replayable storage. | `packages/daemon/src/persistence/chat-event-store.ts` exports `append` + `readFromSequence` + `readAll`; sqlite migration runs idempotently; 1000-event round-trip < 100 ms. | G14-T04 (so events ship branded ids) |
-| **G14-T06** | **Projections from event log (turn/activity/checkpoint/session)** | P1 | L | Re-implements the four ephemeral stores as projections that rebuild from the event log on daemon start. Closes the "daemon restart drops chat state" gap. | Daemon restart with a populated event log produces the same projection state. Each projection writes its cursor to `projection_state`. Resume from a gap is rejected. | G14-T05 |
-| **G14-T07** | **Effect Schema for new contracts (opt-in path)** | P2 | M | Adopt Effect Schema for *new* contract files only. Avoid touching `chat-thread.ts`. Establishes the dependency in the workspace so future contracts can opt in. See §2.2 Phase A. | `effect` + `@effect/schema` added; one new contract (e.g. `provider-driver.ts`) uses `Schema.Struct`; bundle-size impact on dashboard measured & documented in PR. | — |
-| **G14-T08** | **Daemon services on Effect.gen (`ProviderRegistry` first)** | P2 | M | First Effect.gen migration target. Pure read/write registry; no live network. Establishes the pattern; subsequent migrations copy it. See §2.2 Phase B. | `ProviderRegistry.Service` exists alongside `makeProviderRegistry()`; `Layer.succeed(ProviderRegistry, fake)` swappable in tests; no regression in command-center handlers. | G14-T07 |
-| **G14-T09** | **Daemon `ManagedRuntime` bootstrap** | P2 | L | The actual bootstrap path becomes one `Layer.merge(...)` + `Effect.runFork`. Removes the fan of imperative `make*` factories from `packages/daemon/src/bin.ts`. See §2.2 Phase C. | `packages/daemon/src/bin.ts` pulls one Layer and runs it; existing CLI commands still work; daemon boot time within ±10% of pre-migration. | G14-T08 |
-| **G14-T10** | **Chat reactors (Checkpoint / ProviderRuntimeIngestion / Permission)** | P2 | M | Refactors the three side-effect-heavy chat modules into first-class reactors with `start()` + `drain`. Removes flaky `waitFor(() => …)` polling from integration tests. See §2.3. T087 already landed the analogous `PtyAdapter` (terminal layer) — same shape (`spawnSync`/`spawn` contract + Mock test double), so G14-T10 should re-use that pattern rather than reinvent it. | `packages/daemon/src/chat/reactors/` exists with three reactors + tests; `thread-manager.ts` shrinks by ≥30% LOC; integration tests use `.drain` not `setTimeout`; reactors consume `PtyAdapter`-style injected services where they need terminal output. | G14-T05, G14-T06, T087 (pattern reuse) |
-| **G14-T11** | **TurnDiff projection + `chat.turn.getDiff` action** | P2 | M | Splits `CheckpointSummary.files` into "summary on every snapshot" + "TurnDiff on demand". See §2.4. | New `TurnDiffZ` schema; new `chat.turn.getDiff` action; range query (`from`, `to`) works; existing diff UI continues to function during transition. | G14-T05, G14-T06 |
-| **G14-T12** | **ProviderApprovalPolicy schema + per-tool resolver** | P2 | M | Per-tool/per-kind approval policy. See §2.5. | `ProviderApprovalPolicyZ` + `ToolKindZ` in contracts; permission coordinator consults policy before raising approval; default for unconfigured tools is `untrusted`; integration test for each policy literal. | G14-T04 (branded ids), G14-T10 (permission reactor) |
-| **G14-T13** | **Provider package depth (Drivers / Registry / Directory / Reaper / Loggers)** | P2 | M | §2.6 layer split: `packages/daemon/src/provider/{Drivers,Layers}/...`. | New directory layout; old `provider-{registry,store,discovery}.ts` become thin shims that re-export; session reaper GCs orphaned runtimes; per-driver tests pass. | G14-T08 (Effect.gen) |
-| **G14-T14** | **Polish `app/` Swift gateway as the canonical desktop shell** | P2 | L | §2.7. Treat `app/` as the t3-`apps/desktop` analogue. Scope of "polish" is OPEN QUESTION FOR USER (which features are missing today?). | TBD pending OQ resolution. Suggested minimum: persistent project list, multi-thread switching, native auto-update channel, daemon-restart on crash. | — (independent track) |
-| **G14-T15** | **Tasks/missions/goals on the same sqlite substrate** | P3 | L | Migrate `.tasks/*.json` + `_events.jsonl` to sqlite. The daemon ships exactly one persistence boundary. See §2.1 Phase 4. | One sqlite file holds chat + task data; `.tasks/*.json` writes are removed; existing CLI commands unaffected; migration is one-way and idempotent. | G14-T06 (we have working projections) |
-| **G14-T16** | **Goal-14 retrospective + ARCHITECTURE.md refresh** | P3 | S | Capture lessons; refresh `ARCHITECTURE.md` with the new layout (event store, reactors, provider depth, branded IDs, RSC + silo rule). Closes the loop on every previous task. | `ARCHITECTURE.md` is the single source of truth a new contributor reads; goal-14 retrospective lives in `.tmux-ide/library/learnings.md`. | G14-T05 through G14-T15 |
+| #           | Title                                                                          | P   | Effort | Engineering rationale                                                                                                                                                                                                                                                                                                                                                            | Acceptance                                                                                                                                                                                                                                                | Depends on                                          |
+| ----------- | ------------------------------------------------------------------------------ | --- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| **G14-T01** | **Architectural Rule ADR + ARCHITECTURE.md stub**                              | P1  | S      | Codifies §1 of this document as a referenceable ADR so PR descriptions can cite `ADR-0001` instead of restating the rule. Cheapest possible reduction of mixed-and-matched code review noise.                                                                                                                                                                                    | `docs/adr/0001-rsc-shell-and-siloed-blocks.md` exists; `ARCHITECTURE.md` has a one-paragraph stub linking to it; `CONTRIBUTING.md` (if present) cross-links.                                                                                              | —                                                   |
+| **G14-T02** | **Silo audit cleanup (table-driven sweep)**                                    | P1  | S      | Walk every row of §5's silo audit; for each "needs cleanup" row, file a sub-task or fix inline. Closes out goal-13 cross-framework debt before goal-14 builds on top.                                                                                                                                                                                                            | Every row in §5 is either ✅ clean or has a linked tracking task; no row left at "needs cleanup" with no owner.                                                                                                                                           | G14-T01                                             |
+| **G14-T03** | **Silo boundary lint**                                                         | P1  | S      | Adds the five ESLint rules from §1.4 + the CI grep for stray `mount()` calls. Prevents future "mixed-and-matched" regressions automatically.                                                                                                                                                                                                                                     | `pnpm lint` enforces rules 1-5; deliberate violation reproduces a CI failure; `pnpm lint -- --fix` does not silently bypass the rules.                                                                                                                    | G14-T01                                             |
+| **G14-T04** | **Branded chat IDs (Zod brand)**                                               | P1  | M      | Catches whole bug class (`(threadId, turnId)` swap) at compile time. Cheap mechanically; high signal-to-noise. See §2.8 Option A.                                                                                                                                                                                                                                                | `ThreadId`, `TurnId`, `CheckpointRef`, `EventId`, `MessageId`, `SessionId` all branded; tsc green; tests pass.                                                                                                                                            | —                                                   |
+| **G14-T05** | **Sqlite event log (chat aggregate)**                                          | P1  | M      | Foundation for §2.1, §2.3 (reactors will consume from it), §2.4 (TurnDiff lives here). Replaces ephemeral turn/activity/checkpoint state with durable, replayable storage.                                                                                                                                                                                                       | `packages/daemon/src/persistence/chat-event-store.ts` exports `append` + `readFromSequence` + `readAll`; sqlite migration runs idempotently; 1000-event round-trip < 100 ms.                                                                              | G14-T04 (so events ship branded ids)                |
+| **G14-T06** | **Projections from event log (turn/activity/checkpoint/session)**              | P1  | L      | Re-implements the four ephemeral stores as projections that rebuild from the event log on daemon start. Closes the "daemon restart drops chat state" gap.                                                                                                                                                                                                                        | Daemon restart with a populated event log produces the same projection state. Each projection writes its cursor to `projection_state`. Resume from a gap is rejected.                                                                                     | G14-T05                                             |
+| **G14-T07** | **Effect Schema for new contracts (opt-in path)**                              | P2  | M      | Adopt Effect Schema for _new_ contract files only. Avoid touching `chat-thread.ts`. Establishes the dependency in the workspace so future contracts can opt in. See §2.2 Phase A.                                                                                                                                                                                                | `effect` + `@effect/schema` added; one new contract (e.g. `provider-driver.ts`) uses `Schema.Struct`; bundle-size impact on dashboard measured & documented in PR.                                                                                        | —                                                   |
+| **G14-T08** | **Daemon services on Effect.gen (`ProviderRegistry` first)**                   | P2  | M      | First Effect.gen migration target. Pure read/write registry; no live network. Establishes the pattern; subsequent migrations copy it. See §2.2 Phase B.                                                                                                                                                                                                                          | `ProviderRegistry.Service` exists alongside `makeProviderRegistry()`; `Layer.succeed(ProviderRegistry, fake)` swappable in tests; no regression in command-center handlers.                                                                               | G14-T07                                             |
+| **G14-T09** | **Daemon `ManagedRuntime` bootstrap**                                          | P2  | L      | The actual bootstrap path becomes one `Layer.merge(...)` + `Effect.runFork`. Removes the fan of imperative `make*` factories from `packages/daemon/src/bin.ts`. See §2.2 Phase C.                                                                                                                                                                                                | `packages/daemon/src/bin.ts` pulls one Layer and runs it; existing CLI commands still work; daemon boot time within ±10% of pre-migration.                                                                                                                | G14-T08                                             |
+| **G14-T10** | **Chat reactors (Checkpoint / ProviderRuntimeIngestion / Permission)**         | P2  | M      | Refactors the three side-effect-heavy chat modules into first-class reactors with `start()` + `drain`. Removes flaky `waitFor(() => …)` polling from integration tests. See §2.3. T087 already landed the analogous `PtyAdapter` (terminal layer) — same shape (`spawnSync`/`spawn` contract + Mock test double), so G14-T10 should re-use that pattern rather than reinvent it. | `packages/daemon/src/chat/reactors/` exists with three reactors + tests; `thread-manager.ts` shrinks by ≥30% LOC; integration tests use `.drain` not `setTimeout`; reactors consume `PtyAdapter`-style injected services where they need terminal output. | G14-T05, G14-T06, T087 (pattern reuse)              |
+| **G14-T11** | **TurnDiff projection + `chat.turn.getDiff` action**                           | P2  | M      | Splits `CheckpointSummary.files` into "summary on every snapshot" + "TurnDiff on demand". See §2.4.                                                                                                                                                                                                                                                                              | New `TurnDiffZ` schema; new `chat.turn.getDiff` action; range query (`from`, `to`) works; existing diff UI continues to function during transition.                                                                                                       | G14-T05, G14-T06                                    |
+| **G14-T12** | **ProviderApprovalPolicy schema + per-tool resolver**                          | P2  | M      | Per-tool/per-kind approval policy. See §2.5.                                                                                                                                                                                                                                                                                                                                     | `ProviderApprovalPolicyZ` + `ToolKindZ` in contracts; permission coordinator consults policy before raising approval; default for unconfigured tools is `untrusted`; integration test for each policy literal.                                            | G14-T04 (branded ids), G14-T10 (permission reactor) |
+| **G14-T13** | **Provider package depth (Drivers / Registry / Directory / Reaper / Loggers)** | P2  | M      | §2.6 layer split: `packages/daemon/src/provider/{Drivers,Layers}/...`.                                                                                                                                                                                                                                                                                                           | New directory layout; old `provider-{registry,store,discovery}.ts` become thin shims that re-export; session reaper GCs orphaned runtimes; per-driver tests pass.                                                                                         | G14-T08 (Effect.gen)                                |
+| **G14-T14** | **Polish `app/` Swift gateway as the canonical desktop shell**                 | P2  | L      | §2.7. Treat `app/` as the t3-`apps/desktop` analogue. Scope of "polish" is OPEN QUESTION FOR USER (which features are missing today?).                                                                                                                                                                                                                                           | TBD pending OQ resolution. Suggested minimum: persistent project list, multi-thread switching, native auto-update channel, daemon-restart on crash.                                                                                                       | — (independent track)                               |
+| **G14-T15** | **Tasks/missions/goals on the same sqlite substrate**                          | P3  | L      | Migrate `.tasks/*.json` + `_events.jsonl` to sqlite. The daemon ships exactly one persistence boundary. See §2.1 Phase 4.                                                                                                                                                                                                                                                        | One sqlite file holds chat + task data; `.tasks/*.json` writes are removed; existing CLI commands unaffected; migration is one-way and idempotent.                                                                                                        | G14-T06 (we have working projections)               |
+| **G14-T16** | **Goal-14 retrospective + ARCHITECTURE.md refresh**                            | P3  | S      | Capture lessons; refresh `ARCHITECTURE.md` with the new layout (event store, reactors, provider depth, branded IDs, RSC + silo rule). Closes the loop on every previous task.                                                                                                                                                                                                    | `ARCHITECTURE.md` is the single source of truth a new contributor reads; goal-14 retrospective lives in `.tmux-ide/library/learnings.md`.                                                                                                                 | G14-T05 through G14-T15                             |
 
 ### Dependency graph (ASCII)
 
@@ -1471,14 +1505,14 @@ G14-T16 (retrospective)  — gates on everything else
 
 ### Sequence with checkpoints
 
-| Phase | Tasks | Outcome / checkpoint |
-| --- | --- | --- |
-| 1 — Codify | G14-T01 + G14-T02 + G14-T03 + G14-T04 | Rule is documented, silos are clean, IDs are branded. **Checkpoint**: code review noise drops, type errors catch ID swaps. |
-| 2 — Persistence | G14-T05 + G14-T06 | Chat is durable. **Checkpoint**: `tmux-ide` daemon can be killed mid-turn and resume without losing activity stream. |
-| 3 — Effect adoption (gated by OQ §2.2) | G14-T07 + G14-T08 + G14-T09 | Daemon runs on `ManagedRuntime`. **Checkpoint**: a new service is one `Layer`, not one factory + manual wire-up. |
-| 4 — Reactors + payloads | G14-T10 + G14-T11 + G14-T12 + G14-T13 | All side effects keyed off the event log via reactors; diff API split; approval policies + provider depth align with t3. **Checkpoint**: test flakiness from `setTimeout`-driven assertions drops to zero. |
-| 5 — Unified persistence (optional) | G14-T15 | One sqlite file. **Checkpoint**: rollback is a single file restore. |
-| 6 — Native shell + retrospective | G14-T14 + G14-T16 | `app/` is the canonical desktop. Goal 14 is documented. |
+| Phase                                  | Tasks                                 | Outcome / checkpoint                                                                                                                                                                                       |
+| -------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 — Codify                             | G14-T01 + G14-T02 + G14-T03 + G14-T04 | Rule is documented, silos are clean, IDs are branded. **Checkpoint**: code review noise drops, type errors catch ID swaps.                                                                                 |
+| 2 — Persistence                        | G14-T05 + G14-T06                     | Chat is durable. **Checkpoint**: `tmux-ide` daemon can be killed mid-turn and resume without losing activity stream.                                                                                       |
+| 3 — Effect adoption (gated by OQ §2.2) | G14-T07 + G14-T08 + G14-T09           | Daemon runs on `ManagedRuntime`. **Checkpoint**: a new service is one `Layer`, not one factory + manual wire-up.                                                                                           |
+| 4 — Reactors + payloads                | G14-T10 + G14-T11 + G14-T12 + G14-T13 | All side effects keyed off the event log via reactors; diff API split; approval policies + provider depth align with t3. **Checkpoint**: test flakiness from `setTimeout`-driven assertions drops to zero. |
+| 5 — Unified persistence (optional)     | G14-T15                               | One sqlite file. **Checkpoint**: rollback is a single file restore.                                                                                                                                        |
+| 6 — Native shell + retrospective       | G14-T14 + G14-T16                     | `app/` is the canonical desktop. Goal 14 is documented.                                                                                                                                                    |
 
 **Next step**: Lead picks Phase 1 to start; remaining phases sequence
 themselves once Phase 1 lands.
@@ -1487,7 +1521,7 @@ themselves once Phase 1 lands.
 
 Each task lands as one PR. The shape below is the reviewer's
 checklist — what to expect in the diff, what tests must accompany,
-what *not* to include.
+what _not_ to include.
 
 ### PR for G14-T01 (ADR + ARCHITECTURE.md stub)
 
@@ -1504,7 +1538,7 @@ Tests: none — pure docs.
 
 Risk: zero — pure docs.
 
-Reviewer checks: the ADR is *normative* (RFC-2119 MUST/SHOULD
+Reviewer checks: the ADR is _normative_ (RFC-2119 MUST/SHOULD
 language); not aspirational prose.
 
 ### PR for G14-T03 (silo boundary lint)
@@ -1521,7 +1555,7 @@ new:   tests/silo-boundary.violation.fixture.tsx         ( ~15 lines)   — deli
 
 Tests: a fixture file containing an intentional `mod.mount()` outside
 a Bridge file. CI script runs `eslint` on it and asserts a non-zero
-exit code — guarantees the rule is *active*, not just configured.
+exit code — guarantees the rule is _active_, not just configured.
 
 ### PR for G14-T04 (branded IDs)
 
@@ -1539,7 +1573,7 @@ mod:   dashboard/lib/**/*.ts                            ( ~40 lines)
 Tests: existing tests pass with branded types (most fixtures use
 template strings, which Zod's `.brand()` accepts via `parse`); a new
 test asserts that `ThreadIdZ.parse("thr_01")` returns a value that's
-assignable to `ThreadId` but a plain `"thr_01"` is *not*.
+assignable to `ThreadId` but a plain `"thr_01"` is _not_.
 
 ### PR for G14-T05 (sqlite event log)
 
@@ -1556,6 +1590,7 @@ mod:   packages/daemon/package.json                                ( better-sqli
 ```
 
 Tests:
+
 - `append` + `readFromSequence` round-trip.
 - Concurrent appends from the same stream serialize correctly (the
   correlated subquery test).
@@ -1584,6 +1619,7 @@ mod:   packages/daemon/src/chat/*.test.ts                              (a few te
 ```
 
 Tests:
+
 - Each projection: replay 100 events → projection state matches an
   imperative reduce.
 - Daemon restart: stop, restart, projections are at the same
@@ -1605,7 +1641,7 @@ mod:   pnpm-lock.yaml                                     ( lockfile diff )
 
 The first Effect-Schema contract should be small and isolated —
 `provider-driver.ts` (a tiny set of driver metadata records) is
-ideal. Do *not* migrate `chat-thread.ts` in this PR.
+ideal. Do _not_ migrate `chat-thread.ts` in this PR.
 
 ### PR for G14-T08 (ProviderRegistry on Effect.gen)
 
@@ -1639,9 +1675,10 @@ mod:   packages/daemon/src/chat/chat-integration.test.ts           ( swap waitFo
 ```
 
 Tests:
+
 - Order preservation: a scripted run that produces `activity.appended
-  ×5, turn.completed` events fires reactors in the right order — the
-  CheckpointReactor sees `turn.completed` *after* the 5 activities.
+×5, turn.completed` events fires reactors in the right order — the
+  CheckpointReactor sees `turn.completed` _after_ the 5 activities.
 - Failure isolation: a CheckpointReactor that throws still lets the
   PermissionReactor process subsequent permission requests.
 - `drain` semantics: a test sets a 100ms-blocked snapshot, calls
@@ -1730,19 +1767,19 @@ implementation begins — sketch becomes the AC.
 
 # Deliverable 4 — Out of Scope (Explicit)
 
-| Item | Why out of scope |
-| --- | --- |
+| Item                                                        | Why out of scope                                                                                                                                                                                                                                                                                                                        |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **`ThreadEnvMode = "worktree"`** (per-thread git worktrees) | **User direction**: explicit "we don't want this" in the task description. Worktree management adds disk I/O, filesystem-state ambiguity, and a costly thread-lifecycle hook that we do not need. Threads share the project's working directory; per-turn isolation is provided by the checkpoint snapshot, not by worktree separation. |
-| **Realtime audio (TTS / STT in chat)** | t3 doesn't ship it either; no user demand on our side; would invite a whole "voice provider" axis. |
-| **Full `packages/ssh` package** | t3 has SSH command/config/tunnel/auth helpers as a workspace package because t3 exposes a hosted-remote story (remote-attach to a hosted daemon). We have `packages/daemon/src/lib/tunnels/` for ngrok/cloudflare — that's our equivalent. No need to lift it into a separate package until we have a second consumer. |
-| **`packages/tailscale`** | Tailscale isn't on the roadmap; pairing-via-ngrok is good enough for the personal-daemon use case. |
-| **`apps/mobile` (iOS / Android)** | Confirmed deferred in user direction. The Swift native gateway (§2.7) is desktop-only. Mobile would need its own contract surface for "view threads, approve permissions" — defer until there's a real ask. |
-| **Astro marketing site** | We have `docs/` (Next.js). No second marketing surface needed. |
-| **Full Effect adoption in the dashboard** | T050 research recommends zustand. Adopting `@effect/atom-react` in the dashboard means ~50 KB gzip + multi-day rewrite of the WS layer to fit Effect's primitives. Out of scope unless OQ §2.2 flips. |
-| **Rewriting goal-13 in Effect Schema** | `packages/contracts/src/chat-thread.ts` stays Zod for goal 14. A Schema migration would force the whole dashboard to follow and is not the marginal-engineering-rigor win Phase A claims. |
-| **Replacing zustand on the dashboard** | T050 recommends zustand; the dashboard's current zustand patterns (`projectStore`, `chatStore`, …) match t3's *own* zustand usage in `apps/web`. No change needed. |
-| **GraphQL / tRPC / RPC layer overhaul** | We have the action protocol (`packages/contracts/src/actions-contract.ts`) + Hono REST. t3 also has its own bespoke RPC (`packages/contracts/src/rpc.ts`); they didn't pick GraphQL either. Our layer is sufficient. |
-| **Multiple databases per workspace** | We use one daemon-level data dir; tasks land in `.tasks/` per project, chat data lands in `${dataDir}` globally. Multi-database is over-engineering for the single-user/personal-daemon target. |
+| **Realtime audio (TTS / STT in chat)**                      | t3 doesn't ship it either; no user demand on our side; would invite a whole "voice provider" axis.                                                                                                                                                                                                                                      |
+| **Full `packages/ssh` package**                             | t3 has SSH command/config/tunnel/auth helpers as a workspace package because t3 exposes a hosted-remote story (remote-attach to a hosted daemon). We have `packages/daemon/src/lib/tunnels/` for ngrok/cloudflare — that's our equivalent. No need to lift it into a separate package until we have a second consumer.                  |
+| **`packages/tailscale`**                                    | Tailscale isn't on the roadmap; pairing-via-ngrok is good enough for the personal-daemon use case.                                                                                                                                                                                                                                      |
+| **`apps/mobile` (iOS / Android)**                           | Confirmed deferred in user direction. The Swift native gateway (§2.7) is desktop-only. Mobile would need its own contract surface for "view threads, approve permissions" — defer until there's a real ask.                                                                                                                             |
+| **Astro marketing site**                                    | We have `docs/` (Next.js). No second marketing surface needed.                                                                                                                                                                                                                                                                          |
+| **Full Effect adoption in the dashboard**                   | T050 research recommends zustand. Adopting `@effect/atom-react` in the dashboard means ~50 KB gzip + multi-day rewrite of the WS layer to fit Effect's primitives. Out of scope unless OQ §2.2 flips.                                                                                                                                   |
+| **Rewriting goal-13 in Effect Schema**                      | `packages/contracts/src/chat-thread.ts` stays Zod for goal 14. A Schema migration would force the whole dashboard to follow and is not the marginal-engineering-rigor win Phase A claims.                                                                                                                                               |
+| **Replacing zustand on the dashboard**                      | T050 recommends zustand; the dashboard's current zustand patterns (`projectStore`, `chatStore`, …) match t3's _own_ zustand usage in `apps/web`. No change needed.                                                                                                                                                                      |
+| **GraphQL / tRPC / RPC layer overhaul**                     | We have the action protocol (`packages/contracts/src/actions-contract.ts`) + Hono REST. t3 also has its own bespoke RPC (`packages/contracts/src/rpc.ts`); they didn't pick GraphQL either. Our layer is sufficient.                                                                                                                    |
+| **Multiple databases per workspace**                        | We use one daemon-level data dir; tasks land in `.tasks/` per project, chat data lands in `${dataDir}` globally. Multi-database is over-engineering for the single-user/personal-daemon target.                                                                                                                                         |
 
 **Out-of-scope marker for review**: if a future PR proposes any of
 the above, reviewer should reject with a link to this section.
@@ -1758,32 +1795,33 @@ reviewers to this list.
 Each row is one file/package that currently spans a framework boundary
 (React, Solid, Swift, Electron, …) or has cross-framework imports.
 "Status" is one of:
+
 - ✅ **Clean** — already follows the rule from §1.
 - ⚠️ **Needs cleanup** — works today, but breaks the rule.
 - 🟡 **Borderline** — depends on OQ; revisit.
 
-| # | File / Package | Current shape | Owning silo | Status | Notes / required cleanup |
-| --- | --- | --- | --- | --- | --- |
-| 1 | `dashboard/components/chat/ChatTabPanel.tsx` | React Client; dynamic-imports `@tmux-ide/chat-solid` and calls `mod.mount(el, props)`; manages `handleRef`; calls `setSessionName` / `setThreadId` on prop change. | chat-solid | ✅ Clean | Matches the §1.3 template almost verbatim. **Action**: rename to `ChatSiloBridge.tsx` for consistency with the future bridge naming convention. |
-| 2 | `dashboard/app/v2/_lib/V2MissionControlIsland.tsx` | React Client; dynamic-imports `@tmux-ide/v2-solid-widgets`; calls `mountMissionControl`. | v2-solid-widgets | ✅ Clean | Conforms to the pattern. **Action**: same rename → `MissionControlSiloBridge.tsx`. |
-| 3 | `dashboard/app/v2/_lib/V2ExplorerIsland.tsx` | Same pattern, `mountExplorer`. | v2-solid-widgets | ✅ Clean | Rename. |
-| 4 | `dashboard/app/v2/_lib/V2CostsIsland.tsx` | Same pattern, `mountCosts`. | v2-solid-widgets | ✅ Clean | Rename. |
-| 5 | `dashboard/app/v2/_lib/V2ChangesIsland.tsx` | Same pattern. | v2-solid-widgets | 🟡 Borderline | Uses `import type { ... } from "@tmux-ide/v2-solid-widgets"` for the handle type — that's fine. tsc currently flags it as "Cannot find module" pending workspace install; check if it's just a transient. |
-| 6 | `dashboard/components/chat/NewChatPicker.tsx` | Pure React Client. No silo. | dashboard | ✅ Clean | — |
-| 7 | `dashboard/components/chat-v2/PlanCardStub.tsx` | React Client; receives a typed plan from `@tmux-ide/contracts`; no silo crossing. | dashboard | ✅ Clean | — |
-| 8 | `dashboard/lib/actionClient.ts` | Imports `@tmux-ide/contracts` types only. | dashboard | ✅ Clean | — |
-| 9 | `dashboard/components/settings/ProvidersPanel.tsx` | React Client; imports `@tmux-ide/contracts` for `ProviderInstance`. | dashboard | ✅ Clean | — |
-| 10 | `packages/chat-solid/` | Solid SPA mounted via `mount()`. Exports `mount`, `unmount`, `setThreadId`, `setSessionName`. | chat-solid (self) | ✅ Clean | Add a `README.md` describing the `mount()` API contract + setter convention. |
-| 11 | `packages/v2-solid-widgets/` | Solid SPA with multiple `mount*` functions (one per widget). | v2-solid-widgets (self) | ✅ Clean | Same README ask. |
-| 12 | `dashboard/components/chat/types.ts` | Re-exports types from `@tmux-ide/contracts` for local use. | dashboard | ✅ Clean | — |
-| 13 | `app-electron/src/main.ts` | Electron host. Loads `dashboard` via dev server URL or built bundle. | desktop (Electron) | 🟡 Borderline | If `app-electron/` reaches into `packages/daemon/src/...` directly that breaks the silo rule. **Action**: audit `app-electron/src/`; it should only consume `@tmux-ide/daemon`'s package entry point. |
-| 14 | `app/TmuxIde/` (Swift) | Native macOS app. Communicates with daemon over command-center REST/SSE/WebSocket. | desktop (Swift) | ✅ Clean | The HTTP boundary *is* the silo boundary; no shared types except via OpenAPI / hand-written Swift Codable types. **Action**: track the type drift between Swift Codable and Zod schemas (today: manual). Consider OpenAPI export from contracts as a follow-up. |
-| 15 | `dashboard/lib/menuBridge.ts` | React Client; bridges Tauri-like menu events into the dashboard. | dashboard | ✅ Clean | Name "bridge" overloads with §1.3 silo bridge — rename to `menuTransport.ts` to avoid confusion. |
-| 16 | `dashboard/app/v2/_lib/V2ChatView.tsx` | React Client; tsc currently flags missing exports from `@/lib/api`. | dashboard | ⚠️ Needs cleanup | Pre-existing tsc errors against `@/lib/api` — looks like a stale dashboard during the goal-13 transition. **Action**: file as goal-13 cleanup before goal-14 starts. |
-| 17 | `dashboard/lib/appProtocol.ts` | React Client utility for cross-tab postMessage. | dashboard | ✅ Clean | — |
-| 18 | `dashboard/components/tui/` | Subdir with `common/queries.ts` (50 tsc errors), `common/position.ts` (19), `common/utilities.ts` (14). | dashboard | ⚠️ Needs cleanup | Heavy tsc error count suggests an in-progress migration. Either complete or delete before goal-14 work compounds. **Action**: triage tracking task. |
-| 19 | `packages/daemon/src/cli.ts` | Daemon's own CLI entrypoint (untracked file, 43 tsc errors). | daemon | ⚠️ Needs cleanup | Untracked, pre-existing tsc errors. Either land or revert; either way clean before goal-14. |
-| 20 | `app-electron/` workspace | Standalone Electron host. | desktop (Electron) | 🟡 Borderline | If we commit to `app/` (Swift) as canonical (§2.7), `app-electron/` becomes a fallback. Decide its status (maintained / archived / deleted) before goal-14 retrospective. |
+| #   | File / Package                                     | Current shape                                                                                                                                                      | Owning silo             | Status           | Notes / required cleanup                                                                                                                                                                                                                                        |
+| --- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `dashboard/components/chat/ChatTabPanel.tsx`       | React Client; dynamic-imports `@tmux-ide/chat-solid` and calls `mod.mount(el, props)`; manages `handleRef`; calls `setSessionName` / `setThreadId` on prop change. | chat-solid              | ✅ Clean         | Matches the §1.3 template almost verbatim. **Action**: rename to `ChatSiloBridge.tsx` for consistency with the future bridge naming convention.                                                                                                                 |
+| 2   | `dashboard/app/v2/_lib/V2MissionControlIsland.tsx` | React Client; dynamic-imports `@tmux-ide/v2-solid-widgets`; calls `mountMissionControl`.                                                                           | v2-solid-widgets        | ✅ Clean         | Conforms to the pattern. **Action**: same rename → `MissionControlSiloBridge.tsx`.                                                                                                                                                                              |
+| 3   | `dashboard/app/v2/_lib/V2ExplorerIsland.tsx`       | Same pattern, `mountExplorer`.                                                                                                                                     | v2-solid-widgets        | ✅ Clean         | Rename.                                                                                                                                                                                                                                                         |
+| 4   | `dashboard/app/v2/_lib/V2CostsIsland.tsx`          | Same pattern, `mountCosts`.                                                                                                                                        | v2-solid-widgets        | ✅ Clean         | Rename.                                                                                                                                                                                                                                                         |
+| 5   | `dashboard/app/v2/_lib/V2ChangesIsland.tsx`        | Same pattern.                                                                                                                                                      | v2-solid-widgets        | 🟡 Borderline    | Uses `import type { ... } from "@tmux-ide/v2-solid-widgets"` for the handle type — that's fine. tsc currently flags it as "Cannot find module" pending workspace install; check if it's just a transient.                                                       |
+| 6   | `dashboard/components/chat/NewChatPicker.tsx`      | Pure React Client. No silo.                                                                                                                                        | dashboard               | ✅ Clean         | —                                                                                                                                                                                                                                                               |
+| 7   | `dashboard/components/chat-v2/PlanCardStub.tsx`    | React Client; receives a typed plan from `@tmux-ide/contracts`; no silo crossing.                                                                                  | dashboard               | ✅ Clean         | —                                                                                                                                                                                                                                                               |
+| 8   | `dashboard/lib/actionClient.ts`                    | Imports `@tmux-ide/contracts` types only.                                                                                                                          | dashboard               | ✅ Clean         | —                                                                                                                                                                                                                                                               |
+| 9   | `dashboard/components/settings/ProvidersPanel.tsx` | React Client; imports `@tmux-ide/contracts` for `ProviderInstance`.                                                                                                | dashboard               | ✅ Clean         | —                                                                                                                                                                                                                                                               |
+| 10  | `packages/chat-solid/`                             | Solid SPA mounted via `mount()`. Exports `mount`, `unmount`, `setThreadId`, `setSessionName`.                                                                      | chat-solid (self)       | ✅ Clean         | Add a `README.md` describing the `mount()` API contract + setter convention.                                                                                                                                                                                    |
+| 11  | `packages/v2-solid-widgets/`                       | Solid SPA with multiple `mount*` functions (one per widget).                                                                                                       | v2-solid-widgets (self) | ✅ Clean         | Same README ask.                                                                                                                                                                                                                                                |
+| 12  | `dashboard/components/chat/types.ts`               | Re-exports types from `@tmux-ide/contracts` for local use.                                                                                                         | dashboard               | ✅ Clean         | —                                                                                                                                                                                                                                                               |
+| 13  | `app-electron/src/main.ts`                         | Electron host. Loads `dashboard` via dev server URL or built bundle.                                                                                               | desktop (Electron)      | 🟡 Borderline    | If `app-electron/` reaches into `packages/daemon/src/...` directly that breaks the silo rule. **Action**: audit `app-electron/src/`; it should only consume `@tmux-ide/daemon`'s package entry point.                                                           |
+| 14  | `app/TmuxIde/` (Swift)                             | Native macOS app. Communicates with daemon over command-center REST/SSE/WebSocket.                                                                                 | desktop (Swift)         | ✅ Clean         | The HTTP boundary _is_ the silo boundary; no shared types except via OpenAPI / hand-written Swift Codable types. **Action**: track the type drift between Swift Codable and Zod schemas (today: manual). Consider OpenAPI export from contracts as a follow-up. |
+| 15  | `dashboard/lib/menuBridge.ts`                      | React Client; bridges Tauri-like menu events into the dashboard.                                                                                                   | dashboard               | ✅ Clean         | Name "bridge" overloads with §1.3 silo bridge — rename to `menuTransport.ts` to avoid confusion.                                                                                                                                                                |
+| 16  | `dashboard/app/v2/_lib/V2ChatView.tsx`             | React Client; tsc currently flags missing exports from `@/lib/api`.                                                                                                | dashboard               | ⚠️ Needs cleanup | Pre-existing tsc errors against `@/lib/api` — looks like a stale dashboard during the goal-13 transition. **Action**: file as goal-13 cleanup before goal-14 starts.                                                                                            |
+| 17  | `dashboard/lib/appProtocol.ts`                     | React Client utility for cross-tab postMessage.                                                                                                                    | dashboard               | ✅ Clean         | —                                                                                                                                                                                                                                                               |
+| 18  | `dashboard/components/tui/`                        | Subdir with `common/queries.ts` (50 tsc errors), `common/position.ts` (19), `common/utilities.ts` (14).                                                            | dashboard               | ⚠️ Needs cleanup | Heavy tsc error count suggests an in-progress migration. Either complete or delete before goal-14 work compounds. **Action**: triage tracking task.                                                                                                             |
+| 19  | `packages/daemon/src/cli.ts`                       | Daemon's own CLI entrypoint (untracked file, 43 tsc errors).                                                                                                       | daemon                  | ⚠️ Needs cleanup | Untracked, pre-existing tsc errors. Either land or revert; either way clean before goal-14.                                                                                                                                                                     |
+| 20  | `app-electron/` workspace                          | Standalone Electron host.                                                                                                                                          | desktop (Electron)      | 🟡 Borderline    | If we commit to `app/` (Swift) as canonical (§2.7), `app-electron/` becomes a fallback. Decide its status (maintained / archived / deleted) before goal-14 retrospective.                                                                                       |
 
 ### Summary
 
@@ -1801,18 +1839,18 @@ sub-task that closes the audit.
 
 ## 6.1 Risks
 
-| # | Risk | Likelihood | Impact | Mitigation |
-| --- | --- | --- | --- | --- |
-| R1 | Effect bundle cost lands in the dashboard accidentally (via a contract that pulls in `effect`). | M | H — adds ~50 KB gzip. | Keep Effect Schema in *new* contract files only (Phase A). Add a CI check that fails if `effect` resolves transitively into `dashboard/.next/static/chunks/*`. |
-| R2 | RSC-only rendering breaks client hydration when a silo mounts. | L | M — flash of empty host element before silo bootstraps. | Bridges already render an empty host `<div>` and dynamic-import the silo inside `useEffect`. Verify with a Lighthouse pass before/after R1 lands. |
-| R3 | sqlite migration on existing installs corrupts state. | L | H — user loses chat history. | Migrations are pure SQL DDL (no data migration in Phase 1); JSON backup written to `${dataDir}/legacy/` before migration runs; documented rollback path: delete `daemon.sqlite`, fall back to `legacy/`. |
-| R4 | Branded IDs cause cascading tsc breakage across consumers we didn't track. | M | M — 50+ files might need fixes. | tsc fanout will be visible in CI before the PR merges. Acceptable cost: every file that handles IDs is now type-checked for the swap-bug. |
-| R5 | Reactor refactor (G14-T10) accidentally changes event timing / order. | M | H — chat tests pass but live chat misbehaves. | Reactors process events through a single `Queue` per reactor; sequence is preserved by sqlite event store. Add a regression test that asserts the order of `chat.activity.appended` events for a known scripted turn. |
-| R6 | Provider depth refactor (G14-T13) leaves orphaned provider sessions. | L | M — daemon RAM grows over time. | New `SessionReaper` is the entire point of the refactor; ship with a test that creates 10 sessions, removes 5 threads, and asserts the reaper tears down exactly those 5 runtimes. |
-| R7 | Swift app (`app/`) and dashboard (Next.js) drift on contract shape. | H — already happening | H — silent runtime breakage. | Generate OpenAPI from contracts as a follow-up; Swift Codable types decoded from OpenAPI rather than hand-written. Track in G14-T14. |
-| R8 | "Mixed-and-matched" antipattern re-emerges in PRs because the lint rules from §1.4 are not in place yet. | H | M — silo boundaries quietly erode. | G14-T03 is in Phase 1 to prevent this. Until then, every PR review explicitly checks against ADR-0001. |
-| R9 | Effect adoption (Phase B/C) is partial and we end up with two coexisting service-construction patterns. | M | M — bus factor on understanding the daemon doubles. | Make G14-T09 (ManagedRuntime bootstrap) a hard gate — when it lands, *all* services route through one Layer; the `make*` factories become test fixtures only. |
-| R10 | TurnDiff API gets used naively (full project diff every keystroke) and balloons sqlite. | L | M — disk fills. | Diff payloads land lazily; default range is `latestTurn..latestTurn`; the cache-bust key is the turn id so re-querying the same range hits the projection cache. |
+| #   | Risk                                                                                                     | Likelihood            | Impact                                                  | Mitigation                                                                                                                                                                                                            |
+| --- | -------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1  | Effect bundle cost lands in the dashboard accidentally (via a contract that pulls in `effect`).          | M                     | H — adds ~50 KB gzip.                                   | Keep Effect Schema in _new_ contract files only (Phase A). Add a CI check that fails if `effect` resolves transitively into `dashboard/.next/static/chunks/*`.                                                        |
+| R2  | RSC-only rendering breaks client hydration when a silo mounts.                                           | L                     | M — flash of empty host element before silo bootstraps. | Bridges already render an empty host `<div>` and dynamic-import the silo inside `useEffect`. Verify with a Lighthouse pass before/after R1 lands.                                                                     |
+| R3  | sqlite migration on existing installs corrupts state.                                                    | L                     | H — user loses chat history.                            | Migrations are pure SQL DDL (no data migration in Phase 1); JSON backup written to `${dataDir}/legacy/` before migration runs; documented rollback path: delete `daemon.sqlite`, fall back to `legacy/`.              |
+| R4  | Branded IDs cause cascading tsc breakage across consumers we didn't track.                               | M                     | M — 50+ files might need fixes.                         | tsc fanout will be visible in CI before the PR merges. Acceptable cost: every file that handles IDs is now type-checked for the swap-bug.                                                                             |
+| R5  | Reactor refactor (G14-T10) accidentally changes event timing / order.                                    | M                     | H — chat tests pass but live chat misbehaves.           | Reactors process events through a single `Queue` per reactor; sequence is preserved by sqlite event store. Add a regression test that asserts the order of `chat.activity.appended` events for a known scripted turn. |
+| R6  | Provider depth refactor (G14-T13) leaves orphaned provider sessions.                                     | L                     | M — daemon RAM grows over time.                         | New `SessionReaper` is the entire point of the refactor; ship with a test that creates 10 sessions, removes 5 threads, and asserts the reaper tears down exactly those 5 runtimes.                                    |
+| R7  | Swift app (`app/`) and dashboard (Next.js) drift on contract shape.                                      | H — already happening | H — silent runtime breakage.                            | Generate OpenAPI from contracts as a follow-up; Swift Codable types decoded from OpenAPI rather than hand-written. Track in G14-T14.                                                                                  |
+| R8  | "Mixed-and-matched" antipattern re-emerges in PRs because the lint rules from §1.4 are not in place yet. | H                     | M — silo boundaries quietly erode.                      | G14-T03 is in Phase 1 to prevent this. Until then, every PR review explicitly checks against ADR-0001.                                                                                                                |
+| R9  | Effect adoption (Phase B/C) is partial and we end up with two coexisting service-construction patterns.  | M                     | M — bus factor on understanding the daemon doubles.     | Make G14-T09 (ManagedRuntime bootstrap) a hard gate — when it lands, _all_ services route through one Layer; the `make*` factories become test fixtures only.                                                         |
+| R10 | TurnDiff API gets used naively (full project diff every keystroke) and balloons sqlite.                  | L                     | M — disk fills.                                         | Diff payloads land lazily; default range is `latestTurn..latestTurn`; the cache-bust key is the turn id so re-querying the same range hits the projection cache.                                                      |
 
 ## 6.2 Open questions (need user input before committing)
 
@@ -1832,6 +1870,7 @@ feature gap of today's `app/` is not enumerated in this document.
 
 **OPEN QUESTION FOR USER**: what's the minimum set of features the
 Swift app needs to ship in goal 14? Suggested baseline:
+
 - Persistent project list (synced via daemon API).
 - Multi-thread switching with PTY mirroring.
 - Native auto-update channel.
@@ -1896,11 +1935,11 @@ When G14-T04 lands, places that construct an ID from a string literal
 (`"thr_01"`) will tsc-error. We can either:
 
 (a) Force callers to use `ThreadIdZ.parse("thr_01")` — runtime cost
-    but always validated.
+but always validated.
 (b) Provide an unsafe `asThreadId(s: string): ThreadId` helper —
-    zero-cost but bypasses validation.
+zero-cost but bypasses validation.
 (c) Both — `.parse` for untrusted input, `.unsafe` for known-good
-    test fixtures.
+test fixtures.
 
 **OPEN QUESTION FOR USER**: pick a convention.
 
@@ -1910,97 +1949,97 @@ When G14-T04 lands, places that construct an ID from a string literal
 
 ## A.1 t3 sources cited in this document
 
-| Topic | t3 path |
-| --- | --- |
-| Branded IDs | `context/t3code/packages/contracts/src/baseSchemas.ts` |
-| Approval policy / sandbox mode | `context/t3code/packages/contracts/src/orchestration.ts:29-41` |
-| TurnDiff schema | `context/t3code/packages/contracts/src/orchestration.ts:1126-1183` |
-| Worktree mode (explicitly out of scope) | `context/t3code/packages/contracts/src/settings.ts:85-86` |
-| Event store service | `context/t3code/apps/server/src/persistence/Services/OrchestrationEventStore.ts` |
-| Event store live layer | `context/t3code/apps/server/src/persistence/Layers/OrchestrationEventStore.ts` |
-| Command receipts | `context/t3code/apps/server/src/persistence/Services/OrchestrationCommandReceipts.ts` |
-| Projection pipeline | `context/t3code/apps/server/src/orchestration/Services/ProjectionPipeline.ts` |
-| Projection state cursors | `context/t3code/apps/server/src/persistence/Layers/ProjectionState.ts` |
-| Migrations | `context/t3code/apps/server/src/persistence/Migrations/001_OrchestrationEvents.ts` |
-| CheckpointReactor | `context/t3code/apps/server/src/orchestration/Services/CheckpointReactor.ts` |
-| OrchestrationReactor | `context/t3code/apps/server/src/orchestration/Services/OrchestrationReactor.ts` |
-| ProviderCommandReactor | `context/t3code/apps/server/src/orchestration/Services/ProviderCommandReactor.ts` |
-| ProviderRuntimeIngestion | `context/t3code/apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts` |
-| RuntimeReceiptBus | `context/t3code/apps/server/src/orchestration/Services/RuntimeReceiptBus.ts` |
-| Provider service composition | `context/t3code/apps/server/src/provider/Layers/ProviderService.ts` |
-| Per-driver layers | `context/t3code/apps/server/src/provider/Layers/{Claude,Codex,Cursor,OpenCode}Adapter.ts` |
-| Driver definitions | `context/t3code/apps/server/src/provider/Drivers/{Claude,Codex,Cursor,OpenCode}Driver.ts` |
-| Session directory | `context/t3code/apps/server/src/provider/Layers/ProviderSessionDirectory.ts` (and Services) |
-| Session reaper | `context/t3code/apps/server/src/provider/Layers/ProviderSessionReaper.ts` |
-| Event NDJSON loggers | `context/t3code/apps/server/src/provider/Layers/EventNdjsonLogger.ts` + `ProviderEventLoggers.ts` |
-| Desktop shell (Electron) | `context/t3code/apps/desktop/` |
+| Topic                                   | t3 path                                                                                           |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Branded IDs                             | `context/t3code/packages/contracts/src/baseSchemas.ts`                                            |
+| Approval policy / sandbox mode          | `context/t3code/packages/contracts/src/orchestration.ts:29-41`                                    |
+| TurnDiff schema                         | `context/t3code/packages/contracts/src/orchestration.ts:1126-1183`                                |
+| Worktree mode (explicitly out of scope) | `context/t3code/packages/contracts/src/settings.ts:85-86`                                         |
+| Event store service                     | `context/t3code/apps/server/src/persistence/Services/OrchestrationEventStore.ts`                  |
+| Event store live layer                  | `context/t3code/apps/server/src/persistence/Layers/OrchestrationEventStore.ts`                    |
+| Command receipts                        | `context/t3code/apps/server/src/persistence/Services/OrchestrationCommandReceipts.ts`             |
+| Projection pipeline                     | `context/t3code/apps/server/src/orchestration/Services/ProjectionPipeline.ts`                     |
+| Projection state cursors                | `context/t3code/apps/server/src/persistence/Layers/ProjectionState.ts`                            |
+| Migrations                              | `context/t3code/apps/server/src/persistence/Migrations/001_OrchestrationEvents.ts`                |
+| CheckpointReactor                       | `context/t3code/apps/server/src/orchestration/Services/CheckpointReactor.ts`                      |
+| OrchestrationReactor                    | `context/t3code/apps/server/src/orchestration/Services/OrchestrationReactor.ts`                   |
+| ProviderCommandReactor                  | `context/t3code/apps/server/src/orchestration/Services/ProviderCommandReactor.ts`                 |
+| ProviderRuntimeIngestion                | `context/t3code/apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts`                 |
+| RuntimeReceiptBus                       | `context/t3code/apps/server/src/orchestration/Services/RuntimeReceiptBus.ts`                      |
+| Provider service composition            | `context/t3code/apps/server/src/provider/Layers/ProviderService.ts`                               |
+| Per-driver layers                       | `context/t3code/apps/server/src/provider/Layers/{Claude,Codex,Cursor,OpenCode}Adapter.ts`         |
+| Driver definitions                      | `context/t3code/apps/server/src/provider/Drivers/{Claude,Codex,Cursor,OpenCode}Driver.ts`         |
+| Session directory                       | `context/t3code/apps/server/src/provider/Layers/ProviderSessionDirectory.ts` (and Services)       |
+| Session reaper                          | `context/t3code/apps/server/src/provider/Layers/ProviderSessionReaper.ts`                         |
+| Event NDJSON loggers                    | `context/t3code/apps/server/src/provider/Layers/EventNdjsonLogger.ts` + `ProviderEventLoggers.ts` |
+| Desktop shell (Electron)                | `context/t3code/apps/desktop/`                                                                    |
 
 ## A.2 tmux-ide sources cited in this document
 
-| Topic | tmux-ide path |
-| --- | --- |
-| Chat-thread contracts | `packages/contracts/src/chat-thread.ts` |
-| Thread store | `packages/daemon/src/chat/thread-store.ts` |
-| Thread manager | `packages/daemon/src/chat/thread-manager.ts` |
-| Turn store | `packages/daemon/src/chat/turn-store.ts` |
-| Activity log | `packages/daemon/src/chat/activity-log.ts` |
-| Plan store | `packages/daemon/src/chat/plan-store.ts` |
-| Checkpoint store | `packages/daemon/src/chat/checkpoint-store.ts` |
-| Session store (T078) | `packages/daemon/src/chat/session-store.ts` |
-| Permission coordinator | `packages/daemon/src/chat/permission-coordinator.ts` |
-| Message pipe | `packages/daemon/src/chat/message-pipe.ts` |
-| Codex event handler | `packages/daemon/src/chat/codex-event-handler.ts` |
-| Provider discovery | `packages/daemon/src/chat/provider-discovery.ts` |
-| Provider registry | `packages/daemon/src/chat/provider-registry.ts` |
-| Provider store | `packages/daemon/src/chat/provider-store.ts` |
-| ACP protocol bindings | `packages/daemon/src/chat/acp/` |
-| Codex protocol bindings | `packages/daemon/src/chat/codex/` |
-| Command-center server | `packages/daemon/src/command-center/server.ts` |
-| Chat action handlers | `packages/daemon/src/command-center/actions/handlers/chat-actions.ts` |
-| Tasks event log | `.tasks/_events.jsonl` |
-| Tasks index | `.tasks/tasks/*.json` |
-| Goals | `.tasks/goals/*.json` |
-| Mission | `.tasks/mission.json` |
-| Dashboard chat bridge | `dashboard/components/chat/ChatTabPanel.tsx` |
-| Dashboard mission island | `dashboard/app/v2/_lib/V2MissionControlIsland.tsx` |
-| Dashboard explorer island | `dashboard/app/v2/_lib/V2ExplorerIsland.tsx` |
-| Dashboard costs island | `dashboard/app/v2/_lib/V2CostsIsland.tsx` |
-| Dashboard changes island | `dashboard/app/v2/_lib/V2ChangesIsland.tsx` |
-| chat-solid silo | `packages/chat-solid/src/index.tsx` |
-| v2-solid-widgets silo | `packages/v2-solid-widgets/src/index.tsx` |
-| Electron host | `app-electron/src/main.ts` |
-| Swift app | `app/TmuxIde/` |
-| Architecture overview | `ARCHITECTURE.md` |
-| Research findings (T050) | `.tmux-ide/library/research-findings.md` |
+| Topic                     | tmux-ide path                                                         |
+| ------------------------- | --------------------------------------------------------------------- |
+| Chat-thread contracts     | `packages/contracts/src/chat-thread.ts`                               |
+| Thread store              | `packages/daemon/src/chat/thread-store.ts`                            |
+| Thread manager            | `packages/daemon/src/chat/thread-manager.ts`                          |
+| Turn store                | `packages/daemon/src/chat/turn-store.ts`                              |
+| Activity log              | `packages/daemon/src/chat/activity-log.ts`                            |
+| Plan store                | `packages/daemon/src/chat/plan-store.ts`                              |
+| Checkpoint store          | `packages/daemon/src/chat/checkpoint-store.ts`                        |
+| Session store (T078)      | `packages/daemon/src/chat/session-store.ts`                           |
+| Permission coordinator    | `packages/daemon/src/chat/permission-coordinator.ts`                  |
+| Message pipe              | `packages/daemon/src/chat/message-pipe.ts`                            |
+| Codex event handler       | `packages/daemon/src/chat/codex-event-handler.ts`                     |
+| Provider discovery        | `packages/daemon/src/chat/provider-discovery.ts`                      |
+| Provider registry         | `packages/daemon/src/chat/provider-registry.ts`                       |
+| Provider store            | `packages/daemon/src/chat/provider-store.ts`                          |
+| ACP protocol bindings     | `packages/daemon/src/chat/acp/`                                       |
+| Codex protocol bindings   | `packages/daemon/src/chat/codex/`                                     |
+| Command-center server     | `packages/daemon/src/command-center/server.ts`                        |
+| Chat action handlers      | `packages/daemon/src/command-center/actions/handlers/chat-actions.ts` |
+| Tasks event log           | `.tasks/_events.jsonl`                                                |
+| Tasks index               | `.tasks/tasks/*.json`                                                 |
+| Goals                     | `.tasks/goals/*.json`                                                 |
+| Mission                   | `.tasks/mission.json`                                                 |
+| Dashboard chat bridge     | `dashboard/components/chat/ChatTabPanel.tsx`                          |
+| Dashboard mission island  | `dashboard/app/v2/_lib/V2MissionControlIsland.tsx`                    |
+| Dashboard explorer island | `dashboard/app/v2/_lib/V2ExplorerIsland.tsx`                          |
+| Dashboard costs island    | `dashboard/app/v2/_lib/V2CostsIsland.tsx`                             |
+| Dashboard changes island  | `dashboard/app/v2/_lib/V2ChangesIsland.tsx`                           |
+| chat-solid silo           | `packages/chat-solid/src/index.tsx`                                   |
+| v2-solid-widgets silo     | `packages/v2-solid-widgets/src/index.tsx`                             |
+| Electron host             | `app-electron/src/main.ts`                                            |
+| Swift app                 | `app/TmuxIde/`                                                        |
+| Architecture overview     | `ARCHITECTURE.md`                                                     |
+| Research findings (T050)  | `.tmux-ide/library/research-findings.md`                              |
 
 ---
 
 # Appendix B — Glossary
 
-| Term | Meaning |
-| --- | --- |
-| **Silo** | A self-contained DOM-mounting subtree implemented in a non-React framework (Solid today; Lit/Preact/Vue possible tomorrow). Mounted from React via a *bridge*. |
-| **Bridge** | A React component that mounts a silo, owns its host element, and dispatches prop changes to the silo via the silo's `MountHandle` setters. |
-| **RSC** | React Server Component. Rendered on the Next.js server; no client-side bundle for this component (only HTML); cannot use `useState` / `useRef` / browser APIs. |
-| **Reactor** | A long-lived service that consumes domain events from a queue and applies side effects. Has `start()` (scoped) and `drain` (test affordance). |
-| **Projection** | A read model derived from the event log. Owns its own table + cursor in `projection_state`. |
-| **Event store** | Append-only durable store of domain events. Single source of truth for replay. |
-| **Layer** | Effect-runtime dependency injection unit. Composes services. |
-| **Brand** | Nominal type tag attached to a structural type so `ThreadId !== TurnId` at the type level, even though both are strings at runtime. |
-| **ManagedRuntime** | Effect's "compose all layers into one runtime, run effects on it" abstraction. |
-| **OQ** | Open Question (see §6.2). |
+| Term               | Meaning                                                                                                                                                        |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Silo**           | A self-contained DOM-mounting subtree implemented in a non-React framework (Solid today; Lit/Preact/Vue possible tomorrow). Mounted from React via a _bridge_. |
+| **Bridge**         | A React component that mounts a silo, owns its host element, and dispatches prop changes to the silo via the silo's `MountHandle` setters.                     |
+| **RSC**            | React Server Component. Rendered on the Next.js server; no client-side bundle for this component (only HTML); cannot use `useState` / `useRef` / browser APIs. |
+| **Reactor**        | A long-lived service that consumes domain events from a queue and applies side effects. Has `start()` (scoped) and `drain` (test affordance).                  |
+| **Projection**     | A read model derived from the event log. Owns its own table + cursor in `projection_state`.                                                                    |
+| **Event store**    | Append-only durable store of domain events. Single source of truth for replay.                                                                                 |
+| **Layer**          | Effect-runtime dependency injection unit. Composes services.                                                                                                   |
+| **Brand**          | Nominal type tag attached to a structural type so `ThreadId !== TurnId` at the type level, even though both are strings at runtime.                            |
+| **ManagedRuntime** | Effect's "compose all layers into one runtime, run effects on it" abstraction.                                                                                 |
+| **OQ**             | Open Question (see §6.2).                                                                                                                                      |
 
 ---
 
-# Appendix C — What we are *not* claiming
+# Appendix C — What we are _not_ claiming
 
 Lest this roadmap sound like t3-worship:
 
 - **t3 has 28 sqlite migrations** because it grew that schema in
-  production. We do *not* need 28 migrations on day 1 of G14-T05;
+  production. We do _not_ need 28 migrations on day 1 of G14-T05;
   start with 4-5 (events, threads, turns, activities, checkpoints).
 - **t3 ships Effect everywhere** because they made an early bet. We
-  did not. Retroactive adoption is *slow* and partial adoption is the
+  did not. Retroactive adoption is _slow_ and partial adoption is the
   pragmatic path.
 - **t3's reactor split is not magic** — it's structurally what the
   code becomes once you decouple "I emit an event" from "I do a side
@@ -2012,8 +2051,8 @@ Lest this roadmap sound like t3-worship:
   thinner for us; if §2.6 lands smaller (one Driver file + one
   Adapter Layer for now), that's fine.
 
-The point of goal 14 is to *acquire the architectural levers t3
-already has* — not to mirror their code one-to-one. Where the lever
+The point of goal 14 is to _acquire the architectural levers t3
+already has_ — not to mirror their code one-to-one. Where the lever
 is smaller for us, the implementation is smaller too.
 
 ---
@@ -2029,9 +2068,11 @@ verbose; the ADR should be terse.
 # ADR-0001 — RSC-shell + Siloed Blocks
 
 ## Status
+
 Accepted (2026-05-11). Supersedes nothing.
 
 ## Context
+
 The dashboard composed React, Solid (`@tmux-ide/chat-solid`,
 `@tmux-ide/v2-solid-widgets`), an Electron host (`app-electron`),
 and a native macOS shell (`app/`). Goal-13 integration pain came
@@ -2039,12 +2080,13 @@ from components composed across framework boundaries without a clear
 rule. We need one rule that prevents recurrence.
 
 ## Decision
+
 - React Server Components render the outer page chrome.
 - Interactive React surfaces are React Client components (`"use client"`).
-- Non-React UI lives in a *silo* — a workspace package
+- Non-React UI lives in a _silo_ — a workspace package
   (`@tmux-ide/<silo>`) that exposes a single `mount(el, props): handle`
   function.
-- React communicates with a silo only via a *bridge* — a React Client
+- React communicates with a silo only via a _bridge_ — a React Client
   component that owns one host `<div>`, calls `mount()` once on
   effect, dispatches prop updates via handle setters, and unmounts on
   cleanup.
@@ -2054,6 +2096,7 @@ rule. We need one rule that prevents recurrence.
   internals (only the silo's public package entry point).
 
 ## Consequences
+
 - One named bridge per silo per page → ~5 bridges at any given
   time. Trivial to audit by `grep '*SiloBridge.tsx'`.
 - Adding a new silo (Lit / Preact / Vue) is one new package + one new
@@ -2061,16 +2104,18 @@ rule. We need one rule that prevents recurrence.
 - ESLint enforces this automatically; PRs that violate fail CI.
 
 ## Alternatives considered
-- *Single-framework rewrite (everything React)*. Rejected: the chat
+
+- _Single-framework rewrite (everything React)_. Rejected: the chat
   silo's editor (TipTap-on-Solid) and the cost widget's reactive
   primitives are easier in Solid; rewriting them as React would
   cost weeks for no user-visible gain.
-- *Module federation*. Rejected as overkill — federation solves a
+- _Module federation_. Rejected as overkill — federation solves a
   cross-team problem we do not have.
-- *iframes per silo*. Rejected — defeats fast prop updates,
+- _iframes per silo_. Rejected — defeats fast prop updates,
   break focus management.
 
 ## References
+
 - `docs/goal-14-architecture-parity.md` §1 (this rule's full motivation)
 - `dashboard/components/chat/ChatTabPanel.tsx` (canonical bridge)
 - `packages/chat-solid/src/index.tsx` (canonical silo mount API)
@@ -2089,6 +2134,7 @@ Each phase has a distinct test-strategy pattern.
 ## Phase 1 (codify) — no runtime; lint + grep
 
 Tests are CI assertions on documentation:
+
 - ADR file exists at the canonical path.
 - Eslint config contains the boundary rules.
 - A negative-fixture file is rejected by `eslint --no-eslintrc`.
@@ -2106,8 +2152,8 @@ master. Pattern:
 2. The scenario uses the harness factory `createHarness()` already in
    place after goal 13.
 3. After G14-T06 lands, the harness's `serialize()` /
-   `hydrateFrom()` methods are *replaced* with sqlite snapshot dump
-   + restore — same shape, different backing.
+   `hydrateFrom()` methods are _replaced_ with sqlite snapshot dump
+   - restore — same shape, different backing.
 
 Specifically, a Phase-2 acceptance test looks like:
 
@@ -2115,7 +2161,7 @@ Specifically, a Phase-2 acceptance test looks like:
 it("restart-rebuild: replaying the event log produces the same projection state", async () => {
   await harness.runScriptedTurn({ threadId, prompt: "..." });
   const beforeSnapshot = harness.serialize();
-  harness.dispose();  // simulates daemon shutdown
+  harness.dispose(); // simulates daemon shutdown
 
   const harness2 = await createHarness({ dataDir: harness.dataDir });
   // dataDir is shared so the sqlite file persists across instances
@@ -2128,8 +2174,8 @@ it("restart-rebuild: replaying the event log produces the same projection state"
 
 ## Phase 3 (Effect adoption) — type checks + parity
 
-Effect.gen migrations are tested for *equivalence with the
-factory-based implementation*. Concretely:
+Effect.gen migrations are tested for _equivalence with the
+factory-based implementation_. Concretely:
 
 ```ts
 // packages/daemon/src/chat/provider-registry.equivalence.test.ts
@@ -2158,7 +2204,7 @@ The reactor `drain()` semantics let integration tests assert
 ```ts
 it("a turn completion triggers a checkpoint", async () => {
   await harness.runScriptedTurn({ threadId, prompt: "edit a file" });
-  await harness.checkpointReactor.drain();  // <— replaces waitFor
+  await harness.checkpointReactor.drain(); // <— replaces waitFor
 
   const snapshot = harness.checkpointStore.get(threadId, latestTurnId);
   expect(snapshot?.status).toBe("ready");
@@ -2166,7 +2212,7 @@ it("a turn completion triggers a checkpoint", async () => {
 ```
 
 `drain()` is a hard contract: it MUST resolve only when the
-reactor's queue is empty *and* the current task (if any) has
+reactor's queue is empty _and_ the current task (if any) has
 completed. Implementations that resolve early are bugs.
 
 ## Phase 5 (tasks-on-sqlite) — one-way migration test

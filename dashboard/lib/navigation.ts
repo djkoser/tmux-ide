@@ -517,10 +517,11 @@ function applyLegacy(state: InternalState, legacy: LegacyNavigationState): void 
     case "settings": {
       saveCurrentStrip(state);
       state.sessionName = null;
-      const strip = state.tabsBySession.get(null) ?? readPersistedStrip(null) ?? {
-        openTabs: [],
-        activeTabId: null,
-      };
+      const strip = state.tabsBySession.get(null) ??
+        readPersistedStrip(null) ?? {
+          openTabs: [],
+          activeTabId: null,
+        };
       state.openTabs = strip.openTabs;
       state.activeTabId = strip.activeTabId;
       const tab = settingsTab(legacy.section, "Settings");
@@ -701,7 +702,9 @@ export function setNavigation(next: LegacyNavigationState | NavigationState): vo
   commit();
 }
 
-function isStructuralState(value: LegacyNavigationState | NavigationState): value is NavigationState {
+function isStructuralState(
+  value: LegacyNavigationState | NavigationState,
+): value is NavigationState {
   return "openTabs" in value && Array.isArray((value as NavigationState).openTabs);
 }
 
@@ -760,10 +763,7 @@ export function activateTab(tabId: string): void {
  * a fresh id, so each call to `openTerminalTab` without an explicit id
  * creates a new shell instance.
  */
-export function openTerminalTab(
-  sessionName: string,
-  options: TerminalTabOptions = {},
-): Tab {
+export function openTerminalTab(sessionName: string, options: TerminalTabOptions = {}): Tab {
   const tab = terminalTab(sessionName, options);
   openTab(tab);
   return tab;
@@ -835,10 +835,7 @@ export function useNavigation(): NavigationState {
       emit();
       return;
     }
-    if (
-      state.openTabs.length === 0 &&
-      (next.openTabs.length > 0 || next.activeTabId !== null)
-    ) {
+    if (state.openTabs.length === 0 && (next.openTabs.length > 0 || next.activeTabId !== null)) {
       state = next;
       refreshSnapshot();
       emit();
@@ -895,4 +892,3 @@ export function __resetNavigationForTests(
   refreshSnapshot();
   emit();
 }
-

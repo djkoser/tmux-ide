@@ -43,13 +43,7 @@ interface PanelStackProps {
   testId?: string;
 }
 
-export function PanelStack({
-  panels,
-  onResize,
-  className,
-  style,
-  testId,
-}: PanelStackProps) {
+export function PanelStack({ panels, onResize, className, style, testId }: PanelStackProps) {
   const [isResizing, setIsResizing] = useState(false);
 
   const handleSashResize = useCallback(
@@ -86,10 +80,7 @@ export function PanelStack({
         ...style,
       }}
     >
-      <div
-        className="flex h-full"
-        style={{ gap: PANEL_GAP, flexGrow: 1, minWidth: 0 }}
-      >
+      <div className="flex h-full" style={{ gap: PANEL_GAP, flexGrow: 1, minWidth: 0 }}>
         {panels.map((entry, index) => {
           const isFirst = index === 0;
           const showSash = !isSingle && !isFirst;

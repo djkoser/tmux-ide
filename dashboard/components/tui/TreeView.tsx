@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import styles from '@components/TreeView.module.css';
+import styles from "@components/TreeView.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
 interface TreeViewProps {
   children?: React.ReactNode;
@@ -16,7 +16,17 @@ interface TreeViewProps {
   title: string;
 }
 
-const TreeView: React.FC<TreeViewProps> = ({ defaultValue = false, title, children, depth = 0, isFile = false, isRoot = false, isLastChild = false, style, parentLines = [] }) => {
+const TreeView: React.FC<TreeViewProps> = ({
+  defaultValue = false,
+  title,
+  children,
+  depth = 0,
+  isFile = false,
+  isRoot = false,
+  isLastChild = false,
+  style,
+  parentLines = [],
+}) => {
   const [show, setShow] = React.useState<boolean>(defaultValue);
 
   const onToggleShow = (): void => {
@@ -26,16 +36,28 @@ const TreeView: React.FC<TreeViewProps> = ({ defaultValue = false, title, childr
   const hasChildren = React.Children.count(children) > 0;
   const isEmptyFolder = !isFile && !hasChildren;
 
-  const spacing = parentLines.map((line) => (line ? '│ . ' : '. . ')).join('');
-  const endPrefix = isLastChild ? '└───' : '├───';
+  const spacing = parentLines.map((line) => (line ? "│ . " : ". . ")).join("");
+  const endPrefix = isLastChild ? "└───" : "├───";
   const prefix = `${spacing}${endPrefix}`;
-  const icon = isFile ? ' ' : show ? '╦ ' : '╤ ';
+  const icon = isFile ? " " : show ? "╦ " : "╤ ";
 
   const updatedParentLines = [...parentLines, !isLastChild];
 
   return (
     <div className={styles.root} style={style}>
-      <div tabIndex={0} role="button" onClick={onToggleShow} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { if (e.key === ' ') e.preventDefault(); onToggleShow(); } }} className={styles.item} aria-expanded={show}>
+      <div
+        tabIndex={0}
+        role="button"
+        onClick={onToggleShow}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            if (e.key === " ") e.preventDefault();
+            onToggleShow();
+          }
+        }}
+        className={styles.item}
+        aria-expanded={show}
+      >
         {prefix}
         {icon}
         {title}
@@ -50,9 +72,9 @@ const TreeView: React.FC<TreeViewProps> = ({ defaultValue = false, title, childr
                     depth: depth + 1,
                     isLastChild: index === React.Children.count(children) - 1,
                     parentLines: updatedParentLines,
-                  } as any
+                  } as any,
                 )
-              : child
+              : child,
           )}
         </div>
       )}

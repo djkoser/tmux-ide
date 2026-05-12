@@ -2,7 +2,12 @@ import { accessSync, constants } from "node:fs";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { once } from "node:events";
 
-import { AcpAgentExitedError, AcpAgentSpawnError, AcpProtocolError, AcpRpcError } from "./errors.ts";
+import {
+  AcpAgentExitedError,
+  AcpAgentSpawnError,
+  AcpProtocolError,
+  AcpRpcError,
+} from "./errors.ts";
 import { AGENT_METHODS, CLIENT_METHODS } from "./methods.ts";
 import { makeJsonRpcEndpoint } from "./protocol.ts";
 import {

@@ -210,9 +210,12 @@ describe("buildChatToolRegistry", () => {
   it("registers all three tmux tools and exposes advertise()", () => {
     const { deps } = buildDeps();
     const registry = buildChatToolRegistry({ session: "alpha", tmuxDeps: deps });
-    expect(registry.list().map((t) => t.name).sort()).toEqual(
-      ["capture_pane", "read_pane", "send_to_pane"].sort(),
-    );
+    expect(
+      registry
+        .list()
+        .map((t) => t.name)
+        .sort(),
+    ).toEqual(["capture_pane", "read_pane", "send_to_pane"].sort());
     const ad = registry.advertise();
     expect(ad).toHaveLength(3);
     for (const entry of ad) {

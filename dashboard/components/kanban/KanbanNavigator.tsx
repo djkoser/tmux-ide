@@ -4,11 +4,7 @@ import { Filter, Group, Layers } from "lucide-react";
 import { NavigatorShell } from "@/components/navigators/NavigatorShell";
 import { cn } from "@/lib/utils";
 import type { Task } from "@/lib/types";
-import {
-  PRIORITY_LABELS,
-  type GroupBy,
-  type KanbanFilters,
-} from "./kanban-types";
+import { PRIORITY_LABELS, type GroupBy, type KanbanFilters } from "./kanban-types";
 
 interface KanbanNavigatorProps {
   tasks: Task[];
@@ -81,9 +77,7 @@ export function KanbanNavigator({
                 key={a}
                 testId={`kanban-nav-agent-${a}`}
                 active={filters.agents.includes(a)}
-                onClick={() =>
-                  onChangeFilters({ ...filters, agents: toggle(filters.agents, a) })
-                }
+                onClick={() => onChangeFilters({ ...filters, agents: toggle(filters.agents, a) })}
               >
                 @{a}
               </NavRow>
@@ -167,7 +161,10 @@ function NavRow({
     >
       <span
         aria-hidden="true"
-        className={cn("h-1.5 w-1.5 rounded-full", active ? "bg-[var(--accent)]" : "bg-[var(--surface)]")}
+        className={cn(
+          "h-1.5 w-1.5 rounded-full",
+          active ? "bg-[var(--accent)]" : "bg-[var(--surface)]",
+        )}
       />
       <span className="truncate">{children}</span>
     </button>

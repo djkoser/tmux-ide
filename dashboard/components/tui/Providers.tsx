@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import * as React from 'react';
+import * as React from "react";
 
-import { HotkeysProvider } from '@modules/hotkeys';
-import { ModalProvider } from '@components/page/ModalContext';
+import { HotkeysProvider } from "@modules/hotkeys";
+import { ModalProvider } from "@components/page/ModalContext";
 
 interface ProvidersProps {
   children: React.ReactNode;

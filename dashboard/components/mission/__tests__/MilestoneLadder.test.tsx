@@ -62,9 +62,7 @@ function makeTask(id: string, milestone: string): Task {
 
 describe("MilestoneLadder", () => {
   it("renders all milestone stations sorted by order", () => {
-    const tasksByM = new Map([
-      ["M2", [makeTask("001", "M2"), makeTask("002", "M2")]],
-    ]);
+    const tasksByM = new Map([["M2", [makeTask("001", "M2"), makeTask("002", "M2")]]]);
     render(<MilestoneLadder milestones={MILESTONES} tasksByMilestone={tasksByM} />);
 
     expect(screen.getByTestId("mission-milestone-ladder")).toBeTruthy();
@@ -77,9 +75,7 @@ describe("MilestoneLadder", () => {
   });
 
   it("expands a station and reveals its tasks on click", async () => {
-    const tasksByM = new Map([
-      ["M2", [makeTask("001", "M2"), makeTask("002", "M2")]],
-    ]);
+    const tasksByM = new Map([["M2", [makeTask("001", "M2"), makeTask("002", "M2")]]]);
     render(<MilestoneLadder milestones={MILESTONES} tasksByMilestone={tasksByM} />);
 
     const button = screen.getByTestId("milestone-button-M2");
@@ -93,9 +89,7 @@ describe("MilestoneLadder", () => {
   });
 
   it("returns null when no milestones present", () => {
-    const { container } = render(
-      <MilestoneLadder milestones={[]} tasksByMilestone={new Map()} />,
-    );
+    const { container } = render(<MilestoneLadder milestones={[]} tasksByMilestone={new Map()} />);
     expect(container.querySelector("[data-testid='mission-milestone-ladder']")).toBeNull();
   });
 });

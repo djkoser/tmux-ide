@@ -26,10 +26,7 @@ export function numberValue(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
-export function firstNumber(
-  source: Record<string, unknown>,
-  keys: string[],
-): number | undefined {
+export function firstNumber(source: Record<string, unknown>, keys: string[]): number | undefined {
   for (const key of keys) {
     const value = numberValue(source[key]);
     if (value !== undefined) return value;
@@ -47,10 +44,7 @@ export function costUsd(value: unknown): number | undefined {
   return amount !== undefined && currency === "USD" ? amount : undefined;
 }
 
-export function extractTokenUsage(
-  value: unknown,
-  tokensAreCumulative = false,
-): UsagePatch | null {
+export function extractTokenUsage(value: unknown, tokensAreCumulative = false): UsagePatch | null {
   if (!isRecord(value)) return null;
 
   const total = isRecord(value.total) ? value.total : null;
@@ -129,10 +123,7 @@ export function mergeUsage(
   previous: ChatThreadUsageSummary | undefined,
   patch: UsagePatch,
 ): ChatThreadUsageSummary {
-  const addOrSet = (
-    current: number | undefined,
-    next: number | undefined,
-  ): number | undefined => {
+  const addOrSet = (current: number | undefined, next: number | undefined): number | undefined => {
     if (next === undefined) return current;
     return patch.tokensAreCumulative ? next : (current ?? 0) + next;
   };

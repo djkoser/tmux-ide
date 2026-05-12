@@ -262,7 +262,14 @@ export function MissionControlView(props: MissionControlViewProps) {
         >
           Agents
         </span>
-        <Show when={agents().length > 0} fallback={<span style={{ color: "var(--theme-focused-foreground-subdued, var(--dim))" }}>— none online —</span>}>
+        <Show
+          when={agents().length > 0}
+          fallback={
+            <span style={{ color: "var(--theme-focused-foreground-subdued, var(--dim))" }}>
+              — none online —
+            </span>
+          }
+        >
           <For each={agents()}>
             {(a) => (
               <span
@@ -279,7 +286,9 @@ export function MissionControlView(props: MissionControlViewProps) {
                 <span
                   aria-hidden="true"
                   style={{
-                    color: a.isBusy ? "var(--green)" : "var(--theme-focused-foreground-subdued, var(--dim))",
+                    color: a.isBusy
+                      ? "var(--green)"
+                      : "var(--theme-focused-foreground-subdued, var(--dim))",
                   }}
                 >
                   {a.isBusy ? "●" : "○"}
@@ -333,7 +342,12 @@ export function MissionControlView(props: MissionControlViewProps) {
           <Show
             when={milestones().length > 0}
             fallback={
-              <div style={{ padding: "8px 12px", color: "var(--theme-focused-foreground-subdued, var(--dim))" }}>
+              <div
+                style={{
+                  padding: "8px 12px",
+                  color: "var(--theme-focused-foreground-subdued, var(--dim))",
+                }}
+              >
                 — no milestones —
               </div>
             }
@@ -341,8 +355,7 @@ export function MissionControlView(props: MissionControlViewProps) {
             <For each={milestones()}>
               {(m, i) => {
                 const isSel = () => i() === selectedMilestone();
-                const isActive = () =>
-                  activeMilestone()?.id === m.id;
+                const isActive = () => activeMilestone()?.id === m.id;
                 return (
                   <div
                     data-milestone-id={m.id}
@@ -367,7 +380,15 @@ export function MissionControlView(props: MissionControlViewProps) {
                     >
                       {STATUS_GLYPH[m.status] ?? "·"}
                     </span>
-                    <span style={{ flex: "1", "min-width": "0", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                    <span
+                      style={{
+                        flex: "1",
+                        "min-width": "0",
+                        overflow: "hidden",
+                        "text-overflow": "ellipsis",
+                        "white-space": "nowrap",
+                      }}
+                    >
                       {m.title}
                     </span>
                     <span
@@ -422,7 +443,12 @@ export function MissionControlView(props: MissionControlViewProps) {
             <Show
               when={wipTasks().length > 0}
               fallback={
-                <div style={{ padding: "8px 12px", color: "var(--theme-focused-foreground-subdued, var(--dim))" }}>
+                <div
+                  style={{
+                    padding: "8px 12px",
+                    color: "var(--theme-focused-foreground-subdued, var(--dim))",
+                  }}
+                >
                   — nothing in flight —
                 </div>
               }
@@ -437,17 +463,36 @@ export function MissionControlView(props: MissionControlViewProps) {
                       "align-items": "center",
                     }}
                   >
-                    <span aria-hidden="true" style={{ color: statusColor(t.status), width: "1ch", "text-align": "center" }}>
+                    <span
+                      aria-hidden="true"
+                      style={{ color: statusColor(t.status), width: "1ch", "text-align": "center" }}
+                    >
                       {STATUS_GLYPH[t.status] ?? "·"}
                     </span>
-                    <span style={{ "font-variant-numeric": "tabular-nums", color: "var(--theme-focused-foreground-subdued, var(--dim))", "font-size": "10px" }}>
+                    <span
+                      style={{
+                        "font-variant-numeric": "tabular-nums",
+                        color: "var(--theme-focused-foreground-subdued, var(--dim))",
+                        "font-size": "10px",
+                      }}
+                    >
                       {t.id}
                     </span>
-                    <span style={{ flex: "1", "min-width": "0", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                    <span
+                      style={{
+                        flex: "1",
+                        "min-width": "0",
+                        overflow: "hidden",
+                        "text-overflow": "ellipsis",
+                        "white-space": "nowrap",
+                      }}
+                    >
                       {t.title}
                     </span>
                     <Show when={t.assignee}>
-                      <span style={{ color: "var(--cyan, var(--accent))", "font-size": "11px" }}>@{t.assignee}</span>
+                      <span style={{ color: "var(--cyan, var(--accent))", "font-size": "11px" }}>
+                        @{t.assignee}
+                      </span>
                     </Show>
                   </div>
                 )}
@@ -472,7 +517,12 @@ export function MissionControlView(props: MissionControlViewProps) {
             <Show
               when={events().length > 0}
               fallback={
-                <div style={{ padding: "8px 12px", color: "var(--theme-focused-foreground-subdued, var(--dim))" }}>
+                <div
+                  style={{
+                    padding: "8px 12px",
+                    color: "var(--theme-focused-foreground-subdued, var(--dim))",
+                  }}
+                >
                   — no recent events —
                 </div>
               }
@@ -508,9 +558,19 @@ export function MissionControlView(props: MissionControlViewProps) {
                       {e.type.replace(/^task\./, "")}
                     </span>
                     <Show when={e.agent}>
-                      <span style={{ color: "var(--cyan, var(--accent))", "min-width": "8ch" }}>{e.agent}</span>
+                      <span style={{ color: "var(--cyan, var(--accent))", "min-width": "8ch" }}>
+                        {e.agent}
+                      </span>
                     </Show>
-                    <span style={{ flex: "1", "min-width": "0", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                    <span
+                      style={{
+                        flex: "1",
+                        "min-width": "0",
+                        overflow: "hidden",
+                        "text-overflow": "ellipsis",
+                        "white-space": "nowrap",
+                      }}
+                    >
                       {e.message ?? ""}
                     </span>
                   </div>

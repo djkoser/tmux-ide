@@ -99,7 +99,10 @@ export default function ProjectV2Page() {
   const [vLayout, setVLayout] = useStoredLayout("project-v");
   const [bentoVLayout, setBentoVLayout] = useStoredLayout("project-bento-v");
   const [bentoHLayout, setBentoHLayout] = useStoredLayout("project-bento-h");
-  const metrics = useMetricsPoll(projectName === "__fallback" ? null : projectName, view === "metrics");
+  const metrics = useMetricsPoll(
+    projectName === "__fallback" ? null : projectName,
+    view === "metrics",
+  );
 
   // Preview path is owned at the page level so the Files view can request a
   // file → switch to Preview without round-tripping through localStorage. The
@@ -137,75 +140,97 @@ export default function ProjectV2Page() {
       <div className="flex flex-1 min-h-0">
         <V2ActivityBar view={view} onView={(id: ActivityBarViewId) => setView(id)} />
         <div className="flex-1 min-w-0">
-        <Group orientation="horizontal" defaultLayout={hLayout} onLayoutChange={setHLayout}>
-          <Panel id="sidebar" defaultSize={20} minSize={14} collapsible collapsedSize={4} className="border-r border-[var(--border)]">
-            <ProjectSidebar
-              projectName={projectName}
-              projectDir={snapshot?.project?.dir ?? null}
-              milestones={milestones}
-              view={view}
-              onView={setView}
-            />
-          </Panel>
+          <Group orientation="horizontal" defaultLayout={hLayout} onLayoutChange={setHLayout}>
+            <Panel
+              id="sidebar"
+              defaultSize={20}
+              minSize={14}
+              collapsible
+              collapsedSize={4}
+              className="border-r border-[var(--border)]"
+            >
+              <ProjectSidebar
+                projectName={projectName}
+                projectDir={snapshot?.project?.dir ?? null}
+                milestones={milestones}
+                view={view}
+                onView={setView}
+              />
+            </Panel>
 
-          <VSeparator />
+            <VSeparator />
 
-          <Panel id="center" defaultSize={56} minSize={30}>
-            <Group orientation="vertical" defaultLayout={vLayout} onLayoutChange={setVLayout}>
-              <Panel id="main" defaultSize={70} minSize={20}>
-                <Group orientation="vertical" defaultLayout={bentoVLayout} onLayoutChange={setBentoVLayout}>
-                  <Panel id="bento" defaultSize={50} minSize={20}>
-                    <Group orientation="horizontal" defaultLayout={bentoHLayout} onLayoutChange={setBentoHLayout}>
-                      <Panel id="bento-left" defaultSize={50} minSize={20}>
-                        <BentoColumn>
-                          <BentoMissionTile mission={mission} milestones={milestones} />
-                          <BentoTasksTile tasks={tasks} />
-                        </BentoColumn>
-                      </Panel>
-                      <VSeparator />
-                      <Panel id="bento-right" defaultSize={50} minSize={20}>
-                        <BentoColumn>
-                          <BentoMilestoneTile milestones={milestones} />
-                          <BentoAgentsTile agents={agents} />
-                        </BentoColumn>
-                      </Panel>
-                    </Group>
-                  </Panel>
-                  <HSeparator />
-                  <Panel id="bento-detail" defaultSize={50} minSize={20}>
-                    <MainContent
-                      view={view}
-                      projectName={projectName}
-                      mission={mission}
-                      milestones={milestones}
-                      tasks={tasks}
-                      agents={agents}
-                      goals={goals}
-                      events={events}
-                      skills={skills}
-                      metrics={metrics}
-                      previewPath={previewPath}
-                      setPreviewPath={setPreviewPath}
-                      openInPreview={openInPreview}
-                    />
-                  </Panel>
-                </Group>
-              </Panel>
+            <Panel id="center" defaultSize={56} minSize={30}>
+              <Group orientation="vertical" defaultLayout={vLayout} onLayoutChange={setVLayout}>
+                <Panel id="main" defaultSize={70} minSize={20}>
+                  <Group
+                    orientation="vertical"
+                    defaultLayout={bentoVLayout}
+                    onLayoutChange={setBentoVLayout}
+                  >
+                    <Panel id="bento" defaultSize={50} minSize={20}>
+                      <Group
+                        orientation="horizontal"
+                        defaultLayout={bentoHLayout}
+                        onLayoutChange={setBentoHLayout}
+                      >
+                        <Panel id="bento-left" defaultSize={50} minSize={20}>
+                          <BentoColumn>
+                            <BentoMissionTile mission={mission} milestones={milestones} />
+                            <BentoTasksTile tasks={tasks} />
+                          </BentoColumn>
+                        </Panel>
+                        <VSeparator />
+                        <Panel id="bento-right" defaultSize={50} minSize={20}>
+                          <BentoColumn>
+                            <BentoMilestoneTile milestones={milestones} />
+                            <BentoAgentsTile agents={agents} />
+                          </BentoColumn>
+                        </Panel>
+                      </Group>
+                    </Panel>
+                    <HSeparator />
+                    <Panel id="bento-detail" defaultSize={50} minSize={20}>
+                      <MainContent
+                        view={view}
+                        projectName={projectName}
+                        mission={mission}
+                        milestones={milestones}
+                        tasks={tasks}
+                        agents={agents}
+                        goals={goals}
+                        events={events}
+                        skills={skills}
+                        metrics={metrics}
+                        previewPath={previewPath}
+                        setPreviewPath={setPreviewPath}
+                        openInPreview={openInPreview}
+                      />
+                    </Panel>
+                  </Group>
+                </Panel>
 
-              <HSeparator />
+                <HSeparator />
 
-              <Panel id="terminal" defaultSize={30} minSize={10}>
-                <TerminalPane projectName={projectName} />
-              </Panel>
-            </Group>
-          </Panel>
+                <Panel id="terminal" defaultSize={30} minSize={10}>
+                  <TerminalPane projectName={projectName} />
+                </Panel>
+              </Group>
+            </Panel>
 
-          <VSeparator />
+            <VSeparator />
 
-          <Panel id="inspector" defaultSize={24} minSize={12} collapsible collapsedSize={4} className="border-l border-[var(--border)]">
-            <InspectorPane agents={agents} tasks={tasks} />
-          </Panel>
-        </Group>
+            <Panel
+              id="inspector"
+              defaultSize={24}
+              minSize={12}
+              collapsible
+              collapsedSize={4}
+              className="border-l border-[var(--border)]"
+            >
+              <InspectorPane agents={agents} tasks={tasks} />
+            </Panel>
+          </Group>
         </div>
       </div>
 
@@ -241,7 +266,10 @@ function V2TopBar({
   return (
     <TooltipProvider delay={200}>
       <header className="flex h-7 shrink-0 items-center border-b border-[var(--border)] bg-[var(--bg-strong)] pl-3 text-[11px] tabular-nums">
-        <Link href="/v2" className="mr-2 inline-flex items-center gap-1 text-[var(--fg)] hover:text-[var(--accent)]">
+        <Link
+          href="/v2"
+          className="mr-2 inline-flex items-center gap-1 text-[var(--fg)] hover:text-[var(--accent)]"
+        >
           <span aria-hidden="true">◇</span>
           <span className="font-medium">tmux-ide</span>
         </Link>
@@ -252,7 +280,9 @@ function V2TopBar({
           data-testid="v2-topbar-project-switcher"
           className="inline-flex h-5 items-center gap-1 px-2 text-[var(--accent)] hover:bg-[var(--surface-hover)]"
         >
-          <span aria-hidden="true" className="text-[var(--dim)]">▾</span>
+          <span aria-hidden="true" className="text-[var(--dim)]">
+            ▾
+          </span>
           <span className="font-medium">{projectName}</span>
         </button>
         <span className="mx-1 text-[var(--dimmer)]">·</span>
@@ -313,7 +343,13 @@ function V2TopBar({
 interface SidebarProps {
   projectName: string;
   projectDir: string | null;
-  milestones: ReadonlyArray<{ id: string; title: string; status: string; taskCount: number; tasksDone: number }>;
+  milestones: ReadonlyArray<{
+    id: string;
+    title: string;
+    status: string;
+    taskCount: number;
+    tasksDone: number;
+  }>;
   view: ViewId;
   onView: (v: ViewId) => void;
 }
@@ -326,13 +362,22 @@ function ProjectSidebar({ projectName, projectDir, milestones, view, onView }: S
   const activeStyle: React.CSSProperties = { borderLeft: "2px solid var(--accent)" };
   return (
     <nav className="flex h-full flex-col overflow-y-auto py-2 text-[12px]">
-      <div className="mb-1 px-3 text-[10px] uppercase tracking-wider text-[var(--dim)]">project</div>
-      <div className="mb-3 flex items-center gap-2 px-2 py-1 text-[var(--accent)]" style={activeStyle}>
-        <span aria-hidden="true" className="w-4 text-center">●</span>
+      <div className="mb-1 px-3 text-[10px] uppercase tracking-wider text-[var(--dim)]">
+        project
+      </div>
+      <div
+        className="mb-3 flex items-center gap-2 px-2 py-1 text-[var(--accent)]"
+        style={activeStyle}
+      >
+        <span aria-hidden="true" className="w-4 text-center">
+          ●
+        </span>
         <span className="truncate font-medium">{projectName}</span>
       </div>
 
-      <div className="mb-1 mt-1 border-t border-[var(--border-weak)] pt-2 px-3 text-[10px] uppercase tracking-wider text-[var(--dim)]">views</div>
+      <div className="mb-1 mt-1 border-t border-[var(--border-weak)] pt-2 px-3 text-[10px] uppercase tracking-wider text-[var(--dim)]">
+        views
+      </div>
       {VIEWS.map((v) => {
         const isActive = v.id === view;
         return (
@@ -343,7 +388,9 @@ function ProjectSidebar({ projectName, projectDir, milestones, view, onView }: S
             className={isActive ? activeCls : inactiveCls}
             style={isActive ? activeStyle : inactiveStyle}
           >
-            <span aria-hidden="true" className="w-4 text-center">{v.glyph}</span>
+            <span aria-hidden="true" className="w-4 text-center">
+              {v.glyph}
+            </span>
             <span className="truncate">{v.label}</span>
           </button>
         );
@@ -351,13 +398,29 @@ function ProjectSidebar({ projectName, projectDir, milestones, view, onView }: S
 
       {projectDir && (
         <>
-          <div className="mb-1 mt-3 border-t border-[var(--border-weak)] pt-2 px-3 text-[10px] uppercase tracking-wider text-[var(--dim)]">widgets</div>
-          <Link href={`/v2/widget/explorer?session=${encodeURIComponent(projectName)}&dir=${encodeURIComponent(projectDir)}`} className={inactiveCls} style={inactiveStyle} data-testid="project-sidebar-files-link">
-            <span aria-hidden="true" className="w-4 text-center">▤</span>
+          <div className="mb-1 mt-3 border-t border-[var(--border-weak)] pt-2 px-3 text-[10px] uppercase tracking-wider text-[var(--dim)]">
+            widgets
+          </div>
+          <Link
+            href={`/v2/widget/explorer?session=${encodeURIComponent(projectName)}&dir=${encodeURIComponent(projectDir)}`}
+            className={inactiveCls}
+            style={inactiveStyle}
+            data-testid="project-sidebar-files-link"
+          >
+            <span aria-hidden="true" className="w-4 text-center">
+              ▤
+            </span>
             <span className="truncate">Files</span>
           </Link>
-          <Link href={`/v2/widget/mission-control?session=${encodeURIComponent(projectName)}&dir=${encodeURIComponent(projectDir)}`} className={inactiveCls} style={inactiveStyle} data-testid="project-sidebar-mission-control-link">
-            <span aria-hidden="true" className="w-4 text-center">◈</span>
+          <Link
+            href={`/v2/widget/mission-control?session=${encodeURIComponent(projectName)}&dir=${encodeURIComponent(projectDir)}`}
+            className={inactiveCls}
+            style={inactiveStyle}
+            data-testid="project-sidebar-mission-control-link"
+          >
+            <span aria-hidden="true" className="w-4 text-center">
+              ◈
+            </span>
             <span className="truncate">Mission Control</span>
           </Link>
         </>
@@ -365,13 +428,25 @@ function ProjectSidebar({ projectName, projectDir, milestones, view, onView }: S
 
       {milestones.length > 0 && (
         <>
-          <div className="mb-1 mt-3 border-t border-[var(--border-weak)] pt-2 px-3 text-[10px] uppercase tracking-wider text-[var(--dim)]">milestones</div>
+          <div className="mb-1 mt-3 border-t border-[var(--border-weak)] pt-2 px-3 text-[10px] uppercase tracking-wider text-[var(--dim)]">
+            milestones
+          </div>
           {milestones.map((m) => (
-            <button key={m.id} type="button" onClick={() => onView("mission")} className={inactiveCls} style={inactiveStyle}>
-              <span aria-hidden="true" className="w-4 text-center">{milestoneGlyph(m.status)}</span>
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => onView("mission")}
+              className={inactiveCls}
+              style={inactiveStyle}
+            >
+              <span aria-hidden="true" className="w-4 text-center">
+                {milestoneGlyph(m.status)}
+              </span>
               <span className="truncate">{m.title}</span>
               {m.taskCount > 0 && (
-                <span className="ml-auto text-[10px] text-[var(--dim)]">{m.tasksDone}/{m.taskCount}</span>
+                <span className="ml-auto text-[10px] text-[var(--dim)]">
+                  {m.tasksDone}/{m.taskCount}
+                </span>
               )}
             </button>
           ))}
@@ -400,7 +475,13 @@ interface MainContentProps {
   view: ViewId;
   projectName: string;
   mission: { title: string; description?: string; status?: string } | null;
-  milestones: ReadonlyArray<{ id: string; title: string; status: string; taskCount: number; tasksDone: number }>;
+  milestones: ReadonlyArray<{
+    id: string;
+    title: string;
+    status: string;
+    taskCount: number;
+    tasksDone: number;
+  }>;
   tasks: Task[];
   agents: AgentDetail[];
   goals: Goal[];
@@ -427,7 +508,13 @@ function BentoMissionTile({
   milestones,
 }: {
   mission: { title: string; description?: string; status?: string } | null;
-  milestones: ReadonlyArray<{ id: string; title: string; status: string; taskCount: number; tasksDone: number }>;
+  milestones: ReadonlyArray<{
+    id: string;
+    title: string;
+    status: string;
+    taskCount: number;
+    tasksDone: number;
+  }>;
 }) {
   const totalTasks = milestones.reduce((acc, m) => acc + m.taskCount, 0);
   const doneTasks = milestones.reduce((acc, m) => acc + m.tasksDone, 0);
@@ -443,7 +530,9 @@ function BentoMissionTile({
             <RowSpaceBetween>
               <span>Milestones</span>
               <Badge>
-                <span className="tabular-nums">{doneTasks}/{totalTasks}</span>
+                <span className="tabular-nums">
+                  {doneTasks}/{totalTasks}
+                </span>
               </Badge>
             </RowSpaceBetween>
           )}
@@ -458,7 +547,13 @@ function BentoMissionTile({
 function BentoMilestoneTile({
   milestones,
 }: {
-  milestones: ReadonlyArray<{ id: string; title: string; status: string; taskCount: number; tasksDone: number }>;
+  milestones: ReadonlyArray<{
+    id: string;
+    title: string;
+    status: string;
+    taskCount: number;
+    tasksDone: number;
+  }>;
 }) {
   const active =
     milestones.find((m) => m.status === "active") ??
@@ -476,7 +571,9 @@ function BentoMilestoneTile({
           <RowSpaceBetween>
             <span>Progress</span>
             <Badge>
-              <span className="tabular-nums">{active.tasksDone}/{active.taskCount}</span>
+              <span className="tabular-nums">
+                {active.tasksDone}/{active.taskCount}
+              </span>
             </Badge>
           </RowSpaceBetween>
         </>
@@ -496,19 +593,27 @@ function BentoTasksTile({ tasks }: { tasks: Task[] }) {
     <Card title="TASKS" mode="left">
       <RowSpaceBetween>
         <span>Todo</span>
-        <Badge><span className="tabular-nums">{todo}</span></Badge>
+        <Badge>
+          <span className="tabular-nums">{todo}</span>
+        </Badge>
       </RowSpaceBetween>
       <RowSpaceBetween>
         <span>In progress</span>
-        <Badge><span className="tabular-nums">{inProgress}</span></Badge>
+        <Badge>
+          <span className="tabular-nums">{inProgress}</span>
+        </Badge>
       </RowSpaceBetween>
       <RowSpaceBetween>
         <span>Review</span>
-        <Badge><span className="tabular-nums">{review}</span></Badge>
+        <Badge>
+          <span className="tabular-nums">{review}</span>
+        </Badge>
       </RowSpaceBetween>
       <RowSpaceBetween>
         <span>Done</span>
-        <Badge><span className="tabular-nums">{done}</span></Badge>
+        <Badge>
+          <span className="tabular-nums">{done}</span>
+        </Badge>
       </RowSpaceBetween>
     </Card>
   );
@@ -523,12 +628,18 @@ function BentoAgentsTile({ agents }: { agents: AgentDetail[] }) {
         agents.map((a) => (
           <RowSpaceBetween key={a.paneId}>
             <span className="truncate">
-              <span aria-hidden="true" className="mr-1" style={{ color: a.isBusy ? "var(--green)" : "var(--dim)" }}>
+              <span
+                aria-hidden="true"
+                className="mr-1"
+                style={{ color: a.isBusy ? "var(--green)" : "var(--dim)" }}
+              >
                 {a.isBusy ? "●" : "○"}
               </span>
               {a.paneTitle}
             </span>
-            <span className="text-[var(--dim)] tabular-nums">{a.elapsed || (a.isBusy ? "working" : "idle")}</span>
+            <span className="text-[var(--dim)] tabular-nums">
+              {a.elapsed || (a.isBusy ? "working" : "idle")}
+            </span>
           </RowSpaceBetween>
         ))
       )}
@@ -539,7 +650,9 @@ function BentoAgentsTile({ agents }: { agents: AgentDetail[] }) {
 function MainContent(props: MainContentProps) {
   switch (props.view) {
     case "mission":
-      return <MissionView mission={props.mission} milestones={props.milestones} tasks={props.tasks} />;
+      return (
+        <MissionView mission={props.mission} milestones={props.milestones} tasks={props.tasks} />
+      );
     case "mission-control":
       return <V2MissionControlIsland projectName={props.projectName} />;
     case "kanban":
@@ -557,12 +670,7 @@ function MainContent(props: MainContentProps) {
     case "tasks":
       return <TasksView projectName={props.projectName} tasks={props.tasks} />;
     case "files":
-      return (
-        <V2ExplorerIsland
-          projectName={props.projectName}
-          onOpenFile={props.openInPreview}
-        />
-      );
+      return <V2ExplorerIsland projectName={props.projectName} onOpenFile={props.openInPreview} />;
     case "preview":
       return (
         <PreviewView
@@ -633,9 +741,7 @@ function MissionView({
 }) {
   const taskRows = useMemo<string[][]>(() => {
     const head = ["ID", "TITLE", "STATUS", "ASSIGNEE"];
-    const body = tasks
-      .slice(0, 12)
-      .map((t) => [t.id, t.title, t.status, t.assignee ?? "—"]);
+    const body = tasks.slice(0, 12).map((t) => [t.id, t.title, t.status, t.assignee ?? "—"]);
     return body.length > 0 ? [head, ...body] : [head, ["—", "no tasks yet", "—", "—"]];
   }, [tasks]);
 
@@ -690,7 +796,11 @@ function MissionView({
   );
 }
 
-function SkillsView({ skills }: { skills: ReadonlyArray<{ name: string; specialties?: string[] }> }) {
+function SkillsView({
+  skills,
+}: {
+  skills: ReadonlyArray<{ name: string; specialties?: string[] }>;
+}) {
   return (
     <div className="h-full overflow-y-auto p-3">
       <Card title="SKILLS" mode="left">
@@ -700,7 +810,9 @@ function SkillsView({ skills }: { skills: ReadonlyArray<{ name: string; specialt
           skills.map((s) => (
             <RowSpaceBetween key={s.name}>
               <span>
-                <span aria-hidden="true" className="mr-1">✶</span>
+                <span aria-hidden="true" className="mr-1">
+                  ✶
+                </span>
                 {s.name}
               </span>
               <span className="text-[var(--dim)]">{s.specialties?.[0] ?? "—"}</span>
@@ -1270,7 +1382,9 @@ function TaskFormCard({
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-[10px] uppercase tracking-wider text-[var(--dim)]">Description</span>
+          <span className="text-[10px] uppercase tracking-wider text-[var(--dim)]">
+            Description
+          </span>
           <textarea
             value={description}
             onChange={(event) => onDescriptionChange(event.target.value)}
@@ -1317,7 +1431,9 @@ function TaskFormCard({
         {error && <p className="text-[var(--red)]">{error}</p>}
 
         <RowSpaceBetween>
-          <span className="text-[var(--dim)]">{mode === "create" ? "Create new task" : "Edit task"}</span>
+          <span className="text-[var(--dim)]">
+            {mode === "create" ? "Create new task" : "Edit task"}
+          </span>
           <div className="flex gap-1">
             <Button onClick={onCancel} theme="SECONDARY" isDisabled={submitting}>
               Cancel
@@ -1400,7 +1516,8 @@ function PreviewView({ projectName, path, onPathChange }: PreviewViewProps) {
 
   const language = useMemo(() => detectLanguage(path), [path]);
   const sizeLabel = preview?.size ? formatBytes(preview.size) : null;
-  const errorMessage = preview?.error ?? (path && preview && !preview.exists ? "File not found." : null);
+  const errorMessage =
+    preview?.error ?? (path && preview && !preview.exists ? "File not found." : null);
   const hasDiff = diff.trim().length > 0;
 
   return (
@@ -1408,7 +1525,8 @@ function PreviewView({ projectName, path, onPathChange }: PreviewViewProps) {
       <Card title="PREVIEW" mode="left">
         <RowSpaceBetween>
           <span className="text-[var(--dim)]">
-            Read-only preview. Polls every {PREVIEW_POLL_MS / 1000}s. Toggle content/diff with the buttons.
+            Read-only preview. Polls every {PREVIEW_POLL_MS / 1000}s. Toggle content/diff with the
+            buttons.
           </span>
           <div className="flex gap-1">
             <Button
@@ -1441,7 +1559,11 @@ function PreviewView({ projectName, path, onPathChange }: PreviewViewProps) {
             placeholder="path/to/file (relative to project root)"
             className="flex-1 rounded border border-[var(--border)] bg-[var(--bg-strong)] px-2 py-1 text-[12px] text-[var(--fg)] outline-none focus:border-[var(--accent)]"
           />
-          <Button onClick={applyPath} theme="PRIMARY" isDisabled={!draftPath.trim() || draftPath.trim() === path}>
+          <Button
+            onClick={applyPath}
+            theme="PRIMARY"
+            isDisabled={!draftPath.trim() || draftPath.trim() === path}
+          >
             Open
           </Button>
         </form>
@@ -1468,9 +1590,7 @@ function PreviewView({ projectName, path, onPathChange }: PreviewViewProps) {
               </CodeBlock>
             )}
             {mode === "diff" && (
-              <CodeBlock data-lang="diff">
-                {hasDiff ? diff : "(no uncommitted changes)"}
-              </CodeBlock>
+              <CodeBlock data-lang="diff">{hasDiff ? diff : "(no uncommitted changes)"}</CodeBlock>
             )}
           </Window>
         </div>
@@ -1557,8 +1677,7 @@ function FilesView({ projectName, onOpenFile }: FilesViewProps) {
       <Card title="FILES" mode="left">
         <RowSpaceBetween>
           <span className="text-[var(--dim)]">
-            Click a file to open it in the Preview view. Click a directory to expand or
-            collapse.
+            Click a file to open it in the Preview view. Click a directory to expand or collapse.
           </span>
           <div className="flex gap-1">
             <Button
@@ -1571,11 +1690,7 @@ function FilesView({ projectName, onOpenFile }: FilesViewProps) {
         </RowSpaceBetween>
         <RowSpaceBetween>
           <span className="text-[var(--dim)]">
-            {loading
-              ? "loading…"
-              : error
-                ? "failed to load"
-                : selectedPath ?? "no selection"}
+            {loading ? "loading…" : error ? "failed to load" : (selectedPath ?? "no selection")}
             {truncated ? " · tree truncated by API" : ""}
           </span>
           <Badge>{loading ? "…" : `${countFiles(tree)} files`}</Badge>
@@ -1633,11 +1748,13 @@ function TerminalPane({ projectName }: { projectName: string }) {
   return (
     <div className="h-full overflow-hidden bg-[var(--bg-strong)] p-3 text-[11px] leading-tight">
       <div className="mb-2 flex items-center text-[10px] text-[var(--dim)]">
-        <span aria-hidden="true" className="mr-1">{">_"}</span>
+        <span aria-hidden="true" className="mr-1">
+          {">_"}
+        </span>
         <span>terminal · {projectName}:lead</span>
       </div>
       <pre className="whitespace-pre-wrap text-[var(--fg)]">
-{`$ tmux-ide attach ${projectName}
+        {`$ tmux-ide attach ${projectName}
 session ${projectName} attached
 $ █`}
       </pre>

@@ -47,8 +47,7 @@ export function V2ChatView({ projectName, chatVersionOverride }: V2ChatViewProps
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const chatVersion: ChatVersion =
-    chatVersionOverride ?? resolveChatVersionFromBrowser();
+  const chatVersion: ChatVersion = chatVersionOverride ?? resolveChatVersionFromBrowser();
 
   // Initial load: threads + providers
   useEffect(() => {
@@ -179,10 +178,7 @@ export function V2ChatView({ projectName, chatVersionOverride }: V2ChatViewProps
           )}
 
           {activeThreadId ? (
-            <SolidChatIsland
-              sessionName={projectName}
-              threadId={activeThreadId}
-            />
+            <SolidChatIsland sessionName={projectName} threadId={activeThreadId} />
           ) : (
             <div className="flex flex-1 items-center justify-center text-[var(--dim)]">
               — pick or create a thread —
@@ -200,13 +196,7 @@ export function V2ChatView({ projectName, chatVersionOverride }: V2ChatViewProps
 // tool-call cards, permission dialogs, attachment pickers, slash menus,
 // plan cards, streaming message rendering. We just give it a container.
 
-function SolidChatIsland({
-  sessionName,
-  threadId,
-}: {
-  sessionName: string;
-  threadId: string;
-}) {
+function SolidChatIsland({ sessionName, threadId }: { sessionName: string; threadId: string }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const handleRef = useRef<{
     unmount(): void;
@@ -295,9 +285,7 @@ function ThreadRail({
                   onClick={() => onPick(t.id)}
                   className="flex w-full flex-col px-3 py-1.5 text-left text-[11px] transition-colors hover:bg-[var(--surface-hover)]"
                   style={{
-                    borderLeft: active
-                      ? "2px solid var(--accent)"
-                      : "2px solid transparent",
+                    borderLeft: active ? "2px solid var(--accent)" : "2px solid transparent",
                     color: active ? "var(--accent)" : "var(--fg)",
                   }}
                 >

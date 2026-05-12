@@ -24,9 +24,15 @@ function normalize(value: unknown): PersistedKanbanState {
   const filters = v.filters && typeof v.filters === "object" ? v.filters : EMPTY_FILTERS;
   return {
     filters: {
-      milestones: Array.isArray(filters.milestones) ? filters.milestones.filter((x): x is string => typeof x === "string") : [],
-      agents: Array.isArray(filters.agents) ? filters.agents.filter((x): x is string => typeof x === "string") : [],
-      priorities: Array.isArray(filters.priorities) ? filters.priorities.filter((x): x is number => typeof x === "number") : [],
+      milestones: Array.isArray(filters.milestones)
+        ? filters.milestones.filter((x): x is string => typeof x === "string")
+        : [],
+      agents: Array.isArray(filters.agents)
+        ? filters.agents.filter((x): x is string => typeof x === "string")
+        : [],
+      priorities: Array.isArray(filters.priorities)
+        ? filters.priorities.filter((x): x is number => typeof x === "number")
+        : [],
       search: typeof filters.search === "string" ? filters.search : "",
     },
     groupBy:

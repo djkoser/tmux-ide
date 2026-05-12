@@ -173,11 +173,7 @@ import {
   TurnAlreadyRunningError,
 } from "../chat/plan-orchestrator.ts";
 import { PlanNotFoundError } from "../chat/plan-store.ts";
-import {
-  PlanApproveBodyZ,
-  PlanRejectBodyZ,
-  ChatThreadCreateInputZ,
-} from "@tmux-ide/contracts";
+import { PlanApproveBodyZ, PlanRejectBodyZ, ChatThreadCreateInputZ } from "@tmux-ide/contracts";
 import {
   makeProviderStore,
   ProviderStoreError,
@@ -546,8 +542,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   // --- /api/providers — ProviderInstance CRUD over ~/.tmux-ide/providers.json
   // (T080). The dashboard's ProvidersPanel reads/writes through this surface;
   // summaries are redacted (no apiKey) so secrets stay daemon-side.
-  const providerStore: ProviderStore =
-    options.providerStore ?? makeProviderStore();
+  const providerStore: ProviderStore = options.providerStore ?? makeProviderStore();
 
   function providerErrorStatus(err: ProviderStoreError): 400 | 404 | 409 {
     if (err.code === "not_found") return 404;
@@ -581,7 +576,13 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     }
     try {
       const created = providerStore.add(parsed.data);
-      return c.json({ provider: created.id, summary: providerStore.summaries().find((s) => s.id === created.id) }, 201);
+      return c.json(
+        {
+          provider: created.id,
+          summary: providerStore.summaries().find((s) => s.id === created.id),
+        },
+        201,
+      );
     } catch (err) {
       if (err instanceof ProviderStoreError) {
         return c.json({ error: err.message, code: err.code }, providerErrorStatus(err));
@@ -700,10 +701,8 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   // `threadStore`. Companion to the action-dispatcher path; the v2 chat
   // UI (dashboard/app/v2/_lib/V2ChatView.tsx + components/chat/NewChatPicker.tsx)
   // talks directly to these routes.
-  const threadStore: ThreadStore =
-    options.chatStores?.threadStore ?? getDefaultThreadStore();
-  const sessionStore: SessionStore =
-    options.chatStores?.sessionStore ?? getDefaultSessionStore();
+  const threadStore: ThreadStore = options.chatStores?.threadStore ?? getDefaultThreadStore();
+  const sessionStore: SessionStore = options.chatStores?.sessionStore ?? getDefaultSessionStore();
   const checkpointStore: CheckpointStore =
     options.chatStores?.checkpointStore ?? getDefaultCheckpointStore();
 
@@ -753,9 +752,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   // PATH). Distinct from `/api/providers`, which serves the redacted
   // user-configured `ProviderInstanceSummary` set (T079).
   app.get("/api/chat/providers", async (c) => {
-    const providers: ChatProviderInfo[] = await discoverProviders(
-      options.providerDiscovery,
-    );
+    const providers: ChatProviderInfo[] = await discoverProviders(options.providerDiscovery);
     return c.json({ providers });
   });
 
@@ -816,10 +813,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
         if (err instanceof PlanNotFoundError) {
           return c.json({ error: err.message, code: "plan_not_found" }, 404);
         }
-        if (
-          err instanceof PlanAlreadyImplementedError ||
-          err instanceof PlanAlreadyRejectedError
-        ) {
+        if (err instanceof PlanAlreadyImplementedError || err instanceof PlanAlreadyRejectedError) {
           return c.json({ error: err.message, code: err.name }, 409);
         }
         throw err;
@@ -2892,7 +2886,10 @@ export function createApp(options: CreateAppOptions = {}): Hono {
 function listAvailableTemplates(): ProjectTemplate[] {
   const __filename = fileURLToPath(import.meta.url);
   const __dir = dirname(__filename);
-  const templatesDir = join(__dir, "..", "..", "templates");
+  // Repo-root templates/ — 4 levels up from packages/daemon/src/command-center/.
+  // Pre-fold this lived at <pkg>/templates (..,.. worked); post-fold the
+  // canonical templates dir is at the repo root.
+  const templatesDir = join(__dir, "..", "..", "..", "..", "templates");
   if (!existsSync(templatesDir)) return [];
   const labels: Record<string, { label: string; description: string }> = {
     default: { label: "Default", description: "Single Claude pane + dev/shell row" },

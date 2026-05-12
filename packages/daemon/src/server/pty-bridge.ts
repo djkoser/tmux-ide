@@ -1,14 +1,7 @@
 import { EventEmitter } from "node:events";
 import * as fs from "node:fs";
-import {
-  defaultNodePtyAdapter,
-  NodePtyAdapter,
-} from "../terminal/NodePtyAdapter.ts";
-import type {
-  PtyAdapter,
-  PtyProcess,
-  PtySpawnInput,
-} from "../terminal/PtyAdapter.ts";
+import { defaultNodePtyAdapter, NodePtyAdapter } from "../terminal/NodePtyAdapter.ts";
+import type { PtyAdapter, PtyProcess, PtySpawnInput } from "../terminal/PtyAdapter.ts";
 
 const DEFAULT_RING_BUFFER_BYTES = 256 * 1024;
 

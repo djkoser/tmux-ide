@@ -1,10 +1,5 @@
 export { TmuxError } from "./errors.ts";
-export {
-  runTmux,
-  _setExecutor,
-  _setSpawner,
-  _getSpawner,
-} from "./runner.ts";
+export { runTmux, _setExecutor, _setSpawner, _getSpawner } from "./runner.ts";
 export {
   attachSession,
   createDetachedSession,
@@ -32,13 +27,5 @@ export {
   type SendKeysOptions,
   type TmuxPaneInfo,
 } from "./panes.ts";
-export {
-  isProcessAlive,
-  startSessionMonitor,
-  stopSessionMonitor,
-} from "./monitor.ts";
-export {
-  resolveTarget,
-  type ResolvedPane,
-  type TmuxPaneTarget,
-} from "./targeting.ts";
+export { isProcessAlive, startSessionMonitor, stopSessionMonitor } from "./monitor.ts";
+export { resolveTarget, type ResolvedPane, type TmuxPaneTarget } from "./targeting.ts";

@@ -11,10 +11,10 @@ afterEach(() => {
 describe("chatSessionSend (T085 fix #1)", () => {
   it("POSTs to /api/v2/action/chat.session.send with the action envelope", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({ ok: true, result: { accepted: true, promptId: "p-9" } }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
+      new Response(JSON.stringify({ ok: true, result: { accepted: true, promptId: "p-9" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
     );
     global.fetch = fetchMock as unknown as typeof fetch;
     const out = await chatSessionSend({ threadId: "t-1", text: "hello" });
@@ -30,9 +30,11 @@ describe("chatSessionSend (T085 fix #1)", () => {
   });
 
   it("wraps text in a single text content block (T080 ProviderInstance contract)", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ ok: true, result: { accepted: true, promptId: "p-1" } })),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ ok: true, result: { accepted: true, promptId: "p-1" } })),
+      );
     global.fetch = fetchMock as unknown as typeof fetch;
     await chatSessionSend({ threadId: "t-2", text: "multi line\nstays one block" });
     const body = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
@@ -42,21 +44,24 @@ describe("chatSessionSend (T085 fix #1)", () => {
   });
 
   it("throws ProjectApiError on HTTP failure", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: "bad request" }), { status: 400 }),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ error: "bad request" }), { status: 400 }));
     global.fetch = fetchMock as unknown as typeof fetch;
-    await expect(chatSessionSend({ threadId: "t-3", text: "x" })).rejects.toThrow(/HTTP 400|bad request/);
+    await expect(chatSessionSend({ threadId: "t-3", text: "x" })).rejects.toThrow(
+      /HTTP 400|bad request/,
+    );
   });
 
   it("surfaces action-envelope errors (ok:false) as ProjectApiError", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({ ok: false, error: { message: "thread not found" } }),
-        { status: 200 },
-      ),
+      new Response(JSON.stringify({ ok: false, error: { message: "thread not found" } }), {
+        status: 200,
+      }),
     );
     global.fetch = fetchMock as unknown as typeof fetch;
-    await expect(chatSessionSend({ threadId: "t-4", text: "x" })).rejects.toThrow(/thread not found/);
+    await expect(chatSessionSend({ threadId: "t-4", text: "x" })).rejects.toThrow(
+      /thread not found/,
+    );
   });
 });

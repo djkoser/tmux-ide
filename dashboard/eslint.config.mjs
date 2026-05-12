@@ -38,24 +38,17 @@ const config = [
             },
             {
               group: ["**/packages/daemon/**", "**/packages/tmux-bridge/**"],
-              message:
-                "dashboard is UI-only — no relative reaches into daemon/tmux-bridge (T059)",
+              message: "dashboard is UI-only — no relative reaches into daemon/tmux-bridge (T059)",
             },
             // G14-T01 Rule 1: deep silo imports forbidden — only the public
             // package entry point is allowed across the silo boundary.
             {
-              group: [
-                "@tmux-ide/chat-solid/*",
-                "@tmux-ide/v2-solid-widgets/*",
-              ],
+              group: ["@tmux-ide/chat-solid/*", "@tmux-ide/v2-solid-widgets/*"],
               message:
                 "Silo internals are off-limits — import the silo's public entry (@tmux-ide/<silo>) only. See ADR-0001 §1.4 Rule 1.",
             },
             {
-              group: [
-                "**/packages/chat-solid/src/**",
-                "**/packages/v2-solid-widgets/src/**",
-              ],
+              group: ["**/packages/chat-solid/src/**", "**/packages/v2-solid-widgets/src/**"],
               message:
                 "Silo internals are off-limits — no relative reaches into a silo's src/. See ADR-0001 §1.4 Rule 1.",
             },
@@ -103,12 +96,7 @@ const config = [
   // runtimes — silos are browser-only; importing server-side either crashes
   // (no `window`) or bundles framework runtime into Node. ADR-0001 §1.4 Rule 5.
   {
-    files: [
-      "app/**/route.ts",
-      "app/**/route.tsx",
-      "app/**/actions.ts",
-      "app/**/actions.tsx",
-    ],
+    files: ["app/**/route.ts", "app/**/route.tsx", "app/**/actions.ts", "app/**/actions.tsx"],
     rules: {
       "no-restricted-imports": [
         "error",

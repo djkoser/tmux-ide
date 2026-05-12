@@ -17,9 +17,15 @@
  * `data-[collapsible=icon]:*`, `group-data-[collapsible=icon]:*` are
  * unreliable inside cn() blocks and were silently failing before).
  */
-[data-slot="sidebar-container"] { width: var(--sidebar-width); }
-[data-slot="sidebar-container"][data-collapsible="offcanvas"] { width: 0; }
-[data-slot="sidebar-container"][data-collapsible="icon"] { width: var(--sidebar-width-icon); }
+[data-slot="sidebar-container"] {
+  width: var(--sidebar-width);
+}
+[data-slot="sidebar-container"][data-collapsible="offcanvas"] {
+  width: 0;
+}
+[data-slot="sidebar-container"][data-collapsible="icon"] {
+  width: var(--sidebar-width-icon);
+}
 [data-slot="sidebar-container"][data-variant="floating"][data-collapsible="icon"],
 [data-slot="sidebar-container"][data-variant="inset"][data-collapsible="icon"] {
   width: calc(var(--sidebar-width-icon) + 0.75rem);
@@ -48,7 +54,9 @@
   height: 2rem;
   padding: 0.5rem;
 }
-[data-slot="sidebar-container"][data-collapsible="icon"] [data-sidebar="menu-button"] > span:last-child {
+[data-slot="sidebar-container"][data-collapsible="icon"]
+  [data-sidebar="menu-button"]
+  > span:last-child {
   display: none;
 }
 [data-slot="sidebar-container"][data-collapsible="icon"] [data-sidebar="menu-item"] > div.ml-8 {

@@ -28,7 +28,14 @@ const CLIENT_HOOKS = new Set([
   "useActionState",
 ]);
 
-const CLIENT_STATE_PACKAGES = ["zustand", "jotai", "valtio", "mobx", "mobx-react", "mobx-react-lite"];
+const CLIENT_STATE_PACKAGES = [
+  "zustand",
+  "jotai",
+  "valtio",
+  "mobx",
+  "mobx-react",
+  "mobx-react-lite",
+];
 const SILO_PACKAGES = ["@tmux-ide/chat-solid", "@tmux-ide/v2-solid-widgets"];
 
 function hasUseClientDirective(ast) {
@@ -43,7 +50,9 @@ function hasUseClientDirective(ast) {
 const rscNoClientHooks = {
   meta: {
     type: "problem",
-    docs: { description: "RSC files must not import React client hooks or client-state libraries." },
+    docs: {
+      description: "RSC files must not import React client hooks or client-state libraries.",
+    },
     messages: {
       hook: 'Importing "{{name}}" requires a "use client" directive at the top of this file. RSC (server) components cannot use client hooks. See ADR-0001.',
       lib: 'Importing "{{name}}" (client-state library) requires a "use client" directive at the top of this file. See ADR-0001.',
@@ -65,7 +74,10 @@ const rscNoClientHooks = {
           }
           return;
         }
-        if (CLIENT_STATE_PACKAGES.includes(src) || CLIENT_STATE_PACKAGES.some((p) => src.startsWith(`${p}/`))) {
+        if (
+          CLIENT_STATE_PACKAGES.includes(src) ||
+          CLIENT_STATE_PACKAGES.some((p) => src.startsWith(`${p}/`))
+        ) {
           context.report({ node, messageId: "lib", data: { name: src } });
         }
       },

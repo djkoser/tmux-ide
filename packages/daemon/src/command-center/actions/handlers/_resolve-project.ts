@@ -7,7 +7,10 @@
  */
 
 import { getProject as getRegisteredProject } from "../../../lib/project-registry.ts";
-import { getSessionCwd as getSessionCwdDefault, hasSession as hasSessionDefault } from "@tmux-ide/tmux-bridge";
+import {
+  getSessionCwd as getSessionCwdDefault,
+  hasSession as hasSessionDefault,
+} from "@tmux-ide/tmux-bridge";
 import type { RegisteredProject } from "../../../schemas/registry.ts";
 import { ActionError } from "../errors.ts";
 

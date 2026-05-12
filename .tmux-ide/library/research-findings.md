@@ -4,21 +4,22 @@ Survey of `src/widgets/*` to inform the migration onto `/v2`. For each
 widget the table records (a) input data shape, (b) render output, (c)
 external dependencies, and (d) the recommended port path: **native
 React port** (rebuild with TUI-component-library primitives + Next.js
-+ command-center API) or **PTY-in-xterm mirror** (run the existing
-OpenTUI binary in a server-side PTY and stream to xterm.js).
+
+- command-center API) or **PTY-in-xterm mirror** (run the existing
+  OpenTUI binary in a server-side PTY and stream to xterm.js).
 
 ## Per-widget findings
 
-| Widget | Input data | Render output | External deps | Port recommendation | Reason |
-|--------|------------|---------------|----------------|---------------------|--------|
-| **changes** | `git status` / `git diff --cached` / `--numstat` / `ls-files`; file watchers; `@preview_file` tmux session var | Interactive — j/k nav, `s`/`u` stage/unstage, `c` view file, `r` refresh, diff preview | `execFileSync` (git); `@parcel/watcher`; tmux CLI for pane comms | **Native React port** | Git status is data-driven; stage/unstage are simple mutations; watcher + git move cleanly to Next.js API routes + SSE for client updates. |
-| **config** | `ide.yml` load/write; config tree model; field-type inference | Interactive — Tab nav, Ctrl+S save, Enter to edit fields, Ctrl+R restart tmux session | YAML I/O (`readConfig`/`writeConfig`); `execFileSync` (tmux restart); child-process for `tmux-ide restart` | **Native React port** | Config editing is a form UI; rebuilds with shadcn forms + Next.js API. tmux restart becomes an async endpoint. |
-| **costs** | Polls `loadAccounting(dir)` from `token-tracker.json` every 5s; session elapsed time | Read-only — j/k nav, `r` refresh, displays agent/task metrics | File I/O (`loadAccounting`); polling via `setInterval` | **Native React port** | Purely display-driven; polling becomes a SWR hook. No external processes or watchers. |
-| **explorer** | Directory tree via `readdirSync`; git status map; `.gitignore` filter; file watchers; tmux session options; branch via `git rev-parse` | Interactive — j/k nav, `/` search, `l`/`h` traverse, `[`/`]` jump-to-changed, `c` read, `o` editor, `H`/`I` toggles, `r` refresh | `readdirSync`/`existsSync`/`statSync`; `@parcel/watcher` (dir + git HEAD); `ignore` (gitignore parser); git CLI; tmux CLI for session options | **PTY-in-xterm mirror** | Dual filesystem watchers (working dir + `.git/HEAD`) with parsed gitignore rules; tree expansion state tightly coupled to watchers; tmux session-var persistence. Rebuilding all of that natively is more work than streaming the existing TUI. |
-| **mission-control** | Loads mission/goals/tasks/events from files; lists panes via tmux; validates state; polls every 2s | Interactive — Tab switching (1-4), j/k nav, `a` add agent, `/` command mode (create task, send cmd, add agent), Enter focus pane | `loadMission`/`loadGoals`/`loadTasks` (file I/O); event log; `listSessionPanes` (tmux CLI); `execFileSync` (tmux split-window, send-keys, select-pane); polling | **PTY-in-xterm mirror** | Heavy tmux mutation: spawning panes, sending keys, managing agents, introspecting pane state. The command palette spawns child processes. Web port would require a tmux-daemon sidecar — PTY streaming is the simpler path. |
-| **preview** | Polls `@preview_file` tmux session var; `readFileSync`; `git diff`; syntax-color hints | Read-only with `d` toggle (content vs diff); gutter markers for git changes; syntax coloring heuristic | `readFileSync`/`statSync`/`existsSync`; git diff; polling tmux option via `execFileSync` | **Native React port** | Read-only + data-driven; git diff computed on demand. Polling tmux session var becomes a context provider; file reads move to a Next.js API. |
-| **setup** | `detectStack()`; load/write `ide.yml`; multi-panel wizard (detect → layout → naming → review) | Interactive — Tab nav, field editing, save/launch flow; sub-components: `DetectPanel`, `LayoutPicker`, `AgentNaming`, `ConfigTree`, `FieldEditor` | File I/O (config read/write); `execFileSync` (tmux-ide launch); stack detection (reads `package.json`, `tsconfig`, etc.) | **Native React port** | Linear wizard with conditional panels. Stack detection + config I/O are straightforward API calls. No watchers; tmux-ide launch becomes an async endpoint. |
-| **tasks** | Loads from `.tasks/` dir; file watcher on task directory; `task-model.ts` for CRUD | Interactive — list → detail → form views; create/edit/delete tasks; dependency tracking | File I/O (`loadTasks`/`ensureTasksDir`); `@parcel/watcher`; child views (`TaskList`, `TaskDetail`, `TaskForm`) | **Native React port** | CRUD over file-backed state. Watcher becomes a polling hook. Form editing is standard React. No tmux integration or process spawning. |
+| Widget              | Input data                                                                                                                             | Render output                                                                                                                                     | External deps                                                                                                                                                   | Port recommendation     | Reason                                                                                                                                                                                                                                          |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **changes**         | `git status` / `git diff --cached` / `--numstat` / `ls-files`; file watchers; `@preview_file` tmux session var                         | Interactive — j/k nav, `s`/`u` stage/unstage, `c` view file, `r` refresh, diff preview                                                            | `execFileSync` (git); `@parcel/watcher`; tmux CLI for pane comms                                                                                                | **Native React port**   | Git status is data-driven; stage/unstage are simple mutations; watcher + git move cleanly to Next.js API routes + SSE for client updates.                                                                                                       |
+| **config**          | `ide.yml` load/write; config tree model; field-type inference                                                                          | Interactive — Tab nav, Ctrl+S save, Enter to edit fields, Ctrl+R restart tmux session                                                             | YAML I/O (`readConfig`/`writeConfig`); `execFileSync` (tmux restart); child-process for `tmux-ide restart`                                                      | **Native React port**   | Config editing is a form UI; rebuilds with shadcn forms + Next.js API. tmux restart becomes an async endpoint.                                                                                                                                  |
+| **costs**           | Polls `loadAccounting(dir)` from `token-tracker.json` every 5s; session elapsed time                                                   | Read-only — j/k nav, `r` refresh, displays agent/task metrics                                                                                     | File I/O (`loadAccounting`); polling via `setInterval`                                                                                                          | **Native React port**   | Purely display-driven; polling becomes a SWR hook. No external processes or watchers.                                                                                                                                                           |
+| **explorer**        | Directory tree via `readdirSync`; git status map; `.gitignore` filter; file watchers; tmux session options; branch via `git rev-parse` | Interactive — j/k nav, `/` search, `l`/`h` traverse, `[`/`]` jump-to-changed, `c` read, `o` editor, `H`/`I` toggles, `r` refresh                  | `readdirSync`/`existsSync`/`statSync`; `@parcel/watcher` (dir + git HEAD); `ignore` (gitignore parser); git CLI; tmux CLI for session options                   | **PTY-in-xterm mirror** | Dual filesystem watchers (working dir + `.git/HEAD`) with parsed gitignore rules; tree expansion state tightly coupled to watchers; tmux session-var persistence. Rebuilding all of that natively is more work than streaming the existing TUI. |
+| **mission-control** | Loads mission/goals/tasks/events from files; lists panes via tmux; validates state; polls every 2s                                     | Interactive — Tab switching (1-4), j/k nav, `a` add agent, `/` command mode (create task, send cmd, add agent), Enter focus pane                  | `loadMission`/`loadGoals`/`loadTasks` (file I/O); event log; `listSessionPanes` (tmux CLI); `execFileSync` (tmux split-window, send-keys, select-pane); polling | **PTY-in-xterm mirror** | Heavy tmux mutation: spawning panes, sending keys, managing agents, introspecting pane state. The command palette spawns child processes. Web port would require a tmux-daemon sidecar — PTY streaming is the simpler path.                     |
+| **preview**         | Polls `@preview_file` tmux session var; `readFileSync`; `git diff`; syntax-color hints                                                 | Read-only with `d` toggle (content vs diff); gutter markers for git changes; syntax coloring heuristic                                            | `readFileSync`/`statSync`/`existsSync`; git diff; polling tmux option via `execFileSync`                                                                        | **Native React port**   | Read-only + data-driven; git diff computed on demand. Polling tmux session var becomes a context provider; file reads move to a Next.js API.                                                                                                    |
+| **setup**           | `detectStack()`; load/write `ide.yml`; multi-panel wizard (detect → layout → naming → review)                                          | Interactive — Tab nav, field editing, save/launch flow; sub-components: `DetectPanel`, `LayoutPicker`, `AgentNaming`, `ConfigTree`, `FieldEditor` | File I/O (config read/write); `execFileSync` (tmux-ide launch); stack detection (reads `package.json`, `tsconfig`, etc.)                                        | **Native React port**   | Linear wizard with conditional panels. Stack detection + config I/O are straightforward API calls. No watchers; tmux-ide launch becomes an async endpoint.                                                                                      |
+| **tasks**           | Loads from `.tasks/` dir; file watcher on task directory; `task-model.ts` for CRUD                                                     | Interactive — list → detail → form views; create/edit/delete tasks; dependency tracking                                                           | File I/O (`loadTasks`/`ensureTasksDir`); `@parcel/watcher`; child views (`TaskList`, `TaskDetail`, `TaskForm`)                                                  | **Native React port**   | CRUD over file-backed state. Watcher becomes a polling hook. Form editing is standard React. No tmux integration or process spawning.                                                                                                           |
 
 ## Cross-cutting observations
 
@@ -66,11 +67,13 @@ G2 split:
 2. Are command-center endpoints already in place for all read paths
    (mission/goals/tasks/events/accounting)? If gaps exist, those
    become G2 prerequisites.
-## 004: Survey src/widgets/* for web port: data shape + render contract
+
+## 004: Survey src/widgets/\* for web port: data shape + render contract
+
 Type: widgets
 Surveyed all 8 widgets in src/widgets/ (changes, config, costs, explorer, mission-control, preview, setup, tasks). Documented input data shape, render output (interactive vs read-only), external dependencies, and per-widget port recommendation in .tmux-ide/library/research-findings.md as a structured table plus cross-cutting observations. Recommend native React port for 6/8 (changes, config, costs, preview, setup, tasks) and PTY-in-xterm mirror for explorer and mission-control. Findings unlock G2 task fan-out — included a suggested G2.A/B/C split and 2 open questions for Lead.
----
 
+---
 
 # Research findings — @base-ui/react retire-candidates audit (Task 006)
 
@@ -82,14 +85,14 @@ viability varies by primitive (see "Substitution complexity" column).
 
 ## Direct usages
 
-| File | Base UI primitive | TUI candidate | Substitution complexity | Notes |
-|------|-------------------|---------------|-------------------------|-------|
-| `components/ui/button.tsx` | `Button` (`@base-ui/react/button`) | `components/tui/Button.tsx` | **Low** | TUI `Button` is a styled `<button>` with `theme: 'PRIMARY' | 'SECONDARY'` and `isDisabled`. Base UI's headless behavior (form integration, render-prop pattern) needs to be matched at the wrapper level — but for our usage (mostly visual styling), TUI Button is a clean drop-in. ~16 consumer files (`@/components/ui` re-export). |
-| `components/ui/dialog.tsx` | `Dialog` (`@base-ui/react/dialog`) | `components/tui/Dialog.tsx` | **High** | TUI `Dialog` is a card with built-in OK/Cancel — **not a modal primitive**. No overlay, no focus-trap, no ESC-to-close, no portal, no `Dialog.Root`/`Trigger`/`Portal`/`Backdrop`/`Popup` slot composition. ~10 consumer files use the wrapper's slot API (`DialogContent`, `DialogTitle`, `DialogDescription`, etc.). To retire `@base-ui/react/dialog` we'd need to either (a) keep a headless layer (Base UI, Radix, or React Aria) or (b) hand-roll focus-trap + portal + scroll-lock + ESC handling. |
-| `components/ui/separator.tsx` | `Separator` (`@base-ui/react/separator`) | `components/tui/Divider.tsx` | **Low** | TUI `Divider` is a presentational rule (no `role="separator"`). Easy swap for visual rules; ARIA semantics need to be re-added in the wrapper if a screen-reader-meaningful separator is required. ~4 consumer files. |
-| `components/ui/tooltip.tsx` | `Tooltip` (`@base-ui/react/tooltip`) | `components/tui/Tooltip.tsx` | **High** | TUI `Tooltip` is a styled `<div>` — **no hover-intent state machine, no positioning, no portal**. Base UI handles delay groups, hover/focus triggers, escape, and viewport-aware positioning. ~5 consumer files use `<Tooltip><TooltipTrigger><TooltipContent>...` — that compositional API has no TUI counterpart. Same retire-options as Dialog. |
-| `components/app-shell/ProjectSwitcher.tsx` | `Popover` (`@base-ui/react/popover`) | `components/tui/Popover.tsx` | **High** | Uses `Popover.Root` / `Trigger` / `Portal` / `Positioner` / `Popup` with `sideOffset`, `align`. TUI `Popover` is a styled `<div>` with no positioning, portal, or open-state handling. Direct substitution would lose all positioning behavior. |
-| `components/status-bar/StatusPopover.tsx` | `Popover` (`@base-ui/react/popover`) | `components/tui/Popover.tsx` | **High** | Same shape as `ProjectSwitcher` — `sideOffset`, `side`, `align` positioning props all rely on Base UI's positioner. Two consumers total for `@base-ui/react/popover`. |
+| File                                       | Base UI primitive                        | TUI candidate                | Substitution complexity | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------ | ---------------------------------------- | ---------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `components/ui/button.tsx`                 | `Button` (`@base-ui/react/button`)       | `components/tui/Button.tsx`  | **Low**                 | TUI `Button` is a styled `<button>` with `theme: 'PRIMARY'                                                                                                                                                                                                                                                                                                                                                                                                                                                | 'SECONDARY'`and`isDisabled`. Base UI's headless behavior (form integration, render-prop pattern) needs to be matched at the wrapper level — but for our usage (mostly visual styling), TUI Button is a clean drop-in. ~16 consumer files (`@/components/ui` re-export). |
+| `components/ui/dialog.tsx`                 | `Dialog` (`@base-ui/react/dialog`)       | `components/tui/Dialog.tsx`  | **High**                | TUI `Dialog` is a card with built-in OK/Cancel — **not a modal primitive**. No overlay, no focus-trap, no ESC-to-close, no portal, no `Dialog.Root`/`Trigger`/`Portal`/`Backdrop`/`Popup` slot composition. ~10 consumer files use the wrapper's slot API (`DialogContent`, `DialogTitle`, `DialogDescription`, etc.). To retire `@base-ui/react/dialog` we'd need to either (a) keep a headless layer (Base UI, Radix, or React Aria) or (b) hand-roll focus-trap + portal + scroll-lock + ESC handling. |
+| `components/ui/separator.tsx`              | `Separator` (`@base-ui/react/separator`) | `components/tui/Divider.tsx` | **Low**                 | TUI `Divider` is a presentational rule (no `role="separator"`). Easy swap for visual rules; ARIA semantics need to be re-added in the wrapper if a screen-reader-meaningful separator is required. ~4 consumer files.                                                                                                                                                                                                                                                                                     |
+| `components/ui/tooltip.tsx`                | `Tooltip` (`@base-ui/react/tooltip`)     | `components/tui/Tooltip.tsx` | **High**                | TUI `Tooltip` is a styled `<div>` — **no hover-intent state machine, no positioning, no portal**. Base UI handles delay groups, hover/focus triggers, escape, and viewport-aware positioning. ~5 consumer files use `<Tooltip><TooltipTrigger><TooltipContent>...` — that compositional API has no TUI counterpart. Same retire-options as Dialog.                                                                                                                                                        |
+| `components/app-shell/ProjectSwitcher.tsx` | `Popover` (`@base-ui/react/popover`)     | `components/tui/Popover.tsx` | **High**                | Uses `Popover.Root` / `Trigger` / `Portal` / `Positioner` / `Popup` with `sideOffset`, `align`. TUI `Popover` is a styled `<div>` with no positioning, portal, or open-state handling. Direct substitution would lose all positioning behavior.                                                                                                                                                                                                                                                           |
+| `components/status-bar/StatusPopover.tsx`  | `Popover` (`@base-ui/react/popover`)     | `components/tui/Popover.tsx` | **High**                | Same shape as `ProjectSwitcher` — `sideOffset`, `side`, `align` positioning props all rely on Base UI's positioner. Two consumers total for `@base-ui/react/popover`.                                                                                                                                                                                                                                                                                                                                     |
 
 `@base-ui/react` is pinned at `^1.4.1` in `dashboard/package.json`. No
 other direct imports.
@@ -157,11 +160,13 @@ single PR per primitive.
    no overlay) acceptable for any of our 10 dialog sites, or do all
    need full-modal semantics? If some can downgrade to the simpler
    shell, fewer headless slots are needed.
-## 006: Audit @base-ui/react usage and list retire-candidates
-Type: cleanup
-Audited @base-ui/react direct usage in dashboard: 6 import sites (button, dialog, separator, tooltip, plus Popover in ProjectSwitcher and StatusPopover). Appended structured findings to .tmux-ide/library/research-findings.md including per-file substitution-complexity rating against the corresponding components/tui/* candidate. Key finding: TUI shells for Dialog/Tooltip/Popover are presentational only — no headless behavior (focus-trap, portal, positioner, hover-intent), so retiring @base-ui/react requires either an alternative headless lib (Radix/React Aria) or hand-rolled behavior. Button and Separator can retire cleanly. Suggested G3.A–G split and 2 open questions (headless strategy + dialog visual contract acceptability) for Lead.
----
 
+## 006: Audit @base-ui/react usage and list retire-candidates
+
+Type: cleanup
+Audited @base-ui/react direct usage in dashboard: 6 import sites (button, dialog, separator, tooltip, plus Popover in ProjectSwitcher and StatusPopover). Appended structured findings to .tmux-ide/library/research-findings.md including per-file substitution-complexity rating against the corresponding components/tui/\* candidate. Key finding: TUI shells for Dialog/Tooltip/Popover are presentational only — no headless behavior (focus-trap, portal, positioner, hover-intent), so retiring @base-ui/react requires either an alternative headless lib (Radix/React Aria) or hand-rolled behavior. Button and Separator can retire cleanly. Suggested G3.A–G split and 2 open questions (headless strategy + dialog visual contract acceptability) for Lead.
+
+---
 
 # Research findings — Base UI Sidebar consumer migration audit (G3 / Task 018)
 
@@ -171,20 +176,20 @@ Audit of consumers of `dashboard/components/ui/sidebar.tsx` (a Tailwind/Base-UI 
 
 11 first-party consumers across runtime + tests, plus the definition site itself. The shell exports 22 primitives (`Sidebar`, `SidebarProvider`, `SidebarTrigger`, `SidebarRail`, `SidebarInset`, `SidebarInput`, `SidebarHeader`, `SidebarFooter`, `SidebarSeparator`, `SidebarContent`, `SidebarGroup`, `SidebarGroupLabel`, `SidebarGroupAction`, `SidebarGroupContent`, `SidebarMenu`, `SidebarMenuItem`, `SidebarMenuButton`, `SidebarMenuAction`, `SidebarMenuBadge`, `SidebarMenuSkeleton`, `SidebarMenuSub`, `SidebarMenuSubItem`, `SidebarMenuSubButton`, plus `useSidebar` hook).
 
-| # | Consumer | Sidebar primitives used | Surface area |
-|---|----------|-------------------------|--------------|
-| 1 | `components/ShellSidebarProvider.tsx` | `SidebarProvider` (with `keyboardShortcut`, `defaultOpen`) | Mounts the provider once at the shell boundary; reads keybind from `useSettings`. |
-| 2 | `components/AppSidebar.tsx` | `Sidebar`, `SidebarContent`, `SidebarFooter`, `SidebarHeader`, `SidebarMenu`, `SidebarMenuButton`, `SidebarMenuItem`, `SidebarMenuSkeleton`, `SidebarRail`, `useSidebar` | Top-level project-scoped tree; receives data from `useSessionStream`/`useProjects`/`fetchPlans`/`fetchSkills`. ~10 primitives, deepest consumer. |
-| 3 | `components/app-shell/SidebarTree.tsx` | `SidebarGroup`, `SidebarGroupContent`, `SidebarGroupLabel`, `SidebarMenu`, `SidebarMenuAction`, `SidebarMenuBadge`, `SidebarMenuButton`, `SidebarMenuItem` | Recursive data-driven tree walker; renders `SidebarItem[]` (sections / links / separators). Used by `AppSidebar`. |
-| 4 | `components/app-shell/AppShell.tsx` | `SidebarInset` | Wraps the right-hand main content so it sits next to the sidebar with the correct shell padding. |
-| 5 | `components/KeybindRoot.tsx` | `useSidebar` (`toggleSidebar`) | Wires the global `Mod+B` "toggle sidebar" action into the registry. |
-| 6 | `components/sessions/SessionsNavigator.tsx` | `useSidebar` (`setOpenMobile`, `isMobile`) | Closes the mobile drawer when a session is selected. |
-| 7 | `components/skills/SkillsNavigator.tsx` | `useSidebar` (`setOpenMobile`, `isMobile`) | Same mobile-close behavior on skill open. |
-| 8 | `components/__tests__/AppSidebar.test.tsx` | imports `SidebarProvider` to wrap render | Test harness only. |
-| 9 | `components/app-shell/__tests__/SidebarTree.test.tsx` | imports `SidebarProvider` to wrap render | Test harness only. |
-| 10 | `components/sessions/__tests__/SessionsNavigator.test.tsx` | mocks `useSidebar` via `vi.mock("@/components/ui/sidebar", …)` | No real import — easy to relocate. |
-| 11 | `components/skills/__tests__/SkillsNavigator.test.tsx` | mocks `useSidebar` via `vi.mock("@/components/ui/sidebar", …)` | No real import — easy to relocate. |
-| def | `components/ui/sidebar.tsx` | self | 695 LOC. Provider/state machine + 22 primitive shells. The retire target. |
+| #   | Consumer                                                   | Sidebar primitives used                                                                                                                                                  | Surface area                                                                                                                                     |
+| --- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | `components/ShellSidebarProvider.tsx`                      | `SidebarProvider` (with `keyboardShortcut`, `defaultOpen`)                                                                                                               | Mounts the provider once at the shell boundary; reads keybind from `useSettings`.                                                                |
+| 2   | `components/AppSidebar.tsx`                                | `Sidebar`, `SidebarContent`, `SidebarFooter`, `SidebarHeader`, `SidebarMenu`, `SidebarMenuButton`, `SidebarMenuItem`, `SidebarMenuSkeleton`, `SidebarRail`, `useSidebar` | Top-level project-scoped tree; receives data from `useSessionStream`/`useProjects`/`fetchPlans`/`fetchSkills`. ~10 primitives, deepest consumer. |
+| 3   | `components/app-shell/SidebarTree.tsx`                     | `SidebarGroup`, `SidebarGroupContent`, `SidebarGroupLabel`, `SidebarMenu`, `SidebarMenuAction`, `SidebarMenuBadge`, `SidebarMenuButton`, `SidebarMenuItem`               | Recursive data-driven tree walker; renders `SidebarItem[]` (sections / links / separators). Used by `AppSidebar`.                                |
+| 4   | `components/app-shell/AppShell.tsx`                        | `SidebarInset`                                                                                                                                                           | Wraps the right-hand main content so it sits next to the sidebar with the correct shell padding.                                                 |
+| 5   | `components/KeybindRoot.tsx`                               | `useSidebar` (`toggleSidebar`)                                                                                                                                           | Wires the global `Mod+B` "toggle sidebar" action into the registry.                                                                              |
+| 6   | `components/sessions/SessionsNavigator.tsx`                | `useSidebar` (`setOpenMobile`, `isMobile`)                                                                                                                               | Closes the mobile drawer when a session is selected.                                                                                             |
+| 7   | `components/skills/SkillsNavigator.tsx`                    | `useSidebar` (`setOpenMobile`, `isMobile`)                                                                                                                               | Same mobile-close behavior on skill open.                                                                                                        |
+| 8   | `components/__tests__/AppSidebar.test.tsx`                 | imports `SidebarProvider` to wrap render                                                                                                                                 | Test harness only.                                                                                                                               |
+| 9   | `components/app-shell/__tests__/SidebarTree.test.tsx`      | imports `SidebarProvider` to wrap render                                                                                                                                 | Test harness only.                                                                                                                               |
+| 10  | `components/sessions/__tests__/SessionsNavigator.test.tsx` | mocks `useSidebar` via `vi.mock("@/components/ui/sidebar", …)`                                                                                                           | No real import — easy to relocate.                                                                                                               |
+| 11  | `components/skills/__tests__/SkillsNavigator.test.tsx`     | mocks `useSidebar` via `vi.mock("@/components/ui/sidebar", …)`                                                                                                           | No real import — easy to relocate.                                                                                                               |
+| def | `components/ui/sidebar.tsx`                                | self                                                                                                                                                                     | 695 LOC. Provider/state machine + 22 primitive shells. The retire target.                                                                        |
 
 Indirect consumers worth flagging (not direct sidebar imports but rely on the same context): `components/TopBar.tsx`, `components/app-shell/MainTabsBar.tsx`, and `components/projects/AddProjectDialog.tsx` all call `openCommandPalette` or layout APIs that today coexist with the Cmd+B toggle path; they don't import sidebar primitives but they share keybind real estate.
 
@@ -192,20 +197,20 @@ Indirect consumers worth flagging (not direct sidebar imports but rely on the sa
 
 The TUI primitives map roughly as: `SidebarLayout` ↔ `<Sidebar>` (the chrome), `Navigation` (top bar; secondary use), `ActionListItem` ↔ `SidebarMenuButton`. The collapse/mobile/cookie story has no TUI counterpart and needs a wrapper (see (c)).
 
-| Consumer | Approach | Notes |
-|----------|----------|-------|
-| `ShellSidebarProvider` | Replace `SidebarProvider` with a new `ShellSidebarShell` that owns: open/collapsed state, cookie persistence, `Mod+B` keybind plumbing, mobile-drawer state. Mount `<SidebarLayout sidebar={…}>` at the same boundary. | The provider is the keystone — every other consumer's migration depends on this one landing first with an equivalent context API. |
-| `AppShell.SidebarInset` | Drop `SidebarInset`. With `SidebarLayout` the children become the right pane directly. | Trivial. Remove the wrapper component; pass `<MainTabContent />` etc. as children of `SidebarLayout`. |
-| `AppSidebar` | Largest port. Replace `Sidebar`/`SidebarHeader`/`SidebarContent`/`SidebarFooter` with a plain `<aside>` whose body is divided into header / scrollable content / footer regions; pass it as `sidebar={…}` prop into `SidebarLayout`. Replace `SidebarMenuSkeleton` with the existing `<Skeleton>` primitive in `components/ui/Skeleton.tsx`. Drop `SidebarRail` (no TUI equivalent — the resize handle on `SidebarLayout` covers the use case). | Behavior to preserve: section expand/collapse, badges, action buttons, keyboard nav. None of these come from Base UI today — they are local state — so the port is just chrome, not behavior. |
-| `SidebarTree` | Replace `SidebarGroup*` with semantic `<section>` + `<header>` + scrolling `<ul>`. Replace each `SidebarMenuButton` with `ActionListItem` (props line up: `icon`, `children`, `href`, `onClick`). `SidebarMenuAction` (the trailing action button) and `SidebarMenuBadge` have no direct TUI equivalent — render them inline inside `ActionListItem`'s children, right-aligned via `RowSpaceBetween`. | The recursion + motion variants are unaffected. The `render?` prop currently used by `SidebarMenuSubButton` (added in T010 for Base UI compatibility) is unused once we leave the shell — drop it. |
-| `KeybindRoot` | Replace `useSidebar().toggleSidebar` with `useShellSidebar().toggleSidebar` from the new shell context. | One-line diff. |
-| `SessionsNavigator`, `SkillsNavigator` | Replace `useSidebar().setOpenMobile/isMobile` with the equivalents on the new shell context. | Two-line diffs each. The mobile-drawer concept must survive the migration. |
-| Tests with `SidebarProvider` wrapping (`AppSidebar.test`, `SidebarTree.test`) | Swap the wrapping component for the new `ShellSidebarShell` (or a thin `TestSidebarHost`). | Mechanical. |
-| Tests with `vi.mock("@/components/ui/sidebar", …)` (`SessionsNavigator.test`, `SkillsNavigator.test`) | Update the mock import path to the new shell module. | Mechanical. |
+| Consumer                                                                                              | Approach                                                                                                                                                                                                                                                                                                                                                                                                                                        | Notes                                                                                                                                                                                              |
+| ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ShellSidebarProvider`                                                                                | Replace `SidebarProvider` with a new `ShellSidebarShell` that owns: open/collapsed state, cookie persistence, `Mod+B` keybind plumbing, mobile-drawer state. Mount `<SidebarLayout sidebar={…}>` at the same boundary.                                                                                                                                                                                                                          | The provider is the keystone — every other consumer's migration depends on this one landing first with an equivalent context API.                                                                  |
+| `AppShell.SidebarInset`                                                                               | Drop `SidebarInset`. With `SidebarLayout` the children become the right pane directly.                                                                                                                                                                                                                                                                                                                                                          | Trivial. Remove the wrapper component; pass `<MainTabContent />` etc. as children of `SidebarLayout`.                                                                                              |
+| `AppSidebar`                                                                                          | Largest port. Replace `Sidebar`/`SidebarHeader`/`SidebarContent`/`SidebarFooter` with a plain `<aside>` whose body is divided into header / scrollable content / footer regions; pass it as `sidebar={…}` prop into `SidebarLayout`. Replace `SidebarMenuSkeleton` with the existing `<Skeleton>` primitive in `components/ui/Skeleton.tsx`. Drop `SidebarRail` (no TUI equivalent — the resize handle on `SidebarLayout` covers the use case). | Behavior to preserve: section expand/collapse, badges, action buttons, keyboard nav. None of these come from Base UI today — they are local state — so the port is just chrome, not behavior.      |
+| `SidebarTree`                                                                                         | Replace `SidebarGroup*` with semantic `<section>` + `<header>` + scrolling `<ul>`. Replace each `SidebarMenuButton` with `ActionListItem` (props line up: `icon`, `children`, `href`, `onClick`). `SidebarMenuAction` (the trailing action button) and `SidebarMenuBadge` have no direct TUI equivalent — render them inline inside `ActionListItem`'s children, right-aligned via `RowSpaceBetween`.                                           | The recursion + motion variants are unaffected. The `render?` prop currently used by `SidebarMenuSubButton` (added in T010 for Base UI compatibility) is unused once we leave the shell — drop it. |
+| `KeybindRoot`                                                                                         | Replace `useSidebar().toggleSidebar` with `useShellSidebar().toggleSidebar` from the new shell context.                                                                                                                                                                                                                                                                                                                                         | One-line diff.                                                                                                                                                                                     |
+| `SessionsNavigator`, `SkillsNavigator`                                                                | Replace `useSidebar().setOpenMobile/isMobile` with the equivalents on the new shell context.                                                                                                                                                                                                                                                                                                                                                    | Two-line diffs each. The mobile-drawer concept must survive the migration.                                                                                                                         |
+| Tests with `SidebarProvider` wrapping (`AppSidebar.test`, `SidebarTree.test`)                         | Swap the wrapping component for the new `ShellSidebarShell` (or a thin `TestSidebarHost`).                                                                                                                                                                                                                                                                                                                                                      | Mechanical.                                                                                                                                                                                        |
+| Tests with `vi.mock("@/components/ui/sidebar", …)` (`SessionsNavigator.test`, `SkillsNavigator.test`) | Update the mock import path to the new shell module.                                                                                                                                                                                                                                                                                                                                                                                            | Mechanical.                                                                                                                                                                                        |
 
 ## (c) Wrapper logic needed for collapse / icon-mode
 
-`SidebarLayout` and `ActionListItem` cover the *visual* contract but not the *stateful* one. The behaviors `dashboard/components/ui/sidebar.tsx` currently provides that the TUI primitives do **not**:
+`SidebarLayout` and `ActionListItem` cover the _visual_ contract but not the _stateful_ one. The behaviors `dashboard/components/ui/sidebar.tsx` currently provides that the TUI primitives do **not**:
 
 1. **Three-state open model** — `expanded` / `collapsed` (icon-only on desktop) / `closed` (off-canvas drawer on mobile). `SidebarLayout` only has a numeric width, no semantic state.
 2. **Cookie persistence** — `sidebar:state` cookie with 7-day TTL, hydrates initial state SSR-safe via `readSidebarCookie()`.
@@ -221,13 +226,24 @@ The TUI primitives map roughly as: `SidebarLayout` ↔ `<Sidebar>` (the chrome),
 export function ShellSidebarShell({
   children,
   sidebar,
-}: { children: ReactNode; sidebar: ReactNode }) {
+}: {
+  children: ReactNode;
+  sidebar: ReactNode;
+}) {
   // owns open/collapsed/openMobile state, cookie, media query, Mod+B keybind
   // provides ShellSidebarContext
   // renders <SidebarLayout sidebar={collapsed ? <CollapsedRail/> : sidebar}>
   // mobile: renders <Dialog>{sidebar}</Dialog> instead of inline
 }
-export function useShellSidebar(): { state, open, setOpen, openMobile, setOpenMobile, isMobile, toggleSidebar };
+export function useShellSidebar(): {
+  state;
+  open;
+  setOpen;
+  openMobile;
+  setOpenMobile;
+  isMobile;
+  toggleSidebar;
+};
 export function ShellActionListItem(props: ActionListItemProps & { tooltip?: string });
 // ↑ wraps TUI ActionListItem, adds collapsed-icon-mode + tooltip-on-hover behavior
 ```
@@ -238,15 +254,15 @@ With those four pieces (`ShellSidebarShell`, `useShellSidebar`, `ShellActionList
 
 7 tasks, ordered by dependency. Tasks G3.S1–G3.S2 unblock everything else; G3.S3–G3.S6 can land in parallel; G3.S7 is the cleanup.
 
-| # | Task | Scope | Depends on | Size |
-|---|------|-------|------------|------|
-| **G3.S1** | Build `ShellSidebarShell` + `useShellSidebar` context | New `components/app-shell/sidebar-shell.tsx`. Owns open/collapsed/mobile state, cookie, Mod+B keybind. Wraps `SidebarLayout`. No consumer migrations yet. Ship behind both APIs (old + new) coexisting. | none | M |
-| **G3.S2** | Build `ShellActionListItem` (collapsed-icon-mode wrapper) | New helper around TUI `ActionListItem` that renders icon-only + tooltip when collapsed. | G3.S1 | S |
-| **G3.S3** | Migrate `ShellSidebarProvider` + `AppShell` boundary | Replace `SidebarProvider`/`SidebarInset` usage. Smallest blast radius — these two files are pure plumbing. | G3.S1 | S |
-| **G3.S4** | Migrate `AppSidebar.tsx` chrome | Replace `Sidebar`/`SidebarHeader`/`SidebarContent`/`SidebarFooter`/`SidebarRail`/`SidebarMenuSkeleton`. Keep `SidebarTree` consumers working via the shim from G3.S1. | G3.S1, G3.S3 | M |
-| **G3.S5** | Migrate `SidebarTree.tsx` | Replace `SidebarGroup*`/`SidebarMenu*` with `<section>`+`ActionListItem`. Render `SidebarMenuAction`/`SidebarMenuBadge` inline via `RowSpaceBetween`. | G3.S2 | M |
-| **G3.S6** | Migrate `useSidebar()` callers | Three files: `KeybindRoot`, `SessionsNavigator`, `SkillsNavigator`. Swap to `useShellSidebar()`. Update the four test files (two harness wraps + two `vi.mock` paths). | G3.S1 | S |
-| **G3.S7** | Delete `components/ui/sidebar.tsx` + `@base-ui/react/dialog` dep audit | Remove the 695-LOC shell, drop `import { Dialog … }` cycle, run full tsc + vitest, check bundle size delta. Document any remaining `@base-ui/react/*` usage that needs its own retirement task. | G3.S3, G3.S4, G3.S5, G3.S6 | S |
+| #         | Task                                                                   | Scope                                                                                                                                                                                                   | Depends on                 | Size |
+| --------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- | ---- |
+| **G3.S1** | Build `ShellSidebarShell` + `useShellSidebar` context                  | New `components/app-shell/sidebar-shell.tsx`. Owns open/collapsed/mobile state, cookie, Mod+B keybind. Wraps `SidebarLayout`. No consumer migrations yet. Ship behind both APIs (old + new) coexisting. | none                       | M    |
+| **G3.S2** | Build `ShellActionListItem` (collapsed-icon-mode wrapper)              | New helper around TUI `ActionListItem` that renders icon-only + tooltip when collapsed.                                                                                                                 | G3.S1                      | S    |
+| **G3.S3** | Migrate `ShellSidebarProvider` + `AppShell` boundary                   | Replace `SidebarProvider`/`SidebarInset` usage. Smallest blast radius — these two files are pure plumbing.                                                                                              | G3.S1                      | S    |
+| **G3.S4** | Migrate `AppSidebar.tsx` chrome                                        | Replace `Sidebar`/`SidebarHeader`/`SidebarContent`/`SidebarFooter`/`SidebarRail`/`SidebarMenuSkeleton`. Keep `SidebarTree` consumers working via the shim from G3.S1.                                   | G3.S1, G3.S3               | M    |
+| **G3.S5** | Migrate `SidebarTree.tsx`                                              | Replace `SidebarGroup*`/`SidebarMenu*` with `<section>`+`ActionListItem`. Render `SidebarMenuAction`/`SidebarMenuBadge` inline via `RowSpaceBetween`.                                                   | G3.S2                      | M    |
+| **G3.S6** | Migrate `useSidebar()` callers                                         | Three files: `KeybindRoot`, `SessionsNavigator`, `SkillsNavigator`. Swap to `useShellSidebar()`. Update the four test files (two harness wraps + two `vi.mock` paths).                                  | G3.S1                      | S    |
+| **G3.S7** | Delete `components/ui/sidebar.tsx` + `@base-ui/react/dialog` dep audit | Remove the 695-LOC shell, drop `import { Dialog … }` cycle, run full tsc + vitest, check bundle size delta. Document any remaining `@base-ui/react/*` usage that needs its own retirement task.         | G3.S3, G3.S4, G3.S5, G3.S6 | S    |
 
 **Open questions for Lead before implementation starts:**
 
@@ -255,30 +271,32 @@ With those four pieces (`ShellSidebarShell`, `useShellSidebar`, `ShellActionList
 3. **`SidebarRail` (drag-to-resize affordance).** Today's shell exposes a rail; `SidebarLayout`'s `isShowingHandle` prop is the rough equivalent. Drop the rail UI, or port the Tailwind hover styling onto the handle?
 
 ## 018: G3: Audit Sidebar/SidebarMenu consumer migration plan to TUI Navigation+SidebarLayout
+
 Type: v2
 Appended ~95-line audit section to .tmux-ide/library/research-findings.md (G3 / Task 018) covering: (a) consumer inventory — 11 first-party files plus the def site, broken down with which of the 22 sidebar primitives each one imports; (b) per-consumer migration approach — table mapping every consumer onto the TUI Navigation/SidebarLayout/ActionListItem replacement, including the smaller useSidebar()-only callers (KeybindRoot, SessionsNavigator, SkillsNavigator) and the test harnesses; (c) wrapper logic gap analysis — six behaviors the Tailwind shell provides that TUI primitives don't (three-state open model, cookie persistence, mobile drawer, Mod+B keybind, useSidebar() context, icon-mode rendering) plus a proposed ShellSidebarShell + useShellSidebar + ShellActionListItem + CollapsedRail wrapper API; (d) split into 7 follow-up tasks (G3.S1-S7) with dependency order, sizing, and scopes that each fit a single dispatch. 3 open questions for Lead surfaced (mobile drawer scope, icon-mode CSS override strategy, SidebarRail vs SidebarLayout handle). NO code changes.
+
 ---
 
-
 ## 029: Plan @pierre/diffs fold-in: full copy vs targeted shim
+
 Type: research
 
 ### File inventory
 
 `dashboard/node_modules/@pierre/diffs/dist/` totals **28,305 LOC** of compiled JS (without `.d.ts` / `.map`). Disk size of source-relevant subdirs:
 
-| Subdir          | LOC     | Disk   | Notes                                                                              |
-| --------------- | ------- | ------ | ---------------------------------------------------------------------------------- |
-| `worker/`       | 17,939  | 2.8 MB | Off-thread Shiki highlighting + SAB. Largest single piece by far.                  |
-| `components/`   | 3,499   | 568 KB | `File`, `FileDiff`, `VirtualizedFileDiff`, `Virtualizer`, `web-components`, etc.   |
-| `utils/`        | 2,908   | 1.2 MB | Helpers consumed by components/managers/renderers/react alike.                    |
-| `renderers/`    | 1,303   | 208 KB | DOM/HAST renderers used by both SSR and worker code paths.                        |
-| `managers/`     | 1,096   | 192 KB | High-level orchestration (file-diff, line-annotation managers).                   |
-| `react/`        | 644     | 288 KB | React surface: `PatchDiff`, `FileDiff`, `MultiFileDiff`, `Virtualizer`, hooks.    |
-| `highlighter/`  | 405     | —      | Shiki adapter.                                                                    |
-| `ssr/`          | 199     | —      | Server-side prerendering exports.                                                 |
-| `shiki-stream/` | 104     | —      | Stream-based highlight pipeline.                                                  |
-| root (5 files)  | 208     | —      | `index.js` (99) + `constants.js` (47) + `sprite.js` (57) + `style.js` (5) + `types.js` (0). |
+| Subdir          | LOC    | Disk   | Notes                                                                                       |
+| --------------- | ------ | ------ | ------------------------------------------------------------------------------------------- |
+| `worker/`       | 17,939 | 2.8 MB | Off-thread Shiki highlighting + SAB. Largest single piece by far.                           |
+| `components/`   | 3,499  | 568 KB | `File`, `FileDiff`, `VirtualizedFileDiff`, `Virtualizer`, `web-components`, etc.            |
+| `utils/`        | 2,908  | 1.2 MB | Helpers consumed by components/managers/renderers/react alike.                              |
+| `renderers/`    | 1,303  | 208 KB | DOM/HAST renderers used by both SSR and worker code paths.                                  |
+| `managers/`     | 1,096  | 192 KB | High-level orchestration (file-diff, line-annotation managers).                             |
+| `react/`        | 644    | 288 KB | React surface: `PatchDiff`, `FileDiff`, `MultiFileDiff`, `Virtualizer`, hooks.              |
+| `highlighter/`  | 405    | —      | Shiki adapter.                                                                              |
+| `ssr/`          | 199    | —      | Server-side prerendering exports.                                                           |
+| `shiki-stream/` | 104    | —      | Stream-based highlight pipeline.                                                            |
+| root (5 files)  | 208    | —      | `index.js` (99) + `constants.js` (47) + `sprite.js` (57) + `style.js` (5) + `types.js` (0). |
 
 Top-level NPM deps that dist code reaches into: `shiki@^3` + `@shikijs/transformers@^3` (highlighter), `diff@8.0.3` (patch parsing), `hast-util-to-html@9.0.5` (DOM serialization), `lru_map@0.4.1` (caching), `@pierre/theme@0.0.22` (token vocabulary).
 
@@ -327,11 +345,11 @@ Both existing call sites (`dashboard/components/DiffViewer.tsx`, `dashboard/comp
 
 ### Rough size estimate
 
-| Approach              | Repo source delta | Bundle (gzip, est) | Maintenance |
-| --------------------- | ----------------- | ------------------ | ----------- |
-| (A) Full copy         | +28,305 LOC, +5 npm transitive deps inlined | ~unchanged on /diffs (already bundled today) | High — rebase against upstream every release; theme/codepath drift; LICENSE.md vendoring |
-| (B) Targeted shim     | +~6,000 LOC (PatchDiff + non-virtualized FileDiff + Shiki adapter + utils tree) | ~5-10 KB smaller (tree-shaking + dropping virtualizer dead-import edges) | Medium — narrower surface to keep in sync but still on the hook for upstream patches |
-| (B-lite, recommended) | +~50 LOC (theme wrapper) | ~unchanged (tree-shaker already prunes virtualizer/worker on cold paths) | Low — npm version bumps only |
+| Approach              | Repo source delta                                                               | Bundle (gzip, est)                                                       | Maintenance                                                                              |
+| --------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| (A) Full copy         | +28,305 LOC, +5 npm transitive deps inlined                                     | ~unchanged on /diffs (already bundled today)                             | High — rebase against upstream every release; theme/codepath drift; LICENSE.md vendoring |
+| (B) Targeted shim     | +~6,000 LOC (PatchDiff + non-virtualized FileDiff + Shiki adapter + utils tree) | ~5-10 KB smaller (tree-shaking + dropping virtualizer dead-import edges) | Medium — narrower surface to keep in sync but still on the hook for upstream patches     |
+| (B-lite, recommended) | +~50 LOC (theme wrapper)                                                        | ~unchanged (tree-shaker already prunes virtualizer/worker on cold paths) | Low — npm version bumps only                                                             |
 
 ### Risk list
 
@@ -347,65 +365,66 @@ Both existing call sites (`dashboard/components/DiffViewer.tsx`, `dashboard/comp
 **Recommend B-lite.** Land a 50-LOC theme wrapper now, keep the npm dep, gate any further fold-in behind a real bundle-size audit. Re-open the question only if turbopack tree-shaking can't strip `worker/`+`renderers/`.
 
 NO code changes in this task.
+
 ## 029: Plan @pierre/diffs fold-in: full copy vs targeted shim — output decision doc
+
 Type: diffs
 Appended a ~85-line decision doc to .tmux-ide/library/research-findings.md (section "029: Plan @pierre/diffs fold-in: full copy vs targeted shim"). NO code changes — pure research per dispatch.
 
 Section structure:
 
-  - File inventory: subdir-by-subdir table covering all 9 dist subdirs + 5 root files. Total dist = 28,305 LOC. Worker (17,939 LOC, 2.8 MB) is the dominant single piece; components/utils together are ~6,400 LOC; react/ proper is only 644 LOC.
-  - Top-level npm deps the dist reaches: shiki@^3, @shikijs/transformers@^3, diff@8.0.3, hast-util-to-html@9.0.5, lru_map@0.4.1, @pierre/theme@0.0.22.
-  - Dependency graph: traced PatchDiff (the only thing dashboard actually imports) through its compiled imports. Reachable closure includes react/* + components/{FileDiff, VirtualizedFileDiff, Virtualizer, WorkerPoolContext} + a slice of utils/. worker/, renderers/, managers/, highlighter/, ssr/, shiki-stream/ are reachable only when the virtualizer + worker-pool path is exercised — and we don't wire WorkerPoolContextProvider in dashboard, so those are dead imports on the live path.
-  - Active path documented: dashboard's PatchDiff usage at components/DiffViewer.tsx:67-84 passes only patch/options/className with a 2,000-line cap (MAX_DIFF_LINES). No virtualization, no worker.
-  - Recommended approach: B-lite (a third option not in the dispatch). Keep @pierre/diffs as an npm dep AND own a ~30-LOC dashboard/components/tui-diffs/PatchDiff.tsx wrapper that injects tmux-ide-themed Shiki themes + clamps diffStyle/themeType. Net dashboard delta ~50 LOC; net dist copied = 0. Both Option A (full copy, +28k LOC + 5 npm transitive deps inlined) and Option B as originally framed (copy PatchDiff + deps, drop virtualizer/worker) lose the maintenance battle vs. tree-shaking the dead virtualizer/worker bytes for free.
-  - Comparison table: repo delta + bundle size (gzip est) + maintenance burden across A / B / B-lite.
-  - Risk list (6 items): tree-shake regression (mitigated via a bundle audit before committing), theme contract instability (mitigated via shiki peer-dep pin), worker pool re-entry, type drift, license compliance for apache-2.0 inlining, @pierre/theme@0.0.22 0.x dep risk for inlining options.
-  - 1-line decision summary at the end recommending B-lite, with explicit gating: re-open only if a bundle audit shows worker/renderers aren't tree-shaken.
+- File inventory: subdir-by-subdir table covering all 9 dist subdirs + 5 root files. Total dist = 28,305 LOC. Worker (17,939 LOC, 2.8 MB) is the dominant single piece; components/utils together are ~6,400 LOC; react/ proper is only 644 LOC.
+- Top-level npm deps the dist reaches: shiki@^3, @shikijs/transformers@^3, diff@8.0.3, hast-util-to-html@9.0.5, lru_map@0.4.1, @pierre/theme@0.0.22.
+- Dependency graph: traced PatchDiff (the only thing dashboard actually imports) through its compiled imports. Reachable closure includes react/\* + components/{FileDiff, VirtualizedFileDiff, Virtualizer, WorkerPoolContext} + a slice of utils/. worker/, renderers/, managers/, highlighter/, ssr/, shiki-stream/ are reachable only when the virtualizer + worker-pool path is exercised — and we don't wire WorkerPoolContextProvider in dashboard, so those are dead imports on the live path.
+- Active path documented: dashboard's PatchDiff usage at components/DiffViewer.tsx:67-84 passes only patch/options/className with a 2,000-line cap (MAX_DIFF_LINES). No virtualization, no worker.
+- Recommended approach: B-lite (a third option not in the dispatch). Keep @pierre/diffs as an npm dep AND own a ~30-LOC dashboard/components/tui-diffs/PatchDiff.tsx wrapper that injects tmux-ide-themed Shiki themes + clamps diffStyle/themeType. Net dashboard delta ~50 LOC; net dist copied = 0. Both Option A (full copy, +28k LOC + 5 npm transitive deps inlined) and Option B as originally framed (copy PatchDiff + deps, drop virtualizer/worker) lose the maintenance battle vs. tree-shaking the dead virtualizer/worker bytes for free.
+- Comparison table: repo delta + bundle size (gzip est) + maintenance burden across A / B / B-lite.
+- Risk list (6 items): tree-shake regression (mitigated via a bundle audit before committing), theme contract instability (mitigated via shiki peer-dep pin), worker pool re-entry, type drift, license compliance for apache-2.0 inlining, @pierre/theme@0.0.22 0.x dep risk for inlining options.
+- 1-line decision summary at the end recommending B-lite, with explicit gating: re-open only if a bundle audit shows worker/renderers aren't tree-shaken.
 
 Open questions / follow-ups (called out in the doc, not blockers):
-  - Run pnpm exec next build --analyze on /v2 + /diffs once dev settles, confirm worker/worker.js + worker/highlight-worker.js absent from the active bundle. If present, escalate from B-lite to B-proper.
-  - Pin shiki peer-dep range explicitly in dashboard/package.json to match @pierre/diffs band (^3).
 
-Files touched: .tmux-ide/library/research-findings.md only (261 → 349 lines, additive). Zero code edits, zero tsc/vitest impact.
----
+- Run pnpm exec next build --analyze on /v2 + /diffs once dev settles, confirm worker/worker.js + worker/highlight-worker.js absent from the active bundle. If present, escalate from B-lite to B-proper.
+- Pin shiki peer-dep range explicitly in dashboard/package.json to match @pierre/diffs band (^3).
 
+## Files touched: .tmux-ide/library/research-findings.md only (261 → 349 lines, additive). Zero code edits, zero tsc/vitest impact.
 
 # Research findings — src/ vs packages/daemon/src/ divergence audit (Task 039)
 
 `diff -rq src packages/daemon/src` returns 27 entries (run 2026-05-08):
 
-| Bucket | Count | Files |
-|--------|------:|-------|
-| Only in `packages/daemon/src` | 11 | `acp/`, `chat/`, `codex/`, `active-projects.ts`, `app-settings.ts`, `auth-token.ts`, `canonical.ts`, `embed.ts`, `index.ts`, `command-center/actions/handlers/chat-actions.ts`, `command-center/actions/handlers/chat-actions.test.ts` |
-| Only in `src` | 2 | `app-cli.ts`, `ui.ts` |
-| Differ | 14 | `command-center/{actions/contract.ts, actions/errors.ts, actions/registry.ts, actions/handlers/daemon-shutdown.ts, actions/handlers/daemon-shutdown.test.ts, server.ts, static.ts, ws-events.ts}`, `lib/{cli-action-bridge.ts, daemon-embed.ts, daemon.ts}`, `schemas/ws-events.ts`, `status.ts`, `widgets/resolve.ts` |
+| Bucket                        | Count | Files                                                                                                                                                                                                                                                                                                                  |
+| ----------------------------- | ----: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Only in `packages/daemon/src` |    11 | `acp/`, `chat/`, `codex/`, `active-projects.ts`, `app-settings.ts`, `auth-token.ts`, `canonical.ts`, `embed.ts`, `index.ts`, `command-center/actions/handlers/chat-actions.ts`, `command-center/actions/handlers/chat-actions.test.ts`                                                                                 |
+| Only in `src`                 |     2 | `app-cli.ts`, `ui.ts`                                                                                                                                                                                                                                                                                                  |
+| Differ                        |    14 | `command-center/{actions/contract.ts, actions/errors.ts, actions/registry.ts, actions/handlers/daemon-shutdown.ts, actions/handlers/daemon-shutdown.test.ts, server.ts, static.ts, ws-events.ts}`, `lib/{cli-action-bridge.ts, daemon-embed.ts, daemon.ts}`, `schemas/ws-events.ts`, `status.ts`, `widgets/resolve.ts` |
 
 File counts: `src/` 260 `.ts/.tsx`; `packages/daemon/src/` 298. The dispatch's "229 vs 267" is close — the gap reflects packages/daemon's chat/codex/acp folders + handlers + scaffolding.
 
 ## Per-area canonical decision
 
-| Area | Canonical side | Reason |
-|------|----------------|--------|
-| `acp/` | **packages/daemon** | Only exists there. Full ACP protocol module — keep as-is. |
-| `chat/` | **packages/daemon** | Only exists there. Thread store, provider discovery, manager, types — load-bearing for chat actions. |
-| `codex/` | **packages/daemon** | Only exists there. Codex client + protocol. |
-| `command-center/actions/contract.ts` | **packages/daemon** (newer 2026-05-06) | Adds `chat.*` discriminated unions (`StopReasonZ`, `AgentProviderZ`, etc.). 253 diff lines, all additive on packages side; src has nothing exclusive worth saving. |
-| `command-center/actions/errors.ts` | **packages/daemon** (newer) | 12-line delta — chat error codes added on packages side. |
-| `command-center/actions/registry.ts` | **packages/daemon** (newer) | Wires the 11 chat handlers (thread.list/create/get/rename/delete, session.send/cancel, providers.list, permission.respond, thread.usage, context.captureTerminal). 85 diff lines. |
-| `command-center/actions/handlers/chat-actions.{ts,test.ts}` | **packages/daemon** | Only exists there. |
-| `command-center/actions/handlers/daemon-shutdown.{ts,test.ts}` | **packages/daemon** (newer) | Adds `resetChatProvidersListCache()` to shutdown sequence. Tiny delta, no merge conflict. |
-| `command-center/server.ts` | **MERGE** — packages/daemon as base + 6 endpoints from src | src/ is newer (2026-05-07) and has 6 endpoints packages/daemon lacks: `GET /api/widget/:name/spawn`, `GET /api/project/:name/files`, `GET /api/project/:name/preview/:file{.+}`, `GET /api/project/:name/config`, `POST /api/project/:name/config`, `POST /api/project/:name/restart`. packages/daemon has chat/codex initialization elsewhere in the file that src lacks. Both must survive. |
-| `command-center/static.ts` | **packages/daemon** (newer) | 37-line delta, no apparent src-only signal. |
-| `command-center/ws-events.ts` | **packages/daemon** (newer) | Adds `ChatEvent` broadcast plumbing + per-client dispatch. |
-| `lib/cli-action-bridge.ts` | **packages/daemon** | Uses relative imports (`../command-center/actions/contract.ts`) and references `canonical-daemon.ts` (only exists in packages/daemon). src/ uses workspace-package aliases (`@tmux-ide/daemon/contract`) which break once the file *is* the package. |
-| `lib/daemon-embed.ts` | **packages/daemon** (newer) | 18-line delta — chat/codex bootstrap on packages side. |
-| `lib/daemon.ts` | **packages/daemon** | Identical except `import` shape: src uses `@tmux-ide/daemon`, packages uses `./daemon-embed.ts`. Packages' relative form is correct intra-package. |
-| `lib/canonical-daemon.ts` | **packages/daemon** | Only exists there; referenced by status.ts and cli-action-bridge.ts. |
-| `schemas/ws-events.ts` | **packages/daemon** (newer) | Adds ChatThreadIndexEntry, ChatSessionUpdate, etc. zod schemas (87-line delta). |
-| `status.ts` | **packages/daemon** | Identical except import shape (relative vs alias). |
-| `widgets/resolve.ts` | **MERGE** — packages/daemon as base + `WidgetSpawnSpec`/`resolveWidgetSpawn` from src | src/ (2026-05-07) added a structured PTY-spawn helper used by the new `/api/widget/:name/spawn` endpoint. packages/daemon doesn't have it. |
-| `app-cli.ts` | **port to packages/daemon** | 17 LOC; only consumer is `bin/cli.ts` via dynamic import. After move, bin/cli.ts imports from `@tmux-ide/daemon`. |
-| `ui.ts` | **port to packages/daemon** | 74 LOC; same consumer pattern as app-cli.ts. Already imports from `@tmux-ide/daemon` so it's a thin shim — can either move into packages/daemon or rewrite as direct internal use. |
+| Area                                                           | Canonical side                                                                        | Reason                                                                                                                                                                                                                                                                                                                                                                                        |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `acp/`                                                         | **packages/daemon**                                                                   | Only exists there. Full ACP protocol module — keep as-is.                                                                                                                                                                                                                                                                                                                                     |
+| `chat/`                                                        | **packages/daemon**                                                                   | Only exists there. Thread store, provider discovery, manager, types — load-bearing for chat actions.                                                                                                                                                                                                                                                                                          |
+| `codex/`                                                       | **packages/daemon**                                                                   | Only exists there. Codex client + protocol.                                                                                                                                                                                                                                                                                                                                                   |
+| `command-center/actions/contract.ts`                           | **packages/daemon** (newer 2026-05-06)                                                | Adds `chat.*` discriminated unions (`StopReasonZ`, `AgentProviderZ`, etc.). 253 diff lines, all additive on packages side; src has nothing exclusive worth saving.                                                                                                                                                                                                                            |
+| `command-center/actions/errors.ts`                             | **packages/daemon** (newer)                                                           | 12-line delta — chat error codes added on packages side.                                                                                                                                                                                                                                                                                                                                      |
+| `command-center/actions/registry.ts`                           | **packages/daemon** (newer)                                                           | Wires the 11 chat handlers (thread.list/create/get/rename/delete, session.send/cancel, providers.list, permission.respond, thread.usage, context.captureTerminal). 85 diff lines.                                                                                                                                                                                                             |
+| `command-center/actions/handlers/chat-actions.{ts,test.ts}`    | **packages/daemon**                                                                   | Only exists there.                                                                                                                                                                                                                                                                                                                                                                            |
+| `command-center/actions/handlers/daemon-shutdown.{ts,test.ts}` | **packages/daemon** (newer)                                                           | Adds `resetChatProvidersListCache()` to shutdown sequence. Tiny delta, no merge conflict.                                                                                                                                                                                                                                                                                                     |
+| `command-center/server.ts`                                     | **MERGE** — packages/daemon as base + 6 endpoints from src                            | src/ is newer (2026-05-07) and has 6 endpoints packages/daemon lacks: `GET /api/widget/:name/spawn`, `GET /api/project/:name/files`, `GET /api/project/:name/preview/:file{.+}`, `GET /api/project/:name/config`, `POST /api/project/:name/config`, `POST /api/project/:name/restart`. packages/daemon has chat/codex initialization elsewhere in the file that src lacks. Both must survive. |
+| `command-center/static.ts`                                     | **packages/daemon** (newer)                                                           | 37-line delta, no apparent src-only signal.                                                                                                                                                                                                                                                                                                                                                   |
+| `command-center/ws-events.ts`                                  | **packages/daemon** (newer)                                                           | Adds `ChatEvent` broadcast plumbing + per-client dispatch.                                                                                                                                                                                                                                                                                                                                    |
+| `lib/cli-action-bridge.ts`                                     | **packages/daemon**                                                                   | Uses relative imports (`../command-center/actions/contract.ts`) and references `canonical-daemon.ts` (only exists in packages/daemon). src/ uses workspace-package aliases (`@tmux-ide/daemon/contract`) which break once the file _is_ the package.                                                                                                                                          |
+| `lib/daemon-embed.ts`                                          | **packages/daemon** (newer)                                                           | 18-line delta — chat/codex bootstrap on packages side.                                                                                                                                                                                                                                                                                                                                        |
+| `lib/daemon.ts`                                                | **packages/daemon**                                                                   | Identical except `import` shape: src uses `@tmux-ide/daemon`, packages uses `./daemon-embed.ts`. Packages' relative form is correct intra-package.                                                                                                                                                                                                                                            |
+| `lib/canonical-daemon.ts`                                      | **packages/daemon**                                                                   | Only exists there; referenced by status.ts and cli-action-bridge.ts.                                                                                                                                                                                                                                                                                                                          |
+| `schemas/ws-events.ts`                                         | **packages/daemon** (newer)                                                           | Adds ChatThreadIndexEntry, ChatSessionUpdate, etc. zod schemas (87-line delta).                                                                                                                                                                                                                                                                                                               |
+| `status.ts`                                                    | **packages/daemon**                                                                   | Identical except import shape (relative vs alias).                                                                                                                                                                                                                                                                                                                                            |
+| `widgets/resolve.ts`                                           | **MERGE** — packages/daemon as base + `WidgetSpawnSpec`/`resolveWidgetSpawn` from src | src/ (2026-05-07) added a structured PTY-spawn helper used by the new `/api/widget/:name/spawn` endpoint. packages/daemon doesn't have it.                                                                                                                                                                                                                                                    |
+| `app-cli.ts`                                                   | **port to packages/daemon**                                                           | 17 LOC; only consumer is `bin/cli.ts` via dynamic import. After move, bin/cli.ts imports from `@tmux-ide/daemon`.                                                                                                                                                                                                                                                                             |
+| `ui.ts`                                                        | **port to packages/daemon**                                                           | 74 LOC; same consumer pattern as app-cli.ts. Already imports from `@tmux-ide/daemon` so it's a thin shim — can either move into packages/daemon or rewrite as direct internal use.                                                                                                                                                                                                            |
 
 Everything **else** in `src/` (the ~260 .ts files not in the 27-line diff) is byte-identical to its packages/daemon counterpart and only needs deletion-from-src after packages/daemon is the canonical home.
 
@@ -429,31 +448,36 @@ No file required dual-side unique pieces beyond these two — every other "diffe
 
 - **Workspace import shape.** src/ files import from `@tmux-ide/daemon`, `@tmux-ide/daemon/contract`, `@tmux-ide/daemon/errors` — these are the workspace package aliases. Once `packages/daemon/` IS the canonical tree, intra-package files must use **relative paths** instead. The packages/daemon copies already do, so no rewrite is needed for those files. **Other consumers** that need to keep using the workspace alias: `bin/cli.ts`, `app-electron/src/main.ts`, the dashboard. They are unaffected by the consolidation.
 - **Tests.** Both trees ship `__tests__/` and `*.test.ts` files. Where the implementation moves, the matching test moves with it. Where they're identical, deletion-from-src is enough.
-- **`src/widgets/`** — the OpenTUI widget binaries (`changes/`, `config/`, `costs/`, `explorer/`, `mission-control/`, `preview/`, `setup/`, `tasks/`). These are not daemon-side code; they are spawned by the daemon as separate processes via `widgets/resolve.ts`. They *can* live anywhere the daemon can resolve at runtime. Recommended target: keep them under `packages/daemon/src/widgets/` so the resolve-path logic stays simple, OR split into a sibling `packages/widgets/` workspace package later. The audit doesn't gate on this — both trees already carry identical widget source.
+- **`src/widgets/`** — the OpenTUI widget binaries (`changes/`, `config/`, `costs/`, `explorer/`, `mission-control/`, `preview/`, `setup/`, `tasks/`). These are not daemon-side code; they are spawned by the daemon as separate processes via `widgets/resolve.ts`. They _can_ live anywhere the daemon can resolve at runtime. Recommended target: keep them under `packages/daemon/src/widgets/` so the resolve-path logic stays simple, OR split into a sibling `packages/widgets/` workspace package later. The audit doesn't gate on this — both trees already carry identical widget source.
 - **`scripts/` and `bin/`** in the repo root are not in scope — they're CLI entry-points and stay where they are.
 
 ## Proposed relocation order (daemon stays runnable at every step)
 
-The mantra: **packages/daemon is already the live daemon process** (per `bin/cli.ts` workspace imports). src/ is the legacy mirror. So the relocation is *deletion-from-src + small diff-recovery*, not a move. This means at no point is the daemon broken.
+The mantra: **packages/daemon is already the live daemon process** (per `bin/cli.ts` workspace imports). src/ is the legacy mirror. So the relocation is _deletion-from-src + small diff-recovery_, not a move. This means at no point is the daemon broken.
 
 **Step 0 — Verify** (sanity check before any change).
+
 - Confirm `pnpm dev` / the canonical daemon spawns out of `packages/daemon/` only.
 - Confirm `bin/cli.ts` imports come from `@tmux-ide/daemon` (already true today for daemon entry points).
 - Snapshot the current `tsc` baseline (currently 10 errors in dashboard/, separate count in src/).
 
 **Step 1 — Recover the 6 v2 endpoints** into `packages/daemon/src/command-center/server.ts`.
+
 - Copy the 6 handler blocks from `src/command-center/server.ts` (verbatim — they don't depend on src/-only code).
 - Run `pnpm typecheck` from repo root. Daemon still runs.
 
 **Step 2 — Recover `widgets/resolve.ts`** — port the `WidgetSpawnSpec` interface + `resolveWidgetSpawn` + `WIDGET_TYPES` export from `src/widgets/resolve.ts` into `packages/daemon/src/widgets/resolve.ts`.
+
 - Run typecheck.
 
 **Step 3 — Port `app-cli.ts` and `ui.ts`** into `packages/daemon/src/`.
+
 - Adjust their imports from `@tmux-ide/daemon` to relative paths.
 - Update `bin/cli.ts`'s dynamic imports from `await import("../src/app-cli.ts")` / `"../src/ui.ts"` to import from `@tmux-ide/daemon` (re-export from the package's `index.ts`).
 - Run typecheck + smoke `tmux-ide doctor` and `tmux-ide ui`.
 
 **Step 4 — Delete `src/`** wholesale. By this point:
+
 - Every byte-identical file in src/ has a counterpart in packages/daemon/.
 - Every divergent file's unique pieces have been recovered into packages/daemon/.
 - Every src-only file has been ported.
@@ -485,24 +509,24 @@ implementation work.
 
 ### apps
 
-| App | Purpose | Key deps | Notes |
-|-----|---------|----------|-------|
-| `apps/server` (`t3`) | The daemon. Bootstraps via `bin.ts`; bundles a Bun-based HTTP/WS server, the Anthropic agent SDK, opencode SDK, `@pierre/diffs`, `node-pty`, and a SQLite store via `@effect/sql-sqlite-bun`. | `@anthropic-ai/claude-agent-sdk`, `@effect/platform-bun`, `@opencode-ai/sdk`, `@pierre/diffs`, `effect`, `node-pty` | Maps to our `packages/daemon/` after T040. Pattern of `apps/server/src/{bin.ts,bootstrap.ts,http.ts,...}` with feature folders (`auth/`, `git/`, `environment/`, `checkpointing/`) is cleaner than our flat `packages/daemon/src/*.ts` top-level dump. Worth porting that arrangement in a follow-up task. |
-| `apps/web` (`@t3tools/web`) | The browser UI. Uses Vite + `@base-ui/react` + `@dnd-kit/*` + `@effect/atom-react` + `@legendapp/list` (virtual list) + `@formkit/auto-animate`. | `@base-ui/react`, `@effect/atom-react`, `@dnd-kit/*`, `@legendapp/list` | Maps to our `dashboard/`. Note: t3code uses **both** `@effect/atom-react` (`apps/web/src/rpc/serverState.ts` etc.) **and** `zustand` (`apps/web/src/uiStateStore.ts`) — they didn't pick one, they layered both. |
-| `apps/desktop` (`@t3tools/desktop`) | Electron shell. | `electron`, `electron-updater`, `effect`, `@effect/platform-node` | Maps to our `app-electron/`. |
-| `apps/marketing` (`@t3tools/marketing`) | Astro site. | `astro` | No analogue in our repo (we use the docs site under `docs/content/`). |
+| App                                     | Purpose                                                                                                                                                                                       | Key deps                                                                                                            | Notes                                                                                                                                                                                                                                                                                                      |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/server` (`t3`)                    | The daemon. Bootstraps via `bin.ts`; bundles a Bun-based HTTP/WS server, the Anthropic agent SDK, opencode SDK, `@pierre/diffs`, `node-pty`, and a SQLite store via `@effect/sql-sqlite-bun`. | `@anthropic-ai/claude-agent-sdk`, `@effect/platform-bun`, `@opencode-ai/sdk`, `@pierre/diffs`, `effect`, `node-pty` | Maps to our `packages/daemon/` after T040. Pattern of `apps/server/src/{bin.ts,bootstrap.ts,http.ts,...}` with feature folders (`auth/`, `git/`, `environment/`, `checkpointing/`) is cleaner than our flat `packages/daemon/src/*.ts` top-level dump. Worth porting that arrangement in a follow-up task. |
+| `apps/web` (`@t3tools/web`)             | The browser UI. Uses Vite + `@base-ui/react` + `@dnd-kit/*` + `@effect/atom-react` + `@legendapp/list` (virtual list) + `@formkit/auto-animate`.                                              | `@base-ui/react`, `@effect/atom-react`, `@dnd-kit/*`, `@legendapp/list`                                             | Maps to our `dashboard/`. Note: t3code uses **both** `@effect/atom-react` (`apps/web/src/rpc/serverState.ts` etc.) **and** `zustand` (`apps/web/src/uiStateStore.ts`) — they didn't pick one, they layered both.                                                                                           |
+| `apps/desktop` (`@t3tools/desktop`)     | Electron shell.                                                                                                                                                                               | `electron`, `electron-updater`, `effect`, `@effect/platform-node`                                                   | Maps to our `app-electron/`.                                                                                                                                                                                                                                                                               |
+| `apps/marketing` (`@t3tools/marketing`) | Astro site.                                                                                                                                                                                   | `astro`                                                                                                             | No analogue in our repo (we use the docs site under `docs/content/`).                                                                                                                                                                                                                                      |
 
 ### packages
 
-| Package | Purpose | Exports | Maps to (or gap) |
-|---------|---------|---------|------------------|
-| `packages/contracts` (`@t3tools/contracts`) | **Single source of truth for wire schemas + types**. Effect-Schema based. Two top-level subpath exports (`./settings`, `.`). | `.`, `./settings` | Our `packages/daemon/src/schemas/` lives inside the daemon package and is re-exported as `@tmux-ide/schemas`. Promoting to a separate workspace package would let dashboard and daemon share without dashboard pulling daemon's runtime tree as a transitive dep. **Strong recommendation**: extract our `schemas/` to `packages/contracts/` in a future task. |
-| `packages/shared` (`@t3tools/shared`) | Cross-cutting helpers used by both server and web — `model`, `git`, `sourceControl`, `logging`, `shell`, plus keybinding defaults. | 5 subpath exports | Our equivalent helpers live in `packages/daemon/src/lib/` (yaml-io, tmux, etc.) and `dashboard/lib/`. A `packages/shared` for things that genuinely cross the boundary (keybinding defaults, ANSI color tokens, project-name validation) would clean things up. |
-| `packages/client-runtime` (`@t3tools/client-runtime`) | Effect-based RPC client runtime — `Atom`-friendly bindings to the contracts. | `.` | We don't have a clean analogue. Closest is `dashboard/lib/api.ts` + `dashboard/lib/wsBus.ts`. |
-| `packages/effect-acp` | ACP (agent communication protocol) Effect Schema bindings. | `./client`, `./agent`, `./schema`, `./rpc`, `./protocol` | Direct analogue: our `packages/daemon/src/acp/` (5 files including client/protocol/schema). t3code's deeper sub-export shape is portable — it lets consumers pick `effect-acp/client` without pulling the agent server bits. |
-| `packages/effect-codex-app-server` | Codex protocol bindings (sister to `effect-acp`). | `./client`, `./schema`, `./rpc`, `./protocol`, `./errors` | Direct analogue: our `packages/daemon/src/codex/`. |
-| `packages/ssh` | SSH command/config/tunnel/auth helpers. | `./auth`, `./command`, `./config`, `./errors`, `./tunnel` | We don't ship SSH. Feature parity not required. |
-| `packages/tailscale` | Tailscale platform helpers. | `.` | We have `packages/daemon/src/lib/tunnels/` for ngrok/cloudflare; tailscale isn't on our roadmap. |
+| Package                                               | Purpose                                                                                                                            | Exports                                                   | Maps to (or gap)                                                                                                                                                                                                                                                                                                                                               |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/contracts` (`@t3tools/contracts`)           | **Single source of truth for wire schemas + types**. Effect-Schema based. Two top-level subpath exports (`./settings`, `.`).       | `.`, `./settings`                                         | Our `packages/daemon/src/schemas/` lives inside the daemon package and is re-exported as `@tmux-ide/schemas`. Promoting to a separate workspace package would let dashboard and daemon share without dashboard pulling daemon's runtime tree as a transitive dep. **Strong recommendation**: extract our `schemas/` to `packages/contracts/` in a future task. |
+| `packages/shared` (`@t3tools/shared`)                 | Cross-cutting helpers used by both server and web — `model`, `git`, `sourceControl`, `logging`, `shell`, plus keybinding defaults. | 5 subpath exports                                         | Our equivalent helpers live in `packages/daemon/src/lib/` (yaml-io, tmux, etc.) and `dashboard/lib/`. A `packages/shared` for things that genuinely cross the boundary (keybinding defaults, ANSI color tokens, project-name validation) would clean things up.                                                                                                |
+| `packages/client-runtime` (`@t3tools/client-runtime`) | Effect-based RPC client runtime — `Atom`-friendly bindings to the contracts.                                                       | `.`                                                       | We don't have a clean analogue. Closest is `dashboard/lib/api.ts` + `dashboard/lib/wsBus.ts`.                                                                                                                                                                                                                                                                  |
+| `packages/effect-acp`                                 | ACP (agent communication protocol) Effect Schema bindings.                                                                         | `./client`, `./agent`, `./schema`, `./rpc`, `./protocol`  | Direct analogue: our `packages/daemon/src/acp/` (5 files including client/protocol/schema). t3code's deeper sub-export shape is portable — it lets consumers pick `effect-acp/client` without pulling the agent server bits.                                                                                                                                   |
+| `packages/effect-codex-app-server`                    | Codex protocol bindings (sister to `effect-acp`).                                                                                  | `./client`, `./schema`, `./rpc`, `./protocol`, `./errors` | Direct analogue: our `packages/daemon/src/codex/`.                                                                                                                                                                                                                                                                                                             |
+| `packages/ssh`                                        | SSH command/config/tunnel/auth helpers.                                                                                            | `./auth`, `./command`, `./config`, `./errors`, `./tunnel` | We don't ship SSH. Feature parity not required.                                                                                                                                                                                                                                                                                                                |
+| `packages/tailscale`                                  | Tailscale platform helpers.                                                                                                        | `.`                                                       | We have `packages/daemon/src/lib/tunnels/` for ngrok/cloudflare; tailscale isn't on our roadmap.                                                                                                                                                                                                                                                               |
 
 ### Conventions worth porting
 
@@ -518,10 +542,10 @@ Scoring `@effect/atom-react` vs `jotai` vs `zustand` for the v2 dashboard rebuil
 
 ### Bundle size (gzipped, current published versions)
 
-| Lib | Min+gzip core | Notes |
-|-----|---------------|-------|
-| `zustand` | ~1.0 KB | The smallest. No dependencies. |
-| `jotai` | ~3.5 KB | Core only; jotai-utils adds a bit more. No deps beyond React. |
+| Lib                  | Min+gzip core                                        | Notes                                                                                                                                                                                               |
+| -------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `zustand`            | ~1.0 KB                                              | The smallest. No dependencies.                                                                                                                                                                      |
+| `jotai`              | ~3.5 KB                                              | Core only; jotai-utils adds a bit more. No deps beyond React.                                                                                                                                       |
 | `@effect/atom-react` | ~10 KB + Effect runtime (~50 KB gzipped of `effect`) | Effect itself is the real cost — a one-shot install if not already loaded, but our dashboard does **not** ship Effect today. Adopting `@effect/atom-react` means inheriting Effect, which cascades. |
 
 Winner on bundle: **zustand** by an order of magnitude.
@@ -531,6 +555,7 @@ Winner on bundle: **zustand** by an order of magnitude.
 State (a): current view (`'mission' | 'kanban' | ...`). State (b): sidebar collapsed boolean. State (c): snapshot from `useSessionStream` (async, server-pushed).
 
 **zustand**:
+
 ```ts
 // store.ts
 import { create } from "zustand";
@@ -562,6 +587,7 @@ const collapsed = useUiStore((s) => s.sidebarCollapsed);
 ```
 
 **jotai**:
+
 ```ts
 // atoms.ts
 import { atom, useAtom, useAtomValue } from "jotai";
@@ -578,15 +604,20 @@ const collapsed = useAtomValue(sidebarCollapsedAtom);
 ```
 
 **@effect/atom-react**:
+
 ```ts
 import { Atom } from "effect/unstable/reactivity";
 import { useAtomValue, useAtomSet } from "@effect/atom-react";
 
-export const viewAtom = Atom.make<ViewId>("mission")
-  .pipe(Atom.keepAlive, Atom.withLabel("ui.view"));
+export const viewAtom = Atom.make<ViewId>("mission").pipe(
+  Atom.keepAlive,
+  Atom.withLabel("ui.view"),
+);
 
-export const sidebarCollapsedAtom = Atom.make(false)
-  .pipe(Atom.keepAlive, Atom.withLabel("ui.sidebar.collapsed"));
+export const sidebarCollapsedAtom = Atom.make(false).pipe(
+  Atom.keepAlive,
+  Atom.withLabel("ui.sidebar.collapsed"),
+);
 
 // Snapshot — derived async atom from a stream:
 export const sessionSnapshotAtom = Atom.fromStream(() => sessionSnapshotStream).pipe(
@@ -618,6 +649,7 @@ All three have tooling; zustand's is the most familiar to teams coming from Redu
 ### Compatibility with TanStack Query
 
 We don't use TanStack Query in dashboard today (verified — not in `dashboard/package.json`). If we adopt it for server state:
+
 - `zustand` is most idiomatic — TanStack owns server state, zustand owns UI state. Clean split.
 - `jotai` integrates via `jotai-tanstack-query`. Slight friction (atom adapter).
 - `@effect/atom-react` overlaps with TanStack — they solve the same problem from different runtimes. Picking both adds confusion.
@@ -630,7 +662,7 @@ Reasoning (concrete):
 2. **Existing patterns line up** — our handful of stores (`projectStore.ts`, `addProjectDialogStore.ts`, `useLayoutState.ts`, `newChatPickerStore.ts`) are already module-level subscribe/snapshot stores. They are essentially zustand stores written by hand. Moving to `create()` is a one-file edit per store, not a paradigm shift. Low-risk migration.
 3. **Async story** — pair with TanStack Query for server-state (REST + SSE refresh). Zustand owns the rest. This split is the same fault line t3code chose (atom-react for RPC, zustand for UI state), but with TanStack instead of atom-react on the data side. TanStack is much more widely understood than Effect, easier to onboard contributors, and doesn't drag in a runtime.
 4. **DevTools** — Redux DevTools just works. Zero new tooling for the team.
-5. **t3code precedent** — they ship `zustand` *and* `@effect/atom-react`. Where they use atom-react is precisely the surface area Effect already pays for itself. We don't have that base.
+5. **t3code precedent** — they ship `zustand` _and_ `@effect/atom-react`. Where they use atom-react is precisely the surface area Effect already pays for itself. We don't have that base.
 
 Where we'd reach for `@effect/atom-react` later: if/when we adopt Effect for the daemon-side scheduling work (currently no plans), the atom-react integration becomes free. Until then, stay with zustand.
 
@@ -649,6 +681,7 @@ Open question for Lead: mode switches must preserve scroll position inside MainT
 The daemon side is in good shape: `packages/daemon/src/chat/` already has `thread-store.ts`, `thread-manager.ts`, `provider-discovery.ts`, `context-actions.ts`, plus the `ChatEvent` broadcast plumbing on `ws-events.ts` and the 11 chat actions on `command-center/actions/handlers/chat-actions.ts`. The action contract surface is `chat.thread.list/create/get/rename/delete/usage`, `chat.session.send/cancel`, `chat.providers.list`, `chat.permission.respond`, `chat.context.captureTerminal`. Wire shape lives in `@tmux-ide/schemas/ws-events` (ChatThreadIndexEntry, ChatSessionUpdate).
 
 Frontend surface that needs building for the v2 mount:
+
 - A **chat thread list rail** — replaces the Plans/Skills sub-list in chat mode; queries `chat.thread.list`, subscribes to `chat-thread-updated` push frames.
 - A **chat tab kind** — already partly there (`ChatTabPanel.tsx` mounts `@tmux-ide/chat-solid` as a Solid island via `mod.mount(el, {...})`). The Solid island handles message rendering + composer. The React side just owns the host element + lifecycle. v2 needs the chat tab kind plumbed into MainTabContent's switch.
 - A **provider-picker dialog** — `NewChatPicker.tsx` exists; needs reskin to TUI primitives but the wiring is right.
@@ -661,6 +694,7 @@ v2 mount sketch: chat mode's activity-bar entry switches active mode, MainTabsBa
 Today every tab is a `Tab` with `kind: 'view' | 'file' | 'skill' | 'chat' | 'terminal' | 'settings'`. Terminals are first-class in `openTabs[]` and survive view switches via the `display: none` keep-alive trick in `TerminalsHost`. v2 should formalise the distinction: a **terminal tab is a long-lived process attached to a `terminalTabId`-keyed PTY**, whereas other tab kinds are stateless views.
 
 NavigationState signal split (zustand):
+
 - `useNavigationStore` — `{ openTabs, activeTabId }` for the **view** tab strip (whatever's mounted in MainTabsBar above MainTabContent).
 - `useTerminalStore` — `{ openTerminalTabs, activeTerminalTabId, defaultTerminalTabId }` for the terminal-pane strip below. Terminal tabs are addressed by stable id (`session:cwd` hash or random UUID at first attach).
 
@@ -681,5 +715,5 @@ The split is non-invasive at the migration boundary: today's `openTabs` already 
 
 1. **TanStack Query opt-in** — yes/no for server state in v2? If yes, the dashboard package adds it as a dep and we wire `useSessionStream` and `fetchSessions` through it.
 2. **Per-mode tab keep-alive cap** — accept memory cost of mounting all per-mode tabs (`display: none`), or invest in a scroll/state serializer? Recommend the simpler cap-at-20-tabs approach unless usage shows otherwise.
-3. **Effect adoption appetite** — re-confirm that we are *not* moving toward Effect in the daemon. If that changes within 6 months, the signal-library decision flips to `@effect/atom-react`.
+3. **Effect adoption appetite** — re-confirm that we are _not_ moving toward Effect in the daemon. If that changes within 6 months, the signal-library decision flips to `@effect/atom-react`.
 4. **`packages/contracts` extraction timing** — block on T060 before adopting zustand (so the new stores import from `@tmux-ide/contracts` not `@tmux-ide/schemas`)? Or land zustand first and rename imports during the contracts extraction? Recommend: land zustand first, rename in the contracts PR.

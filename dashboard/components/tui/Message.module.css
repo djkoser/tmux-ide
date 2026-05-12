@@ -34,7 +34,8 @@
 }
 
 .bubble {
-  padding: calc(8px * var(--theme-line-height-base)) 1ch calc(8px * var(--theme-line-height-base)) 1ch;
+  padding: calc(8px * var(--theme-line-height-base)) 1ch calc(8px * var(--theme-line-height-base))
+    1ch;
   background: var(--theme-border);
   display: inline-block;
   box-shadow: 1ch 1ch 0 0 var(--theme-border-subdued);

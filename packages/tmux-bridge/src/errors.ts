@@ -10,11 +10,7 @@ export class TmuxError extends Error {
   readonly code: string;
   readonly exitCode: number;
 
-  constructor(
-    message: string,
-    code: string,
-    options: { cause?: unknown; exitCode?: number } = {},
-  ) {
+  constructor(message: string, code: string, options: { cause?: unknown; exitCode?: number } = {}) {
     super(message, { cause: options.cause as Error | undefined });
     this.name = "TmuxError";
     this.code = code;

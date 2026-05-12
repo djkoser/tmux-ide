@@ -20,12 +20,7 @@ export default [
   },
   js.configs.recommended,
   {
-    files: [
-      "bin/**/*.{js,mjs}",
-      "scripts/**/*.{js,mjs}",
-      "src/**/*.{js,mjs}",
-      "*.{js,mjs}",
-    ],
+    files: ["bin/**/*.{js,mjs}", "scripts/**/*.{js,mjs}", "src/**/*.{js,mjs}", "*.{js,mjs}"],
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",
@@ -81,10 +76,7 @@ export default [
   // ESLint flags as never-assigned because the assignment happens via
   // the JSX ref attribute at runtime.
   {
-    files: [
-      "packages/v2-solid-widgets/src/**/*.{ts,tsx}",
-      "packages/chat-solid/src/**/*.{ts,tsx}",
-    ],
+    files: ["packages/v2-solid-widgets/src/**/*.{ts,tsx}", "packages/chat-solid/src/**/*.{ts,tsx}"],
     rules: {
       "no-unassigned-vars": "off",
     },
@@ -117,11 +109,9 @@ export default [
               message: "contracts is the leaf zone — no workspace imports allowed (T059)",
             },
             {
-              group: [
-                "**/packages/*/src/**",
-                "!**/packages/contracts/src/**",
-              ],
-              message: "contracts is the leaf zone — no relative reaches into other packages (T059)",
+              group: ["**/packages/*/src/**", "!**/packages/contracts/src/**"],
+              message:
+                "contracts is the leaf zone — no relative reaches into other packages (T059)",
             },
           ],
         },
@@ -168,7 +158,8 @@ export default [
                 "@tmux-ide/dashboard",
                 "@tmux-ide/dashboard/*",
               ],
-              message: "daemon must not import UI-side packages — those are downstream consumers (T059)",
+              message:
+                "daemon must not import UI-side packages — those are downstream consumers (T059)",
             },
             {
               group: [
@@ -185,10 +176,7 @@ export default [
     },
   },
   {
-    files: [
-      "packages/v2-solid-widgets/src/**/*.{ts,tsx}",
-      "packages/chat-solid/src/**/*.{ts,tsx}",
-    ],
+    files: ["packages/v2-solid-widgets/src/**/*.{ts,tsx}", "packages/chat-solid/src/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -201,13 +189,11 @@ export default [
                 "@tmux-ide/tmux-bridge",
                 "@tmux-ide/tmux-bridge/*",
               ],
-              message: "UI-side packages are HTTP/WS clients — talk to daemon at runtime, not via imports (T059)",
+              message:
+                "UI-side packages are HTTP/WS clients — talk to daemon at runtime, not via imports (T059)",
             },
             {
-              group: [
-                "**/packages/daemon/**",
-                "**/packages/tmux-bridge/**",
-              ],
+              group: ["**/packages/daemon/**", "**/packages/tmux-bridge/**"],
               message: "UI-side packages must not relative-reach into daemon/tmux-bridge (T059)",
             },
           ],

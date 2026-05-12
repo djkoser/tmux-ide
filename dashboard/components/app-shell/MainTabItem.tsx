@@ -23,11 +23,7 @@ function TabIcon({ kind }: { kind: Tab["kind"] }) {
     case "terminal":
       return (
         <span className="relative inline-flex shrink-0 items-center">
-          <TerminalSquare
-            aria-hidden="true"
-            size={14}
-            className="text-[var(--dimmer)]"
-          />
+          <TerminalSquare aria-hidden="true" size={14} className="text-[var(--dimmer)]" />
           <span
             aria-hidden="true"
             className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-[var(--green)]"

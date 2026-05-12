@@ -10,10 +10,7 @@ import {
 import { spawnAcpClient } from "../acp/index.ts";
 import { broadcastChatEvent } from "../command-center/ws-events.ts";
 import { openDatabase, type SqliteDb } from "../lib/sqlite-adapter.ts";
-import {
-  makeChatEventStore,
-  type ChatEventStore,
-} from "../persistence/chat-event-store.ts";
+import { makeChatEventStore, type ChatEventStore } from "../persistence/chat-event-store.ts";
 import {
   makeTurnProjection,
   type TurnProjection,
@@ -22,15 +19,9 @@ import { makeInMemoryCursorStore } from "../persistence/types.ts";
 import { makeThreadManager, type ThreadManager } from "./thread-manager.ts";
 import { makeThreadStore, type ThreadStore } from "./thread-store.ts";
 import { makePlanStore, type PlanStore } from "./plan-store.ts";
-import {
-  makePlanOrchestrator,
-  type PlanOrchestrator,
-} from "./plan-orchestrator.ts";
+import { makePlanOrchestrator, type PlanOrchestrator } from "./plan-orchestrator.ts";
 import { makeSessionStore, type SessionStore } from "./session-store.ts";
-import {
-  makeCheckpointStore,
-  type CheckpointStore,
-} from "./checkpoint-store.ts";
+import { makeCheckpointStore, type CheckpointStore } from "./checkpoint-store.ts";
 import type { ChatEvent } from "./types.ts";
 
 let defaultStore: ThreadStore | null = null;
@@ -58,8 +49,11 @@ function isChatThreadEvent(event: ChatEvent): event is ChatThreadEvent {
 function inferActorKind(event: ChatThreadEvent): "user" | "provider" | "system" {
   switch (event.type) {
     case "chat.activity.appended":
-      // Activities carry their own tone; default to user when ambiguous.
-      return event.activity.tone === "agent" ? "provider" : "user";
+      // ThreadActivityTone is "error" | "info" | "tool" | "approval" — none
+      // of these carry actor attribution. Default to "user"; agent/provider
+      // attribution should ride on `sessionId` once the contract carries it
+      // (see T078). The previous `tone === "agent"` comparison was dead.
+      return "user";
     case "chat.turn.started":
     case "chat.turn.completed":
     case "chat.turn.aborted":

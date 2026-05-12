@@ -73,9 +73,7 @@ export function MilestoneLadder({
   return (
     <section data-testid="mission-milestone-ladder" className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-[10px] uppercase tracking-[0.08em] text-[var(--accent)]">
-          Milestones
-        </h2>
+        <h2 className="text-[10px] uppercase tracking-[0.08em] text-[var(--accent)]">Milestones</h2>
         <span className="text-[10px] tabular-nums text-[var(--dim)]">{sorted.length}</span>
       </div>
 
@@ -87,11 +85,7 @@ export function MilestoneLadder({
           const validation = validationByMilestone?.get(m.id);
           const validationFail = validation && !validation.passed;
           return (
-            <li
-              key={m.id}
-              data-testid={`milestone-station-${m.id}`}
-              className="relative min-w-0"
-            >
+            <li key={m.id} data-testid={`milestone-station-${m.id}`} className="relative min-w-0">
               <button
                 type="button"
                 onClick={() => setExpandedId(expanded ? null : m.id)}
@@ -111,7 +105,10 @@ export function MilestoneLadder({
                     <span className="text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]">
                       {m.id}
                     </span>
-                    <StatusPill variant={milestoneVariant(m.status)} label={statusLabel(m.status)} />
+                    <StatusPill
+                      variant={milestoneVariant(m.status)}
+                      label={statusLabel(m.status)}
+                    />
                   </span>
                   <span className="mt-1 block truncate text-[13px] font-medium text-[var(--fg)]">
                     {m.title}
@@ -127,8 +124,7 @@ export function MilestoneLadder({
                         transition={{ type: "spring", stiffness: 600, damping: 49 }}
                         className="block h-full"
                         style={{
-                          background:
-                            m.status === "done" ? "var(--green)" : "var(--accent)",
+                          background: m.status === "done" ? "var(--green)" : "var(--accent)",
                         }}
                       />
                     </span>

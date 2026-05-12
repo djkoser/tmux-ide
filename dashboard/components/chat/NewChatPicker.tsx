@@ -233,7 +233,15 @@ function ProviderTile({
       <span className="min-w-0">
         <span className="flex min-w-0 items-center gap-2">
           <span className="truncate text-[13px] font-medium text-[var(--fg)]">{provider.name}</span>
-          {selected && <span aria-hidden="true" className="text-[var(--accent)]" style={{ fontSize: 14, lineHeight: 1 }}>✓</span>}
+          {selected && (
+            <span
+              aria-hidden="true"
+              className="text-[var(--accent)]"
+              style={{ fontSize: 14, lineHeight: 1 }}
+            >
+              ✓
+            </span>
+          )}
         </span>
         <span className="mt-1 block truncate text-[11px] text-[var(--dim)]">
           {provider.description}

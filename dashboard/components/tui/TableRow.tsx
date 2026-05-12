@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import styles from '@components/TableRow.module.css';
+import styles from "@components/TableRow.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
 type TableRowProps = React.HTMLAttributes<HTMLElement> & {
   children?: React.ReactNode;
@@ -16,6 +16,6 @@ const TableRow = ({ children, ...rest }) => {
   );
 };
 
-TableRow.displayName = 'TableRow';
+TableRow.displayName = "TableRow";
 
 export default TableRow;

@@ -2,11 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "../AppSidebar";
-import {
-  __resetNavigationForTests,
-  setNavigation,
-  type NavigationState,
-} from "@/lib/navigation";
+import { __resetNavigationForTests, setNavigation, type NavigationState } from "@/lib/navigation";
 import { __resetLayoutStateForTests } from "@/lib/useLayoutState";
 
 const SESSIONS = [
@@ -203,9 +199,9 @@ describe("AppSidebar", () => {
     expect(skillsHeader.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(skillsHeader);
     await waitFor(() => {
-      expect(
-        screen.getByTestId("sidebar-section-skills").getAttribute("aria-expanded"),
-      ).toBe("true");
+      expect(screen.getByTestId("sidebar-section-skills").getAttribute("aria-expanded")).toBe(
+        "true",
+      );
     });
   });
 
@@ -225,8 +221,13 @@ describe("AppSidebar", () => {
   // URL-driven resync. The bug was that the implicit kanban default in the
   // URL flowed back into navigation state and clobbered the terminal.
   it("opens the project's default terminal tab when the Terminal leaf is clicked", async () => {
-    const { setActiveSession, getNavigationStateLive, defaultTerminalTabId, stateFromPath, setNavigation: setNav } =
-      await import("@/lib/navigation");
+    const {
+      setActiveSession,
+      getNavigationStateLive,
+      defaultTerminalTabId,
+      stateFromPath,
+      setNavigation: setNav,
+    } = await import("@/lib/navigation");
     window.history.replaceState(null, "", "/project/alpha");
     setActiveSession("alpha");
     renderSidebar();

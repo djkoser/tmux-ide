@@ -2,10 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import {
-  CommandPalette,
-  openCommandPalette,
-} from "@/components/CommandPalette";
+import { CommandPalette, openCommandPalette } from "@/components/CommandPalette";
 import { registerAction } from "@/lib/actions";
 import { useKeybind } from "@/lib/useKeybinds";
 

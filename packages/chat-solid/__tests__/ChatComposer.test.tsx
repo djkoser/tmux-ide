@@ -13,10 +13,12 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-function mountComposer(options: {
-  onSend?: (content: ContentBlock[]) => Promise<void>;
-  availableCommands?: AvailableCommand[];
-} = {}) {
+function mountComposer(
+  options: {
+    onSend?: (content: ContentBlock[]) => Promise<void>;
+    availableCommands?: AvailableCommand[];
+  } = {},
+) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const onSend = vi.fn(options.onSend ?? (async () => undefined));

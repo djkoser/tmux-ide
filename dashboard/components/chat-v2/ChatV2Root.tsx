@@ -43,36 +43,33 @@ export function ChatV2Root(props: ChatV2RootProps) {
   const setActiveThread = useChatStore((s) => s.setActiveThread);
   const activities = useChatStore((s) =>
     props.activeThreadId
-      ? s.activitiesByThread[props.activeThreadId] ?? (EMPTY_ACTIVITIES as never)
+      ? (s.activitiesByThread[props.activeThreadId] ?? (EMPTY_ACTIVITIES as never))
       : (EMPTY_ACTIVITIES as never),
   );
   const turns = useChatStore((s) =>
     props.activeThreadId
-      ? s.turnsByThread[props.activeThreadId] ?? (EMPTY_MAP as never)
+      ? (s.turnsByThread[props.activeThreadId] ?? (EMPTY_MAP as never))
       : (EMPTY_MAP as never),
   );
   const checkpoints = useChatStore((s) =>
     props.activeThreadId
-      ? s.checkpointsByThread[props.activeThreadId] ?? (EMPTY_MAP as never)
+      ? (s.checkpointsByThread[props.activeThreadId] ?? (EMPTY_MAP as never))
       : (EMPTY_MAP as never),
   );
   const plans = useChatStore((s) =>
     props.activeThreadId
-      ? s.plansByThread[props.activeThreadId] ?? (EMPTY_MAP as never)
+      ? (s.plansByThread[props.activeThreadId] ?? (EMPTY_MAP as never))
       : (EMPTY_MAP as never),
   );
   const unreadByThread = useChatStore((s) => s.unreadByThread);
 
   // Sync the parent-managed thread list + active thread into the store.
   useEffect(() => setThreads(props.threads), [props.threads, setThreads]);
-  useEffect(
-    () => setActiveThread(props.activeThreadId),
-    [props.activeThreadId, setActiveThread],
-  );
+  useEffect(() => setActiveThread(props.activeThreadId), [props.activeThreadId, setActiveThread]);
 
   const activeThread =
     props.activeThreadId !== null
-      ? props.threads.find((t) => t.id === props.activeThreadId) ?? null
+      ? (props.threads.find((t) => t.id === props.activeThreadId) ?? null)
       : null;
 
   return (

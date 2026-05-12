@@ -1,6 +1,6 @@
-import styles from '@components/BreadCrumbs.module.css';
+import styles from "@components/BreadCrumbs.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
 interface BreadCrumbsItem {
   url?: string;

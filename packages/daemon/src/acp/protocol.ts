@@ -54,7 +54,12 @@ function isJsonRpcRequest(value: unknown): value is JsonRpcRequest {
 }
 
 function isJsonRpcNotification(value: unknown): value is JsonRpcNotification {
-  return isObject(value) && value.jsonrpc === "2.0" && value.id === undefined && typeof value.method === "string";
+  return (
+    isObject(value) &&
+    value.jsonrpc === "2.0" &&
+    value.id === undefined &&
+    typeof value.method === "string"
+  );
 }
 
 function isJsonRpcResponse(value: unknown): value is JsonRpcResponse {
@@ -100,14 +105,19 @@ export function makeJsonRpcEndpoint(opts: {
     resolveClosed();
   }
 
-  function respond(id: number | string, response: { result?: unknown; error?: JsonRpcErrorPayload }) {
+  function respond(
+    id: number | string,
+    response: { result?: unknown; error?: JsonRpcErrorPayload },
+  ) {
     write({ jsonrpc: "2.0", id, ...response });
   }
 
   async function handleIncomingRequest(request: JsonRpcRequest) {
     try {
       if (!incomingRequestHandler) {
-        respond(request.id, { error: { code: -32601, message: `Method not found: ${request.method}` } });
+        respond(request.id, {
+          error: { code: -32601, message: `Method not found: ${request.method}` },
+        });
         return;
       }
       const result = await incomingRequestHandler(request);
@@ -162,10 +172,14 @@ export function makeJsonRpcEndpoint(opts: {
   }
 
   opts.input.on("data", handleChunk);
-  opts.input.on("error", (err) => finish(new AcpProtocolError("ACP input stream failed", { cause: err })));
+  opts.input.on("error", (err) =>
+    finish(new AcpProtocolError("ACP input stream failed", { cause: err })),
+  );
   opts.input.on("close", () => finish(new AcpAgentExitedError()));
   opts.input.on("end", () => finish(new AcpAgentExitedError()));
-  opts.output.on?.("error", (err) => finish(new AcpProtocolError("ACP output stream failed", { cause: err })));
+  opts.output.on?.("error", (err) =>
+    finish(new AcpProtocolError("ACP output stream failed", { cause: err })),
+  );
 
   return {
     request(method: string, params?: unknown): Promise<unknown> {

@@ -63,10 +63,7 @@ describe("projectStopHandler", () => {
 
   it("raises project_not_found for unknown projects", async () => {
     await expect(
-      projectStopHandler(
-        { name: "ghost" },
-        { getProject: () => null, hasSession: () => false },
-      ),
+      projectStopHandler({ name: "ghost" }, { getProject: () => null, hasSession: () => false }),
     ).rejects.toMatchObject({ code: "project_not_found" });
   });
 

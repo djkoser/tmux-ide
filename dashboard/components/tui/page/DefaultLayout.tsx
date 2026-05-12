@@ -1,6 +1,6 @@
-import styles from '@components/page/DefaultLayout.module.css';
+import styles from "@components/page/DefaultLayout.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
 interface DefaultLayoutProps {
   previewPixelSRC: string;

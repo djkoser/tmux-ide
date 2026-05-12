@@ -118,9 +118,7 @@ export function makePlanStore(opts: MakePlanStoreOptions = {}): PlanStore {
       const existing = getOrThrow(threadId, planId);
       const ts = options.at ?? now().toISOString();
       const rejection: NonNullable<ProposedPlan["rejected"]> =
-        options.reason !== undefined
-          ? { at: ts, reason: options.reason }
-          : { at: ts };
+        options.reason !== undefined ? { at: ts, reason: options.reason } : { at: ts };
       const next: ProposedPlan = {
         ...existing,
         rejected: rejection,

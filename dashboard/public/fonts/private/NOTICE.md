@@ -14,7 +14,7 @@ prohibited by the Berkeley Mono End-User License Agreement.
 If you are an OSS contributor / fork maintainer / self-hoster:
 
 - The terminal will fall back automatically to `ui-monospace, SFMono-Regular,
-  "JetBrains Mono", "IBM Plex Mono", monospace` when this file is absent.
+"JetBrains Mono", "IBM Plex Mono", monospace` when this file is absent.
 - To use Berkeley Mono yourself, purchase a license at berkeleygraphics.com
   and drop the variable WOFF2 here.
 - Do not commit, vendor, or otherwise distribute the font file.

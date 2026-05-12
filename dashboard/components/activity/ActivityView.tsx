@@ -178,182 +178,178 @@ export function ActivityView({ sessionName }: ActivityViewProps) {
   return (
     <Panel testId="activity-view">
       <PanelBody scrollable={false}>
-        <div
-          ref={scrollRef}
-          onScroll={handleScroll}
-          className="flex-1 space-y-5 overflow-auto p-4"
-        >
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-5">
-          <KpiCard
-            label="total events"
-            value={stats.total}
-            active={kpiFilter === "all"}
-            testId="activity-kpi"
-            onClick={() => setKpiFilter("all")}
-          />
-          <KpiCard
-            label="last hour"
-            value={stats.hour}
-            active={kpiFilter === "hour"}
-            color="var(--accent)"
-            testId="activity-kpi"
-            onClick={() => setKpiFilter("hour")}
-          />
-          <KpiCard
-            label="last 24h"
-            value={stats.day}
-            active={kpiFilter === "day"}
-            color="var(--cyan)"
-            testId="activity-kpi"
-            onClick={() => setKpiFilter("day")}
-          />
-          <KpiCard
-            label="unique agents"
-            value={stats.agents}
-            active={kpiFilter === "agents"}
-            color="var(--green)"
-            testId="activity-kpi"
-            onClick={() => setKpiFilter("agents")}
-          />
-          <KpiCard
-            label="event types"
-            value={stats.types}
-            active={kpiFilter === "types"}
-            color="var(--yellow)"
-            testId="activity-kpi"
-            onClick={() => setKpiFilter("types")}
-          />
-        </div>
+        <div ref={scrollRef} onScroll={handleScroll} className="flex-1 space-y-5 overflow-auto p-4">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-5">
+            <KpiCard
+              label="total events"
+              value={stats.total}
+              active={kpiFilter === "all"}
+              testId="activity-kpi"
+              onClick={() => setKpiFilter("all")}
+            />
+            <KpiCard
+              label="last hour"
+              value={stats.hour}
+              active={kpiFilter === "hour"}
+              color="var(--accent)"
+              testId="activity-kpi"
+              onClick={() => setKpiFilter("hour")}
+            />
+            <KpiCard
+              label="last 24h"
+              value={stats.day}
+              active={kpiFilter === "day"}
+              color="var(--cyan)"
+              testId="activity-kpi"
+              onClick={() => setKpiFilter("day")}
+            />
+            <KpiCard
+              label="unique agents"
+              value={stats.agents}
+              active={kpiFilter === "agents"}
+              color="var(--green)"
+              testId="activity-kpi"
+              onClick={() => setKpiFilter("agents")}
+            />
+            <KpiCard
+              label="event types"
+              value={stats.types}
+              active={kpiFilter === "types"}
+              color="var(--yellow)"
+              testId="activity-kpi"
+              onClick={() => setKpiFilter("types")}
+            />
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            data-testid="activity-filter"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search events"
-            className="h-8 min-w-0 flex-1 rounded-md border border-[var(--border-weak)] bg-[var(--bg-strong)] px-3 text-[12px] text-[var(--fg)] outline-none placeholder:text-[var(--dimmer)] focus:border-[var(--accent)] md:min-w-56"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              setLive((value) => !value);
-              requestAnimationFrame(() => {
-                if (scrollRef.current) scrollRef.current.scrollTop = 0;
-              });
-            }}
-            className={`h-8 rounded-md border px-3 text-[11px] uppercase tracking-[0.08em] ${
-              live
-                ? "border-[var(--green)] bg-[rgba(155,205,151,0.1)] text-[var(--green)]"
-                : "border-[var(--border-weak)] bg-[var(--bg-strong)] text-[var(--dim)]"
-            }`}
-          >
-            Live
-          </button>
-          {eventTypes.map((type) => {
-            const active = selectedTypes.has(type);
-            const meta = EVENT_META[type] ?? DEFAULT_META;
-            return (
-              <button
-                key={type}
-                type="button"
-                data-testid="activity-filter"
-                onClick={() => toggleType(type)}
-                className={`h-7 rounded-md border px-2 text-[11px] transition-colors ${
-                  active
-                    ? "border-[var(--accent)] bg-[var(--surface-active)]"
-                    : "border-[var(--border-weak)] bg-[var(--bg-strong)] hover:bg-[var(--surface-hover)]"
-                }`}
-                style={{ color: active ? "var(--accent)" : meta.color }}
-              >
-                {type.replaceAll("_", " ")}
-              </button>
-            );
-          })}
-          {(selectedTypes.size > 0 || query || kpiFilter !== "all") && (
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              data-testid="activity-filter"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search events"
+              className="h-8 min-w-0 flex-1 rounded-md border border-[var(--border-weak)] bg-[var(--bg-strong)] px-3 text-[12px] text-[var(--fg)] outline-none placeholder:text-[var(--dimmer)] focus:border-[var(--accent)] md:min-w-56"
+            />
             <button
               type="button"
               onClick={() => {
-                setKpiFilter("all");
-                setSelectedTypes(new Set());
-                setQuery("");
+                setLive((value) => !value);
+                requestAnimationFrame(() => {
+                  if (scrollRef.current) scrollRef.current.scrollTop = 0;
+                });
               }}
-              className="h-7 rounded-md border border-[var(--border-weak)] px-2 text-[11px] text-[var(--dim)] hover:text-[var(--fg)]"
+              className={`h-8 rounded-md border px-3 text-[11px] uppercase tracking-[0.08em] ${
+                live
+                  ? "border-[var(--green)] bg-[rgba(155,205,151,0.1)] text-[var(--green)]"
+                  : "border-[var(--border-weak)] bg-[var(--bg-strong)] text-[var(--dim)]"
+              }`}
             >
-              clear
+              Live
             </button>
-          )}
-        </div>
-        {groups.length === 0 ? (
-          <EmptyState
-            title="No activity yet"
-            body="New dispatches, completions, retries, and errors will appear here."
-          />
-        ) : (
-          <div className="space-y-4">
-            {groups.map((group) => (
-              <section key={group.key}>
-                <SectionHeader
-                  label={group.label}
-                  rightSlot={
-                    <span className="text-[10px] tabular-nums text-[var(--dim)]">
-                      {group.rows.length}
-                    </span>
-                  }
-                  className="sticky top-0 z-10 bg-[var(--bg)] py-1"
-                />
-                <div className="divide-y divide-[var(--border-weak)] overflow-hidden rounded-md border border-[var(--border-weak)] bg-[var(--bg-strong)]">
-                  {group.rows.map((event, index) => {
-                    const meta = EVENT_META[event.type] ?? DEFAULT_META;
-                    const label = (EVENT_META[event.type]?.label ?? event.type).replaceAll(
-                      "_",
-                      " ",
-                    );
-                    return (
-                      <div
-                        key={`${event.timestamp}-${event.type}-${index}`}
-                        data-testid="activity-event"
-                        className="grid grid-cols-[10px_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 hover:bg-[var(--surface-hover)]"
-                      >
-                        <span
-                          className="h-2 w-2 rounded-full"
-                          style={{ background: meta.color }}
-                          aria-hidden="true"
-                        />
-                        <div className="min-w-0">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <StatusPill
-                              variant={eventVariant(event.type)}
-                              label={label}
-                              dot={false}
-                            />
-                            <span className="truncate text-[12px] text-[var(--fg)]">
-                              {formatMessage(event)}
-                            </span>
-                          </div>
-                          <div className="mt-1 flex min-w-0 items-center gap-2 text-[10px] text-[var(--dim)]">
-                            {event.agent && (
-                              <span className="rounded-md bg-[var(--surface)] px-1.5 py-0.5 text-[var(--cyan)]">
-                                @{event.agent}
-                              </span>
-                            )}
-                            {event.taskId && <code>{event.taskId}</code>}
-                          </div>
-                        </div>
-                        <time
-                          dateTime={event.timestamp}
-                          title={fullTimestamp(event)}
-                          className="text-right text-[11px] tabular-nums text-[var(--dim)]"
-                        >
-                          {formatRelative(event)}
-                        </time>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
+            {eventTypes.map((type) => {
+              const active = selectedTypes.has(type);
+              const meta = EVENT_META[type] ?? DEFAULT_META;
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  data-testid="activity-filter"
+                  onClick={() => toggleType(type)}
+                  className={`h-7 rounded-md border px-2 text-[11px] transition-colors ${
+                    active
+                      ? "border-[var(--accent)] bg-[var(--surface-active)]"
+                      : "border-[var(--border-weak)] bg-[var(--bg-strong)] hover:bg-[var(--surface-hover)]"
+                  }`}
+                  style={{ color: active ? "var(--accent)" : meta.color }}
+                >
+                  {type.replaceAll("_", " ")}
+                </button>
+              );
+            })}
+            {(selectedTypes.size > 0 || query || kpiFilter !== "all") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setKpiFilter("all");
+                  setSelectedTypes(new Set());
+                  setQuery("");
+                }}
+                className="h-7 rounded-md border border-[var(--border-weak)] px-2 text-[11px] text-[var(--dim)] hover:text-[var(--fg)]"
+              >
+                clear
+              </button>
+            )}
           </div>
-        )}
+          {groups.length === 0 ? (
+            <EmptyState
+              title="No activity yet"
+              body="New dispatches, completions, retries, and errors will appear here."
+            />
+          ) : (
+            <div className="space-y-4">
+              {groups.map((group) => (
+                <section key={group.key}>
+                  <SectionHeader
+                    label={group.label}
+                    rightSlot={
+                      <span className="text-[10px] tabular-nums text-[var(--dim)]">
+                        {group.rows.length}
+                      </span>
+                    }
+                    className="sticky top-0 z-10 bg-[var(--bg)] py-1"
+                  />
+                  <div className="divide-y divide-[var(--border-weak)] overflow-hidden rounded-md border border-[var(--border-weak)] bg-[var(--bg-strong)]">
+                    {group.rows.map((event, index) => {
+                      const meta = EVENT_META[event.type] ?? DEFAULT_META;
+                      const label = (EVENT_META[event.type]?.label ?? event.type).replaceAll(
+                        "_",
+                        " ",
+                      );
+                      return (
+                        <div
+                          key={`${event.timestamp}-${event.type}-${index}`}
+                          data-testid="activity-event"
+                          className="grid grid-cols-[10px_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 hover:bg-[var(--surface-hover)]"
+                        >
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{ background: meta.color }}
+                            aria-hidden="true"
+                          />
+                          <div className="min-w-0">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <StatusPill
+                                variant={eventVariant(event.type)}
+                                label={label}
+                                dot={false}
+                              />
+                              <span className="truncate text-[12px] text-[var(--fg)]">
+                                {formatMessage(event)}
+                              </span>
+                            </div>
+                            <div className="mt-1 flex min-w-0 items-center gap-2 text-[10px] text-[var(--dim)]">
+                              {event.agent && (
+                                <span className="rounded-md bg-[var(--surface)] px-1.5 py-0.5 text-[var(--cyan)]">
+                                  @{event.agent}
+                                </span>
+                              )}
+                              {event.taskId && <code>{event.taskId}</code>}
+                            </div>
+                          </div>
+                          <time
+                            dateTime={event.timestamp}
+                            title={fullTimestamp(event)}
+                            className="text-right text-[11px] tabular-nums text-[var(--dim)]"
+                          >
+                            {formatRelative(event)}
+                          </time>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
         </div>
       </PanelBody>
     </Panel>

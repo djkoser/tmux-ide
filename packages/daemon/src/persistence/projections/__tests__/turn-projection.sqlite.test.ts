@@ -26,7 +26,11 @@ import { makeChatEventStore, type ChatEventStore } from "../../chat-event-store.
 import { makeInMemoryCursorStore } from "../../types.ts";
 import { makeTurnProjection } from "../turn-projection.ts";
 
-function turnStarted(threadId: string, turnId: string, ts = "2026-01-01T00:00:00.000Z"): ChatThreadEvent {
+function turnStarted(
+  threadId: string,
+  turnId: string,
+  ts = "2026-01-01T00:00:00.000Z",
+): ChatThreadEvent {
   return {
     type: "chat.turn.started",
     threadId,
@@ -35,7 +39,11 @@ function turnStarted(threadId: string, turnId: string, ts = "2026-01-01T00:00:00
   };
 }
 
-function turnCompleted(threadId: string, turnId: string, ts = "2026-01-01T00:01:00.000Z"): ChatThreadEvent {
+function turnCompleted(
+  threadId: string,
+  turnId: string,
+  ts = "2026-01-01T00:01:00.000Z",
+): ChatThreadEvent {
   return {
     type: "chat.turn.completed",
     threadId,

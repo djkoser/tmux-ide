@@ -421,11 +421,7 @@ export function AppSidebar() {
                 closeMobile();
               }}
             >
-              {activeProject ? (
-                <FolderOpen aria-hidden="true" />
-              ) : (
-                <Folder aria-hidden="true" />
-              )}
+              {activeProject ? <FolderOpen aria-hidden="true" /> : <Folder aria-hidden="true" />}
               <span className="truncate font-medium">{activeProject ?? "Overview"}</span>
               <ChevronDown
                 aria-hidden="true"
@@ -533,10 +529,7 @@ function buildOverviewItems(args: OverviewArgs): SidebarItem[] {
   return [sessionsSection];
 }
 
-function projectToSidebarLink(
-  project: MergedProject,
-  onPick: (name: string) => void,
-): SidebarItem {
+function projectToSidebarLink(project: MergedProject, onPick: (name: string) => void): SidebarItem {
   const session = project.session;
   const badge =
     session && session.stats && session.stats.totalTasks > 0

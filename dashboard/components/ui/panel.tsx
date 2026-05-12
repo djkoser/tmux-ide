@@ -12,14 +12,7 @@ interface PanelProps {
   testId?: string;
 }
 
-export function Panel({
-  variant = "grow",
-  width,
-  className,
-  style,
-  children,
-  testId,
-}: PanelProps) {
+export function Panel({ variant = "grow", width, className, style, children, testId }: PanelProps) {
   return (
     <div
       data-slot="panel"
@@ -71,14 +64,10 @@ export function PanelHeader({
       {leadingAction}
       <div className="flex min-w-0 flex-1 items-center gap-2">
         {title && (
-          <span className="truncate text-[var(--fg)] font-medium tracking-[-0.005em]">
-            {title}
-          </span>
+          <span className="truncate text-[var(--fg)] font-medium tracking-[-0.005em]">{title}</span>
         )}
         {badge}
-        {subtitle && (
-          <span className="truncate text-[11px] text-[var(--dim)]">{subtitle}</span>
-        )}
+        {subtitle && <span className="truncate text-[11px] text-[var(--dim)]">{subtitle}</span>}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-1">{actions}</div>}
     </header>

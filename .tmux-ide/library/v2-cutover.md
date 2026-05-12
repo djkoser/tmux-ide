@@ -12,11 +12,11 @@ inputs and redirects `/` → `/v2` when either is truthy. Otherwise it returns
 `null`, which is the existing v1 behavior (NavigationState in `AppShell`
 chooses what to render).
 
-| Source     | Value                | Result               |
-| ---------- | -------------------- | -------------------- |
-| Env var    | `NEXT_PUBLIC_V2_ROOT=true` | Redirect `/` → `/v2` |
-| Query      | `?v2=1` or `?v2=true`     | Redirect `/` → `/v2` |
-| Neither    | (unset / any other)       | v1 root, no redirect |
+| Source  | Value                      | Result               |
+| ------- | -------------------------- | -------------------- |
+| Env var | `NEXT_PUBLIC_V2_ROOT=true` | Redirect `/` → `/v2` |
+| Query   | `?v2=1` or `?v2=true`      | Redirect `/` → `/v2` |
+| Neither | (unset / any other)        | v1 root, no redirect |
 
 The env var wins for a default-state cutover (sticky for everyone hitting
 `/`). The query param is the override for ad-hoc testing without needing to

@@ -13,11 +13,7 @@ import {
   SurfaceCard,
   type StatusPillVariant,
 } from "@/components/ui";
-import {
-  deleteTaskApi,
-  updateTask,
-  type EventData,
-} from "@/lib/api";
+import { deleteTaskApi, updateTask, type EventData } from "@/lib/api";
 import type { AgentDetail, Goal, Task } from "@/lib/types";
 import { useToasts } from "@/lib/useToasts";
 import { STATUS_COLUMNS, STATUS_LABELS, type TaskStatus } from "./kanban-types";
@@ -106,7 +102,9 @@ export function TaskDetailPanel({
 
   const dependencies = useMemo(() => {
     if (!task) return [];
-    return task.depends_on.map((id) => allTasks.find((t) => t.id === id) ?? { id, status: "todo" as TaskStatus, title: id });
+    return task.depends_on.map(
+      (id) => allTasks.find((t) => t.id === id) ?? { id, status: "todo" as TaskStatus, title: id },
+    );
   }, [allTasks, task]);
 
   const persistFields = useCallback(
@@ -167,11 +165,7 @@ export function TaskDetailPanel({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        side="right"
-        data-testid="task-detail-panel"
-        className="w-full max-w-[480px]"
-      >
+      <DialogContent side="right" data-testid="task-detail-panel" className="w-full max-w-[480px]">
         <DialogTitle className="sr-only">{task ? `Task ${task.id}` : "Task detail"}</DialogTitle>
         {!task ? (
           <EmptyState title="No task selected" />
@@ -353,11 +347,7 @@ export function TaskDetailPanel({
                       <Trash2 aria-hidden="true" size={13} />
                       Confirm delete
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setConfirmDelete(false)}
-                    >
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}>
                       Cancel
                     </Button>
                   </>

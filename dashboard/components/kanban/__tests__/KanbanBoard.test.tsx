@@ -102,10 +102,7 @@ describe("KanbanBoard", () => {
   });
 
   it("switches column composition when group-by changes to priority", async () => {
-    const tasks = [
-      makeTask({ id: "001", priority: 1 }),
-      makeTask({ id: "002", priority: 4 }),
-    ];
+    const tasks = [makeTask({ id: "001", priority: 1 }), makeTask({ id: "002", priority: 4 })];
     render(<KanbanBoard {...baseProps} tasks={tasks} />);
     const groupBtn = screen.getByTestId("kanban-groupby-priority");
     await act(async () => {
@@ -118,10 +115,7 @@ describe("KanbanBoard", () => {
   });
 
   it("supports cmd-click multi-select and shows the bulk actions bar", async () => {
-    const tasks = [
-      makeTask({ id: "001" }),
-      makeTask({ id: "002" }),
-    ];
+    const tasks = [makeTask({ id: "001" }), makeTask({ id: "002" })];
     render(<KanbanBoard {...baseProps} tasks={tasks} />);
     fireEvent.click(screen.getByTestId("task-card-001"), { metaKey: true });
     fireEvent.click(screen.getByTestId("task-card-002"), { metaKey: true });
@@ -137,8 +131,9 @@ describe("KanbanBoard", () => {
     });
     await waitFor(() => {
       const calls = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls;
-      const updateCall = calls.find(([url, init]) =>
-        String(url).includes("/api/project/alpha/task/001") && init?.method === "POST",
+      const updateCall = calls.find(
+        ([url, init]) =>
+          String(url).includes("/api/project/alpha/task/001") && init?.method === "POST",
       );
       expect(updateCall).toBeTruthy();
       expect(updateCall![1]?.body).toContain("in-progress");
@@ -173,16 +168,13 @@ describe("KanbanBoard", () => {
     await waitFor(() => {
       expect(screen.getByTestId("task-detail-panel")).toBeTruthy();
     });
-    expect(
-      (screen.getByTestId("task-panel-title") as HTMLInputElement).value,
-    ).toBe("Detailed task");
+    expect((screen.getByTestId("task-panel-title") as HTMLInputElement).value).toBe(
+      "Detailed task",
+    );
   });
 
   it("supports keyboard navigation with j/k and toggles selection with x", async () => {
-    const tasks = [
-      makeTask({ id: "001", priority: 1 }),
-      makeTask({ id: "002", priority: 2 }),
-    ];
+    const tasks = [makeTask({ id: "001", priority: 1 }), makeTask({ id: "002", priority: 2 })];
     render(<KanbanBoard {...baseProps} tasks={tasks} />);
     await act(async () => {
       fireEvent.keyDown(window, { key: "j" });
@@ -201,10 +193,7 @@ describe("KanbanBoard", () => {
   });
 
   it("clears all filters when the clear-all link is pressed", async () => {
-    const tasks = [
-      makeTask({ id: "001", title: "Foo" }),
-      makeTask({ id: "002", title: "Bar" }),
-    ];
+    const tasks = [makeTask({ id: "001", title: "Foo" }), makeTask({ id: "002", title: "Bar" })];
     render(<KanbanBoard {...baseProps} tasks={tasks} />);
     await act(async () => {
       fireEvent.change(screen.getByTestId("kanban-filter-search"), {
@@ -215,9 +204,7 @@ describe("KanbanBoard", () => {
     await act(async () => {
       fireEvent.click(screen.getByTestId("kanban-filter-clear"));
     });
-    expect(
-      (screen.getByTestId("kanban-filter-search") as HTMLInputElement).value,
-    ).toBe("");
+    expect((screen.getByTestId("kanban-filter-search") as HTMLInputElement).value).toBe("");
   });
 
   it("opens the create task dialog from the header button", async () => {

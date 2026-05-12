@@ -2,7 +2,12 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { once } from "node:events";
 import { accessSync, constants } from "node:fs";
 
-import { CodexAgentExitedError, CodexAgentSpawnError, CodexProtocolError, CodexRpcError } from "./errors.ts";
+import {
+  CodexAgentExitedError,
+  CodexAgentSpawnError,
+  CodexProtocolError,
+  CodexRpcError,
+} from "./errors.ts";
 import { AGENT_METHODS, CLIENT_METHODS } from "./methods.ts";
 import { makeJsonRpcEndpoint } from "./protocol.ts";
 import {
@@ -207,7 +212,10 @@ export async function spawnCodexClient(opts: SpawnCodexClientOptions): Promise<C
 
   return {
     async initialize(): Promise<CodexInitializeResponse> {
-      return (await endpoint.request(AGENT_METHODS.initialize, defaultInitializeRequest())) as CodexInitializeResponse;
+      return (await endpoint.request(
+        AGENT_METHODS.initialize,
+        defaultInitializeRequest(),
+      )) as CodexInitializeResponse;
     },
     async newConversation(req: NewConversationRequest): Promise<NewConversationResponse> {
       return (await endpoint.request(AGENT_METHODS.thread_start, req)) as NewConversationResponse;

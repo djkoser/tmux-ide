@@ -17,7 +17,9 @@ describe("ACP schema boundary validation", () => {
   });
 
   test("rejects a bad session notification", () => {
-    expect(() => SessionNotificationZ.parse({ sessionId: "s1", update: { content: "nope" } })).toThrow();
+    expect(() =>
+      SessionNotificationZ.parse({ sessionId: "s1", update: { content: "nope" } }),
+    ).toThrow();
   });
 
   test("decodes a permission request", () => {

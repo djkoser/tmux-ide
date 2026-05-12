@@ -27,10 +27,7 @@ export interface CodexEventDeps {
   resolveActivePrompt(stopReason: "end_turn" | "refusal", turnId?: string): void;
 }
 
-export function handleCodexAgentEvent(
-  event: CodexAgentEvent,
-  deps: CodexEventDeps,
-): void {
+export function handleCodexAgentEvent(event: CodexAgentEvent, deps: CodexEventDeps): void {
   if (event.method === CODEX_CLIENT_METHODS.turn_started) return;
 
   if (event.method === CODEX_CLIENT_METHODS.turn_completed) {

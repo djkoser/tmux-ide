@@ -24,7 +24,7 @@ afterEach(() => {
 
 describe("ls", () => {
   it("returns sessions array via CLI --json", () => {
-    const result = spawnSync("node", [cli, "ls", "--json"], {
+    const result = spawnSync("bun", [cli, "ls", "--json"], {
       encoding: "utf-8",
       timeout: 10000,
     });
@@ -34,7 +34,7 @@ describe("ls", () => {
   });
 
   it("parses session list with expected fields", () => {
-    const result = spawnSync("node", [cli, "ls", "--json"], {
+    const result = spawnSync("bun", [cli, "ls", "--json"], {
       encoding: "utf-8",
       timeout: 10000,
     });
@@ -48,7 +48,7 @@ describe("ls", () => {
   });
 
   it("returns valid JSON structure even if sessions exist", () => {
-    const result = spawnSync("node", [cli, "ls", "--json"], {
+    const result = spawnSync("bun", [cli, "ls", "--json"], {
       encoding: "utf-8",
       timeout: 10000,
     });
@@ -66,7 +66,7 @@ describe("ls", () => {
 
   it("prints human-readable output without --json", () => {
     // Just verify it doesn't crash and produces output
-    const result = spawnSync("node", [cli, "ls"], {
+    const result = spawnSync("bun", [cli, "ls"], {
       encoding: "utf-8",
       timeout: 10000,
     });

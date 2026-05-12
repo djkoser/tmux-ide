@@ -94,6 +94,7 @@ export interface ChatReactorServiceShape {
   readonly raw: Reactor<PersistedChatEvent>;
 }
 
-export class ChatReactorService extends Context.Tag(
-  "@tmux-ide/daemon/runtime/ChatReactorService",
-)<ChatReactorService, ChatReactorServiceShape>() {}
+export class ChatReactorService extends Context.Tag("@tmux-ide/daemon/runtime/ChatReactorService")<
+  ChatReactorService,
+  ChatReactorServiceShape
+>() {}

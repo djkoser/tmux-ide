@@ -104,7 +104,10 @@ export function makeJsonRpcEndpoint(opts: {
     }
   }
 
-  function respond(id: number | string, response: { result?: unknown; error?: CodexJsonRpcErrorPayload }) {
+  function respond(
+    id: number | string,
+    response: { result?: unknown; error?: CodexJsonRpcErrorPayload },
+  ) {
     // Codex app-server uses JSON-RPC shapes over JSONL, but omits the
     // `jsonrpc: "2.0"` member that ACP includes.
     write({ id, ...response });
@@ -113,7 +116,9 @@ export function makeJsonRpcEndpoint(opts: {
   async function handleIncomingRequest(request: CodexJsonRpcRequest) {
     try {
       if (!incomingRequestHandler) {
-        respond(request.id, { error: { code: -32601, message: `Method not found: ${request.method}` } });
+        respond(request.id, {
+          error: { code: -32601, message: `Method not found: ${request.method}` },
+        });
         return;
       }
       const result = await incomingRequestHandler(request);
@@ -173,10 +178,14 @@ export function makeJsonRpcEndpoint(opts: {
   }
 
   opts.input.on("data", handleChunk);
-  opts.input.on("error", (err) => finish(new CodexProtocolError("Codex input stream failed", { cause: err })));
+  opts.input.on("error", (err) =>
+    finish(new CodexProtocolError("Codex input stream failed", { cause: err })),
+  );
   opts.input.on("close", () => finish(new CodexAgentExitedError()));
   opts.input.on("end", () => finish(new CodexAgentExitedError()));
-  opts.output.on?.("error", (err) => finish(new CodexProtocolError("Codex output stream failed", { cause: err })));
+  opts.output.on?.("error", (err) =>
+    finish(new CodexProtocolError("Codex output stream failed", { cause: err })),
+  );
 
   return {
     request(method: string, params?: unknown): Promise<unknown> {

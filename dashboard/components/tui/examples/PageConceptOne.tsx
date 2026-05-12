@@ -1,12 +1,12 @@
-'use client';
+"use client";
 
-import styles from '@components/examples/PageConceptOne.module.css';
+import styles from "@components/examples/PageConceptOne.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
-import Card from '@components/Card';
-import DataTable from '@components/DataTable';
-import Dialog from '@components/Dialog';
+import Card from "@components/Card";
+import DataTable from "@components/DataTable";
+import Dialog from "@components/Dialog";
 
 const PageConceptOne = (props) => {
   return (
@@ -17,12 +17,12 @@ const PageConceptOne = (props) => {
             <Card title="SECTION A">
               <DataTable
                 data={[
-                  ['HEADING A', 'HEADING B'],
-                  ['DATA 1', 'DATA 2'],
-                  ['DATA 3', 'DATA 4'],
-                  ['DATA 5', 'DATA 6'],
-                  ['DATA 7', 'DATA 8'],
-                  ['DATA 9', 'DATA 10'],
+                  ["HEADING A", "HEADING B"],
+                  ["DATA 1", "DATA 2"],
+                  ["DATA 3", "DATA 4"],
+                  ["DATA 5", "DATA 6"],
+                  ["DATA 7", "DATA 8"],
+                  ["DATA 9", "DATA 10"],
                 ]}
               />
             </Card>
@@ -32,12 +32,12 @@ const PageConceptOne = (props) => {
             <Card title="SECTION B">
               <DataTable
                 data={[
-                  ['HEADING A', 'HEADING B'],
-                  ['DATA 1', 'DATA 2'],
-                  ['DATA 3', 'DATA 4'],
-                  ['DATA 5', 'DATA 6'],
-                  ['DATA 7', 'DATA 8'],
-                  ['DATA 9', 'DATA 10'],
+                  ["HEADING A", "HEADING B"],
+                  ["DATA 1", "DATA 2"],
+                  ["DATA 3", "DATA 4"],
+                  ["DATA 5", "DATA 6"],
+                  ["DATA 7", "DATA 8"],
+                  ["DATA 9", "DATA 10"],
                 ]}
               />
             </Card>
@@ -57,12 +57,12 @@ const PageConceptOne = (props) => {
             <Card title="SECTION C">
               <DataTable
                 data={[
-                  ['HEADING A', 'HEADING B'],
-                  ['DATA 1', 'DATA 2'],
-                  ['DATA 3', 'DATA 4'],
-                  ['DATA 5', 'DATA 6'],
-                  ['DATA 7', 'DATA 8'],
-                  ['DATA 9', 'DATA 10'],
+                  ["HEADING A", "HEADING B"],
+                  ["DATA 1", "DATA 2"],
+                  ["DATA 3", "DATA 4"],
+                  ["DATA 5", "DATA 6"],
+                  ["DATA 7", "DATA 8"],
+                  ["DATA 9", "DATA 10"],
                 ]}
               />
             </Card>
@@ -72,12 +72,12 @@ const PageConceptOne = (props) => {
             <Card title="SECTION D">
               <DataTable
                 data={[
-                  ['HEADING A', 'HEADING B'],
-                  ['DATA 1', 'DATA 2'],
-                  ['DATA 3', 'DATA 4'],
-                  ['DATA 5', 'DATA 6'],
-                  ['DATA 7', 'DATA 8'],
-                  ['DATA 9', 'DATA 10'],
+                  ["HEADING A", "HEADING B"],
+                  ["DATA 1", "DATA 2"],
+                  ["DATA 3", "DATA 4"],
+                  ["DATA 5", "DATA 6"],
+                  ["DATA 7", "DATA 8"],
+                  ["DATA 9", "DATA 10"],
                 ]}
               />
             </Card>
@@ -89,24 +89,24 @@ const PageConceptOne = (props) => {
           <Card title="SECTION E">
             <DataTable
               data={[
-                ['HEADING A', 'HEADING B'],
-                ['DATA 1', 'DATA 2'],
-                ['DATA 3', 'DATA 4'],
-                ['DATA 5', 'DATA 6'],
-                ['DATA 7', 'DATA 8'],
-                ['DATA 9', 'DATA 10'],
+                ["HEADING A", "HEADING B"],
+                ["DATA 1", "DATA 2"],
+                ["DATA 3", "DATA 4"],
+                ["DATA 5", "DATA 6"],
+                ["DATA 7", "DATA 8"],
+                ["DATA 9", "DATA 10"],
               ]}
             />
           </Card>
           <Card title="SECTION F">
             <DataTable
               data={[
-                ['HEADING A', 'HEADING B'],
-                ['DATA 1', 'DATA 2'],
-                ['DATA 3', 'DATA 4'],
-                ['DATA 5', 'DATA 6'],
-                ['DATA 7', 'DATA 8'],
-                ['DATA 9', 'DATA 10'],
+                ["HEADING A", "HEADING B"],
+                ["DATA 1", "DATA 2"],
+                ["DATA 3", "DATA 4"],
+                ["DATA 5", "DATA 6"],
+                ["DATA 7", "DATA 8"],
+                ["DATA 9", "DATA 10"],
               ]}
             />
           </Card>
@@ -115,24 +115,24 @@ const PageConceptOne = (props) => {
           <Card title="SECTION G">
             <DataTable
               data={[
-                ['HEADING A', 'HEADING B'],
-                ['DATA 1', 'DATA 2'],
-                ['DATA 3', 'DATA 4'],
-                ['DATA 5', 'DATA 6'],
-                ['DATA 7', 'DATA 8'],
-                ['DATA 9', 'DATA 10'],
+                ["HEADING A", "HEADING B"],
+                ["DATA 1", "DATA 2"],
+                ["DATA 3", "DATA 4"],
+                ["DATA 5", "DATA 6"],
+                ["DATA 7", "DATA 8"],
+                ["DATA 9", "DATA 10"],
               ]}
             />
           </Card>
           <Card title="SECTION H">
             <DataTable
               data={[
-                ['HEADING A', 'HEADING B'],
-                ['DATA 1', 'DATA 2'],
-                ['DATA 3', 'DATA 4'],
-                ['DATA 5', 'DATA 6'],
-                ['DATA 7', 'DATA 8'],
-                ['DATA 9', 'DATA 10'],
+                ["HEADING A", "HEADING B"],
+                ["DATA 1", "DATA 2"],
+                ["DATA 3", "DATA 4"],
+                ["DATA 5", "DATA 6"],
+                ["DATA 7", "DATA 8"],
+                ["DATA 9", "DATA 10"],
               ]}
             />
           </Card>
@@ -141,24 +141,24 @@ const PageConceptOne = (props) => {
           <Card title="SECTION I">
             <DataTable
               data={[
-                ['HEADING A', 'HEADING B'],
-                ['DATA 1', 'DATA 2'],
-                ['DATA 3', 'DATA 4'],
-                ['DATA 5', 'DATA 6'],
-                ['DATA 7', 'DATA 8'],
-                ['DATA 9', 'DATA 10'],
+                ["HEADING A", "HEADING B"],
+                ["DATA 1", "DATA 2"],
+                ["DATA 3", "DATA 4"],
+                ["DATA 5", "DATA 6"],
+                ["DATA 7", "DATA 8"],
+                ["DATA 9", "DATA 10"],
               ]}
             />
           </Card>
           <Card title="SECTION J">
             <DataTable
               data={[
-                ['HEADING A', 'HEADING B'],
-                ['DATA 1', 'DATA 2'],
-                ['DATA 3', 'DATA 4'],
-                ['DATA 5', 'DATA 6'],
-                ['DATA 7', 'DATA 8'],
-                ['DATA 9', 'DATA 10'],
+                ["HEADING A", "HEADING B"],
+                ["DATA 1", "DATA 2"],
+                ["DATA 3", "DATA 4"],
+                ["DATA 5", "DATA 6"],
+                ["DATA 7", "DATA 8"],
+                ["DATA 9", "DATA 10"],
               ]}
             />
           </Card>
@@ -167,24 +167,24 @@ const PageConceptOne = (props) => {
           <Card title="SECTION K">
             <DataTable
               data={[
-                ['HEADING A', 'HEADING B'],
-                ['DATA 1', 'DATA 2'],
-                ['DATA 3', 'DATA 4'],
-                ['DATA 5', 'DATA 6'],
-                ['DATA 7', 'DATA 8'],
-                ['DATA 9', 'DATA 10'],
+                ["HEADING A", "HEADING B"],
+                ["DATA 1", "DATA 2"],
+                ["DATA 3", "DATA 4"],
+                ["DATA 5", "DATA 6"],
+                ["DATA 7", "DATA 8"],
+                ["DATA 9", "DATA 10"],
               ]}
             />
           </Card>
           <Card title="SECTION L">
             <DataTable
               data={[
-                ['HEADING A', 'HEADING B'],
-                ['DATA 1', 'DATA 2'],
-                ['DATA 3', 'DATA 4'],
-                ['DATA 5', 'DATA 6'],
-                ['DATA 7', 'DATA 8'],
-                ['DATA 9', 'DATA 10'],
+                ["HEADING A", "HEADING B"],
+                ["DATA 1", "DATA 2"],
+                ["DATA 3", "DATA 4"],
+                ["DATA 5", "DATA 6"],
+                ["DATA 7", "DATA 8"],
+                ["DATA 9", "DATA 10"],
               ]}
             />
           </Card>
@@ -193,25 +193,25 @@ const PageConceptOne = (props) => {
           <Card title="SECTION M">
             <DataTable
               data={[
-                ['HEADING A', 'HEADING B'],
-                ['DATA 1', 'DATA 2'],
-                ['DATA 3', 'DATA 4'],
-                ['DATA 5', 'DATA 6'],
-                ['DATA 7', 'DATA 8'],
-                ['DATA 9', 'DATA 10'],
+                ["HEADING A", "HEADING B"],
+                ["DATA 1", "DATA 2"],
+                ["DATA 3", "DATA 4"],
+                ["DATA 5", "DATA 6"],
+                ["DATA 7", "DATA 8"],
+                ["DATA 9", "DATA 10"],
               ]}
             />
           </Card>
           <Card title="SECTION N">
-            {' '}
+            {" "}
             <DataTable
               data={[
-                ['HEADING A', 'HEADING B'],
-                ['DATA 1', 'DATA 2'],
-                ['DATA 3', 'DATA 4'],
-                ['DATA 5', 'DATA 6'],
-                ['DATA 7', 'DATA 8'],
-                ['DATA 9', 'DATA 10'],
+                ["HEADING A", "HEADING B"],
+                ["DATA 1", "DATA 2"],
+                ["DATA 3", "DATA 4"],
+                ["DATA 5", "DATA 6"],
+                ["DATA 7", "DATA 8"],
+                ["DATA 9", "DATA 10"],
               ]}
             />
           </Card>

@@ -87,13 +87,7 @@ export const DEFAULT_INTERACTION_MODE: InteractionMode = "default";
  * planner, validator, researcher). Used as default-permission and
  * UI-grouping metadata only.
  */
-export const SessionRoleZ = z.enum([
-  "lead",
-  "teammate",
-  "planner",
-  "validator",
-  "researcher",
-]);
+export const SessionRoleZ = z.enum(["lead", "teammate", "planner", "validator", "researcher"]);
 export type SessionRole = z.infer<typeof SessionRoleZ>;
 
 // ---------------------------------------------------------------------------
@@ -559,4 +553,3 @@ export const ProviderTokenUsageZ = z.object({
   totalCostUsd: z.number().nonnegative().optional(),
 });
 export type ProviderTokenUsage = z.infer<typeof ProviderTokenUsageZ>;
-

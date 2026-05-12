@@ -45,7 +45,9 @@ export function CheckpointChip({ checkpoint, onRevert }: CheckpointChipProps) {
           ●
         </span>
         <span>{STATUS_LABEL[checkpoint.status]}</span>
-        <span className="text-[var(--dim)]">{fileCount} file{fileCount === 1 ? "" : "s"}</span>
+        <span className="text-[var(--dim)]">
+          {fileCount} file{fileCount === 1 ? "" : "s"}
+        </span>
       </button>
       {open ? (
         <div
@@ -60,10 +62,7 @@ export function CheckpointChip({ checkpoint, onRevert }: CheckpointChipProps) {
           ) : (
             <ul data-testid="checkpoint-chip-files" className="max-h-48 overflow-y-auto">
               {checkpoint.files.map((f) => (
-                <li
-                  key={f.path}
-                  className="flex items-center justify-between gap-2 py-0.5"
-                >
+                <li key={f.path} className="flex items-center justify-between gap-2 py-0.5">
                   <span className="truncate text-[var(--fg-soft)]">{f.path}</span>
                   <span className="text-[10px] text-[var(--dim)]">
                     <span className="text-[var(--green)]">+{f.additions}</span>{" "}

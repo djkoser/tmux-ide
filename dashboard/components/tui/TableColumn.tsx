@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import styles from '@components/TableColumn.module.css';
+import styles from "@components/TableColumn.module.css";
 
-import * as React from 'react';
+import * as React from "react";
 
 type TableColumnProps = React.HTMLAttributes<HTMLTableCellElement> & {
   children?: React.ReactNode;
@@ -16,6 +16,6 @@ const TableColumn: React.FC<TableColumnProps> = ({ children, ...rest }) => {
   );
 };
 
-TableColumn.displayName = 'TableColumn';
+TableColumn.displayName = "TableColumn";
 
 export default TableColumn;

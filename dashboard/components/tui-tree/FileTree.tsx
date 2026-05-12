@@ -201,10 +201,7 @@ function filterEntries(
   return entries.filter((entry) => !entry.ignored);
 }
 
-function findEntry(
-  entries: ReadonlyArray<FileTreeEntry>,
-  path: string,
-): FileTreeEntry | null {
+function findEntry(entries: ReadonlyArray<FileTreeEntry>, path: string): FileTreeEntry | null {
   for (const entry of entries) {
     if (entry.path === path) return entry;
     if (entry.isDir && entry.children) {

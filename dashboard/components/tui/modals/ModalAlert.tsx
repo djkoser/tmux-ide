@@ -1,14 +1,14 @@
-'use client';
+"use client";
 
-import styles from '@components/modals/ModalAlert.module.css';
+import styles from "@components/modals/ModalAlert.module.css";
 
-import * as React from 'react';
-import * as Utilities from '@common/utilities';
+import * as React from "react";
+import * as Utilities from "@common/utilities";
 
-import { useModals } from '@components/page/ModalContext';
+import { useModals } from "@components/page/ModalContext";
 
-import Button from '@components/Button';
-import Card from '@components/Card';
+import Button from "@components/Button";
+import Card from "@components/Card";
 
 interface ModalAlertProps {
   buttonText?: string | any;
@@ -24,7 +24,9 @@ function ModalAlert({ message, buttonText }: ModalAlertProps) {
         {message}
         <br />
         <br />
-        <Button onClick={() => close()}>{Utilities.isEmpty(buttonText) ? 'Close' : buttonText}</Button>
+        <Button onClick={() => close()}>
+          {Utilities.isEmpty(buttonText) ? "Close" : buttonText}
+        </Button>
       </Card>
     </div>
   );

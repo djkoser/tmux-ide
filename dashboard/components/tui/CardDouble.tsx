@@ -1,7 +1,7 @@
-import styles from '@components/CardDouble.module.css';
+import styles from "@components/CardDouble.module.css";
 
-import * as React from 'react';
-import * as Utilities from '@common/utilities';
+import * as React from "react";
+import * as Utilities from "@common/utilities";
 
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   children?: React.ReactNode;
@@ -19,7 +19,7 @@ const CardDouble: React.FC<CardProps> = ({ children, mode, title, style, ...rest
     </header>
   );
 
-  if (mode === 'left') {
+  if (mode === "left") {
     titleElement = (
       <header className={styles.action}>
         <div className={styles.leftCorner} aria-hidden="true"></div>
@@ -29,7 +29,7 @@ const CardDouble: React.FC<CardProps> = ({ children, mode, title, style, ...rest
     );
   }
 
-  if (mode === 'right') {
+  if (mode === "right") {
     titleElement = (
       <header className={styles.action}>
         <div className={styles.left} aria-hidden="true"></div>

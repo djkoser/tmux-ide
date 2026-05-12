@@ -20,7 +20,14 @@
  */
 
 import { z } from "zod";
-import { routes, type RouteBody, type RouteName, type RouteParams, type RouteQuery, type RouteResponse } from "./routes.ts";
+import {
+  routes,
+  type RouteBody,
+  type RouteName,
+  type RouteParams,
+  type RouteQuery,
+  type RouteResponse,
+} from "./routes.ts";
 
 export interface ApiClientOptions {
   apiBaseUrl: string;
@@ -81,9 +88,7 @@ export interface ApiClient {
     name: R,
     opts?: CallOptions<R>,
   ): Promise<
-    (typeof routes)[R] extends { nullableOn404: true }
-      ? RouteResponse<R> | null
-      : RouteResponse<R>
+    (typeof routes)[R] extends { nullableOn404: true } ? RouteResponse<R> | null : RouteResponse<R>
   >;
 }
 

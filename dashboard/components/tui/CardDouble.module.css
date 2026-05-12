@@ -56,7 +56,8 @@
   border-top-style: double;
   border-left: var(--card-double-border-width) solid var(--theme-text);
   border-left-style: double;
-  padding: calc(var(--card-double-top-gutter) * var(--theme-line-height-base)) calc(1ch - 6px) 0px 1ch;
+  padding: calc(var(--card-double-top-gutter) * var(--theme-line-height-base)) calc(1ch - 6px) 0px
+    1ch;
 }
 
 .right {
@@ -75,7 +76,8 @@
   border-top-style: double;
   border-right: var(--card-double-border-width) solid var(--theme-text);
   border-right-style: double;
-  padding: calc(var(--card-double-top-gutter) * var(--theme-line-height-base)) 1ch 0px calc(1ch - 6px);
+  padding: calc(var(--card-double-top-gutter) * var(--theme-line-height-base)) 1ch 0px
+    calc(1ch - 6px);
 }
 
 .title {

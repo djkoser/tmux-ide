@@ -57,7 +57,15 @@ const SNAPSHOT = {
     validationSummary: { total: 0, passing: 0, failing: 0, pending: 0, blocked: 0 },
   },
   milestones: [
-    { id: "M1", title: "Foundation", description: "", status: "active", order: 1, taskCount: 1, tasksDone: 0 },
+    {
+      id: "M1",
+      title: "Foundation",
+      description: "",
+      status: "active",
+      order: 1,
+      taskCount: 1,
+      tasksDone: 0,
+    },
   ],
   goals: [],
   tasks: [],

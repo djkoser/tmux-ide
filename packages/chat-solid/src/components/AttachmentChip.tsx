@@ -1,9 +1,6 @@
 import type { ComposerAttachment } from "../types";
 
-export function AttachmentChip(props: {
-  attachment: ComposerAttachment;
-  onRemove(): void;
-}) {
+export function AttachmentChip(props: { attachment: ComposerAttachment; onRemove(): void }) {
   const label = () =>
     props.attachment.kind === "terminal"
       ? `Terminal: ${props.attachment.paneTitle}`

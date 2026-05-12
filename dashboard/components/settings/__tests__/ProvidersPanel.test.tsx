@@ -51,9 +51,7 @@ describe("ProvidersPanel", () => {
     fireEvent.change(screen.getByTestId("providers-draft-model"), {
       target: { value: "claude" },
     });
-    expect((screen.getByTestId("providers-draft-add") as HTMLButtonElement).disabled).toBe(
-      true,
-    );
+    expect((screen.getByTestId("providers-draft-add") as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("hides apiKey field for local-ollama and accepts only model + base url", () => {
@@ -77,15 +75,19 @@ describe("ProvidersPanel", () => {
   });
 
   it("removes a provider and persists the deletion to localStorage", () => {
-    render(<ProvidersPanel initialProviders={[
-      {
-        id: "ant",
-        kind: "anthropic",
-        displayName: "Claude",
-        model: "claude-opus-4-7",
-        apiKey: "sk-x",
-      },
-    ]} />);
+    render(
+      <ProvidersPanel
+        initialProviders={[
+          {
+            id: "ant",
+            kind: "anthropic",
+            displayName: "Claude",
+            model: "claude-opus-4-7",
+            apiKey: "sk-x",
+          },
+        ]}
+      />,
+    );
     fireEvent.click(screen.getByTestId("providers-remove"));
     expect(screen.getByTestId("providers-empty")).toBeTruthy();
     const stored = window.localStorage.getItem("tmux-ide.providers.v1");
@@ -93,15 +95,19 @@ describe("ProvidersPanel", () => {
   });
 
   it("rejects duplicate ids on add (silently — button does nothing)", () => {
-    render(<ProvidersPanel initialProviders={[
-      {
-        id: "dup",
-        kind: "anthropic",
-        displayName: "Claude",
-        model: "m",
-        apiKey: "k",
-      },
-    ]} />);
+    render(
+      <ProvidersPanel
+        initialProviders={[
+          {
+            id: "dup",
+            kind: "anthropic",
+            displayName: "Claude",
+            model: "m",
+            apiKey: "k",
+          },
+        ]}
+      />,
+    );
     fireEvent.change(screen.getByTestId("providers-draft-id"), {
       target: { value: "dup" },
     });

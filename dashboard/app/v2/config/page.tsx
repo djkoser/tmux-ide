@@ -252,8 +252,8 @@ export default function ConfigV2Page() {
         {!sessionName && (
           <Card title="NO SESSIONS" mode="left">
             <p className="text-[var(--dim)]">
-              No tmux-ide sessions discovered. Run <code>tmux-ide init</code> in a project to
-              create one.
+              No tmux-ide sessions discovered. Run <code>tmux-ide init</code> in a project to create
+              one.
             </p>
           </Card>
         )}
@@ -401,8 +401,8 @@ function GeneralTab({
           <Badge>{rowsCount}</Badge>
         </RowSpaceBetween>
         <p className="text-[var(--dim)]">
-          Pane layout editing isn&apos;t exposed in this MVP form — edit{" "}
-          <code>rows:</code> directly in the Raw YAML tab, then Save.
+          Pane layout editing isn&apos;t exposed in this MVP form — edit <code>rows:</code> directly
+          in the Raw YAML tab, then Save.
         </p>
       </Card>
     </>

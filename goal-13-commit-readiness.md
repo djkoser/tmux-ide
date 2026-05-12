@@ -9,14 +9,14 @@
 
 ## 1. Test matrix — clean
 
-| Suite                                                     | Result               |
-| --------------------------------------------------------- | -------------------- |
-| `pnpm --filter @tmux-ide/contracts test` (vitest)         | **66/66 pass**       |
-| `pnpm --filter @tmux-ide/daemon exec vitest run`          | **240/240 pass** (12 files) |
-| `dashboard` ProvidersPanel test                           | **6/6 pass**         |
-| `pnpm --filter @tmux-ide/contracts exec tsc --noEmit`     | **clean**            |
-| `pnpm --filter @tmux-ide/daemon exec tsc --noEmit`        | **44 pre-existing errors, all in `src/cli.ts` (commander typing drift) and `src/chat/chat-integration-harness.ts` (missing `sessionStore` field). None in T079 surfaces.** |
-| `dashboard` `tsc --noEmit`                                | **pre-existing errors in scratch TUI examples, react-dom typings, and `lib/__tests__/*` — none in `ProvidersPanel.tsx` or its test** |
+| Suite                                                 | Result                                                                                                                                                                     |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm --filter @tmux-ide/contracts test` (vitest)     | **66/66 pass**                                                                                                                                                             |
+| `pnpm --filter @tmux-ide/daemon exec vitest run`      | **240/240 pass** (12 files)                                                                                                                                                |
+| `dashboard` ProvidersPanel test                       | **6/6 pass**                                                                                                                                                               |
+| `pnpm --filter @tmux-ide/contracts exec tsc --noEmit` | **clean**                                                                                                                                                                  |
+| `pnpm --filter @tmux-ide/daemon exec tsc --noEmit`    | **44 pre-existing errors, all in `src/cli.ts` (commander typing drift) and `src/chat/chat-integration-harness.ts` (missing `sessionStore` field). None in T079 surfaces.** |
+| `dashboard` `tsc --noEmit`                            | **pre-existing errors in scratch TUI examples, react-dom typings, and `lib/__tests__/*` — none in `ProvidersPanel.tsx` or its test**                                       |
 
 No merge-conflict markers anywhere in T079 artifacts. No duplicated files.
 
@@ -26,13 +26,13 @@ No merge-conflict markers anywhere in T079 artifacts. No duplicated files.
 
 Both panes raced T079, but the on-disk state is clean. One coherent copy of each file, no `.orig`/`.bak`/`.rej` siblings, no conflict markers.
 
-| Acceptance item | File | Status |
-| --- | --- | --- |
-| `ProviderKindZ`, `ProviderConfigZ` discriminated union, `ProviderInstanceZ`, `ProvidersFileZ` in contracts | `packages/contracts/src/chat-thread.ts` (lines 440–561) | ✓ canonical, includes wire-safe `ProviderInstanceSummaryZ` (redacted, `hasApiKey: boolean`) |
-| Single `provider-registry.ts` with 4 fetch-based adapters + generic-acp stub | `packages/daemon/src/chat/provider-registry.ts` (443 lines) | ✓ anthropic / openai / local-ollama / local-lmstudio + generic-acp stub, all `fetch`-injectable via `AdapterFactoryDeps` |
-| ≥20 unit tests for provider-registry | `packages/daemon/src/chat/provider-registry.test.ts` (497 lines) | ✓ **26 `it()` blocks** across 8 `describe()` groups |
-| `ProvidersPanel.tsx` with localStorage persistence | `dashboard/components/settings/ProvidersPanel.tsx` (241 lines) | ✓ reads/writes `STORAGE_KEY`, validates with `ProviderInstanceSummaryZ`, accompanied by `__tests__/ProvidersPanel.test.tsx` (6 tests) |
-| 6 new provider-abstraction scenarios | `packages/daemon/src/chat/provider-registry.test.ts:367` (`describe("provider-abstraction integration scenarios"…)`) | ✓ scenarios (a)–(f) present. **Note:** brief said `chat-integration.test.ts`, but they landed in `provider-registry.test.ts` instead. Intent satisfied; chat-integration.test.ts has 11 unchanged scenarios. |
+| Acceptance item                                                                                            | File                                                                                                                 | Status                                                                                                                                                                                                       |
+| ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ProviderKindZ`, `ProviderConfigZ` discriminated union, `ProviderInstanceZ`, `ProvidersFileZ` in contracts | `packages/contracts/src/chat-thread.ts` (lines 440–561)                                                              | ✓ canonical, includes wire-safe `ProviderInstanceSummaryZ` (redacted, `hasApiKey: boolean`)                                                                                                                  |
+| Single `provider-registry.ts` with 4 fetch-based adapters + generic-acp stub                               | `packages/daemon/src/chat/provider-registry.ts` (443 lines)                                                          | ✓ anthropic / openai / local-ollama / local-lmstudio + generic-acp stub, all `fetch`-injectable via `AdapterFactoryDeps`                                                                                     |
+| ≥20 unit tests for provider-registry                                                                       | `packages/daemon/src/chat/provider-registry.test.ts` (497 lines)                                                     | ✓ **26 `it()` blocks** across 8 `describe()` groups                                                                                                                                                          |
+| `ProvidersPanel.tsx` with localStorage persistence                                                         | `dashboard/components/settings/ProvidersPanel.tsx` (241 lines)                                                       | ✓ reads/writes `STORAGE_KEY`, validates with `ProviderInstanceSummaryZ`, accompanied by `__tests__/ProvidersPanel.test.tsx` (6 tests)                                                                        |
+| 6 new provider-abstraction scenarios                                                                       | `packages/daemon/src/chat/provider-registry.test.ts:367` (`describe("provider-abstraction integration scenarios"…)`) | ✓ scenarios (a)–(f) present. **Note:** brief said `chat-integration.test.ts`, but they landed in `provider-registry.test.ts` instead. Intent satisfied; chat-integration.test.ts has 11 unchanged scenarios. |
 
 No loser version to delete. No duplication. The wire-safe `ProviderInstanceSummaryZ` is already the canonical export.
 
@@ -123,11 +123,11 @@ app-electron/                              — Electron app skeleton (large, see
 
 ### 3f. Local-only / orphan flags
 
-* `.tmux-ide/` — local skills/library; **already gitignored**? No — listed as untracked. Verify before staging.
-* `ide.yml` — gitignored; the modified copy will not be staged.
-* `dashboard/tsconfig.tsbuildinfo` — build artifact; **must be unstaged** or added to `.gitignore`.
-* `.DS_Store` — none present in tree. ✓
-* `.tasks/` and `app-electron/.tasks/` — both gitignored already. ✓ No cwd-bug leakage to clean up.
+- `.tmux-ide/` — local skills/library; **already gitignored**? No — listed as untracked. Verify before staging.
+- `ide.yml` — gitignored; the modified copy will not be staged.
+- `dashboard/tsconfig.tsbuildinfo` — build artifact; **must be unstaged** or added to `.gitignore`.
+- `.DS_Store` — none present in tree. ✓
+- `.tasks/` and `app-electron/.tasks/` — both gitignored already. ✓ No cwd-bug leakage to clean up.
 
 ---
 
@@ -155,6 +155,7 @@ Three commits keep the diff reviewable:
 ### Commit 1 — goal 13 core (chat parity + provider abstraction)
 
 Scope:
+
 - `packages/contracts/**` (Zod schemas including `chat-thread.ts` provider types)
 - `packages/daemon/src/chat/**` (thread/turn/plan/checkpoint/provider-registry/provider-store)
 - `packages/daemon/src/command-center/**` (REST/SSE/WS)

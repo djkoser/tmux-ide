@@ -12,14 +12,14 @@ export function pluralize(text: string, count: number) {
 }
 
 export function getOrdinalNumber(n) {
-  return n + (n > 0 ? ['th', 'st', 'nd', 'rd'][(n > 3 && n < 21) || n % 10 > 3 ? 0 : n % 10] : '');
+  return n + (n > 0 ? ["th", "st", "nd", "rd"][(n > 3 && n < 21) || n % 10 > 3 ? 0 : n % 10] : "");
 }
 
 // NOTE(jimmylee)
 // Stolen from: https://github.com/JohannesKlauss/react-hotkeys-hook/blob/main/src/deepEqual.ts
 export function deepEqual(x: any, y: any): boolean {
   //@ts-ignore
-  return x && y && typeof x === 'object' && typeof y === 'object'
+  return x && y && typeof x === "object" && typeof y === "object"
     ? Object.keys(x).length === Object.keys(y).length &&
         //@ts-ignore
         Object.keys(x).reduce((isEqual, key) => isEqual && deepEqual(x[key], y[key]), true)
@@ -27,19 +27,19 @@ export function deepEqual(x: any, y: any): boolean {
 }
 
 export function getDomainFromEmailWithoutAnySubdomain(email: string): string {
-  const atIndex = email.lastIndexOf('@');
+  const atIndex = email.lastIndexOf("@");
   if (atIndex === -1) {
-    return '';
+    return "";
   }
 
   const domain = email.slice(atIndex + 1);
-  const domainParts = domain.split('.');
+  const domainParts = domain.split(".");
 
   if (domainParts.length < 2) {
-    return '';
+    return "";
   }
 
-  const mainDomain = domainParts.slice(-2).join('.');
+  const mainDomain = domainParts.slice(-2).join(".");
   return mainDomain;
 }
 
@@ -47,7 +47,7 @@ export function onHandleAppearanceModeChange(className?: string) {
   const body = document.body;
 
   body.classList.forEach((existingClass) => {
-    if (existingClass.startsWith('tint-')) {
+    if (existingClass.startsWith("tint-")) {
       body.classList.remove(existingClass);
     }
   });
@@ -61,7 +61,7 @@ export function onHandleAppearanceChange(className?: string) {
   const body = document.body;
 
   body.classList.forEach((existingClass) => {
-    if (existingClass.startsWith('theme-')) {
+    if (existingClass.startsWith("theme-")) {
       body.classList.remove(existingClass);
     }
   });
@@ -69,7 +69,7 @@ export function onHandleAppearanceChange(className?: string) {
   if (className) {
     body.classList.add(className);
   } else {
-    body.classList.add('theme-light');
+    body.classList.add("theme-light");
   }
 }
 
@@ -78,7 +78,7 @@ export function onHandleFontChange(className?: string) {
 
   if (className) {
     body.classList.forEach((existingClass) => {
-      if (existingClass.startsWith('font-')) {
+      if (existingClass.startsWith("font-")) {
         body.classList.remove(existingClass);
       }
     });
@@ -88,24 +88,24 @@ export function onHandleFontChange(className?: string) {
   }
 
   body.classList.forEach((existingClass) => {
-    if (existingClass.startsWith('font-')) {
+    if (existingClass.startsWith("font-")) {
       body.classList.remove(existingClass);
     }
   });
 }
 
 export function formatDollars(value: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
   }).format(value);
 }
 
 export function calculatePositionWithGutter(rect, objectWidth, viewportWidth, gutter = 24) {
   const right = viewportWidth - rect.right;
   const top = rect.top + rect.height + gutter;
-  const side = right + objectWidth >= viewportWidth ? 'left' : 'right';
-  const adjustedRight = side === 'left' ? viewportWidth - objectWidth - gutter : right;
+  const side = right + objectWidth >= viewportWidth ? "left" : "right";
+  const adjustedRight = side === "left" ? viewportWidth - objectWidth - gutter : right;
   return { top, right: adjustedRight, side };
 }
 
@@ -126,18 +126,18 @@ export function leftPad(input, length) {
     return input;
   }
 
-  const zeros = '0'.repeat(zerosNeeded);
+  const zeros = "0".repeat(zerosNeeded);
 
   return zeros + input;
 }
 
 export function toDateISOString(data: string) {
   const date = new Date(data);
-  const dayOfWeek = date.toLocaleDateString('en-US', {
-    weekday: 'long',
+  const dayOfWeek = date.toLocaleDateString("en-US", {
+    weekday: "long",
   });
-  const month = date.toLocaleDateString('en-US', {
-    month: 'long',
+  const month = date.toLocaleDateString("en-US", {
+    month: "long",
   });
   const dayOfMonth = getOrdinalNumber(date.getDate());
   const year = date.getFullYear();
@@ -147,7 +147,7 @@ export function toDateISOString(data: string) {
   return formattedDate;
 }
 
-export function elide(string, length = 140, emptyState = '...') {
+export function elide(string, length = 140, emptyState = "...") {
   if (isEmpty(string)) {
     return emptyState;
   }
@@ -160,11 +160,11 @@ export function elide(string, length = 140, emptyState = '...') {
 }
 
 export function bytesToSize(bytes: number, decimals: number = 2) {
-  if (bytes === 0) return '0 Bytes';
+  if (bytes === 0) return "0 Bytes";
 
   const k = 1000;
   const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+  const sizes = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
 
   const i = Math.floor(Math.log(bytes) / Math.log(k));
 
@@ -181,7 +181,7 @@ export function isEmpty(text: any) {
     return true;
   }
 
-  if (typeof text === 'object') {
+  if (typeof text === "object") {
     return true;
   }
 
@@ -196,27 +196,27 @@ export function isEmpty(text: any) {
 
 export function createSlug(text: any) {
   if (isEmpty(text)) {
-    return 'untitled';
+    return "untitled";
   }
 
-  const a = 'æøåàáäâèéëêìíïîòóöôùúüûñçßÿœæŕśńṕẃǵǹḿǘẍźḧ·/_,:;';
-  const b = 'aoaaaaaeeeeiiiioooouuuuncsyoarsnpwgnmuxzh------';
-  const p = new RegExp(a.split('').join('|'), 'g');
+  const a = "æøåàáäâèéëêìíïîòóöôùúüûñçßÿœæŕśńṕẃǵǹḿǘẍźḧ·/_,:;";
+  const b = "aoaaaaaeeeeiiiioooouuuuncsyoarsnpwgnmuxzh------";
+  const p = new RegExp(a.split("").join("|"), "g");
 
   return text
     .toString()
     .toLowerCase()
-    .replace(/\s+/g, '-') // Replace spaces with -
+    .replace(/\s+/g, "-") // Replace spaces with -
     .replace(p, (c) => b.charAt(a.indexOf(c))) // Replace special chars
-    .replace(/&/g, '-and-') // Replace & with 'and'
-    .replace(/[^\w\-]+/g, '') // Remove all non-word chars
-    .replace(/\-\-+/g, '-') // Replace multiple - with single -
-    .replace(/^-+/, '') // Trim - from start of text
-    .replace(/-+$/, ''); // Trim - from end of text
+    .replace(/&/g, "-and-") // Replace & with 'and'
+    .replace(/[^\w\-]+/g, "") // Remove all non-word chars
+    .replace(/\-\-+/g, "-") // Replace multiple - with single -
+    .replace(/^-+/, "") // Trim - from start of text
+    .replace(/-+$/, ""); // Trim - from end of text
 }
 
 export function isUrl(string: any) {
-  if (typeof string !== 'string') {
+  if (typeof string !== "string") {
     return false;
   }
 
@@ -230,7 +230,10 @@ export function isUrl(string: any) {
     return false;
   }
 
-  if (localhostDomainRE.test(everythingAfterProtocol) || nonLocalhostDomainRE.test(everythingAfterProtocol)) {
+  if (
+    localhostDomainRE.test(everythingAfterProtocol) ||
+    nonLocalhostDomainRE.test(everythingAfterProtocol)
+  ) {
     return true;
   }
 
@@ -267,26 +270,26 @@ export function timeAgo(dateInput: Date | string | number): string {
   const secondsPast = (now.getTime() - date.getTime()) / 1000;
 
   if (secondsPast < 0 || isNaN(secondsPast)) {
-    return '[INVALID]';
+    return "[INVALID]";
   }
 
   if (secondsPast < 60) {
-    return 'Just now';
+    return "Just now";
   } else if (secondsPast < 3600) {
     const minutes = Math.floor(secondsPast / 60);
-    return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+    return `${minutes} minute${minutes > 1 ? "s" : ""} ago`;
   } else if (secondsPast < 86400) {
     const hours = Math.floor(secondsPast / 3600);
-    return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    return `${hours} hour${hours > 1 ? "s" : ""} ago`;
   } else if (secondsPast < 604800) {
     const days = Math.floor(secondsPast / 86400);
-    return `${days} day${days > 1 ? 's' : ''} ago`;
+    return `${days} day${days > 1 ? "s" : ""} ago`;
   }
 
-  const formattedDate = date.toLocaleDateString('en-US', {
-    month: '2-digit',
-    day: '2-digit',
-    year: 'numeric',
+  const formattedDate = date.toLocaleDateString("en-US", {
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
   });
 
   return formattedDate;
@@ -301,7 +304,7 @@ export function classNames(...args: any[]): string {
 
     let argType = typeof arg;
 
-    if (argType === 'string' || argType === 'number') {
+    if (argType === "string" || argType === "number") {
       classes.push(arg);
     } else if (Array.isArray(arg)) {
       if (arg.length) {
@@ -310,7 +313,7 @@ export function classNames(...args: any[]): string {
           classes.push(inner);
         }
       }
-    } else if (argType === 'object') {
+    } else if (argType === "object") {
       if (arg.toString !== Object.prototype.toString) {
         classes.push(arg.toString());
       } else {
@@ -323,12 +326,12 @@ export function classNames(...args: any[]): string {
     }
   }
 
-  return classes.join(' ');
+  return classes.join(" ");
 }
 
 export async function generateNonce() {
-  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
+  const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let result = "";
   const charactersLength = characters.length;
   for (let i = 0; i < 8; i++) {
     result += characters.charAt(Math.floor(Math.random() * charactersLength));
@@ -349,22 +352,46 @@ export const isFocusableElement = (element: EventTarget | null): element is HTML
     return false;
   }
 
-  const focusableSelectors = ['a[href]', 'button', 'input', 'select', 'textarea', '[tabindex]:not([tabindex="-1"])', '[contenteditable="true"]'];
+  const focusableSelectors = [
+    "a[href]",
+    "button",
+    "input",
+    "select",
+    "textarea",
+    '[tabindex]:not([tabindex="-1"])',
+    '[contenteditable="true"]',
+  ];
 
-  return element.matches(focusableSelectors.join(', '));
+  return element.matches(focusableSelectors.join(", "));
 };
 
-export const findNextFocusable = (element: Element | null, direction: 'next' | 'previous' = 'next'): HTMLElement | null => {
+export const findNextFocusable = (
+  element: Element | null,
+  direction: "next" | "previous" = "next",
+): HTMLElement | null => {
   if (!element) return null;
 
-  const focusableSelectors = ['a[href]', 'button', 'input', 'select', 'textarea', '[tabindex]:not([tabindex="-1"])', '[contenteditable="true"]'];
+  const focusableSelectors = [
+    "a[href]",
+    "button",
+    "input",
+    "select",
+    "textarea",
+    '[tabindex]:not([tabindex="-1"])',
+    '[contenteditable="true"]',
+  ];
 
-  const focusableElements = Array.from(document.querySelectorAll<HTMLElement>(focusableSelectors.join(', ')));
+  const focusableElements = Array.from(
+    document.querySelectorAll<HTMLElement>(focusableSelectors.join(", ")),
+  );
 
   const currentIndex = focusableElements.indexOf(element as HTMLElement);
 
   if (currentIndex !== -1) {
-    const nextIndex = direction === 'next' ? (currentIndex + 1) % focusableElements.length : (currentIndex - 1 + focusableElements.length) % focusableElements.length;
+    const nextIndex =
+      direction === "next"
+        ? (currentIndex + 1) % focusableElements.length
+        : (currentIndex - 1 + focusableElements.length) % focusableElements.length;
 
     return focusableElements[nextIndex];
   }
@@ -372,10 +399,18 @@ export const findNextFocusable = (element: Element | null, direction: 'next' | '
   return null;
 };
 
-export const findFocusableDescendant = (container: Element | null, currentFocused: Element | null = null, direction: 'next' | 'previous' = 'next'): HTMLElement | null => {
+export const findFocusableDescendant = (
+  container: Element | null,
+  currentFocused: Element | null = null,
+  direction: "next" | "previous" = "next",
+): HTMLElement | null => {
   if (!container) return null;
 
-  const focusableElements = Array.from(container.querySelectorAll<HTMLElement>('a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"]), [contenteditable="true"]'));
+  const focusableElements = Array.from(
+    container.querySelectorAll<HTMLElement>(
+      'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"]), [contenteditable="true"]',
+    ),
+  );
 
   if (focusableElements.length === 0) return null;
 
@@ -383,7 +418,7 @@ export const findFocusableDescendant = (container: Element | null, currentFocuse
   if (currentFocused) {
     const currentIndex = focusableElements.indexOf(currentFocused as HTMLElement);
     if (currentIndex !== -1) {
-      index = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
+      index = direction === "next" ? currentIndex + 1 : currentIndex - 1;
     }
   }
 

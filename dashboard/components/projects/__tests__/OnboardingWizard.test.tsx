@@ -46,9 +46,7 @@ describe("OnboardingWizard — step rail + navigation", () => {
   it("starts on Basics with name pre-filled", () => {
     render(<OnboardingWizard inspect={INSPECT} onCancel={vi.fn()} onSubmit={vi.fn()} />);
     expect(screen.getByTestId("onboarding-step-basics").getAttribute("data-active")).toBe("true");
-    expect((screen.getByTestId("onboarding-name") as HTMLInputElement).value).toBe(
-      "wavyr-website",
-    );
+    expect((screen.getByTestId("onboarding-name") as HTMLInputElement).value).toBe("wavyr-website");
     expect(screen.getByTestId("onboarding-dir").textContent).toContain(INSPECT.dir);
     expect(screen.getByTestId("onboarding-stack").textContent).toMatch(/next/);
   });

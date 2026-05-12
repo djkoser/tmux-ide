@@ -129,21 +129,18 @@ describe("validateStep", () => {
   });
 
   it("Basics: rejects names already in the registry (uniqueness)", () => {
-    const result = validateStep(
-      { ...base(), name: "alpha" },
-      "basics",
-      { existingNames: ["alpha", "beta"] },
-    );
+    const result = validateStep({ ...base(), name: "alpha" }, "basics", {
+      existingNames: ["alpha", "beta"],
+    });
     expect(result.valid).toBe(false);
     expect(result.errors.name).toMatch(/already registered/i);
   });
 
   it("Basics: allowName lets the user keep the inspect.name", () => {
-    const result = validateStep(
-      { ...base(), name: "wavyr-website" },
-      "basics",
-      { existingNames: ["wavyr-website"], allowName: "wavyr-website" },
-    );
+    const result = validateStep({ ...base(), name: "wavyr-website" }, "basics", {
+      existingNames: ["wavyr-website"],
+      allowName: "wavyr-website",
+    });
     expect(result.valid).toBe(true);
   });
 
@@ -160,19 +157,13 @@ describe("validateStep", () => {
   });
 
   it("Tools: rejects missing dev command when toggle is on", () => {
-    const result = validateStep(
-      { ...base(), devEnabled: true, devCommand: "  " },
-      "tools",
-    );
+    const result = validateStep({ ...base(), devEnabled: true, devCommand: "  " }, "tools");
     expect(result.valid).toBe(false);
     expect(result.errors.devCommand).toMatch(/enter a dev/i);
   });
 
   it("Tools: dev command not required when toggle is off", () => {
-    const result = validateStep(
-      { ...base(), devEnabled: false, devCommand: "" },
-      "tools",
-    );
+    const result = validateStep({ ...base(), devEnabled: false, devCommand: "" }, "tools");
     expect(result.valid).toBe(true);
   });
 });

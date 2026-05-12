@@ -34,9 +34,7 @@ import { TurnProjectionService } from "../services.ts";
 import { runChatTurnPipeline } from "../chat-turn-pipeline.ts";
 
 const requireFn = createRequire(import.meta.url);
-const SqliteDatabase = requireFn("bun:sqlite").Database as new (
-  path: string,
-) => SqliteDb;
+const SqliteDatabase = requireFn("bun:sqlite").Database as new (path: string) => SqliteDb;
 
 const THREAD = "thread-runtime-1234567890";
 const TURN_1 = "turn-runtime-1-123456789";
@@ -146,11 +144,7 @@ describe("Effect runtime — in-memory pipeline", () => {
       }),
       eventStoreLayer,
     );
-    const pipelineLayer = Layer.mergeAll(
-      eventStoreLayer,
-      projectionLayer,
-      reactorLayer,
-    );
+    const pipelineLayer = Layer.mergeAll(eventStoreLayer, projectionLayer, reactorLayer);
 
     const program = runChatTurnPipeline({
       events: EVENTS().map((event) => ({ event, actorKind: "user" })),
@@ -207,10 +201,7 @@ describe("Effect runtime — in-memory pipeline", () => {
 
     // Use `Effect.either` to convert the failure channel into a value.
     const outcome = await Effect.runPromise(
-      Effect.either(program).pipe(
-        Effect.provide(brokenLayer),
-        Effect.scoped,
-      ),
+      Effect.either(program).pipe(Effect.provide(brokenLayer), Effect.scoped),
     );
 
     if (outcome._tag === "Right") {
@@ -278,11 +269,7 @@ describe("Effect runtime — sqlite pipeline", () => {
         }),
         eventStoreLayer,
       );
-      const pipelineLayer = Layer.mergeAll(
-        eventStoreLayer,
-        projectionLayer,
-        reactorLayer,
-      );
+      const pipelineLayer = Layer.mergeAll(eventStoreLayer, projectionLayer, reactorLayer);
 
       const result = await Effect.runPromise(
         runChatTurnPipeline({

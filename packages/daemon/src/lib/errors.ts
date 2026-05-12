@@ -52,11 +52,7 @@ export type DaemonStartupReason =
 export class DaemonStartupError extends IdeError {
   readonly reason: DaemonStartupReason;
 
-  constructor(
-    message: string,
-    reason: DaemonStartupReason,
-    { cause }: { cause?: Error } = {},
-  ) {
+  constructor(message: string, reason: DaemonStartupReason, { cause }: { cause?: Error } = {}) {
     super(message, { code: `DAEMON_${reason.toUpperCase()}`, exitCode: 1, cause });
     this.name = "DaemonStartupError";
     this.reason = reason;

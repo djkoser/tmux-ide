@@ -132,9 +132,10 @@ async function resolveCanonicalDaemon(): Promise<{
   }
 }
 
-async function stopTransientDaemon(
-  daemon: { transientHandle: EmbeddedDaemonHandle | null; restoreCwd: string | null },
-): Promise<void> {
+async function stopTransientDaemon(daemon: {
+  transientHandle: EmbeddedDaemonHandle | null;
+  restoreCwd: string | null;
+}): Promise<void> {
   if (daemon.transientHandle) await daemon.transientHandle.stop().catch(() => undefined);
   if (daemon.restoreCwd) process.chdir(daemon.restoreCwd);
 }

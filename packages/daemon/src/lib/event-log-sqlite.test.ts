@@ -2,12 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import {
-  appendEvent,
-  queryEvents,
-  readEvents,
-  type OrchestratorEvent,
-} from "./event-log.ts";
+import { appendEvent, queryEvents, readEvents, type OrchestratorEvent } from "./event-log.ts";
 import { __resetEventLogSqliteForTests } from "./event-log-sqlite.ts";
 
 const FIXTURE: OrchestratorEvent[] = [
@@ -66,12 +61,7 @@ for (const backend of BACKENDS) {
     it("appends events and reads them back in chronological order", () => {
       const events = readEvents(dir);
       expect(events.length).toBe(FIXTURE.length);
-      expect(events.map((e) => e.type)).toEqual([
-        "dispatch",
-        "completion",
-        "dispatch",
-        "stall",
-      ]);
+      expect(events.map((e) => e.type)).toEqual(["dispatch", "completion", "dispatch", "stall"]);
       expect(events[0]!.taskId).toBe("001");
       expect(events[3]!.taskId).toBe("002");
     });

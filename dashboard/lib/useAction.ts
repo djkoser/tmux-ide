@@ -2,11 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { ActionInvocationError, dispatch } from "./actionClient";
-import type {
-  ActionInput,
-  ActionName,
-  ActionResult,
-} from "@tmux-ide/contracts";
+import type { ActionInput, ActionName, ActionResult } from "@tmux-ide/contracts";
 
 export interface UseActionResult<Name extends ActionName> {
   /**

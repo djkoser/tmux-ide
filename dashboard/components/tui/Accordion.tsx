@@ -1,11 +1,11 @@
-'use client';
+"use client";
 
-import styles from '@components/Accordion.module.css';
+import styles from "@components/Accordion.module.css";
 
-import * as React from 'react';
-import * as Utilities from '@common/utilities';
+import * as React from "react";
+import * as Utilities from "@common/utilities";
 
-import Row from '@components/Row';
+import Row from "@components/Row";
 
 interface AccordionProps {
   defaultValue?: boolean;
@@ -23,13 +23,25 @@ const Accordion: React.FC<AccordionProps> = ({ defaultValue = false, title, chil
 
   return (
     <>
-      <Row ref={accordionRef} tabIndex={0} role="button" onClick={toggleShow} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { if (e.key === ' ') e.preventDefault(); toggleShow(); } }} aria-expanded={show}>
+      <Row
+        ref={accordionRef}
+        tabIndex={0}
+        role="button"
+        onClick={toggleShow}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            if (e.key === " ") e.preventDefault();
+            toggleShow();
+          }
+        }}
+        aria-expanded={show}
+      >
         <div className={Utilities.classNames(styles.flex, show ? styles.active : undefined)}>
-          <span className={styles.icon}>{show ? '▾' : '▸'}</span>
+          <span className={styles.icon}>{show ? "▾" : "▸"}</span>
           <span className={styles.content}>{title}</span>
         </div>
       </Row>
-      {show && <Row style={{ paddingLeft: '1ch' }}>{children}</Row>}
+      {show && <Row style={{ paddingLeft: "1ch" }}>{children}</Row>}
     </>
   );
 };

@@ -6,12 +6,17 @@ export default async function V2TerminalPage({ params }: { params: Promise<{ id:
   return (
     <div className="flex h-screen flex-col bg-[var(--bg)] text-[var(--fg)]">
       <header className="flex h-7 shrink-0 items-center border-b border-[var(--border)] bg-[var(--bg-strong)] px-3 text-[11px] tabular-nums">
-        <Link href="/v2" className="mr-2 inline-flex items-center gap-1 text-[var(--dim)] hover:text-[var(--fg)]">
+        <Link
+          href="/v2"
+          className="mr-2 inline-flex items-center gap-1 text-[var(--dim)] hover:text-[var(--fg)]"
+        >
           <span aria-hidden="true">◇</span>
           <span>tmux-ide</span>
         </Link>
         <span className="mx-1 text-[var(--dimmer)]">/</span>
-        <span aria-hidden="true" className="mr-1">{">_"}</span>
+        <span aria-hidden="true" className="mr-1">
+          {">_"}
+        </span>
         <span className="font-medium text-[var(--accent)]">terminal</span>
         <span className="mx-2 text-[var(--dimmer)]">·</span>
         <span className="text-[var(--dim)]">{id}</span>

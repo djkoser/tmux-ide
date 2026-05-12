@@ -198,9 +198,15 @@ function rotateEventLogIfNeeded(dir: string): void {
     const rotateDate = dateKey(stat.mtimeMs);
     const rotatedPath = rotatedLogPath(tasksDir, rotateDate);
     const content = readFileSync(logPath);
-    const existing = existsSync(rotatedPath) ? gunzipSync(readFileSync(rotatedPath)) : Buffer.alloc(0);
-    const separator = existing.byteLength > 0 && !existing.toString("utf-8").endsWith("\n") ? "\n" : "";
-    writeFileSync(rotatedPath, gzipSync(Buffer.concat([existing, Buffer.from(separator), content])));
+    const existing = existsSync(rotatedPath)
+      ? gunzipSync(readFileSync(rotatedPath))
+      : Buffer.alloc(0);
+    const separator =
+      existing.byteLength > 0 && !existing.toString("utf-8").endsWith("\n") ? "\n" : "";
+    writeFileSync(
+      rotatedPath,
+      gzipSync(Buffer.concat([existing, Buffer.from(separator), content])),
+    );
     unlinkSync(logPath);
   } catch {
     // rotation is best-effort; continue writing to current file
@@ -321,7 +327,9 @@ export function readEvents(dir: string): OrchestratorEvent[] {
       .sort()
       .slice(-1);
     for (const file of rotations) {
-      const raw = gunzipSync(readFileSync(join(tasksDir, file))).toString("utf-8").trim();
+      const raw = gunzipSync(readFileSync(join(tasksDir, file)))
+        .toString("utf-8")
+        .trim();
       if (raw) lines = lines.concat(raw.split("\n"));
     }
   }

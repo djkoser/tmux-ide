@@ -37,11 +37,7 @@ import type {
   LatestTurnState,
   TurnAbortReason,
 } from "@tmux-ide/contracts";
-import type {
-  ChatEventReader,
-  PersistedChatEvent,
-  ProjectionCursorStore,
-} from "../types.ts";
+import type { ChatEventReader, PersistedChatEvent, ProjectionCursorStore } from "../types.ts";
 import { ProjectionGapError } from "../types.ts";
 
 export interface TurnRecord extends LatestTurn {
@@ -107,9 +103,7 @@ function stripThreadId(record: TurnRecord): LatestTurn {
   return rest;
 }
 
-export function makeTurnProjection(
-  opts: MakeTurnProjectionOptions,
-): TurnProjection {
+export function makeTurnProjection(opts: MakeTurnProjectionOptions): TurnProjection {
   const name = opts.name ?? DEFAULT_NAME;
   const batchSize = opts.batchSize ?? DEFAULT_BATCH_SIZE;
   const log = opts.logger ?? (() => undefined);
@@ -117,8 +111,7 @@ export function makeTurnProjection(
   const byThread = new Map<string, Map<string, TurnRecord>>();
   const latestByThread = new Map<string, string>();
   const latestByThreadSession = new Map<string, string>();
-  const sessionKey = (threadId: string, sessionId: string): string =>
-    `${threadId} ${sessionId}`;
+  const sessionKey = (threadId: string, sessionId: string): string => `${threadId} ${sessionId}`;
 
   let cursor = 0;
   let unsubscribe: (() => void) | null = null;
@@ -191,13 +184,9 @@ export function makeTurnProjection(
     const next: TurnRecord = {
       ...existing,
       state: nextState,
-      completedAt: TERMINAL_STATES.has(nextState)
-        ? completedAt
-        : existing.completedAt,
+      completedAt: TERMINAL_STATES.has(nextState) ? completedAt : existing.completedAt,
       assistantMessageId:
-        assistantMessageId !== undefined
-          ? assistantMessageId
-          : existing.assistantMessageId,
+        assistantMessageId !== undefined ? assistantMessageId : existing.assistantMessageId,
     };
     b!.set(turnId, next);
   }
@@ -229,13 +218,7 @@ export function makeTurnProjection(
         return;
       case "chat.turn.aborted": {
         const nextState = ABORT_TO_STATE[event.reason];
-        applyTurnTransition(
-          event.threadId,
-          event.turnId,
-          nextState,
-          occurredAt,
-          undefined,
-        );
+        applyTurnTransition(event.threadId, event.turnId, nextState, occurredAt, undefined);
         return;
       }
       case "chat.session.removed":

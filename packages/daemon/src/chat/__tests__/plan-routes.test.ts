@@ -83,8 +83,6 @@ describe("Route registry — plan endpoints", () => {
       "/api/threads/:threadId/plans/:planId/approve",
     );
     expect(routes["threads.plans.reject"].method).toBe("POST");
-    expect(routes["threads.plans.reject"].path).toBe(
-      "/api/threads/:threadId/plans/:planId/reject",
-    );
+    expect(routes["threads.plans.reject"].path).toBe("/api/threads/:threadId/plans/:planId/reject");
   });
 });

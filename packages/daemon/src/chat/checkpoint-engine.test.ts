@@ -4,10 +4,7 @@ import { promisify } from "node:util";
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  makeCheckpointEngine,
-  CheckpointEngineError,
-} from "./checkpoint-engine.ts";
+import { makeCheckpointEngine, CheckpointEngineError } from "./checkpoint-engine.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -121,9 +118,7 @@ describe("checkpoint-engine — git integration", () => {
       workspaceDir: repo,
     });
 
-    expect(await engine.status({ checkpointRef: snap.refName, workspaceDir: repo })).toBe(
-      "ready",
-    );
+    expect(await engine.status({ checkpointRef: snap.refName, workspaceDir: repo })).toBe("ready");
 
     expect(
       await engine.status({
@@ -134,9 +129,9 @@ describe("checkpoint-engine — git integration", () => {
 
     const notARepo = mkdtempSync(join(tmpdir(), "not-a-repo-"));
     tracked.push(notARepo);
-    expect(
-      await engine.status({ checkpointRef: snap.refName, workspaceDir: notARepo }),
-    ).toBe("error");
+    expect(await engine.status({ checkpointRef: snap.refName, workspaceDir: notARepo })).toBe(
+      "error",
+    );
   });
 
   it("revert restores tracked files to the snapshot, leaves untracked files alone", async () => {

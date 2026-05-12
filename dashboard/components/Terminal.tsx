@@ -195,8 +195,7 @@ export function Terminal({
           typeof navigator !== "undefined" &&
           (/iPad|iPhone|iPod/.test(navigator.platform) ||
             (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
-        const useWebgl =
-          rendererPref === "webgl" || (rendererPref === "auto" && !isiOS);
+        const useWebgl = rendererPref === "webgl" || (rendererPref === "auto" && !isiOS);
 
         if (useWebgl) {
           try {

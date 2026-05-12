@@ -36,10 +36,7 @@ export interface PtyBridgeLike {
  * WS protocol speaks. Adding a new reason is a single-line change in
  * both directions.
  */
-export type CwdErrorWireReason =
-  | "cwd-not-found"
-  | "cwd-not-directory"
-  | "cwd-stat-failed";
+export type CwdErrorWireReason = "cwd-not-found" | "cwd-not-directory" | "cwd-stat-failed";
 
 const CWD_ERROR_WIRE_REASON: Record<TerminalCwdErrorReason, CwdErrorWireReason> = {
   notFound: "cwd-not-found",
@@ -394,9 +391,13 @@ export function handlePtyWebSocket(
       }
 
       const registry = options.registry ?? defaultPtyBridgeRegistry;
-      const acquired = registry.acquire(id, options.createBridge ?? ((bridgeId) => new PtyBridge({ id: bridgeId })), {
-        idleMs: options.idleMs,
-      });
+      const acquired = registry.acquire(
+        id,
+        options.createBridge ?? ((bridgeId) => new PtyBridge({ id: bridgeId })),
+        {
+          idleMs: options.idleMs,
+        },
+      );
       bridge = acquired.bridge;
       releaseBridge = acquired.release;
       attachBridgeEvents(bridge);
@@ -407,8 +408,7 @@ export function handlePtyWebSocket(
         if (init.cmd !== undefined) spawnOptions.cmd = init.cmd;
 
         const currentCwd = bridge.getCwd?.() ?? null;
-        const cwdChanged =
-          init.cwd !== undefined && currentCwd !== null && currentCwd !== init.cwd;
+        const cwdChanged = init.cwd !== undefined && currentCwd !== null && currentCwd !== init.cwd;
 
         if (!acquired.reused) {
           bridge.spawn(init.cols, init.rows, spawnOptions);

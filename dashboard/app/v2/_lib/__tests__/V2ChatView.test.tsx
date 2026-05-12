@@ -1,4 +1,3 @@
- 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 
@@ -68,16 +67,12 @@ describe("V2ChatView :: feature-flag-cutover (T080)", () => {
 
   it("v1 container carries data-chat-version='v1'", () => {
     render(<V2ChatView projectName="demo" chatVersionOverride="v1" />);
-    expect(
-      screen.getByTestId("v2-chat-view-chat-v1").getAttribute("data-chat-version"),
-    ).toBe("v1");
+    expect(screen.getByTestId("v2-chat-view-chat-v1").getAttribute("data-chat-version")).toBe("v1");
   });
 
   it("v2 container carries data-chat-version='v2'", () => {
     render(<V2ChatView projectName="demo" chatVersionOverride="v2" />);
-    expect(
-      screen.getByTestId("v2-chat-view-chat-v2").getAttribute("data-chat-version"),
-    ).toBe("v2");
+    expect(screen.getByTestId("v2-chat-view-chat-v2").getAttribute("data-chat-version")).toBe("v2");
   });
 
   it("v2 UI does NOT render the v1 banner — banner is gated on v1 only", () => {

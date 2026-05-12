@@ -72,7 +72,9 @@ describe("makeJsonRpcEndpoint", () => {
     const seen: unknown[] = [];
     endpoint.onNotification((notification) => seen.push(notification));
 
-    input.write(`${JSON.stringify({ jsonrpc: "2.0", method: "session/update", params: { n: 1 } })}\n`);
+    input.write(
+      `${JSON.stringify({ jsonrpc: "2.0", method: "session/update", params: { n: 1 } })}\n`,
+    );
     await tick();
 
     expect(seen).toEqual([{ jsonrpc: "2.0", method: "session/update", params: { n: 1 } }]);
@@ -113,7 +115,11 @@ describe("makeJsonRpcEndpoint", () => {
   test("preserves explicit RPC errors from incoming request handlers", async () => {
     const { endpoint, input, writes } = makeHarness();
     endpoint.onIncomingRequest(async () => {
-      throw new AcpRpcError({ code: -32601, message: "Method not found", data: { method: "client/nope" } });
+      throw new AcpRpcError({
+        code: -32601,
+        message: "Method not found",
+        data: { method: "client/nope" },
+      });
     });
 
     input.write(`${JSON.stringify({ jsonrpc: "2.0", id: "r1", method: "client/nope" })}\n`);

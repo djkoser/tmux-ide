@@ -36,9 +36,9 @@ re-mount class of bugs.
 **The Next.js dashboard is rendered as React Server Components by
 default. Interactive surfaces drop to React client components only
 where state, refs, or browser APIs demand it. UI built in a foreign
-framework (Solid, Lit, Preact, …) lives in a named *silo* package
+framework (Solid, Lit, Preact, …) lives in a named _silo_ package
 (`@tmux-ide/<silo-name>`) and is mounted from React through a single
-*bridge component* per silo. Bridge components are the only place in
+_bridge component_ per silo. Bridge components are the only place in
 the codebase that knows how to translate between React's component
 model and a non-React DOM-mounting API. The data contract between a
 silo and its bridge is a single `mount(el, props)` call that returns a
@@ -48,21 +48,21 @@ handle.**
 
 ### Decision matrix
 
-| Surface | Choose | Reason | Examples (current code) |
-| --- | --- | --- | --- |
-| Static page chrome, project/thread index lists, anything that fetches once and renders | **RSC** | No interactive state; render-on-server is cheaper and avoids a hydration round-trip. | `app/(shell)/*` *should be* RSC (today most are `"use client"`; tracked in goal-14 §5). |
-| Form widgets, sortable tables, inline editing, command palette, anything driven by zustand or React state | **React Client** (`"use client"`) | Needs `useState` / `useEffect` / refs / browser APIs. | `dashboard/components/projects/AddProjectDialog.tsx`, `KeybindRoot.tsx`, `CommandPalette.tsx`. |
-| Anything that runs in a non-React framework — Solid DOM islands today, Lit / Preact / Vue tomorrow | **Silo package** mounted via bridge | Foreign framework owns its DOM subtree; React must not reach inside. | `@tmux-ide/chat-solid` mounted via `ChatTabPanel.tsx`; `@tmux-ide/v2-solid-widgets` mounted via `V2*Island.tsx`. |
-| Long-lived browser process attached to a backend stream (PTY, ANSI mirror) | **React Client + silo-shaped wrapper** | Treat the stream owner as a silo even though it's still React, so the rendering subtree is replaceable. | `Terminal*` xterm wrappers under `dashboard/components/terminals/`. |
-| Sub-window with its own runtime (Electron BrowserWindow, native Swift view via `app/`) | **Out-of-tree silo** | Different process entirely. Bridge is the IPC layer, not a React component. | `app/TmuxIde/` (Swift) and `app-electron/` (Electron). |
+| Surface                                                                                                   | Choose                                 | Reason                                                                                                  | Examples (current code)                                                                                          |
+| --------------------------------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Static page chrome, project/thread index lists, anything that fetches once and renders                    | **RSC**                                | No interactive state; render-on-server is cheaper and avoids a hydration round-trip.                    | `app/(shell)/*` _should be_ RSC (today most are `"use client"`; tracked in goal-14 §5).                          |
+| Form widgets, sortable tables, inline editing, command palette, anything driven by zustand or React state | **React Client** (`"use client"`)      | Needs `useState` / `useEffect` / refs / browser APIs.                                                   | `dashboard/components/projects/AddProjectDialog.tsx`, `KeybindRoot.tsx`, `CommandPalette.tsx`.                   |
+| Anything that runs in a non-React framework — Solid DOM islands today, Lit / Preact / Vue tomorrow        | **Silo package** mounted via bridge    | Foreign framework owns its DOM subtree; React must not reach inside.                                    | `@tmux-ide/chat-solid` mounted via `ChatTabPanel.tsx`; `@tmux-ide/v2-solid-widgets` mounted via `V2*Island.tsx`. |
+| Long-lived browser process attached to a backend stream (PTY, ANSI mirror)                                | **React Client + silo-shaped wrapper** | Treat the stream owner as a silo even though it's still React, so the rendering subtree is replaceable. | `Terminal*` xterm wrappers under `dashboard/components/terminals/`.                                              |
+| Sub-window with its own runtime (Electron BrowserWindow, native Swift view via `app/`)                    | **Out-of-tree silo**                   | Different process entirely. Bridge is the IPC layer, not a React component.                             | `app/TmuxIde/` (Swift) and `app-electron/` (Electron).                                                           |
 
 ### Tie-breakers for borderline cases
 
-- If you can answer the question *"does this component own a `useRef`
-  to a DOM node?"* with **yes**, it is a Client component or a silo,
+- If you can answer the question _"does this component own a `useRef`
+  to a DOM node?"_ with **yes**, it is a Client component or a silo,
   not RSC.
-- If you can answer *"does this component need to pass live React
-  state to a non-React UI?"* with **yes**, it is a silo with a bridge
+- If you can answer _"does this component need to pass live React
+  state to a non-React UI?"_ with **yes**, it is a silo with a bridge
   — never inline `dangerouslySetInnerHTML` or `useEffect`-glue inside
   an otherwise RSC tree.
 
@@ -160,7 +160,7 @@ unmount → re-mount on every thread switch, which:
 - Sometimes leaks event listeners if the silo's `unmount()` is
   imperfect.
 
-Driving prop changes through *handle setters* keeps the silo alive
+Driving prop changes through _handle setters_ keeps the silo alive
 across prop changes. The silo decides what to do with the new value
 (e.g. re-fetch the thread, swap content) without re-running its
 bootstrap.
@@ -182,7 +182,7 @@ export function mount(el: HTMLElement, initial: InitialProps): SiloMountHandle;
 ```
 
 The setter convention (`setThreadId`, `setSessionName`, …) is part of
-the *silo public API*, not a free-form prop. Adding a new prop is a
+the _silo public API_, not a free-form prop. Adding a new prop is a
 visible API change in the silo package — that is the entire point of
 the boundary.
 
@@ -239,7 +239,7 @@ workspace layout.
 - `docs/goal-14-architecture-parity.md` §1.1–§1.5 — long-form rationale,
   audit table, enforcement sketch.
 - `docs/contributing/bridge-template.md` — the copy-pasteable template
-  plus the *why `[]`-deps* explainer, for engineers writing a new silo.
+  plus the _why `[]`-deps_ explainer, for engineers writing a new silo.
 - `ARCHITECTURE.md` — root architecture doc; the "Dashboard
   architecture" stub points here.
 - `dashboard/components/chat/ChatTabPanel.tsx` — canonical

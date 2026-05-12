@@ -6,7 +6,7 @@ warrants serving the legacy `(shell)` route from `/` again. The
 rollback is feature-flag-driven and reversible — no code changes are
 required for the standard rollback.
 
-> **Scope** — this covers rolling back the *route flip* (default `/`
+> **Scope** — this covers rolling back the _route flip_ (default `/`
 > serves which shell), not the underlying widget ports. The native
 > React widget surfaces under `/v2/*` stay live in either configuration.
 
@@ -22,6 +22,7 @@ the root `app/page.tsx` redirect — but the typical shapes are:
 - **Env var** — `NEXT_PUBLIC_TMUX_IDE_V2=on` (set on the dashboard
   process). To roll back: unset the variable (or set to `off`) and
   restart the dev server / rebuild for prod.
+
   ```bash
   # dev
   unset NEXT_PUBLIC_TMUX_IDE_V2
@@ -30,6 +31,7 @@ the root `app/page.tsx` redirect — but the typical shapes are:
   # prod (next build is static-export — see next.config.mjs `output: "export"`)
   cd dashboard && rm -rf out && pnpm build
   ```
+
 - **Middleware redirect** — if `dashboard/middleware.ts` rewrites `/`
   to `/v2`, comment out or guard the rewrite block, then rebuild.
 - **Root-route redirect** — if `app/page.tsx` calls `redirect("/v2")`,
@@ -58,13 +60,13 @@ unflushed state.
 
 Known `/v2` localStorage keys (as of 2026-05-07):
 
-| Key pattern | Source | What it stores |
-|-------------|--------|----------------|
-| `tmux-ide.v2.layout.v1.overview-h` | `app/v2/_lib/useStoredLayout.ts` (used by `app/v2/page.tsx`) | Horizontal panel sizes on the v2 overview |
-| `tmux-ide.v2.layout.v1.overview-v` | same | Vertical panel sizes on the v2 overview |
-| `tmux-ide.v2.layout.v1.project-h` | `app/v2/project/[name]/ProjectV2Page.tsx` | Horizontal panel sizes on the v2 project view |
-| `tmux-ide.v2.layout.v1.project-v` | same | Vertical panel sizes on the v2 project view |
-| `tmux-ide:preview:last-path:<projectName>` | `app/v2/project/[name]/ProjectV2Page.tsx` Preview view | Per-project last-opened file path for the Preview surface |
+| Key pattern                                | Source                                                       | What it stores                                            |
+| ------------------------------------------ | ------------------------------------------------------------ | --------------------------------------------------------- |
+| `tmux-ide.v2.layout.v1.overview-h`         | `app/v2/_lib/useStoredLayout.ts` (used by `app/v2/page.tsx`) | Horizontal panel sizes on the v2 overview                 |
+| `tmux-ide.v2.layout.v1.overview-v`         | same                                                         | Vertical panel sizes on the v2 overview                   |
+| `tmux-ide.v2.layout.v1.project-h`          | `app/v2/project/[name]/ProjectV2Page.tsx`                    | Horizontal panel sizes on the v2 project view             |
+| `tmux-ide.v2.layout.v1.project-v`          | same                                                         | Vertical panel sizes on the v2 project view               |
+| `tmux-ide:preview:last-path:<projectName>` | `app/v2/project/[name]/ProjectV2Page.tsx` Preview view       | Per-project last-opened file path for the Preview surface |
 
 **To re-discover this list at rollback time** (in case the file changes):
 
@@ -163,14 +165,14 @@ When the underlying issue is fixed and you're ready to flip the flag
 back on:
 
 - [ ] **Reproduction** — the original regression is reproducible on
-  `main`-without-the-fix and **fixed** on the candidate commit. Don't
-  re-cutover without proving the regression is dead.
+      `main`-without-the-fix and **fixed** on the candidate commit. Don't
+      re-cutover without proving the regression is dead.
 - [ ] **Tests** — `pnpm check` passes from clean. dashboard `tsc
-  --noEmit` count is at the baseline (10 today; update this
-  document if the baseline changes).
+--noEmit` count is at the baseline (10 today; update this
+      document if the baseline changes).
 - [ ] **Local walk-through** — with flag on, hit:
   - `/` (v2 overview)
-  - `/project/<name>` *(if v2 redirects this URL)* / `/v2/project/<name>`
+  - `/project/<name>` _(if v2 redirects this URL)_ / `/v2/project/<name>`
   - `/v2/config` — load config, edit a field, Save, Restart
   - `/v2/project/<name>` — Mission, Kanban, Tasks, Plans, Skills,
     Diffs, **Preview** (test the Content/Diff toggle), **Metrics**
@@ -178,21 +180,21 @@ back on:
   - Terminal route
   - Command palette (`⌘K`), terminal toggle (`⌘J`), sidebar toggle (`⌘\`)
 - [ ] **localStorage compat** — open DevTools, confirm no errors
-  during hydration on a fresh profile (no pre-existing `tmux-ide.v2.*`
-  keys) **and** on a profile that has stale keys from a prior `/v2`
-  session.
+      during hydration on a fresh profile (no pre-existing `tmux-ide.v2.*`
+      keys) **and** on a profile that has stale keys from a prior `/v2`
+      session.
 - [ ] **API endpoints** — confirm command-center is on a version that
-  exposes the v2-required endpoints:
+      exposes the v2-required endpoints:
   - `GET /api/project/:name/metrics`
   - `GET /api/project/:name/preview/:file{.+}`
   - `GET /api/project/:name/config`
   - `POST /api/project/:name/config`
   - `POST /api/project/:name/restart`
 - [ ] **Rollback rehearsal** — flip the flag off in a test environment
-  and confirm the legacy shell still renders. This catches the
-  "couldn't roll back even if we wanted to" failure mode early.
+      and confirm the legacy shell still renders. This catches the
+      "couldn't roll back even if we wanted to" failure mode early.
 - [ ] **Comms** — drop a note in the team channel before flipping; if
-  this is a re-cutover after a regression, link the post-mortem.
+      this is a re-cutover after a regression, link the post-mortem.
 
 If any box stays unchecked, do not re-cutover.
 

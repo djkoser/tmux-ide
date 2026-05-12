@@ -40,10 +40,7 @@ const NAME_STATUS_KIND_MAP: Record<string, CheckpointFile["kind"]> = {
   T: "modified",
 };
 
-export type CheckpointEngineExec = (
-  args: readonly string[],
-  cwd: string,
-) => Promise<string>;
+export type CheckpointEngineExec = (args: readonly string[], cwd: string) => Promise<string>;
 
 export interface CheckpointSnapshot {
   /** Commit SHA produced by `git stash create` (or HEAD on a clean tree). */
@@ -61,9 +58,10 @@ export interface CheckpointEngine {
   }): Promise<CheckpointSnapshot>;
   status(input: { checkpointRef: string; workspaceDir: string }): Promise<CheckpointStatus>;
   revert(input: { checkpointRef: string; workspaceDir: string }): Promise<void>;
-  listForThread(input: { threadId: string; workspaceDir: string }): Promise<
-    Array<{ turnId: string; refName: string; checkpointRef: string }>
-  >;
+  listForThread(input: {
+    threadId: string;
+    workspaceDir: string;
+  }): Promise<Array<{ turnId: string; refName: string; checkpointRef: string }>>;
 }
 
 export type CheckpointEngineErrorCode =
@@ -136,11 +134,7 @@ export function makeCheckpointEngine(opts: MakeCheckpointEngineOptions = {}): Ch
     try {
       await exec(["update-ref", refName, sha], input.workspaceDir);
     } catch (err) {
-      throw new CheckpointEngineError(
-        `git update-ref failed for ${refName}`,
-        "git_failed",
-        err,
-      );
+      throw new CheckpointEngineError(`git update-ref failed for ${refName}`, "git_failed", err);
     }
 
     const files = await collectChangedFiles(input.workspaceDir, exec);
@@ -158,10 +152,7 @@ export function makeCheckpointEngine(opts: MakeCheckpointEngineOptions = {}): Ch
     }
     try {
       const resolved = (
-        await exec(
-          ["rev-parse", "--verify", `${input.checkpointRef}^{commit}`],
-          input.workspaceDir,
-        )
+        await exec(["rev-parse", "--verify", `${input.checkpointRef}^{commit}`], input.workspaceDir)
       ).trim();
       return resolved ? "ready" : "missing";
     } catch (err) {
@@ -175,10 +166,7 @@ export function makeCheckpointEngine(opts: MakeCheckpointEngineOptions = {}): Ch
     }
   }
 
-  async function revert(input: {
-    checkpointRef: string;
-    workspaceDir: string;
-  }): Promise<void> {
+  async function revert(input: { checkpointRef: string; workspaceDir: string }): Promise<void> {
     await ensureGitRepo(input.workspaceDir);
 
     const refStatus = await status({
@@ -192,11 +180,7 @@ export function makeCheckpointEngine(opts: MakeCheckpointEngineOptions = {}): Ch
       );
     }
 
-    const conflicts = await detectDirtyConflicts(
-      input.workspaceDir,
-      input.checkpointRef,
-      exec,
-    );
+    const conflicts = await detectDirtyConflicts(input.workspaceDir, input.checkpointRef, exec);
     if (conflicts.length > 0) {
       throw new CheckpointEngineError(
         `Cannot revert — working tree has uncommitted changes that conflict with the checkpoint: ${conflicts.join(", ")}`,
@@ -332,9 +316,7 @@ async function detectDirtyConflicts(
   exec: CheckpointEngineExec,
 ): Promise<string[]> {
   // Paths that will be touched by the revert.
-  const refPaths = (
-    await exec(["diff", "--name-only", `${checkpointRef}`], cwd).catch(() => "")
-  )
+  const refPaths = (await exec(["diff", "--name-only", `${checkpointRef}`], cwd).catch(() => ""))
     .split("\n")
     .map((s) => s.trim())
     .filter(Boolean);

@@ -120,18 +120,14 @@ export function taskClaimHandler(
   input: ActionInput<"task.claim">,
   deps: TaskSystemDeps = {},
 ): ActionResult<"task.claim"> {
-  return runMutation(input, deps, (dir) =>
-    claimTaskRecord(dir, input.taskId, input.assign),
-  );
+  return runMutation(input, deps, (dir) => claimTaskRecord(dir, input.taskId, input.assign));
 }
 
 export function taskDoneHandler(
   input: ActionInput<"task.done">,
   deps: TaskSystemDeps = {},
 ): ActionResult<"task.done"> {
-  return runMutation(input, deps, (dir) =>
-    doneTaskRecord(dir, input.taskId, input.proof),
-  );
+  return runMutation(input, deps, (dir) => doneTaskRecord(dir, input.taskId, input.proof));
 }
 
 export function taskDeleteHandler(

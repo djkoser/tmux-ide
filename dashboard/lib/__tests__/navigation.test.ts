@@ -148,17 +148,9 @@ describe("setActiveSession + tab actions", () => {
     setActiveSession("alpha");
     openTab(viewTab("alpha", "plans"));
     openTab(viewTab("alpha", "metrics"));
-    reorderTabs([
-      "view:alpha:metrics",
-      "view:alpha:plans",
-      "view:alpha:kanban",
-    ]);
+    reorderTabs(["view:alpha:metrics", "view:alpha:plans", "view:alpha:kanban"]);
     const ids = getNavigationStateLive().openTabs.map((t) => t.id);
-    expect(ids).toEqual([
-      "view:alpha:metrics",
-      "view:alpha:plans",
-      "view:alpha:kanban",
-    ]);
+    expect(ids).toEqual(["view:alpha:metrics", "view:alpha:plans", "view:alpha:kanban"]);
   });
 
   it("persists per-session tab strips so switching back restores them", () => {
@@ -345,8 +337,20 @@ describe("terminal tabs", () => {
       "tmux-ide.tabs.alpha",
       JSON.stringify({
         openTabs: [
-          { id: "view:alpha:kanban", kind: "view", sessionName: "alpha", view: "kanban", title: "kanban" },
-          { id: term.id, kind: "terminal", sessionName: "alpha", title: "tmux-ide", cmd: ["__login_shell__", "tmux-ide"] },
+          {
+            id: "view:alpha:kanban",
+            kind: "view",
+            sessionName: "alpha",
+            view: "kanban",
+            title: "kanban",
+          },
+          {
+            id: term.id,
+            kind: "terminal",
+            sessionName: "alpha",
+            title: "tmux-ide",
+            cmd: ["__login_shell__", "tmux-ide"],
+          },
         ],
         activeTabId: term.id,
       }),

@@ -122,8 +122,7 @@ export function createTmuxTools(
 } {
   const listPanes = deps.listPanes ?? listSessionPanes;
   const sendKeys =
-    deps.sendKeys ??
-    ((target, text, opts) => bridgeSendKeys(target, text, { enter: opts.enter }));
+    deps.sendKeys ?? ((target, text, opts) => bridgeSendKeys(target, text, { enter: opts.enter }));
   const captureRecent =
     deps.captureRecent ?? ((target, lines) => bridgeCaptureRecent(target, lines));
   const capturePane =

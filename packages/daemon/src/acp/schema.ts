@@ -33,33 +33,48 @@ export interface Implementation {
 }
 
 export type EmbeddedResourceResource =
-  | { readonly _meta?: Meta; readonly mimeType?: string | null; readonly text: string; readonly uri: string }
-  | { readonly _meta?: Meta; readonly blob: string; readonly mimeType?: string | null; readonly uri: string };
+  | {
+      readonly _meta?: Meta;
+      readonly mimeType?: string | null;
+      readonly text: string;
+      readonly uri: string;
+    }
+  | {
+      readonly _meta?: Meta;
+      readonly blob: string;
+      readonly mimeType?: string | null;
+      readonly uri: string;
+    };
 
 export type ContentBlock =
-  | ({ readonly type: "text"; readonly _meta?: Meta; readonly annotations?: unknown; readonly text: string } & JsonObject)
-  | {
+  | ({
+      readonly type: "text";
+      readonly _meta?: Meta;
+      readonly annotations?: unknown;
+      readonly text: string;
+    } & JsonObject)
+  | ({
       readonly type: "image";
       readonly _meta?: Meta;
       readonly annotations?: unknown;
       readonly data: string;
       readonly mimeType: string;
       readonly uri?: string | null;
-    } & JsonObject
-  | {
+    } & JsonObject)
+  | ({
       readonly type: "audio";
       readonly _meta?: Meta;
       readonly annotations?: unknown;
       readonly data: string;
       readonly mimeType: string;
-    } & JsonObject
-  | {
+    } & JsonObject)
+  | ({
       readonly type: "resource";
       readonly _meta?: Meta;
       readonly annotations?: unknown;
       readonly resource: EmbeddedResourceResource;
-    } & JsonObject
-  | {
+    } & JsonObject)
+  | ({
       readonly type: "resource_link";
       readonly _meta?: Meta;
       readonly annotations?: unknown;
@@ -69,7 +84,7 @@ export type ContentBlock =
       readonly size?: number | null;
       readonly title?: string | null;
       readonly uri: string;
-    } & JsonObject;
+    } & JsonObject);
 
 export interface ToolCallLocation {
   readonly _meta?: Meta;
@@ -78,9 +93,23 @@ export interface ToolCallLocation {
 }
 
 export type ToolCallContent =
-  | ({ readonly type: "content"; readonly _meta?: Meta; readonly content: ContentBlock } & JsonObject)
-  | ({ readonly type: "diff"; readonly _meta?: Meta; readonly newText: string; readonly oldText?: string | null; readonly path: string } & JsonObject)
-  | ({ readonly type: "terminal"; readonly _meta?: Meta; readonly terminalId: string } & JsonObject);
+  | ({
+      readonly type: "content";
+      readonly _meta?: Meta;
+      readonly content: ContentBlock;
+    } & JsonObject)
+  | ({
+      readonly type: "diff";
+      readonly _meta?: Meta;
+      readonly newText: string;
+      readonly oldText?: string | null;
+      readonly path: string;
+    } & JsonObject)
+  | ({
+      readonly type: "terminal";
+      readonly _meta?: Meta;
+      readonly terminalId: string;
+    } & JsonObject);
 
 export interface ToolCall {
   readonly _meta?: Meta;
@@ -177,10 +206,29 @@ export type SessionUpdate =
   | ({ readonly sessionUpdate: "tool_call_update" } & ToolCallUpdate & JsonObject)
   | ({ readonly sessionUpdate: "plan" } & AgentPlanUpdate & JsonObject)
   | ({ readonly sessionUpdate: "available_commands_update" } & AvailableCommandsUpdate & JsonObject)
-  | ({ readonly sessionUpdate: "current_mode_update"; readonly _meta?: Meta; readonly currentModeId: SessionModeId } & JsonObject)
-  | ({ readonly sessionUpdate: "config_option_update"; readonly _meta?: Meta; readonly configOptions: ReadonlyArray<unknown> } & JsonObject)
-  | ({ readonly sessionUpdate: "session_info_update"; readonly _meta?: Meta; readonly title?: string | null; readonly updatedAt?: string | null } & JsonObject)
-  | ({ readonly sessionUpdate: "usage_update"; readonly _meta?: Meta; readonly cost?: unknown; readonly size: number; readonly used: number } & JsonObject);
+  | ({
+      readonly sessionUpdate: "current_mode_update";
+      readonly _meta?: Meta;
+      readonly currentModeId: SessionModeId;
+    } & JsonObject)
+  | ({
+      readonly sessionUpdate: "config_option_update";
+      readonly _meta?: Meta;
+      readonly configOptions: ReadonlyArray<unknown>;
+    } & JsonObject)
+  | ({
+      readonly sessionUpdate: "session_info_update";
+      readonly _meta?: Meta;
+      readonly title?: string | null;
+      readonly updatedAt?: string | null;
+    } & JsonObject)
+  | ({
+      readonly sessionUpdate: "usage_update";
+      readonly _meta?: Meta;
+      readonly cost?: unknown;
+      readonly size: number;
+      readonly used: number;
+    } & JsonObject);
 
 export interface SessionNotification {
   readonly _meta?: Meta;
@@ -204,9 +252,27 @@ export interface InitializeResponse {
 }
 
 export type McpServer =
-  | { readonly type: "http"; readonly _meta?: Meta; readonly headers: ReadonlyArray<unknown>; readonly name: string; readonly url: string }
-  | { readonly type: "sse"; readonly _meta?: Meta; readonly headers: ReadonlyArray<unknown>; readonly name: string; readonly url: string }
-  | { readonly _meta?: Meta; readonly args: ReadonlyArray<string>; readonly command: string; readonly env: ReadonlyArray<unknown>; readonly name: string };
+  | {
+      readonly type: "http";
+      readonly _meta?: Meta;
+      readonly headers: ReadonlyArray<unknown>;
+      readonly name: string;
+      readonly url: string;
+    }
+  | {
+      readonly type: "sse";
+      readonly _meta?: Meta;
+      readonly headers: ReadonlyArray<unknown>;
+      readonly name: string;
+      readonly url: string;
+    }
+  | {
+      readonly _meta?: Meta;
+      readonly args: ReadonlyArray<string>;
+      readonly command: string;
+      readonly env: ReadonlyArray<unknown>;
+      readonly name: string;
+    };
 
 export interface NewSessionRequest {
   readonly _meta?: Meta;
@@ -271,16 +337,33 @@ export interface RequestPermissionRequest {
 
 export interface RequestPermissionResponse {
   readonly _meta?: Meta;
-  readonly outcome: { readonly outcome: "cancelled" } | { readonly outcome: "selected"; readonly _meta?: Meta; readonly optionId: string };
+  readonly outcome:
+    | { readonly outcome: "cancelled" }
+    | { readonly outcome: "selected"; readonly _meta?: Meta; readonly optionId: string };
 }
 
 const MetaZ = z.record(z.string(), z.unknown()).nullable().optional();
 const EmbeddedResourceResourceZ = z.union([
-  z.object({ _meta: MetaZ, mimeType: z.string().nullable().optional(), text: z.string(), uri: z.string() }),
-  z.object({ _meta: MetaZ, blob: z.string(), mimeType: z.string().nullable().optional(), uri: z.string() }),
+  z.object({
+    _meta: MetaZ,
+    mimeType: z.string().nullable().optional(),
+    text: z.string(),
+    uri: z.string(),
+  }),
+  z.object({
+    _meta: MetaZ,
+    blob: z.string(),
+    mimeType: z.string().nullable().optional(),
+    uri: z.string(),
+  }),
 ]) as unknown as z.ZodType<EmbeddedResourceResource>;
 const ContentBlockZ = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("text"), _meta: MetaZ, annotations: z.unknown().optional(), text: z.string() }),
+  z.object({
+    type: z.literal("text"),
+    _meta: MetaZ,
+    annotations: z.unknown().optional(),
+    text: z.string(),
+  }),
   z.object({
     type: z.literal("image"),
     _meta: MetaZ,
@@ -289,8 +372,19 @@ const ContentBlockZ = z.discriminatedUnion("type", [
     mimeType: z.string(),
     uri: z.string().nullable().optional(),
   }),
-  z.object({ type: z.literal("audio"), _meta: MetaZ, annotations: z.unknown().optional(), data: z.string(), mimeType: z.string() }),
-  z.object({ type: z.literal("resource"), _meta: MetaZ, annotations: z.unknown().optional(), resource: EmbeddedResourceResourceZ }),
+  z.object({
+    type: z.literal("audio"),
+    _meta: MetaZ,
+    annotations: z.unknown().optional(),
+    data: z.string(),
+    mimeType: z.string(),
+  }),
+  z.object({
+    type: z.literal("resource"),
+    _meta: MetaZ,
+    annotations: z.unknown().optional(),
+    resource: EmbeddedResourceResourceZ,
+  }),
   z.object({
     type: z.literal("resource_link"),
     _meta: MetaZ,
@@ -304,7 +398,18 @@ const ContentBlockZ = z.discriminatedUnion("type", [
   }),
 ]) as unknown as z.ZodType<ContentBlock>;
 
-const ToolKindZ = z.enum(["read", "edit", "delete", "move", "search", "execute", "think", "fetch", "switch_mode", "other"]);
+const ToolKindZ = z.enum([
+  "read",
+  "edit",
+  "delete",
+  "move",
+  "search",
+  "execute",
+  "think",
+  "fetch",
+  "switch_mode",
+  "other",
+]);
 const ToolCallStatusZ = z.enum(["pending", "in_progress", "completed", "failed"]);
 const ToolCallLocationZ = z.object({
   _meta: MetaZ,
@@ -313,7 +418,13 @@ const ToolCallLocationZ = z.object({
 }) as unknown as z.ZodType<ToolCallLocation>;
 const ToolCallContentZ = z.discriminatedUnion("type", [
   z.object({ type: z.literal("content"), _meta: MetaZ, content: ContentBlockZ }),
-  z.object({ type: z.literal("diff"), _meta: MetaZ, newText: z.string(), oldText: z.string().nullable().optional(), path: z.string() }),
+  z.object({
+    type: z.literal("diff"),
+    _meta: MetaZ,
+    newText: z.string(),
+    oldText: z.string().nullable().optional(),
+    path: z.string(),
+  }),
   z.object({ type: z.literal("terminal"), _meta: MetaZ, terminalId: z.string() }),
 ]) as unknown as z.ZodType<ToolCallContent>;
 const PermissionOptionZ = z.object({
@@ -340,7 +451,10 @@ const PlanEntryZ = z.object({
   priority: z.enum(["high", "medium", "low"]),
   status: z.enum(["pending", "in_progress", "completed"]),
 }) as unknown as z.ZodType<PlanEntry>;
-const AvailableCommandInputZ = z.object({ _meta: MetaZ, hint: z.string() }) as unknown as z.ZodType<AvailableCommandInput>;
+const AvailableCommandInputZ = z.object({
+  _meta: MetaZ,
+  hint: z.string(),
+}) as unknown as z.ZodType<AvailableCommandInput>;
 const AvailableCommandZ = z.object({
   _meta: MetaZ,
   description: z.string(),
@@ -359,9 +473,24 @@ export const SessionNotificationZ: z.ZodType<SessionNotification> = z.object({
   _meta: MetaZ,
   sessionId: z.string(),
   update: z.discriminatedUnion("sessionUpdate", [
-    z.object({ sessionUpdate: z.literal("user_message_chunk"), _meta: MetaZ, content: ContentBlockZ, messageId: z.string().nullable().optional() }),
-    z.object({ sessionUpdate: z.literal("agent_message_chunk"), _meta: MetaZ, content: ContentBlockZ, messageId: z.string().nullable().optional() }),
-    z.object({ sessionUpdate: z.literal("agent_thought_chunk"), _meta: MetaZ, content: ContentBlockZ, messageId: z.string().nullable().optional() }),
+    z.object({
+      sessionUpdate: z.literal("user_message_chunk"),
+      _meta: MetaZ,
+      content: ContentBlockZ,
+      messageId: z.string().nullable().optional(),
+    }),
+    z.object({
+      sessionUpdate: z.literal("agent_message_chunk"),
+      _meta: MetaZ,
+      content: ContentBlockZ,
+      messageId: z.string().nullable().optional(),
+    }),
+    z.object({
+      sessionUpdate: z.literal("agent_thought_chunk"),
+      _meta: MetaZ,
+      content: ContentBlockZ,
+      messageId: z.string().nullable().optional(),
+    }),
     z.object({
       sessionUpdate: z.literal("tool_call"),
       _meta: MetaZ,
@@ -380,10 +509,33 @@ export const SessionNotificationZ: z.ZodType<SessionNotification> = z.object({
       _meta: MetaZ,
       entries: z.array(PlanEntryZ),
     }),
-    z.object({ sessionUpdate: z.literal("available_commands_update"), _meta: MetaZ, availableCommands: z.array(AvailableCommandZ) }),
-    z.object({ sessionUpdate: z.literal("current_mode_update"), _meta: MetaZ, currentModeId: z.string() }),
-    z.object({ sessionUpdate: z.literal("config_option_update"), _meta: MetaZ, configOptions: z.array(z.unknown()) }),
-    z.object({ sessionUpdate: z.literal("session_info_update"), _meta: MetaZ, title: z.string().nullable().optional(), updatedAt: z.string().nullable().optional() }),
-    z.object({ sessionUpdate: z.literal("usage_update"), _meta: MetaZ, cost: z.unknown().optional(), size: z.number().int().nonnegative(), used: z.number().int().nonnegative() }),
+    z.object({
+      sessionUpdate: z.literal("available_commands_update"),
+      _meta: MetaZ,
+      availableCommands: z.array(AvailableCommandZ),
+    }),
+    z.object({
+      sessionUpdate: z.literal("current_mode_update"),
+      _meta: MetaZ,
+      currentModeId: z.string(),
+    }),
+    z.object({
+      sessionUpdate: z.literal("config_option_update"),
+      _meta: MetaZ,
+      configOptions: z.array(z.unknown()),
+    }),
+    z.object({
+      sessionUpdate: z.literal("session_info_update"),
+      _meta: MetaZ,
+      title: z.string().nullable().optional(),
+      updatedAt: z.string().nullable().optional(),
+    }),
+    z.object({
+      sessionUpdate: z.literal("usage_update"),
+      _meta: MetaZ,
+      cost: z.unknown().optional(),
+      size: z.number().int().nonnegative(),
+      used: z.number().int().nonnegative(),
+    }),
   ]),
 });

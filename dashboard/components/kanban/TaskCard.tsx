@@ -178,7 +178,9 @@ export function TaskCard({
                 ✓ {task.proof.tests.passed}/{task.proof.tests.total}
               </span>
             )}
-            {task.proof?.pr && <span className="text-[var(--cyan)]">PR#{task.proof.pr.number}</span>}
+            {task.proof?.pr && (
+              <span className="text-[var(--cyan)]">PR#{task.proof.pr.number}</span>
+            )}
           </div>
         </div>
       </div>

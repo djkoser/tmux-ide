@@ -4,15 +4,20 @@ import { fileURLToPath } from "node:url";
 import { outputError } from "./lib/output.ts";
 import { loadSkills, loadSkill } from "./lib/skill-registry.ts";
 import { readConfig } from "./lib/yaml-io.ts";
-import {
-  CliActionInvocationError,
-  tryDispatchAction,
-} from "./lib/cli-action-bridge.ts";
+import { CliActionInvocationError, tryDispatchAction } from "./lib/cli-action-bridge.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function scaffoldSkillContent(name: string): string {
-  const templatePath = resolve(__dirname, "..", "..", "..", "templates", "skills", "general-worker.md");
+  const templatePath = resolve(
+    __dirname,
+    "..",
+    "..",
+    "..",
+    "templates",
+    "skills",
+    "general-worker.md",
+  );
   if (existsSync(templatePath)) {
     return readFileSync(templatePath, "utf-8").replace(/^name: .+/m, `name: ${name}`);
   }

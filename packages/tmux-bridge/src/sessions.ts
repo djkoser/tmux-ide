@@ -48,10 +48,9 @@ export function hasSession(session: string): boolean {
  */
 export function getSessionCwd(session: string): string | null {
   try {
-    const raw = runTmux(
-      ["display-message", "-p", "-t", session, "#{pane_current_path}"],
-      { encoding: "utf-8" },
-    ) as string;
+    const raw = runTmux(["display-message", "-p", "-t", session, "#{pane_current_path}"], {
+      encoding: "utf-8",
+    }) as string;
     const trimmed = raw.trim();
     return trimmed.length > 0 ? trimmed : null;
   } catch {
@@ -103,11 +102,7 @@ export function createDetachedSession(
   ).trim();
 }
 
-export function setSessionEnvironment(
-  session: string,
-  key: string,
-  value: string | number,
-): void {
+export function setSessionEnvironment(session: string, key: string, value: string | number): void {
   runTmux(["set-environment", "-t", session, key, String(value)]);
 }
 
@@ -122,11 +117,7 @@ export function getSessionVariable(session: string, name: string): string | null
   }
 }
 
-export function setSessionVariable(
-  session: string,
-  name: string,
-  value: string,
-): void {
+export function setSessionVariable(session: string, name: string, value: string): void {
   runTmux(["set-option", "-t", session, name, value]);
 }
 

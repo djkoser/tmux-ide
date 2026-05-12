@@ -1,14 +1,6 @@
 "use client";
 
-import {
-  ChevronDown,
-  ChevronRight,
-  CircleDot,
-  Flag,
-  Search,
-  Target,
-  X,
-} from "lucide-react";
+import { ChevronDown, ChevronRight, CircleDot, Flag, Search, Target, X } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useDeferredValue, useMemo, useState } from "react";
 import { Button, StatusPill } from "@/components/ui";
@@ -136,24 +128,13 @@ export function MissionTreeNavigator({ sessionName, onTaskClick }: MissionTreeNa
       const filteredGoals = group.goals
         .map((g) => ({
           goal: g.goal,
-          tasks: g.tasks.filter(
-            (t) => matchesQuery(t.title, q) || matchesQuery(t.id, q),
-          ),
+          tasks: g.tasks.filter((t) => matchesQuery(t.title, q) || matchesQuery(t.id, q)),
         }))
-        .filter(
-          (g) =>
-            milestoneMatch ||
-            matchesQuery(g.goal.title, q) ||
-            g.tasks.length > 0,
-        );
+        .filter((g) => milestoneMatch || matchesQuery(g.goal.title, q) || g.tasks.length > 0);
       const filteredOrphans = group.unassignedTasks.filter(
         (t) => matchesQuery(t.title, q) || matchesQuery(t.id, q),
       );
-      if (
-        milestoneMatch ||
-        filteredGoals.length > 0 ||
-        filteredOrphans.length > 0
-      ) {
+      if (milestoneMatch || filteredGoals.length > 0 || filteredOrphans.length > 0) {
         out.push({
           milestone: group.milestone,
           goals: filteredGoals,
@@ -172,11 +153,7 @@ export function MissionTreeNavigator({ sessionName, onTaskClick }: MissionTreeNa
   const missionStatus = mission?.status ?? "planning";
 
   return (
-    <NavigatorShell
-      title="Mission"
-      subtitle={mission?.title}
-      testId="mission-tree-navigator"
-    >
+    <NavigatorShell title="Mission" subtitle={mission?.title} testId="mission-tree-navigator">
       {!snapshot?.project ? (
         <div className="px-3 py-3 text-[11px] text-[var(--dim)]">loading project...</div>
       ) : (

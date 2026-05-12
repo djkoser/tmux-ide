@@ -30,7 +30,7 @@ function matchInitials(name: string, query: string, offset: number): CandidateMa
   let queryIndex = 0;
 
   for (let index = 0; index < name.length && queryIndex < query.length; index += 1) {
-    const previous = index === 0 ? "" : name[index - 1] ?? "";
+    const previous = index === 0 ? "" : (name[index - 1] ?? "");
     const isBoundary = index === 0 || /[\s/_-]/.test(previous);
     if (isBoundary && name[index] === query[queryIndex]) {
       matched.push(index + offset);
@@ -81,8 +81,7 @@ function scoreCommand(command: AvailableCommand, normalizedQuery: string): Candi
   }
 
   return (
-    matchInitials(name, normalizedQuery, offset) ??
-    matchSubsequence(name, normalizedQuery, offset)
+    matchInitials(name, normalizedQuery, offset) ?? matchSubsequence(name, normalizedQuery, offset)
   );
 }
 

@@ -65,9 +65,7 @@ function turnStarted(overrides: Partial<ChatTurnStartedEvent> = {}): ChatTurnSta
   };
 }
 
-function turnCompleted(
-  overrides: Partial<ChatTurnCompletedEvent> = {},
-): ChatTurnCompletedEvent {
+function turnCompleted(overrides: Partial<ChatTurnCompletedEvent> = {}): ChatTurnCompletedEvent {
   return {
     type: "chat.turn.completed",
     threadId: "thr_a",
@@ -183,9 +181,11 @@ describe("chat-v2 store: activity-appended reducer", () => {
   it("increments unread on inactive thread", () => {
     useChatStore.getState().setActiveThread("thr_b");
     useChatStore.getState().applyEvent(activityAppended({ threadId: "thr_a" }));
-    useChatStore.getState().applyEvent(
-      activityAppended({ threadId: "thr_a", activity: activity({ id: "evt_2" }), seq: 1 }),
-    );
+    useChatStore
+      .getState()
+      .applyEvent(
+        activityAppended({ threadId: "thr_a", activity: activity({ id: "evt_2" }), seq: 1 }),
+      );
     expect(useChatStore.getState().unreadByThread.thr_a).toBe(2);
   });
 
@@ -206,9 +206,7 @@ describe("chat-v2 store: turn lifecycle reducers", () => {
 
   it("turn.completed flips state to completed and records completedAt", () => {
     useChatStore.getState().applyEvent(turnStarted());
-    useChatStore
-      .getState()
-      .applyEvent(turnCompleted({ assistantMessageId: "msg_2" }));
+    useChatStore.getState().applyEvent(turnCompleted({ assistantMessageId: "msg_2" }));
     const turn = useChatStore.getState().turnsByThread.thr_a?.turn_1;
     expect(turn?.state).toBe("completed");
     expect(turn?.completedAt).toBe("2026-05-11T10:01:00Z");
@@ -258,9 +256,7 @@ describe("chat-v2 store: checkpoint + plan + revert reducers", () => {
       plan: plan(),
     };
     useChatStore.getState().applyEvent(event);
-    expect(useChatStore.getState().plansByThread.thr_a?.plan_1?.planMarkdown).toBe(
-      "## Plan",
-    );
+    expect(useChatStore.getState().plansByThread.thr_a?.plan_1?.planMarkdown).toBe("## Plan");
   });
 
   it("plan.upserted overwrites a plan with the same id", () => {

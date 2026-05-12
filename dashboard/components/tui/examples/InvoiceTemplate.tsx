@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 //NOTE(jimmylee): React port of the WindowCreateInvoice CLI screen — layout only, no animation header.
 //NOTE(jimmylee): Same data shape as scripts/cli/templates/template.ts so the React surface and CLI
@@ -8,29 +8,29 @@
 //NOTE(jimmylee): so it stays in lockstep with CLITemplate / ResultsList — every CLI port surface uses
 //NOTE(jimmylee): the same dialog frame and action button pair the alt-screen CLI shows.
 
-import * as React from 'react';
+import * as React from "react";
 
-import Window from '@components/Window';
-import Card from '@components/Card';
-import SimpleTable from '@components/SimpleTable';
-import ActionButton from '@components/ActionButton';
-import RowSpaceBetween from '@components/RowSpaceBetween';
+import Window from "@components/Window";
+import Card from "@components/Card";
+import SimpleTable from "@components/SimpleTable";
+import ActionButton from "@components/ActionButton";
+import RowSpaceBetween from "@components/RowSpaceBetween";
 
 const LINE_ITEMS: string[][] = [
-  ['#', 'DESC.', 'UNIT RATE', 'COUNT', 'AMOUNT (USD)'],
-  ['1', 'Cloud Infrastructure (Mar)', '4,250.00', '1', '4,250.00'],
-  ['2', 'Design Software Licenses', '75.00', '2', '150.00'],
-  ['3', 'Office Supplies', '312.00', '1', '312.00'],
+  ["#", "DESC.", "UNIT RATE", "COUNT", "AMOUNT (USD)"],
+  ["1", "Cloud Infrastructure (Mar)", "4,250.00", "1", "4,250.00"],
+  ["2", "Design Software Licenses", "75.00", "2", "150.00"],
+  ["3", "Office Supplies", "312.00", "1", "312.00"],
 ];
 
-const LINE_ITEM_ALIGN: ('left' | 'right')[] = ['left', 'left', 'right', 'right', 'right'];
+const LINE_ITEM_ALIGN: ("left" | "right")[] = ["left", "left", "right", "right", "right"];
 
 const SUMMARY: Array<[string, string]> = [
-  ['Subtotal', '$4,712.00'],
-  ['Discount', '$-471.20'],
-  ['Net Sales Total', '$4,240.80'],
-  ['Tax', '$0.00'],
-  ['Total', '$4,240.80'],
+  ["Subtotal", "$4,712.00"],
+  ["Discount", "$-471.20"],
+  ["Net Sales Total", "$4,240.80"],
+  ["Tax", "$0.00"],
+  ["Total", "$4,240.80"],
 ];
 
 const InvoiceTemplate: React.FC = () => {
@@ -66,7 +66,7 @@ const InvoiceTemplate: React.FC = () => {
         <SimpleTable data={LINE_ITEMS} align={LINE_ITEM_ALIGN} />
         <br />
         {SUMMARY.map(([label, value]) => (
-          <div key={label} style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <div key={label} style={{ display: "flex", justifyContent: "space-between" }}>
             <span>{label}</span>
             <span>{value}</span>
           </div>

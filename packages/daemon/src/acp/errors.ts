@@ -22,7 +22,10 @@ export class AcpAgentExitedError extends AcpError {
   readonly code: number | null;
   readonly signal: NodeJS.Signals | string | null;
 
-  constructor(message = "ACP agent exited", options?: { code?: number | null; signal?: string | null }) {
+  constructor(
+    message = "ACP agent exited",
+    options?: { code?: number | null; signal?: string | null },
+  ) {
     super(message);
     this.code = options?.code ?? null;
     this.signal = options?.signal ?? null;

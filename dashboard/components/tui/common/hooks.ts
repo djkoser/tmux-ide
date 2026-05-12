@@ -1,6 +1,10 @@
-import * as React from 'react';
+import * as React from "react";
 
-export function useDebouncedCallback<T>(ms: number, f: (...args: T[]) => void, deps: any[]): (...args: T[]) => void {
+export function useDebouncedCallback<T>(
+  ms: number,
+  f: (...args: T[]) => void,
+  deps: any[],
+): (...args: T[]) => void {
   let throttled = false;
   let latestArgs: T | null = null;
 
@@ -25,6 +29,6 @@ export function useDebouncedCallback<T>(ms: number, f: (...args: T[]) => void, d
         setTimeout(clearThrottle, ms);
       }
     },
-    [...deps, ms]
+    [...deps, ms],
   );
 }

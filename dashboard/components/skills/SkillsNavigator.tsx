@@ -77,9 +77,7 @@ export function SkillsNavigator() {
   return (
     <NavigatorShell title="Skills" testId="skills-navigator">
       {!activeProject ? (
-        <div className="px-3 py-3 text-[11px] text-[var(--dim)]">
-          open a project to load skills
-        </div>
+        <div className="px-3 py-3 text-[11px] text-[var(--dim)]">open a project to load skills</div>
       ) : error ? (
         <div className="px-3 py-3 text-[11px] text-[var(--red)]">skills unavailable</div>
       ) : loading ? (
@@ -102,12 +100,7 @@ export function SkillsNavigator() {
                 type="button"
                 data-testid={`navigator-skill-${skill.name}`}
                 onClick={() => {
-                  openWorkspaceTab(
-                    "skill",
-                    activeProject,
-                    `Skill · ${skill.name}`,
-                    skill.name,
-                  );
+                  openWorkspaceTab("skill", activeProject, `Skill · ${skill.name}`, skill.name);
                   closeMobile();
                 }}
                 className="flex w-full items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--surface-hover)]"

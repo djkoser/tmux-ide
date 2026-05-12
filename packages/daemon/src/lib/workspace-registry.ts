@@ -14,13 +14,7 @@
  */
 
 import { EventEmitter } from "node:events";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
@@ -85,12 +79,8 @@ export class WorkspaceRegistry {
   private loaded = false;
 
   constructor(options: WorkspaceRegistryOptions = {}) {
-    this.dir =
-      options.dir ??
-      process.env[REGISTRY_DIR_ENV] ??
-      join(homedir(), ".tmux-ide");
-    this.listSessions =
-      options.listSessions ?? defaultListSessions;
+    this.dir = options.dir ?? process.env[REGISTRY_DIR_ENV] ?? join(homedir(), ".tmux-ide");
+    this.listSessions = options.listSessions ?? defaultListSessions;
     this.emitter.setMaxListeners(0);
   }
 
@@ -218,9 +208,7 @@ export function getDefaultWorkspaceRegistry(): WorkspaceRegistry {
 }
 
 /** @internal Test hook: replace the singleton. */
-export function _setDefaultWorkspaceRegistryForTests(
-  registry: WorkspaceRegistry | null,
-): void {
+export function _setDefaultWorkspaceRegistryForTests(registry: WorkspaceRegistry | null): void {
   _default = registry;
 }
 
@@ -230,11 +218,10 @@ function defaultListSessions(): string[] {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { execFileSync } = require("node:child_process") as typeof import("node:child_process");
   try {
-    const raw = execFileSync(
-      "tmux",
-      ["list-sessions", "-F", "#{session_name}"],
-      { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] },
-    ) as string;
+    const raw = execFileSync("tmux", ["list-sessions", "-F", "#{session_name}"], {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }) as string;
     return raw.split("\n").filter(Boolean);
   } catch {
     return [];

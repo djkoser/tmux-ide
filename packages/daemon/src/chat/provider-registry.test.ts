@@ -24,7 +24,9 @@ import {
 
 const NOW = "2026-05-11T10:00:00.000Z";
 
-function anthropicConfig(overrides: Partial<AnthropicProviderConfig> = {}): AnthropicProviderConfig {
+function anthropicConfig(
+  overrides: Partial<AnthropicProviderConfig> = {},
+): AnthropicProviderConfig {
   return {
     kind: "anthropic",
     apiKey: "sk-ant-test",
@@ -37,7 +39,9 @@ function openaiConfig(overrides: Partial<OpenAIProviderConfig> = {}): OpenAIProv
   return { kind: "openai", apiKey: "sk-openai-test", model: "gpt-4o", ...overrides };
 }
 
-function ollamaConfig(overrides: Partial<LocalOllamaProviderConfig> = {}): LocalOllamaProviderConfig {
+function ollamaConfig(
+  overrides: Partial<LocalOllamaProviderConfig> = {},
+): LocalOllamaProviderConfig {
   return {
     kind: "local-ollama",
     baseUrl: "http://127.0.0.1:11434",
@@ -87,7 +91,10 @@ function makeFakeFetch(
   }) as unknown as typeof fetch;
 }
 
-async function collect(adapter: ProviderAdapter, messages: ReadonlyArray<{ role: "user" | "assistant" | "system"; content: string }>): Promise<ProviderEvent[]> {
+async function collect(
+  adapter: ProviderAdapter,
+  messages: ReadonlyArray<{ role: "user" | "assistant" | "system"; content: string }>,
+): Promise<ProviderEvent[]> {
   const events: ProviderEvent[] = [];
   for await (const e of adapter.sendTurn({ messages })) events.push(e);
   return events;
@@ -145,7 +152,12 @@ describe("provider-registry: kind + instance management", () => {
     const reg = makeProviderRegistry();
     reg.registerInstance(instance("a1", "anthropic", anthropicConfig()));
     reg.registerInstance(instance("o1", "openai", openaiConfig()));
-    expect(reg.listInstances().map((i) => i.id).sort()).toEqual(["a1", "o1"]);
+    expect(
+      reg
+        .listInstances()
+        .map((i) => i.id)
+        .sort(),
+    ).toEqual(["a1", "o1"]);
   });
 
   it("adapterFor on a missing id throws instance_not_found", () => {
@@ -402,12 +414,18 @@ describe("provider-abstraction integration scenarios", () => {
       factories: {
         anthropic: () =>
           mockAdapterEmitting(
-            [{ type: "text", text: "anthropic" }, { type: "end", reason: "completed" }],
+            [
+              { type: "text", text: "anthropic" },
+              { type: "end", reason: "completed" },
+            ],
             a,
           ),
         openai: () =>
           mockAdapterEmitting(
-            [{ type: "text", text: "openai" }, { type: "end", reason: "completed" }],
+            [
+              { type: "text", text: "openai" },
+              { type: "end", reason: "completed" },
+            ],
             o,
           ),
       },
@@ -425,9 +443,9 @@ describe("provider-abstraction integration scenarios", () => {
     expect(() =>
       reg.validateConfig({ kind: "anthropic", model: "claude-opus-4-7" } as never),
     ).toThrow(ProviderRegistryError);
-    expect(() =>
-      reg.validateConfig({ kind: "openai", apiKey: "sk-x" } as never),
-    ).toThrow(ProviderRegistryError);
+    expect(() => reg.validateConfig({ kind: "openai", apiKey: "sk-x" } as never)).toThrow(
+      ProviderRegistryError,
+    );
   });
 
   it("(d) provider-not-found surfaces a typed error suitable for turn-aborted", () => {

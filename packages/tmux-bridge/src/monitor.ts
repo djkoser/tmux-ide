@@ -10,11 +10,7 @@ export function isProcessAlive(pid: number): boolean {
   }
 }
 
-export function startSessionMonitor(
-  session: string,
-  monitorScript: string,
-  port?: number,
-): void {
+export function startSessionMonitor(session: string, monitorScript: string, port?: number): void {
   // If an existing monitor is still alive, kill it for a clean handoff.
   try {
     const existingPid = (

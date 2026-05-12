@@ -178,7 +178,9 @@ describe("wsBus", () => {
     const first = MockWebSocket.instances[0]!;
     first.open();
     // First subscribe frame(s) sent as listeners attach.
-    expect(first.parsedSends().some((f) => (f as { type: string }).type === "subscribe")).toBe(true);
+    expect(first.parsedSends().some((f) => (f as { type: string }).type === "subscribe")).toBe(
+      true,
+    );
 
     // Connection drops.
     first.errorAndClose();
@@ -230,9 +232,7 @@ describe("wsBus", () => {
     release();
 
     // unsubscribe goes out immediately.
-    const unsubs = sock
-      .parsedSends()
-      .filter((f) => (f as { type: string }).type === "unsubscribe");
+    const unsubs = sock.parsedSends().filter((f) => (f as { type: string }).type === "unsubscribe");
     expect(unsubs).toEqual([{ type: "unsubscribe", sessions: ["alpha"] }]);
 
     // Socket stays open during grace period.

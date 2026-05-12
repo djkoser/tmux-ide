@@ -6,7 +6,10 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const script = join(__dirname, "..", "scripts", "postinstall.js");
+// postinstall.js lives at repo-root scripts/ (4 levels up from
+// packages/daemon/src/postinstall.test.ts). The file is plain JS so node
+// is fine — no TS-syntax issue like the bin/cli.ts case.
+const script = join(__dirname, "..", "..", "..", "scripts", "postinstall.js");
 
 function makeHome() {
   const root = mkdtempSync(join(tmpdir(), "tmux-ide-postinstall-test-"));

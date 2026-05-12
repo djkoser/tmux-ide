@@ -152,7 +152,10 @@ export function makeMessagePipe(opts: MessagePipeOptions): MessagePipe {
     pending.timer.unref?.();
   }
 
-  function bufferText(update: SessionUpdate, kind: "agent_message_chunk" | "agent_thought_chunk"): void {
+  function bufferText(
+    update: SessionUpdate,
+    kind: "agent_message_chunk" | "agent_thought_chunk",
+  ): void {
     const content = update.content as { type: "text"; text: string };
     const messageId =
       typeof update.messageId === "string" || update.messageId === null

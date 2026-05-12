@@ -13,10 +13,7 @@
 
 import { z } from "zod";
 import { SessionOverviewSchemaZ, OrchestratorEventSchemaZ } from "./domain.ts";
-import {
-  WorkspaceAddedFrameSchemaZ,
-  WorkspaceRemovedFrameSchemaZ,
-} from "@tmux-ide/contracts";
+import { WorkspaceAddedFrameSchemaZ, WorkspaceRemovedFrameSchemaZ } from "@tmux-ide/contracts";
 
 // ---------------------------------------------------------------------------
 // Snapshot payload — mirrors what `/api/project/<name>/stream` already pushes

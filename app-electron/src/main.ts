@@ -90,7 +90,6 @@ function daemonBindHostname(): string | undefined {
   return process.env.TMUX_IDE_BIND_HOSTNAME === "0.0.0.0" ? "0.0.0.0" : undefined;
 }
 
-
 // ----- app:// protocol ------------------------------------------------------
 
 /**
@@ -325,7 +324,10 @@ function initializeAutoUpdater(): typeof import("electron-updater").autoUpdater 
 async function checkForUpdates(options: { notify: boolean } = { notify: false }): Promise<void> {
   sendUpdateStatus({ status: "checking" });
   if (!app.isPackaged) {
-    sendUpdateStatus({ status: "no-update", message: "Updates are only available in packaged builds." });
+    sendUpdateStatus({
+      status: "no-update",
+      message: "Updates are only available in packaged builds.",
+    });
     return;
   }
 

@@ -1,10 +1,5 @@
 import { createSignal, createMemo, createEffect, For, Show, onCleanup, onMount } from "solid-js";
-import {
-  fetchProjectDiff,
-  fetchProjectFileDiff,
-  type DiffData,
-  type DiffFileEntry,
-} from "../api";
+import { fetchProjectDiff, fetchProjectFileDiff, type DiffData, type DiffFileEntry } from "../api";
 import type { BaseMountOptions } from "../types";
 
 interface ChangesViewProps {
@@ -20,7 +15,12 @@ interface DiffLine {
 
 function classifyLine(line: string): DiffLine["kind"] {
   if (line.startsWith("@@")) return "hunk";
-  if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("diff ") || line.startsWith("index "))
+  if (
+    line.startsWith("+++") ||
+    line.startsWith("---") ||
+    line.startsWith("diff ") ||
+    line.startsWith("index ")
+  )
     return "meta";
   if (line.startsWith("+")) return "add";
   if (line.startsWith("-")) return "del";
@@ -92,7 +92,9 @@ export function ChangesView(props: ChangesViewProps) {
       setFilePatch("");
       return;
     }
-    void fetchProjectFileDiff(props.options(), f.file).then(setFilePatch).catch(() => setFilePatch(""));
+    void fetchProjectFileDiff(props.options(), f.file)
+      .then(setFilePatch)
+      .catch(() => setFilePatch(""));
   });
 
   const lines = createMemo<DiffLine[]>(() => parseDiff(filePatch()));
@@ -197,8 +199,7 @@ export function ChangesView(props: ChangesViewProps) {
               "font-family": "inherit",
               cursor: "pointer",
               border: "none",
-              background:
-                diffStyle() === "unified" ? "var(--surface-hover)" : "transparent",
+              background: diffStyle() === "unified" ? "var(--surface-hover)" : "transparent",
               color:
                 diffStyle() === "unified"
                   ? "var(--theme-text, var(--fg))"
@@ -217,8 +218,7 @@ export function ChangesView(props: ChangesViewProps) {
               "font-family": "inherit",
               cursor: "pointer",
               border: "none",
-              background:
-                diffStyle() === "split" ? "var(--surface-hover)" : "transparent",
+              background: diffStyle() === "split" ? "var(--surface-hover)" : "transparent",
               color:
                 diffStyle() === "split"
                   ? "var(--theme-text, var(--fg))"
@@ -260,11 +260,13 @@ export function ChangesView(props: ChangesViewProps) {
           <Show
             when={files().length > 0}
             fallback={
-              <div style={{ padding: "12px", color: "var(--theme-focused-foreground-subdued, var(--dim))" }}>
-                <Show
-                  when={!loading()}
-                  fallback={<>… loading</>}
-                >
+              <div
+                style={{
+                  padding: "12px",
+                  color: "var(--theme-focused-foreground-subdued, var(--dim))",
+                }}
+              >
+                <Show when={!loading()} fallback={<>… loading</>}>
                   All clean ✓
                 </Show>
               </div>
@@ -291,16 +293,33 @@ export function ChangesView(props: ChangesViewProps) {
                     }}
                     onClick={() => setSelected(i())}
                   >
-                    <span style={{ "min-width": "0", flex: "1", overflow: "hidden", "text-overflow": "ellipsis" }}>
+                    <span
+                      style={{
+                        "min-width": "0",
+                        flex: "1",
+                        overflow: "hidden",
+                        "text-overflow": "ellipsis",
+                      }}
+                    >
                       {f.file}
                     </span>
                     <Show when={f.additions > 0}>
-                      <span style={{ color: "var(--green, var(--diff-add-text))", "font-variant-numeric": "tabular-nums" }}>
+                      <span
+                        style={{
+                          color: "var(--green, var(--diff-add-text))",
+                          "font-variant-numeric": "tabular-nums",
+                        }}
+                      >
                         +{f.additions}
                       </span>
                     </Show>
                     <Show when={f.deletions > 0}>
-                      <span style={{ color: "var(--red, var(--diff-del-text))", "font-variant-numeric": "tabular-nums" }}>
+                      <span
+                        style={{
+                          color: "var(--red, var(--diff-del-text))",
+                          "font-variant-numeric": "tabular-nums",
+                        }}
+                      >
                         -{f.deletions}
                       </span>
                     </Show>
@@ -317,14 +336,19 @@ export function ChangesView(props: ChangesViewProps) {
           data-testid="v2-changes-patch"
           style={{
             "flex-grow": "1",
-            "overflow": "auto",
+            overflow: "auto",
             "min-width": "0",
           }}
         >
           <Show
             when={files()[selected()] && filePatch()}
             fallback={
-              <div style={{ padding: "12px", color: "var(--theme-focused-foreground-subdued, var(--dim))" }}>
+              <div
+                style={{
+                  padding: "12px",
+                  color: "var(--theme-focused-foreground-subdued, var(--dim))",
+                }}
+              >
                 {files().length === 0 && !loading()
                   ? "No uncommitted changes"
                   : "Select a file to view diff"}
@@ -392,7 +416,14 @@ function SplitDiff(props: { lines: DiffLine[] }) {
           if (line.kind === "hunk" || line.kind === "meta") {
             return (
               <>
-                <div style={{ "background-color": c.bg, color: c.fg, "white-space": "pre", "grid-column": "1 / -1" }}>
+                <div
+                  style={{
+                    "background-color": c.bg,
+                    color: c.fg,
+                    "white-space": "pre",
+                    "grid-column": "1 / -1",
+                  }}
+                >
                   {line.text || " "}
                 </div>
               </>
@@ -401,17 +432,34 @@ function SplitDiff(props: { lines: DiffLine[] }) {
           if (line.kind === "del") {
             return (
               <>
-                <div style={{ "background-color": c.bg, color: c.fg, "white-space": "pre", "border-right": "1px solid var(--theme-border-subdued, var(--border-weak))" }}>
+                <div
+                  style={{
+                    "background-color": c.bg,
+                    color: c.fg,
+                    "white-space": "pre",
+                    "border-right": "1px solid var(--theme-border-subdued, var(--border-weak))",
+                  }}
+                >
                   {line.text || " "}
                 </div>
-                <div style={{ "white-space": "pre", "border-right": "1px solid var(--theme-border-subdued, var(--border-weak))" }} />
+                <div
+                  style={{
+                    "white-space": "pre",
+                    "border-right": "1px solid var(--theme-border-subdued, var(--border-weak))",
+                  }}
+                />
               </>
             );
           }
           if (line.kind === "add") {
             return (
               <>
-                <div style={{ "white-space": "pre", "border-right": "1px solid var(--theme-border-subdued, var(--border-weak))" }} />
+                <div
+                  style={{
+                    "white-space": "pre",
+                    "border-right": "1px solid var(--theme-border-subdued, var(--border-weak))",
+                  }}
+                />
                 <div style={{ "background-color": c.bg, color: c.fg, "white-space": "pre" }}>
                   {line.text || " "}
                 </div>
@@ -421,7 +469,13 @@ function SplitDiff(props: { lines: DiffLine[] }) {
           // context — both columns
           return (
             <>
-              <div style={{ color: c.fg, "white-space": "pre", "border-right": "1px solid var(--theme-border-subdued, var(--border-weak))" }}>
+              <div
+                style={{
+                  color: c.fg,
+                  "white-space": "pre",
+                  "border-right": "1px solid var(--theme-border-subdued, var(--border-weak))",
+                }}
+              >
                 {line.text || " "}
               </div>
               <div style={{ color: c.fg, "white-space": "pre" }}>{line.text || " "}</div>

@@ -26,10 +26,7 @@ import {
   InvalidPermissionOptionError,
   PermissionRequestNotFoundError,
 } from "./permission-helpers.ts";
-import {
-  makePermissionCoordinator,
-  type PermissionCoordinator,
-} from "./permission-coordinator.ts";
+import { makePermissionCoordinator, type PermissionCoordinator } from "./permission-coordinator.ts";
 import { makeMessagePipe, type MessagePipe } from "./message-pipe.ts";
 import {
   dispatchAcpPrompt,
@@ -193,7 +190,11 @@ export function makeThreadManager(opts: MakeThreadManagerOptions): ThreadManager
     },
   });
 
-  function makePipeFor(threadId: string, initialUsage: ChatThreadUsageSummary | undefined, seq: number) {
+  function makePipeFor(
+    threadId: string,
+    initialUsage: ChatThreadUsageSummary | undefined,
+    seq: number,
+  ) {
     return makeMessagePipe({
       threadId,
       initialSeq: seq,
@@ -314,9 +315,7 @@ export function makeThreadManager(opts: MakeThreadManagerOptions): ThreadManager
     const start = (async () => {
       const thread = await opts.store.get(threadId);
       if (!thread) throw new ThreadNotFoundError(threadId);
-      return thread.provider.kind === "codex"
-        ? spawnCodexLive(threadId)
-        : spawnAcpLive(threadId);
+      return thread.provider.kind === "codex" ? spawnCodexLive(threadId) : spawnAcpLive(threadId);
     })();
     starting.set(threadId, start);
     try {
@@ -403,9 +402,7 @@ export function makeThreadManager(opts: MakeThreadManagerOptions): ThreadManager
         threadId: input.threadId,
         ...(input.id ? { id: input.id } : {}),
         providerName: input.provider.kind,
-        ...(input.providerInstanceId
-          ? { providerInstanceId: input.providerInstanceId }
-          : {}),
+        ...(input.providerInstanceId ? { providerInstanceId: input.providerInstanceId } : {}),
         ...(input.role ? { role: input.role } : {}),
         ...(input.displayName ? { displayName: input.displayName } : {}),
         status: "idle",
@@ -426,7 +423,8 @@ export function makeThreadManager(opts: MakeThreadManagerOptions): ThreadManager
       // threads carry the reference on the Session, not the Thread root).
       const sessionInstanceId = instanceId
         ? null
-        : sessionStore.list(threadId).find((s) => s.providerInstanceId)?.providerInstanceId ?? null;
+        : (sessionStore.list(threadId).find((s) => s.providerInstanceId)?.providerInstanceId ??
+          null);
       const id = instanceId ?? sessionInstanceId;
       if (!id) return null;
       return opts.providerStore.get(id);

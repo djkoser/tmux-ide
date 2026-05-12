@@ -80,7 +80,9 @@ describe("spawnAcpClient", () => {
     await expect(client.newSession({ cwd: process.cwd(), mcpServers: [] })).resolves.toEqual({
       sessionId: "s1",
     });
-    await expect(client.loadSession({ cwd: process.cwd(), mcpServers: [], sessionId: "s1" })).resolves.toEqual({});
+    await expect(
+      client.loadSession({ cwd: process.cwd(), mcpServers: [], sessionId: "s1" }),
+    ).resolves.toEqual({});
     await expect(
       client.prompt({
         sessionId: "s1",
@@ -115,7 +117,9 @@ describe("spawnAcpClient", () => {
       return { outcome: { outcome: "selected", optionId: "allow" } };
     });
 
-    await expect(client.prompt({ sessionId: "s1", prompt: [{ type: "text", text: "permission" }] })).resolves.toMatchObject({
+    await expect(
+      client.prompt({ sessionId: "s1", prompt: [{ type: "text", text: "permission" }] }),
+    ).resolves.toMatchObject({
       stopReason: "end_turn",
       permission: { outcome: { outcome: "selected", optionId: "allow" } },
     });

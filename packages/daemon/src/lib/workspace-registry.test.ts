@@ -45,9 +45,10 @@ describe("WorkspaceRegistry — add/list/get/remove round-trip", () => {
     expect(ws.sessionName).toBe("alpha");
     expect(ws.addedAt).toBe(FIXED.toISOString());
 
-    const file = JSON.parse(
-      readFileSync(join(dir, "workspaces.json"), "utf-8"),
-    ) as { version: number; workspaces: unknown[] };
+    const file = JSON.parse(readFileSync(join(dir, "workspaces.json"), "utf-8")) as {
+      version: number;
+      workspaces: unknown[];
+    };
     expect(file.version).toBe(1);
     expect(file.workspaces).toHaveLength(1);
 
@@ -103,9 +104,9 @@ describe("WorkspaceRegistry — reconcile against tmux list-sessions", () => {
 
     // The cleanup is persisted so a fresh registry stays clean even if
     // tmux later reports beta again.
-    const file = JSON.parse(
-      readFileSync(join(dir, "workspaces.json"), "utf-8"),
-    ) as { workspaces: { name: string }[] };
+    const file = JSON.parse(readFileSync(join(dir, "workspaces.json"), "utf-8")) as {
+      workspaces: { name: string }[];
+    };
     expect(file.workspaces.map((w) => w.name)).toEqual(["alpha"]);
   });
 

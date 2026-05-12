@@ -2,11 +2,12 @@ import { getSettingsSnapshot } from "@/lib/useSettings";
 
 export type SoundKind = "complete" | "error" | "idle";
 
-const soundSettingsKey: Record<SoundKind, keyof ReturnType<typeof getSettingsSnapshot>["sounds"]> = {
-  complete: "onTaskComplete",
-  error: "onTaskError",
-  idle: "onAgentIdle",
-};
+const soundSettingsKey: Record<SoundKind, keyof ReturnType<typeof getSettingsSnapshot>["sounds"]> =
+  {
+    complete: "onTaskComplete",
+    error: "onTaskError",
+    idle: "onAgentIdle",
+  };
 
 const tone: Record<SoundKind, { frequency: number; endFrequency: number; duration: number }> = {
   complete: { frequency: 660, endFrequency: 880, duration: 0.18 },

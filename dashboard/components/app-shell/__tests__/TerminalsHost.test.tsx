@@ -72,12 +72,8 @@ describe("TerminalsHost", () => {
     // The active tab is the most recently opened (`adhoc`). Its slot
     // should be visible; the older default's slot should be hidden.
     const slots = document.querySelectorAll<HTMLElement>("[data-terminal-slot]");
-    const adhocSlot = Array.from(slots).find(
-      (el) => el.dataset.terminalSlot === adhoc.id,
-    );
-    const defaultSlot = Array.from(slots).find(
-      (el) => el.dataset.terminalSlot === defaultId,
-    );
+    const adhocSlot = Array.from(slots).find((el) => el.dataset.terminalSlot === adhoc.id);
+    const defaultSlot = Array.from(slots).find((el) => el.dataset.terminalSlot === defaultId);
     expect(adhocSlot?.style.display).toBe("flex");
     expect(defaultSlot?.style.display).toBe("none");
   });
@@ -198,9 +194,7 @@ describe("TerminalsHost", () => {
 
     // t2 is the most recently opened and is the active terminal.
     let slots = document.querySelectorAll<HTMLElement>("[data-terminal-slot]");
-    let slotMap = new Map(
-      Array.from(slots).map((s) => [s.dataset.terminalSlot, s.style.display]),
-    );
+    let slotMap = new Map(Array.from(slots).map((s) => [s.dataset.terminalSlot, s.style.display]));
     expect(slotMap.get(t2.id)).toBe("flex");
     expect(slotMap.get(t1.id)).toBe("none");
 
@@ -208,9 +202,7 @@ describe("TerminalsHost", () => {
     activateTab(t1.id);
     rerender(<TerminalsHost />);
     slots = document.querySelectorAll<HTMLElement>("[data-terminal-slot]");
-    slotMap = new Map(
-      Array.from(slots).map((s) => [s.dataset.terminalSlot, s.style.display]),
-    );
+    slotMap = new Map(Array.from(slots).map((s) => [s.dataset.terminalSlot, s.style.display]));
     expect(slotMap.get(t1.id)).toBe("flex");
     expect(slotMap.get(t2.id)).toBe("none");
   });

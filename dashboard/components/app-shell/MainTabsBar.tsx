@@ -13,12 +13,7 @@ import { SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortabl
 import { Plus } from "lucide-react";
 import { openCommandPalette } from "@/components/CommandPalette";
 import { MainTabItem } from "./MainTabItem";
-import {
-  activateTab,
-  closeTab,
-  reorderTabs,
-  useNavigation,
-} from "@/lib/navigation";
+import { activateTab, closeTab, reorderTabs, useNavigation } from "@/lib/navigation";
 
 /**
  * MainTabsBar — single unified row of tabs at the top of the main

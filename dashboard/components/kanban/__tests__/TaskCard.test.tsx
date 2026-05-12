@@ -36,13 +36,7 @@ function renderCard(task: Task, props: Partial<Parameters<typeof TaskCard>[0]> =
   return render(
     <DndContext>
       <SortableContext items={[task.id]}>
-        <TaskCard
-          task={task}
-          density="comfortable"
-          selected={false}
-          blocked={false}
-          {...props}
-        />
+        <TaskCard task={task} density="comfortable" selected={false} blocked={false} {...props} />
       </SortableContext>
     </DndContext>,
   );

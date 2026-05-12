@@ -29,7 +29,10 @@ interface MinuteGroup {
   events: EventData[];
 }
 
-const ICONS: Record<string, { Icon: ComponentType<{ size?: number; className?: string }>; color: string }> = {
+const ICONS: Record<
+  string,
+  { Icon: ComponentType<{ size?: number; className?: string }>; color: string }
+> = {
   dispatch: { Icon: Send, color: "var(--accent)" },
   "task.dispatched": { Icon: Send, color: "var(--accent)" },
   completion: { Icon: CheckCircle2, color: "var(--green)" },
@@ -78,18 +81,17 @@ function EventRow({ event }: { event: EventData }) {
       className="flex items-center gap-3 rounded-sm px-2 py-1.5"
     >
       <meta.Icon size={12} className="shrink-0" />
-      <span className="shrink-0 text-[10px] uppercase tracking-[0.08em]" style={{ color: meta.color }}>
+      <span
+        className="shrink-0 text-[10px] uppercase tracking-[0.08em]"
+        style={{ color: meta.color }}
+      >
         {event.type.replace(/^task\./, "")}
       </span>
       {event.agent && (
         <span className="shrink-0 text-[11px] text-[var(--fg-secondary)]">{event.agent}</span>
       )}
-      <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--fg)]">
-        {event.message}
-      </span>
-      <span className="shrink-0 text-[10px] tabular-nums text-[var(--dim)]">
-        {event.relative}
-      </span>
+      <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--fg)]">{event.message}</span>
+      <span className="shrink-0 text-[10px] tabular-nums text-[var(--dim)]">{event.relative}</span>
     </li>
   );
 }
@@ -135,7 +137,11 @@ export function EventStream({ events, limit = 20, onShowAll }: EventStreamProps)
               const isCollapsed = group.events.length > 1 && collapsed[group.bucket] !== false;
               const showCollapse = group.events.length > 1;
               return (
-                <li key={group.bucket} data-testid={`event-bucket-${group.bucket}`} className="px-2 py-1.5">
+                <li
+                  key={group.bucket}
+                  data-testid={`event-bucket-${group.bucket}`}
+                  className="px-2 py-1.5"
+                >
                   {showCollapse ? (
                     <>
                       <button
@@ -145,7 +151,11 @@ export function EventStream({ events, limit = 20, onShowAll }: EventStreamProps)
                         className="flex w-full items-center gap-2 rounded-sm px-1 py-0.5 text-left transition-colors hover-only:hover:bg-[var(--surface-hover)]"
                       >
                         {isCollapsed ? (
-                          <ChevronRight aria-hidden="true" size={12} className="text-[var(--dim)]" />
+                          <ChevronRight
+                            aria-hidden="true"
+                            size={12}
+                            className="text-[var(--dim)]"
+                          />
                         ) : (
                           <ChevronDown aria-hidden="true" size={12} className="text-[var(--dim)]" />
                         )}

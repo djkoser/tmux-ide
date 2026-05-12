@@ -1,8 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import {
-  daemonShutdownHandler,
-  setDaemonShutdownBackend,
-} from "./daemon-shutdown.ts";
+import { daemonShutdownHandler, setDaemonShutdownBackend } from "./daemon-shutdown.ts";
 
 describe("daemonShutdownHandler", () => {
   it("queues a shutdown and returns immediately", async () => {

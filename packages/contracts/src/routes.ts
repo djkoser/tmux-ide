@@ -16,11 +16,7 @@
  */
 
 import { z } from "zod";
-import {
-  MissionSchemaZ,
-  ProjectDetailSchemaZ,
-  SessionOverviewSchemaZ,
-} from "./domain.ts";
+import { MissionSchemaZ, ProjectDetailSchemaZ, SessionOverviewSchemaZ } from "./domain.ts";
 import { ProposedPlanZ, RuntimeModeZ } from "./chat-thread.ts";
 
 // ---------------------------------------------------------------------------

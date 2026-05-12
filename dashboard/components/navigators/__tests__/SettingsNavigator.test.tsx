@@ -12,12 +12,8 @@ describe("SettingsNavigator", () => {
 
   it("marks the active section with data-active=true", () => {
     render(<SettingsNavigator active="appearance" onChange={() => {}} />);
-    expect(
-      screen.getByTestId("settings-nav-appearance").getAttribute("data-active"),
-    ).toBe("true");
-    expect(screen.getByTestId("settings-nav-general").getAttribute("data-active")).toBe(
-      "false",
-    );
+    expect(screen.getByTestId("settings-nav-appearance").getAttribute("data-active")).toBe("true");
+    expect(screen.getByTestId("settings-nav-general").getAttribute("data-active")).toBe("false");
   });
 
   it("fires onChange with the picked section id", () => {

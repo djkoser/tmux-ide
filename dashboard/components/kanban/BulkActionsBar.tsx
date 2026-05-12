@@ -24,9 +24,7 @@ export function BulkActionsBar({ count, onClear, onSetStatus, onDelete }: BulkAc
       className="pointer-events-auto fixed bottom-6 left-1/2 z-30 -translate-x-1/2 rounded-md border border-[var(--border)] bg-[var(--bg-strong)] px-2 py-1.5 shadow-2xl"
     >
       <div className="flex items-center gap-2">
-        <span className="text-[11px] tabular-nums text-[var(--fg)]">
-          {count} selected
-        </span>
+        <span className="text-[11px] tabular-nums text-[var(--fg)]">{count} selected</span>
         <span className="h-4 w-px bg-[var(--border-weak)]" />
         <span className="text-[10px] uppercase tracking-wide text-[var(--dim)]">Move to</span>
         {STATUS_COLUMNS.map((col) => (

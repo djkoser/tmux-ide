@@ -61,9 +61,7 @@ const bridge: BridgeInternals = {
  * than the server's union (it doesn't yet include the new variants), so we
  * read fields off a duck-typed shape rather than narrowing the union.
  */
-function readActionCompleteFrame(
-  frame: ServerFrame,
-): { name: string; result: unknown } | null {
+function readActionCompleteFrame(frame: ServerFrame): { name: string; result: unknown } | null {
   const candidate = frame as { type?: unknown; name?: unknown; result?: unknown };
   if (candidate.type !== "action.complete") return null;
   if (typeof candidate.name !== "string") return null;

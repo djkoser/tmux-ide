@@ -71,9 +71,7 @@ export function resolveTarget(
         throw new Error(`Pane not found by title: ${target.title}`);
       }
       if (matches.length > 1) {
-        throw new Error(
-          `Ambiguous pane title "${target.title}" matches ${matches.length} panes`,
-        );
+        throw new Error(`Ambiguous pane title "${target.title}" matches ${matches.length} panes`);
       }
       return {
         target: paneTarget(session, matches[0]!.index),

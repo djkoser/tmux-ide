@@ -52,9 +52,7 @@ describe("SessionsNavigator", () => {
     await act(async () => {
       render(<SessionsNavigator />);
     });
-    await waitFor(() =>
-      expect(screen.getByTestId("sessions-navigator")).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByTestId("sessions-navigator")).toBeTruthy());
   });
 
   it("renders one row per session and marks the active project", async () => {
@@ -65,12 +63,8 @@ describe("SessionsNavigator", () => {
       expect(screen.getByTestId("navigator-session-alpha")).toBeTruthy();
       expect(screen.getByTestId("navigator-session-beta")).toBeTruthy();
     });
-    expect(
-      screen.getByTestId("navigator-session-alpha").getAttribute("data-active"),
-    ).toBe("true");
-    expect(
-      screen.getByTestId("navigator-session-beta").getAttribute("data-active"),
-    ).toBe("false");
+    expect(screen.getByTestId("navigator-session-alpha").getAttribute("data-active")).toBe("true");
+    expect(screen.getByTestId("navigator-session-beta").getAttribute("data-active")).toBe("false");
   });
 
   it("renders an api-unreachable banner when the fetch fails", async () => {

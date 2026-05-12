@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 //NOTE(jimmylee): React port of the TUI CLI template (scripts/cli/templates/template.ts).
 //NOTE(jimmylee): Layout-only port — no animation header, no terminal canvas. TUI React surfaces
@@ -8,31 +8,31 @@
 //NOTE(jimmylee): ActionButton, RowSpaceBetween. A human should look at this surface and the
 //NOTE(jimmylee): `npm run cli:typescript` / `npm run cli:python` output and read them as the same screen.
 
-import * as React from 'react';
+import * as React from "react";
 
-import Window from '@components/Window';
-import Card from '@components/Card';
-import SimpleTable from '@components/SimpleTable';
-import ActionButton from '@components/ActionButton';
-import RowSpaceBetween from '@components/RowSpaceBetween';
+import Window from "@components/Window";
+import Card from "@components/Card";
+import SimpleTable from "@components/SimpleTable";
+import ActionButton from "@components/ActionButton";
+import RowSpaceBetween from "@components/RowSpaceBetween";
 
 const SUMMARY: Array<[string, string]> = [
-  ['PROJECT', 'tmux-ide'],
-  ['VERSION', '1.1.19'],
-  ['LANGUAGE', 'TypeScript + Python'],
-  ['STATUS', 'OK'],
+  ["PROJECT", "tmux-ide"],
+  ["VERSION", "1.1.19"],
+  ["LANGUAGE", "TypeScript + Python"],
+  ["STATUS", "OK"],
 ];
 
 //NOTE(jimmylee): Same primitive set the CLI template demonstrates. The status column matches the
 //NOTE(jimmylee): CLI's status coloring contract — ACTIVE/OPEN/APPROVED, CLOSED/PAID/SUSPENDED.
 const PRIMITIVES: string[][] = [
-  ['NAME', 'KIND', 'STATUS', 'UPDATED'],
-  ['ansi.js', 'primitive', 'ACTIVE', '2026-04-08T09:00:00'],
-  ['window.js', 'primitive', 'ACTIVE', '2026-04-08T09:00:00'],
-  ['card.js', 'primitive', 'ACTIVE', '2026-04-08T09:00:00'],
-  ['table.js', 'primitive', 'ACTIVE', '2026-04-08T09:00:00'],
-  ['button.js', 'primitive', 'ACTIVE', '2026-04-08T09:00:00'],
-  ['app.js', 'lifecycle', 'ACTIVE', '2026-04-08T09:00:00'],
+  ["NAME", "KIND", "STATUS", "UPDATED"],
+  ["ansi.js", "primitive", "ACTIVE", "2026-04-08T09:00:00"],
+  ["window.js", "primitive", "ACTIVE", "2026-04-08T09:00:00"],
+  ["card.js", "primitive", "ACTIVE", "2026-04-08T09:00:00"],
+  ["table.js", "primitive", "ACTIVE", "2026-04-08T09:00:00"],
+  ["button.js", "primitive", "ACTIVE", "2026-04-08T09:00:00"],
+  ["app.js", "lifecycle", "ACTIVE", "2026-04-08T09:00:00"],
 ];
 
 //NOTE(jimmylee): NOTE prose intentionally opens with a meditation on inside/outside before pivoting
@@ -47,7 +47,7 @@ const CLITemplate: React.FC = () => {
       <Card title="TUI CLI / TEMPLATE" mode="left">
         {SUMMARY.map(([k, v]) => (
           <div key={k}>
-            {k.padEnd(24, ' ')}
+            {k.padEnd(24, " ")}
             {v}
           </div>
         ))}

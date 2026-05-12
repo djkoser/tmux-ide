@@ -38,7 +38,7 @@ demand it, and foreign-framework UI (Solid today: `@tmux-ide/chat-solid`,
 a single bridge component each. The rule, the decision matrix, the
 canonical bridge template, and the planned lint enforcement live in
 [`docs/adr/0001-rsc-shell-and-siloed-blocks.md`](docs/adr/0001-rsc-shell-and-siloed-blocks.md);
-the copy-pasteable bridge template plus the *why `[]`-deps* explainer
+the copy-pasteable bridge template plus the _why `[]`-deps_ explainer
 live in [`docs/contributing/bridge-template.md`](docs/contributing/bridge-template.md).
 PRs touching dashboard ↔ silo boundaries should cite ADR-0001 instead
 of restating the rule.

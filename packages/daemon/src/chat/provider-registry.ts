@@ -111,9 +111,7 @@ export interface MakeProviderRegistryOptions {
   factories?: Partial<Record<ProviderKind, AdapterFactory>>;
 }
 
-export function makeProviderRegistry(
-  opts: MakeProviderRegistryOptions = {},
-): ProviderRegistry {
+export function makeProviderRegistry(opts: MakeProviderRegistryOptions = {}): ProviderRegistry {
   const factories = new Map<ProviderKind, AdapterFactory>();
   for (const [kind, factory] of Object.entries(BUILT_IN_FACTORIES)) {
     factories.set(kind as ProviderKind, factory);
@@ -255,10 +253,7 @@ function makeAnthropicAdapter(
   };
 }
 
-function makeOpenAIAdapter(
-  instance: ProviderInstance,
-  deps?: AdapterFactoryDeps,
-): ProviderAdapter {
+function makeOpenAIAdapter(instance: ProviderInstance, deps?: AdapterFactoryDeps): ProviderAdapter {
   const config = instance.config as OpenAIProviderConfig;
   return {
     kind: "openai",
@@ -304,10 +299,7 @@ function makeOpenAIAdapter(
   };
 }
 
-function makeOllamaAdapter(
-  instance: ProviderInstance,
-  deps?: AdapterFactoryDeps,
-): ProviderAdapter {
+function makeOllamaAdapter(instance: ProviderInstance, deps?: AdapterFactoryDeps): ProviderAdapter {
   const config = instance.config as LocalOllamaProviderConfig;
   return {
     kind: "local-ollama",
@@ -420,9 +412,11 @@ function mapStopReason(raw: unknown): "completed" | "max_tokens" | "refusal" | "
  * UsagePatch-shaped delta. Pure function — drives per-provider
  * accounting independent of session-level totals.
  */
-export function accountingFromEvents(
-  events: Iterable<ProviderEvent>,
-): { inputTokens: number; outputTokens: number; totalCostUsd?: number } {
+export function accountingFromEvents(events: Iterable<ProviderEvent>): {
+  inputTokens: number;
+  outputTokens: number;
+  totalCostUsd?: number;
+} {
   let inputTokens = 0;
   let outputTokens = 0;
   let totalCostUsd: number | undefined;

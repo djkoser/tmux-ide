@@ -6,15 +6,15 @@
 
 ## Headline numbers
 
-| Bucket | Count |
-| --- | ---: |
+| Bucket                           |   Count |
+| -------------------------------- | ------: |
 | Files in `src/` (`.ts` + `.tsx`) | **211** |
-| Files in `packages/daemon/src/` | **359** |
-| In both | **208** |
-| ↳ Byte-identical | **162** |
-| ↳ Diverged | **46** |
-| `src/`-only | **3** |
-| `packages/daemon/src/`-only | **151** |
+| Files in `packages/daemon/src/`  | **359** |
+| In both                          | **208** |
+| ↳ Byte-identical                 | **162** |
+| ↳ Diverged                       |  **46** |
+| `src/`-only                      |   **3** |
+| `packages/daemon/src/`-only      | **151** |
 
 Failing daemon `bun test src` run: **38 failures** across 8 test files. Root cause confirmed in §5.
 
@@ -28,16 +28,16 @@ These files are byte-identical on both sides. Deleting the `src/` copy is a no-o
 
 By top-level bucket:
 
-| Bucket | Count |
-| --- | ---: |
-| `lib/` | 71 |
-| `widgets/` | 40 |
-| repo-root `src/*.ts` | 25 |
-| `ui/` | 12 |
-| `command-center/` | 7 |
-| `schemas/` | 4 |
-| `server/` | 2 |
-| `__tests__/` | 1 |
+| Bucket               | Count |
+| -------------------- | ----: |
+| `lib/`               |    71 |
+| `widgets/`           |    40 |
+| repo-root `src/*.ts` |    25 |
+| `ui/`                |    12 |
+| `command-center/`    |     7 |
+| `schemas/`           |     4 |
+| `server/`            |     2 |
+| `__tests__/`         |     1 |
 
 Full list (alphabetical):
 
@@ -216,66 +216,66 @@ All 46 diverged files share **one of three** divergence patterns. Categorising b
 
 The daemon side imports from `@tmux-ide/tmux-bridge` (the canonical helper package); the `src/` side still imports from `./lib/tmux.ts` (legacy local copy). Recommendation: **use packages/daemon**.
 
-| File | s_lines | d_lines | Evidence |
-| --- | ---: | ---: | --- |
-| `attach.ts` | 20 | 20 | `< ./lib/tmux.ts` vs `> @tmux-ide/tmux-bridge` |
-| `notify.ts` | 85 | 85 | same |
-| `inspect.ts` | 212 | 212 | same |
-| `orchestrator-status.ts` | 228 | 228 | same |
-| `restart.ts` | 24 | 24 | same |
-| `send.ts` | 181 | 181 | same |
-| `status.ts` | 66 | 59 | same import swap + small refactor; daemon wins |
-| `stop.ts` | 37 | 28 | same import swap; daemon wins |
-| `stop.test.ts` | 151 | 151 | same |
-| `init.ts` | 211 | 211 | identical except path-resolution: `__dirname, "..", "templates"` (src) vs `__dirname, "..", "..", "..", "templates"` (daemon). Daemon wins — the relative path matches its deeper location. |
+| File                     | s_lines | d_lines | Evidence                                                                                                                                                                                    |
+| ------------------------ | ------: | ------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `attach.ts`              |      20 |      20 | `< ./lib/tmux.ts` vs `> @tmux-ide/tmux-bridge`                                                                                                                                              |
+| `notify.ts`              |      85 |      85 | same                                                                                                                                                                                        |
+| `inspect.ts`             |     212 |     212 | same                                                                                                                                                                                        |
+| `orchestrator-status.ts` |     228 |     228 | same                                                                                                                                                                                        |
+| `restart.ts`             |      24 |      24 | same                                                                                                                                                                                        |
+| `send.ts`                |     181 |     181 | same                                                                                                                                                                                        |
+| `status.ts`              |      66 |      59 | same import swap + small refactor; daemon wins                                                                                                                                              |
+| `stop.ts`                |      37 |      28 | same import swap; daemon wins                                                                                                                                                               |
+| `stop.test.ts`           |     151 |     151 | same                                                                                                                                                                                        |
+| `init.ts`                |     211 |     211 | identical except path-resolution: `__dirname, "..", "templates"` (src) vs `__dirname, "..", "..", "..", "templates"` (daemon). Daemon wins — the relative path matches its deeper location. |
 
 ### 2B. Schema / type re-export shims (daemon is a 2-line shim into `@tmux-ide/contracts`)
 
 The daemon side is a thin re-export shim that points at the canonical `@tmux-ide/contracts` schemas. The `src/` side still carries the full schema source. The schemas have already moved — `src/` is the orphan. Recommendation: **use packages/daemon** (the shim) and rewrite any `src/`-side importers to depend on `@tmux-ide/contracts` directly so the shim itself can eventually retire too.
 
-| File | s_lines | d_lines | Evidence |
-| --- | ---: | ---: | --- |
-| `schemas/domain.ts` | 430 | 2 | `// Schemas extracted to @tmux-ide/contracts (T056). Re-export shim.` |
-| `schemas/ide-config.ts` | 148 | 2 | same |
-| `lib/ws-v3/protocol.ts` | 160 | 2 | `// Protocol moved to @tmux-ide/contracts (T059). Re-export shim.` |
-| `lib/auth/types.ts` | 13 | 2 | re-export of `AuthConfigSchema` from contracts |
-| `lib/hq/types.ts` | 44 | 19 | partial re-export; `RemoteMachine` stays daemon-side per its comment (carries `Date`/`Set` runtime state) |
-| `lib/daemon.ts` | 469 | 42 | daemon is a 42-line stub: "Orphaned legacy daemon entrypoint. Prefer `tmux-ide --headless`." `src/` carries the legacy 469-line implementation; safe to delete after the launch path drops the reference. |
-| `schemas/ws-events.ts` | 150 | 258 | daemon side is the live schema and depends on chat types; src/ is older. **use packages/daemon.** |
+| File                    | s_lines | d_lines | Evidence                                                                                                                                                                                                  |
+| ----------------------- | ------: | ------: | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schemas/domain.ts`     |     430 |       2 | `// Schemas extracted to @tmux-ide/contracts (T056). Re-export shim.`                                                                                                                                     |
+| `schemas/ide-config.ts` |     148 |       2 | same                                                                                                                                                                                                      |
+| `lib/ws-v3/protocol.ts` |     160 |       2 | `// Protocol moved to @tmux-ide/contracts (T059). Re-export shim.`                                                                                                                                        |
+| `lib/auth/types.ts`     |      13 |       2 | re-export of `AuthConfigSchema` from contracts                                                                                                                                                            |
+| `lib/hq/types.ts`       |      44 |      19 | partial re-export; `RemoteMachine` stays daemon-side per its comment (carries `Date`/`Set` runtime state)                                                                                                 |
+| `lib/daemon.ts`         |     469 |      42 | daemon is a 42-line stub: "Orphaned legacy daemon entrypoint. Prefer `tmux-ide --headless`." `src/` carries the legacy 469-line implementation; safe to delete after the launch path drops the reference. |
+| `schemas/ws-events.ts`  |     150 |     258 | daemon side is the live schema and depends on chat types; src/ is older. **use packages/daemon.**                                                                                                         |
 
 ### 2C. Daemon-canonical (daemon is the newer / more complete implementation)
 
 The daemon side is the canonical implementation; `src/` is a behind-by-one-or-many-features predecessor. Recommendation: **use packages/daemon**.
 
-| File | s_lines | d_lines | Notes |
-| --- | ---: | ---: | --- |
-| `command-center/server.ts` | 2395 | 2973 | daemon has 578 lines of newer middleware/types |
-| `command-center/server.test.ts` | 988 | 1061 | daemon larger; covers newer endpoints |
-| `command-center/discovery.ts` | 296 | 306 | daemon depends on `workspace-registry` + `PaneInfo` from contracts |
-| `command-center/ws-events.ts` | 390 | 463 | daemon broadcasts chat + workspace events |
-| `command-center/static.ts` | 122 | 140 | daemon larger; bundled-asset handling |
-| `config.ts` | 313 | 556 | daemon adds 240 lines of `tryDispatchAction` + `mutateConfig` |
-| `task.ts` | 1155 | 1283 | daemon has additional helpers (`areGoalTasksDone`, etc) |
-| `task.test.ts` | 1466 | 1467 | trivial diff; daemon wins |
-| `skill.ts` | 138 | 225 | daemon adds skill registry plumbing |
-| `lib/skill-registry.ts` | 86 | 135 | daemon larger; canonical |
-| `lib/event-log.ts` | 316 | 376 | daemon has the sqlite-backend branch |
-| `lib/errors.ts` | 44 | 71 | daemon larger taxonomy |
-| `lib/task-store.ts` | 1269 | 1281 | trivial diff |
-| `lib/validation.ts` | 123 | 170 | daemon larger |
-| `lib/webhook.ts` | 51 | 122 | daemon larger; HMAC + retry path |
-| `lib/output.ts` | 76 | 76 | trivial diff |
-| `lib/tunnels/cloudflare.ts` | 254 | 256 | trivial diff |
-| `lib/tunnels/ngrok.ts` | 261 | 264 | trivial diff |
-| `lib/daemon-watchdog.ts` | 106 | 111 | both call `tsx` per T087; daemon side has slightly newer comments |
-| `server/pty-bridge.ts` | 334 | 539 | **CRITICAL** — daemon is the T087 PtyAdapter-consuming version; `src/` still imports `node-pty` directly. Use daemon. |
-| `server/pty-bridge.test.ts` | 289 | 480 | daemon has 21 adapter tests |
-| `server/ws-route.ts` | 387 | 483 | daemon larger; canonical |
-| `server/ws-route.test.ts` | 507 | 663 | daemon larger; canonical |
-| `widgets/resolve.ts` | 40 | 64 | daemon adds 24 lines of widget command resolution |
-| `widgets/lib/pane-comms.ts` | 219 | 209 | trivial diff; daemon importing `PaneInfo` from contracts |
-| `widgets/config/index.tsx` | 440 | 440 | trivial diff |
-| `launch.ts` | 583 | 493 | **EXCEPTION** — `src/` is BIGGER. Reason: `src/launch.ts` still owns `startSessionMonitor` + `DEFAULT_COMMAND_CENTER_PORT` (90 lines); daemon moved both to `@tmux-ide/tmux-bridge`. Daemon is canonical; the `src/` lines are migration leftovers. |
+| File                            | s_lines | d_lines | Notes                                                                                                                                                                                                                                               |
+| ------------------------------- | ------: | ------: | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `command-center/server.ts`      |    2395 |    2973 | daemon has 578 lines of newer middleware/types                                                                                                                                                                                                      |
+| `command-center/server.test.ts` |     988 |    1061 | daemon larger; covers newer endpoints                                                                                                                                                                                                               |
+| `command-center/discovery.ts`   |     296 |     306 | daemon depends on `workspace-registry` + `PaneInfo` from contracts                                                                                                                                                                                  |
+| `command-center/ws-events.ts`   |     390 |     463 | daemon broadcasts chat + workspace events                                                                                                                                                                                                           |
+| `command-center/static.ts`      |     122 |     140 | daemon larger; bundled-asset handling                                                                                                                                                                                                               |
+| `config.ts`                     |     313 |     556 | daemon adds 240 lines of `tryDispatchAction` + `mutateConfig`                                                                                                                                                                                       |
+| `task.ts`                       |    1155 |    1283 | daemon has additional helpers (`areGoalTasksDone`, etc)                                                                                                                                                                                             |
+| `task.test.ts`                  |    1466 |    1467 | trivial diff; daemon wins                                                                                                                                                                                                                           |
+| `skill.ts`                      |     138 |     225 | daemon adds skill registry plumbing                                                                                                                                                                                                                 |
+| `lib/skill-registry.ts`         |      86 |     135 | daemon larger; canonical                                                                                                                                                                                                                            |
+| `lib/event-log.ts`              |     316 |     376 | daemon has the sqlite-backend branch                                                                                                                                                                                                                |
+| `lib/errors.ts`                 |      44 |      71 | daemon larger taxonomy                                                                                                                                                                                                                              |
+| `lib/task-store.ts`             |    1269 |    1281 | trivial diff                                                                                                                                                                                                                                        |
+| `lib/validation.ts`             |     123 |     170 | daemon larger                                                                                                                                                                                                                                       |
+| `lib/webhook.ts`                |      51 |     122 | daemon larger; HMAC + retry path                                                                                                                                                                                                                    |
+| `lib/output.ts`                 |      76 |      76 | trivial diff                                                                                                                                                                                                                                        |
+| `lib/tunnels/cloudflare.ts`     |     254 |     256 | trivial diff                                                                                                                                                                                                                                        |
+| `lib/tunnels/ngrok.ts`          |     261 |     264 | trivial diff                                                                                                                                                                                                                                        |
+| `lib/daemon-watchdog.ts`        |     106 |     111 | both call `tsx` per T087; daemon side has slightly newer comments                                                                                                                                                                                   |
+| `server/pty-bridge.ts`          |     334 |     539 | **CRITICAL** — daemon is the T087 PtyAdapter-consuming version; `src/` still imports `node-pty` directly. Use daemon.                                                                                                                               |
+| `server/pty-bridge.test.ts`     |     289 |     480 | daemon has 21 adapter tests                                                                                                                                                                                                                         |
+| `server/ws-route.ts`            |     387 |     483 | daemon larger; canonical                                                                                                                                                                                                                            |
+| `server/ws-route.test.ts`       |     507 |     663 | daemon larger; canonical                                                                                                                                                                                                                            |
+| `widgets/resolve.ts`            |      40 |      64 | daemon adds 24 lines of widget command resolution                                                                                                                                                                                                   |
+| `widgets/lib/pane-comms.ts`     |     219 |     209 | trivial diff; daemon importing `PaneInfo` from contracts                                                                                                                                                                                            |
+| `widgets/config/index.tsx`      |     440 |     440 | trivial diff                                                                                                                                                                                                                                        |
+| `launch.ts`                     |     583 |     493 | **EXCEPTION** — `src/` is BIGGER. Reason: `src/launch.ts` still owns `startSessionMonitor` + `DEFAULT_COMMAND_CENTER_PORT` (90 lines); daemon moved both to `@tmux-ide/tmux-bridge`. Daemon is canonical; the `src/` lines are migration leftovers. |
 
 ### 2D. Test fixtures that resolve `bin/cli.js` relative to their own dir
 
@@ -287,20 +287,20 @@ const cli = join(__dirname, "..", "bin", "cli.js");
 
 …which resolves to `packages/daemon/bin/cli.js` (doesn't exist) instead of the repo-root `bin/cli.js`. **This causes the 38 failing `bun test` runs in §5.**
 
-| File | s_lines | d_lines | Fix |
-| --- | ---: | ---: | --- |
-| `cli.test.ts` | 314 | 176 | Repoint to `../../../bin/cli.js` OR delete the daemon copy and keep these in `src/` as CLI-edge tests. |
-| `integration.test.ts` | 276 | 274 | same |
+| File                  | s_lines | d_lines | Fix                                                                                                    |
+| --------------------- | ------: | ------: | ------------------------------------------------------------------------------------------------------ |
+| `cli.test.ts`         |     314 |     176 | Repoint to `../../../bin/cli.js` OR delete the daemon copy and keep these in `src/` as CLI-edge tests. |
+| `integration.test.ts` |     276 |     274 | same                                                                                                   |
 
 ---
 
 ## 3. `src/`-only (3 files — keep or move with care)
 
-| File | Status | Recommendation |
-| --- | --- | --- |
-| `chat.ts` | CLI entry. Imports `getDefaultThreadStore` etc. from `../packages/daemon/src/chat/defaults.ts`. Includes the new `chat events <thread>` subcommand from T095. | **Stays under `src/`** while `bin/cli.ts` still does relative imports. When `bin/cli.ts` flips to `@tmux-ide/daemon`, move this file under `packages/daemon/src/cli/chat.ts` and re-export via the package `cli` entry point. Add to `.src-allowlist` until then. |
-| `lib/tmux.ts` | Legacy local copy of the tmux helper; daemon side uses `@tmux-ide/tmux-bridge`. | **Delete after** the few remaining `src/` files that still import `./lib/tmux.ts` (caught by the §2A diverged list) are switched to `@tmux-ide/tmux-bridge`. Keep the test file alongside until then. |
-| `lib/tmux.test.ts` | Mirrors the canonical `packages/tmux-bridge/src/runner.test.ts` (T087 already aligned both). | **Delete with** `lib/tmux.ts` once the helper migration is complete. |
+| File               | Status                                                                                                                                                        | Recommendation                                                                                                                                                                                                                                                    |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `chat.ts`          | CLI entry. Imports `getDefaultThreadStore` etc. from `../packages/daemon/src/chat/defaults.ts`. Includes the new `chat events <thread>` subcommand from T095. | **Stays under `src/`** while `bin/cli.ts` still does relative imports. When `bin/cli.ts` flips to `@tmux-ide/daemon`, move this file under `packages/daemon/src/cli/chat.ts` and re-export via the package `cli` entry point. Add to `.src-allowlist` until then. |
+| `lib/tmux.ts`      | Legacy local copy of the tmux helper; daemon side uses `@tmux-ide/tmux-bridge`.                                                                               | **Delete after** the few remaining `src/` files that still import `./lib/tmux.ts` (caught by the §2A diverged list) are switched to `@tmux-ide/tmux-bridge`. Keep the test file alongside until then.                                                             |
+| `lib/tmux.test.ts` | Mirrors the canonical `packages/tmux-bridge/src/runner.test.ts` (T087 already aligned both).                                                                  | **Delete with** `lib/tmux.ts` once the helper migration is complete.                                                                                                                                                                                              |
 
 ---
 
@@ -308,17 +308,17 @@ const cli = join(__dirname, "..", "bin", "cli.js");
 
 These are the genuinely-new pieces of the canonical tree. Bucketed by top-level dir for review:
 
-| Bucket | Count | Spot-check |
-| --- | ---: | --- |
-| `chat/` | 46 | `chat-integration.test.ts` (2228 lines), `thread-manager.ts`, `reactors/reactor.ts` (T092), `defaults.ts`, `permission-coordinator.ts` — all production chat. Belongs. |
-| `command-center/` (esp. `actions/handlers/`) | 37 | Action-handler architecture (G14-T03 split). Belongs. |
-| `lib/` | 18 | `sqlite-adapter.ts`, `event-log-sqlite.ts`, `workspace-registry.ts`, `cli-action-bridge.ts`, `canonical-daemon.ts` — daemon-only infra. Belongs. |
-| repo-root `*.ts` | 12 | `bin.ts`, `cli.ts` (daemon CLI entry), `app-cli.ts`, `embed.ts`, `active-projects.ts`, `auth-token.ts`, `canonical.ts`, `app-settings.ts`, `checkpoint.ts`, `ui.ts`, `index.ts`, `cli-action-wrappers.test.ts`. Daemon-package surface. Belongs. |
-| `codex/` | 10 | Codex provider client (T070-era). Belongs. |
-| `acp/` | 9 | Agent Client Protocol stack. Belongs. |
-| `terminal/` | 7 | PtyAdapter + NodePtyAdapter + MockPtyAdapter + 4 tests. T087. Belongs. |
-| `runtime/` | 6 | Effect runtime services + layers + pipeline (T093). Belongs. |
-| `persistence/` | 6 | chat-event-store + turn-projection + types (T090/T091/T095). Belongs. |
+| Bucket                                       | Count | Spot-check                                                                                                                                                                                                                                       |
+| -------------------------------------------- | ----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `chat/`                                      |    46 | `chat-integration.test.ts` (2228 lines), `thread-manager.ts`, `reactors/reactor.ts` (T092), `defaults.ts`, `permission-coordinator.ts` — all production chat. Belongs.                                                                           |
+| `command-center/` (esp. `actions/handlers/`) |    37 | Action-handler architecture (G14-T03 split). Belongs.                                                                                                                                                                                            |
+| `lib/`                                       |    18 | `sqlite-adapter.ts`, `event-log-sqlite.ts`, `workspace-registry.ts`, `cli-action-bridge.ts`, `canonical-daemon.ts` — daemon-only infra. Belongs.                                                                                                 |
+| repo-root `*.ts`                             |    12 | `bin.ts`, `cli.ts` (daemon CLI entry), `app-cli.ts`, `embed.ts`, `active-projects.ts`, `auth-token.ts`, `canonical.ts`, `app-settings.ts`, `checkpoint.ts`, `ui.ts`, `index.ts`, `cli-action-wrappers.test.ts`. Daemon-package surface. Belongs. |
+| `codex/`                                     |    10 | Codex provider client (T070-era). Belongs.                                                                                                                                                                                                       |
+| `acp/`                                       |     9 | Agent Client Protocol stack. Belongs.                                                                                                                                                                                                            |
+| `terminal/`                                  |     7 | PtyAdapter + NodePtyAdapter + MockPtyAdapter + 4 tests. T087. Belongs.                                                                                                                                                                           |
+| `runtime/`                                   |     6 | Effect runtime services + layers + pipeline (T093). Belongs.                                                                                                                                                                                     |
+| `persistence/`                               |     6 | chat-event-store + turn-projection + types (T090/T091/T095). Belongs.                                                                                                                                                                            |
 
 No daemon-only file looks orphaned. No further action needed for this bucket beyond confirming the inventory in code review.
 
@@ -337,16 +337,16 @@ Ran 1581 tests across 128 files.
 
 Failures, attributed by test file:
 
-| Count | File | Failure mode |
-| ---: | --- | --- |
-| 15 | `packages/daemon/src/integration.test.ts` | `spawnSync("node", [cli, …])` exits status 1 — `cli = __dirname/../bin/cli.js` resolves to `packages/daemon/bin/cli.js`, doesn't exist. |
-| 8 | `packages/daemon/src/cli.test.ts` | same |
-| 4 | `packages/daemon/src/ls.test.ts` | same |
-| 4 | `packages/daemon/src/config-cli.test.ts` | same |
-| 3 | `packages/daemon/src/postinstall.test.ts` | path-relative fs assertions broken by the deeper file location |
-| 2 | `packages/daemon/src/inspect.test.ts` | same `cli` path issue |
-| 1 | `packages/daemon/src/command-center/projects.test.ts` | bundled-templates path resolution; same root cause |
-| 1 | `packages/daemon/src/terminal/__tests__/NodePtyAdapter.test.ts` | unrelated — real PTY integration flake, T087 territory. Not a fold issue. |
+| Count | File                                                            | Failure mode                                                                                                                            |
+| ----: | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+|    15 | `packages/daemon/src/integration.test.ts`                       | `spawnSync("node", [cli, …])` exits status 1 — `cli = __dirname/../bin/cli.js` resolves to `packages/daemon/bin/cli.js`, doesn't exist. |
+|     8 | `packages/daemon/src/cli.test.ts`                               | same                                                                                                                                    |
+|     4 | `packages/daemon/src/ls.test.ts`                                | same                                                                                                                                    |
+|     4 | `packages/daemon/src/config-cli.test.ts`                        | same                                                                                                                                    |
+|     3 | `packages/daemon/src/postinstall.test.ts`                       | path-relative fs assertions broken by the deeper file location                                                                          |
+|     2 | `packages/daemon/src/inspect.test.ts`                           | same `cli` path issue                                                                                                                   |
+|     1 | `packages/daemon/src/command-center/projects.test.ts`           | bundled-templates path resolution; same root cause                                                                                      |
+|     1 | `packages/daemon/src/terminal/__tests__/NodePtyAdapter.test.ts` | unrelated — real PTY integration flake, T087 territory. Not a fold issue.                                                               |
 
 **37 of 38 failures are direct symptoms of the duplication.** Every CLI-edge test was copied from `src/` to `packages/daemon/src/` without updating the relative path to `bin/cli.js`. Two fixes are equivalent:
 
@@ -381,22 +381,24 @@ Bucketed so three agents can run two of these concurrently without colliding on 
 
 **Files in scope** — `cli.test.ts`, `integration.test.ts` on both sides. Plus the 7 daemon test files whose path resolution is broken: `ls.test.ts`, `config-cli.test.ts`, `inspect.test.ts`, `postinstall.test.ts`, `command-center/projects.test.ts`, and any other `daemon/src/*.test.ts` that `spawnSync(node, [cli, ...])`.
 **Action** — pick one of:
-  - (a) delete `packages/daemon/src/cli.test.ts` + `integration.test.ts` + the 5 CLI-edge tests; keep the `src/` copies. Simplest. Lose any newer assertions in the daemon copies (§2D notes `daemon-cli.test.ts` is *smaller* — 176 vs 314 — so this is probably safe).
-  - (b) update the daemon copies' `cli` const to `join(__dirname, "..", "..", "..", "bin", "cli.js")` and delete the `src/` copies. Aligns with "canonical = packages/daemon" but requires test edits.
+
+- (a) delete `packages/daemon/src/cli.test.ts` + `integration.test.ts` + the 5 CLI-edge tests; keep the `src/` copies. Simplest. Lose any newer assertions in the daemon copies (§2D notes `daemon-cli.test.ts` is _smaller_ — 176 vs 314 — so this is probably safe).
+- (b) update the daemon copies' `cli` const to `join(__dirname, "..", "..", "..", "bin", "cli.js")` and delete the `src/` copies. Aligns with "canonical = packages/daemon" but requires test edits.
   Recommend **(a)** — simpler revert path; CLI-edge tests genuinely belong next to `bin/cli.ts`.
-**Dependencies** — F2 (avoids importer collisions with the diverged code being chosen here).
-**Test gate** — `cd packages/daemon && bun test src` shows 0 failures (down from 38). Plus `pnpm test`.
-**Estimated effort** — S.
+  **Dependencies** — F2 (avoids importer collisions with the diverged code being chosen here).
+  **Test gate** — `cd packages/daemon && bun test src` shows 0 failures (down from 38). Plus `pnpm test`.
+  **Estimated effort** — S.
 
 ### F4 — Move `chat.ts` + retire `lib/tmux.ts` (the §3 `src/`-only files)
 
 **Files in scope** — `src/chat.ts`, `src/lib/tmux.ts`, `src/lib/tmux.test.ts`.
 **Action**:
-  - `chat.ts` — relocate to `packages/daemon/src/cli/chat.ts` (or similar). Update `bin/cli.ts`'s `import { chatCommand } from "../src/chat.ts"` to point at the new location. Until `bin/cli.ts` itself moves to `@tmux-ide/daemon`, keep a 1-line shim or add to `.src-allowlist`.
-  - `lib/tmux.ts` + `lib/tmux.test.ts` — delete. The canonical lives in `packages/tmux-bridge/src/`. Any `src/` importers were already cleaned up in F2 (§2A swaps `./lib/tmux.ts` → `@tmux-ide/tmux-bridge`).
-**Dependencies** — F2 (must have switched all §2A handlers off `./lib/tmux.ts`).
-**Test gate** — `pnpm lint && pnpm test && pnpm --filter @tmux-ide/tmux-bridge test`.
-**Estimated effort** — S.
+
+- `chat.ts` — relocate to `packages/daemon/src/cli/chat.ts` (or similar). Update `bin/cli.ts`'s `import { chatCommand } from "../src/chat.ts"` to point at the new location. Until `bin/cli.ts` itself moves to `@tmux-ide/daemon`, keep a 1-line shim or add to `.src-allowlist`.
+- `lib/tmux.ts` + `lib/tmux.test.ts` — delete. The canonical lives in `packages/tmux-bridge/src/`. Any `src/` importers were already cleaned up in F2 (§2A swaps `./lib/tmux.ts` → `@tmux-ide/tmux-bridge`).
+  **Dependencies** — F2 (must have switched all §2A handlers off `./lib/tmux.ts`).
+  **Test gate** — `pnpm lint && pnpm test && pnpm --filter @tmux-ide/tmux-bridge test`.
+  **Estimated effort** — S.
 
 ### F5 — Flip `bin/cli.ts` to import from `@tmux-ide/daemon`
 

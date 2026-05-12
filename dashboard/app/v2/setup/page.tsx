@@ -241,14 +241,19 @@ export default function V2SetupPage() {
   return (
     <div className="flex h-screen flex-col bg-[var(--bg)] text-[var(--fg)]">
       <header className="flex h-7 shrink-0 items-center border-b border-[var(--border)] bg-[var(--bg-strong)] px-3 text-[11px] tabular-nums">
-        <Link href="/v2" className="mr-2 inline-flex items-center gap-1 text-[var(--dim)] hover:text-[var(--fg)]">
+        <Link
+          href="/v2"
+          className="mr-2 inline-flex items-center gap-1 text-[var(--dim)] hover:text-[var(--fg)]"
+        >
           <span aria-hidden="true">◇</span>
           <span>tmux-ide</span>
         </Link>
         <span className="mx-1 text-[var(--dimmer)]">/</span>
         <span className="text-[var(--accent)]">setup</span>
         <span className="flex-1" />
-        <span className="text-[var(--dim)]">step {stepIndex + 1} of {STEPS.length}</span>
+        <span className="text-[var(--dim)]">
+          step {stepIndex + 1} of {STEPS.length}
+        </span>
       </header>
 
       <div className="flex-1 min-h-0 overflow-y-auto p-4">
@@ -263,7 +268,13 @@ export default function V2SetupPage() {
             }))}
           />
 
-          {state.step === "detect" && <DetectPanel state={state} onDir={(dir) => dispatchAction({ type: "set-dir", dir })} onDetect={handleDetect} />}
+          {state.step === "detect" && (
+            <DetectPanel
+              state={state}
+              onDir={(dir) => dispatchAction({ type: "set-dir", dir })}
+              onDetect={handleDetect}
+            />
+          )}
           {state.step === "layout" && (
             <LayoutPanel
               currentId={state.layoutId}
@@ -279,11 +290,7 @@ export default function V2SetupPage() {
             />
           )}
           {state.step === "review" && (
-            <ReviewPanel
-              state={state}
-              layout={currentLayout}
-              onSubmit={handleSaveAndLaunch}
-            />
+            <ReviewPanel state={state} layout={currentLayout} onSubmit={handleSaveAndLaunch} />
           )}
         </div>
       </div>
@@ -311,8 +318,17 @@ export default function V2SetupPage() {
             Next
           </Button>
         ) : (
-          <Button onClick={handleSaveAndLaunch} disabled={state.saving || state.launching || !!state.savedName}>
-            {state.saving ? "Saving..." : state.launching ? "Launching..." : state.savedName ? "Done" : "Save & Launch"}
+          <Button
+            onClick={handleSaveAndLaunch}
+            disabled={state.saving || state.launching || !!state.savedName}
+          >
+            {state.saving
+              ? "Saving..."
+              : state.launching
+                ? "Launching..."
+                : state.savedName
+                  ? "Done"
+                  : "Save & Launch"}
           </Button>
         )}
       </footer>
@@ -327,7 +343,9 @@ function computeCanAdvance(state: SetupState): boolean {
     case "layout":
       return true;
     case "naming":
-      return state.projectName.trim().length > 0 && state.agentNames.every((n) => n.trim().length > 0);
+      return (
+        state.projectName.trim().length > 0 && state.agentNames.every((n) => n.trim().length > 0)
+      );
     case "review":
       return false;
     default:
@@ -342,7 +360,10 @@ function canStepDirectly(state: SetupState, target: StepId): boolean {
   for (let i = 0; i < idx; i += 1) {
     const sId = order[i];
     if (sId === "detect" && state.inspect === null) return false;
-    if (sId === "naming" && (state.projectName.trim().length === 0 || state.agentNames.some((n) => !n.trim()))) {
+    if (
+      sId === "naming" &&
+      (state.projectName.trim().length === 0 || state.agentNames.some((n) => !n.trim()))
+    ) {
       return false;
     }
   }
@@ -377,16 +398,22 @@ function DetectPanel({ state, onDir, onDetect }: DetectPanelProps) {
         </Button>
       </RowSpaceBetween>
 
-      {state.inspectError && (
-        <p className="mt-2 text-[var(--red)]">{state.inspectError}</p>
-      )}
+      {state.inspectError && <p className="mt-2 text-[var(--red)]">{state.inspectError}</p>}
 
-      {state.inspect && <DetectSummary detected={state.inspect.detected} hasIdeYml={state.inspect.hasIdeYml} />}
+      {state.inspect && (
+        <DetectSummary detected={state.inspect.detected} hasIdeYml={state.inspect.hasIdeYml} />
+      )}
     </Card>
   );
 }
 
-function DetectSummary({ detected, hasIdeYml }: { detected: ProjectInspectDetected; hasIdeYml: boolean }) {
+function DetectSummary({
+  detected,
+  hasIdeYml,
+}: {
+  detected: ProjectInspectDetected;
+  hasIdeYml: boolean;
+}) {
   return (
     <div className="mt-3 space-y-1 text-[12px]">
       <RowSpaceBetween>
@@ -421,7 +448,9 @@ interface LayoutPanelProps {
 function LayoutPanel({ currentId, onSelect }: LayoutPanelProps) {
   return (
     <Card title="PICK LAYOUT" mode="left">
-      <p className="mb-3 text-[var(--dim)]">Choose the pane arrangement. You can edit ide.yml later.</p>
+      <p className="mb-3 text-[var(--dim)]">
+        Choose the pane arrangement. You can edit ide.yml later.
+      </p>
       <div className="space-y-2">
         {LAYOUTS.map((layout) => {
           const selected = layout.id === currentId;
@@ -443,7 +472,7 @@ function LayoutPanel({ currentId, onSelect }: LayoutPanelProps) {
               </RowSpaceBetween>
               <p className="mt-1 text-[11px] text-[var(--dim)]">{layout.description}</p>
               <pre className="mt-2 overflow-x-auto text-[10px] leading-tight text-[var(--fg-secondary)]">
-{layout.diagram.join("\n")}
+                {layout.diagram.join("\n")}
               </pre>
             </button>
           );
@@ -526,7 +555,9 @@ function ReviewPanel({ state, layout, onSubmit }: ReviewPanelProps) {
       </RowSpaceBetween>
 
       {state.saveError && <p className="mt-3 text-[var(--red)]">Save failed: {state.saveError}</p>}
-      {state.launchError && <p className="mt-3 text-[var(--red)]">Launch failed: {state.launchError}</p>}
+      {state.launchError && (
+        <p className="mt-3 text-[var(--red)]">Launch failed: {state.launchError}</p>
+      )}
       {state.savedName && !state.launchError && (
         <p className="mt-3 text-[var(--green)]">Saved {state.savedName}. Launching session…</p>
       )}
