@@ -42,15 +42,23 @@ import {
   type TurnDiffProjection,
 } from "../persistence/projections/turn-diff-projection.ts";
 import { makeReactor, type Reactor } from "../chat/reactors/reactor.ts";
+import {
+  makeProviderApprovalPolicy,
+  type PermissionRequestEmission,
+  type ProviderApprovalPolicy,
+  type ProviderApprovalRules,
+} from "../chat/provider-approval-policy.ts";
 
-import { ChatEventStoreError, ProjectionError, ReactorError } from "./errors.ts";
+import { ApprovalPolicyError, ChatEventStoreError, ProjectionError, ReactorError } from "./errors.ts";
 import {
   ChatEventStoreService,
   ChatReactorService,
+  ProviderApprovalPolicyService,
   TurnDiffProjectionService,
   TurnProjectionService,
   type ChatEventStoreServiceShape,
   type ChatReactorServiceShape,
+  type ProviderApprovalPolicyServiceShape,
   type TurnDiffProjectionServiceShape,
   type TurnProjectionServiceShape,
 } from "./services.ts";
@@ -228,6 +236,88 @@ export const TurnDiffProjectionLive = (
   );
 
 // ---------------------------------------------------------------------------
+// ProviderApprovalPolicyService (G14-T12 / T102)
+// ---------------------------------------------------------------------------
+
+interface MakeProviderApprovalPolicyLayerOptions {
+  initialRules?: Record<string, ProviderApprovalRules>;
+  emitPermissionRequest?: (req: PermissionRequestEmission) => void;
+  now?: () => Date;
+  randomId?: () => string;
+}
+
+function wrapApprovalPolicy(
+  policy: ProviderApprovalPolicy,
+): ProviderApprovalPolicyServiceShape {
+  return {
+    evaluate: (input) =>
+      Effect.try({
+        try: () => policy.evaluate(input),
+        catch: (cause) =>
+          new ApprovalPolicyError({
+            operation: "evaluate",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      }),
+    register: (provider, rules) =>
+      Effect.try({
+        try: () => policy.register(provider, rules),
+        catch: (cause) =>
+          new ApprovalPolicyError({
+            operation: "register",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      }),
+    getRules: (provider) => Effect.sync(() => policy.getRules(provider)),
+    resolvePrompt: (promptId, decision, reason) =>
+      Effect.try({
+        try: () => policy.resolvePrompt(promptId, decision, reason),
+        catch: (cause) =>
+          new ApprovalPolicyError({
+            operation: "resolve",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      }),
+    pendingPrompts: Effect.sync(() => policy.pendingPrompts()),
+    raw: policy,
+  };
+}
+
+/**
+ * Build the approval policy from initial rules. No external dependencies
+ * — the policy is a pure in-memory rule table + emission callback, so
+ * Layer.sync is enough (Layer.scoped only buys us release semantics we
+ * don't need here).
+ */
+export const ProviderApprovalPolicyLive = (
+  options: MakeProviderApprovalPolicyLayerOptions = {},
+): Layer.Layer<ProviderApprovalPolicyService> =>
+  Layer.sync(ProviderApprovalPolicyService, () =>
+    wrapApprovalPolicy(
+      makeProviderApprovalPolicy({
+        ...(options.initialRules ? { initialRules: options.initialRules } : {}),
+        ...(options.emitPermissionRequest
+          ? { emitPermissionRequest: options.emitPermissionRequest }
+          : {}),
+        ...(options.now ? { now: options.now } : {}),
+        ...(options.randomId ? { randomId: options.randomId } : {}),
+      }),
+    ),
+  );
+
+/**
+ * Bind a pre-constructed policy instance — useful when tests want to
+ * inspect `.pendingPrompts()` outside the Effect runtime.
+ */
+export const ProviderApprovalPolicyFromValue = (
+  policy: ProviderApprovalPolicy,
+): Layer.Layer<ProviderApprovalPolicyService> =>
+  Layer.succeed(ProviderApprovalPolicyService, wrapApprovalPolicy(policy));
+
+// ---------------------------------------------------------------------------
 // ChatReactorService
 // ---------------------------------------------------------------------------
 
@@ -350,6 +440,8 @@ export interface ChatTurnPipelineLayerOptions {
   db?: SqliteDb;
   reactor: MakeChatReactorLayerOptions;
   projection?: MakeTurnProjectionLayerOptions;
+  /** Optional initial approval-policy config (T102). */
+  approvalPolicy?: MakeProviderApprovalPolicyLayerOptions;
 }
 
 /**
@@ -367,7 +459,8 @@ export const ChatTurnPipelineLive = (
   | ChatEventStoreService
   | TurnProjectionService
   | TurnDiffProjectionService
-  | ChatReactorService,
+  | ChatReactorService
+  | ProviderApprovalPolicyService,
   ReactorError,
   Scope.Scope
 > => {
@@ -388,17 +481,22 @@ export const ChatTurnPipelineLive = (
   // as soon as they pull a ChatTurnPipelineLive into their runtime.
   const turnDiffLayer = TurnDiffProjectionLive(options.projection ?? {});
   const reactorLayer = ChatReactorLive(options.reactor);
+  // Approval policy (T102) — independent of the event store / reactor,
+  // so it joins the merge without a Layer.provide chain.
+  const policyLayer = ProviderApprovalPolicyLive(options.approvalPolicy ?? {});
 
   return Layer.mergeAll(
     eventStoreLayer,
     Layer.provide(projectionLayer, eventStoreLayer),
     Layer.provide(turnDiffLayer, eventStoreLayer),
     Layer.provide(reactorLayer, eventStoreLayer),
+    policyLayer,
   ) as Layer.Layer<
     | ChatEventStoreService
     | TurnProjectionService
     | TurnDiffProjectionService
-    | ChatReactorService,
+    | ChatReactorService
+    | ProviderApprovalPolicyService,
     ReactorError,
     Scope.Scope
   >;

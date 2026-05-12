@@ -34,8 +34,20 @@ import type {
 } from "../persistence/projections/turn-diff-projection.ts";
 import type { LatestTurn } from "@tmux-ide/contracts";
 import type { Reactor } from "../chat/reactors/reactor.ts";
+import type {
+  ApprovalVerdict,
+  EvaluateInput,
+  PermissionRequestEmission,
+  ProviderApprovalPolicy,
+  ProviderApprovalRules,
+} from "../chat/provider-approval-policy.ts";
 
-import type { ChatEventStoreError, ProjectionError, ReactorError } from "./errors.ts";
+import type {
+  ApprovalPolicyError,
+  ChatEventStoreError,
+  ProjectionError,
+  ReactorError,
+} from "./errors.ts";
 
 // ---------------------------------------------------------------------------
 // ChatEventStoreService
@@ -119,6 +131,41 @@ export interface ChatReactorServiceShape {
   /** Escape hatch — direct access to the underlying reactor. */
   readonly raw: Reactor<PersistedChatEvent>;
 }
+
+// ---------------------------------------------------------------------------
+// ProviderApprovalPolicyService (G14-T12 / T102)
+// ---------------------------------------------------------------------------
+
+export interface ProviderApprovalPolicyServiceShape {
+  /** Resolve the verdict for a tool call. Side-effect inside the
+   *  underlying policy fires the permission-request emission callback
+   *  when the verdict is `needs-confirmation`. */
+  readonly evaluate: (input: EvaluateInput) => Effect.Effect<ApprovalVerdict, ApprovalPolicyError>;
+  /** Hot-update a provider's rules. Last-write-wins. */
+  readonly register: (
+    provider: string,
+    rules: ProviderApprovalRules,
+  ) => Effect.Effect<void, ApprovalPolicyError>;
+  /** Read rules for inspection (debug endpoint, tests). */
+  readonly getRules: (provider: string) => Effect.Effect<ProviderApprovalRules | null, never>;
+  /** Resolve a pending prompt — used by the WS path when the operator
+   *  clicks an approve/deny button in the chat UI. */
+  readonly resolvePrompt: (
+    promptId: string,
+    decision: "approve" | "deny",
+    reason?: string,
+  ) => Effect.Effect<boolean, ApprovalPolicyError>;
+  /** Snapshot of currently-pending prompts. */
+  readonly pendingPrompts: Effect.Effect<readonly PermissionRequestEmission[], never>;
+  /** Escape hatch — direct access to the plain policy. */
+  readonly raw: ProviderApprovalPolicy;
+}
+
+export class ProviderApprovalPolicyService extends Context.Tag(
+  "@tmux-ide/daemon/runtime/ProviderApprovalPolicyService",
+)<ProviderApprovalPolicyService, ProviderApprovalPolicyServiceShape>() {}
+
+// ---------------------------------------------------------------------------
 
 export class ChatReactorService extends Context.Tag("@tmux-ide/daemon/runtime/ChatReactorService")<
   ChatReactorService,

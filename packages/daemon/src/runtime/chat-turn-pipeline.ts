@@ -24,8 +24,21 @@ import { Effect } from "effect";
 import type { ChatThreadEvent, LatestTurn } from "@tmux-ide/contracts";
 
 import type { PersistedChatEvent } from "../persistence/chat-event-store.ts";
-import { ChatEventStoreService, ChatReactorService, TurnProjectionService } from "./services.ts";
-import type { ChatEventStoreError, ProjectionError } from "./errors.ts";
+import type {
+  ApprovalVerdict,
+  EvaluateInput,
+} from "../chat/provider-approval-policy.ts";
+import {
+  ChatEventStoreService,
+  ChatReactorService,
+  ProviderApprovalPolicyService,
+  TurnProjectionService,
+} from "./services.ts";
+import type {
+  ApprovalPolicyError,
+  ChatEventStoreError,
+  ProjectionError,
+} from "./errors.ts";
 
 export interface RunChatTurnPipelineInput {
   /**
@@ -97,4 +110,43 @@ export const runChatTurnPipeline = (
     const cursor = yield* projection.cursor;
 
     return { appended, latest, cursor } satisfies RunChatTurnPipelineOutput;
+  });
+
+/**
+ * T102 — Gate a tool call through the ProviderApprovalPolicy BEFORE
+ * dispatching it. The dispatch callback only runs when the verdict is
+ * `approved`; `denied` and `needs-confirmation` short-circuit and
+ * return the verdict for the caller to surface to the user (via the
+ * existing permission-prompt panel in the chat-v2 UI).
+ *
+ * Shape:
+ *   - Pulls `ProviderApprovalPolicyService` from the environment.
+ *   - When the verdict is `approved`, the optional `onApproved`
+ *     callback is invoked. It returns `Effect<A, E>`; the pipeline
+ *     returns the inner result alongside the verdict so callers see
+ *     both the gating decision AND the dispatched value in one go.
+ *   - When the verdict is `denied` or `needs-confirmation`, the
+ *     callback is skipped and the verdict alone is returned.
+ *
+ * The gating call is sync from Effect's perspective — `policy.evaluate`
+ * is cheap (Map lookup + optional emission). The reactor / WS bus
+ * handles the asynchronous "wait for the user to click approve"
+ * choreography through the existing PermissionCoordinator path.
+ */
+export const dispatchToolCallThroughPolicy = <A, E, R>(
+  input: EvaluateInput,
+  onApproved: () => Effect.Effect<A, E, R>,
+): Effect.Effect<
+  { verdict: ApprovalVerdict; result: A | null },
+  E | ApprovalPolicyError,
+  R | ProviderApprovalPolicyService
+> =>
+  Effect.gen(function* () {
+    const policy = yield* ProviderApprovalPolicyService;
+    const verdict = yield* policy.evaluate(input);
+    if (verdict.kind === "approved") {
+      const result = yield* onApproved();
+      return { verdict, result };
+    }
+    return { verdict, result: null as A | null };
   });

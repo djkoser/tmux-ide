@@ -38,3 +38,15 @@ export class ReactorError extends Data.TaggedError("ReactorError")<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
+
+/**
+ * Permission-policy evaluation failure (T102). Used when the policy
+ * subsystem itself misbehaves (corrupted rules, hot-reload race) — not
+ * for "denied" / "needs-confirmation" verdicts, which are first-class
+ * values in `ApprovalVerdict`, not errors.
+ */
+export class ApprovalPolicyError extends Data.TaggedError("ApprovalPolicyError")<{
+  readonly operation: "evaluate" | "register" | "resolve";
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
