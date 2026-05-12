@@ -1,0 +1,2973 @@
+import { execFileSync, execFile } from "node:child_process";
+import { promisify } from "node:util";
+import {
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  unlinkSync,
+  statSync,
+  renameSync,
+  readdirSync,
+} from "node:fs";
+import { join, dirname, basename } from "node:path";
+import { fileURLToPath } from "node:url";
+import { Hono, type MiddlewareHandler } from "hono";
+import { streamSSE } from "hono/streaming";
+import { cors } from "hono/cors";
+import {
+  discoverSessions,
+  buildOverviews,
+  buildProjectDetail,
+  buildOrchestratorSnapshot,
+  type SessionOverview,
+  type ProjectDetail,
+} from "./discovery.ts";
+import {
+  listSessionPanes,
+  sendCommand,
+  sendEnterToPane,
+  sendLiteralToPane,
+  sendText,
+  getPaneBusyStatus,
+} from "../widgets/lib/pane-comms.ts";
+import { resolvePane } from "../send.ts";
+import { getSessionState, killSession, stopSessionMonitor } from "@tmux-ide/tmux-bridge";
+import { readConfig, writeConfig } from "../lib/yaml-io.ts";
+import { IdeConfigSchema } from "../schemas/ide-config.ts";
+import {
+  ensureTasksDir,
+  loadMission,
+  saveMission,
+  loadTasks,
+  taskStore,
+  getTaskStoreMetrics,
+  type TaskStoreChangeEvent,
+} from "../lib/task-store.ts";
+import {
+  createTaskRecord,
+  deleteTaskRecord,
+  updateTaskRecord,
+  TaskActionError,
+} from "../lib/task-actions.ts";
+import { readEvents, appendEvent, eventLogEmitter } from "../lib/event-log.ts";
+import { extractMarks, calculateStats, tagContent } from "../lib/authorship.ts";
+import {
+  loadValidationState,
+  loadValidationContract,
+  saveValidationState,
+  checkCoverage,
+} from "../lib/validation.ts";
+import { loadSkills, loadSkill } from "../lib/skill-registry.ts";
+import { computeMetrics, loadMissionHistory } from "../lib/metrics.ts";
+import { loadPlans, markPlanDone } from "../lib/plan-store.ts";
+import {
+  loadCheckpoints,
+  loadCheckpoint,
+  loadCheckpointsForTask,
+  saveCheckpoint,
+  deleteCheckpoint,
+  nextCheckpointId,
+  loadReviews,
+  loadReview,
+  loadReviewsForTask,
+  saveReview,
+  deleteReview,
+  nextReviewId,
+  type Checkpoint,
+  type ReviewRequest,
+  type ReviewComment,
+} from "../lib/workflow-store.ts";
+import { zValidator } from "@hono/zod-validator";
+import {
+  getDefaultWorkspaceRegistry,
+  WorkspaceAlreadyExistsError,
+  WorkspaceNotFoundError,
+} from "../lib/workspace-registry.ts";
+import { AddWorkspaceRequestSchemaZ } from "@tmux-ide/contracts";
+import {
+  updateTaskSchema,
+  createTaskSchema,
+  savePlanSchema,
+  savePlanContentSchema,
+  sendCommandSchema,
+  createMilestoneSchema,
+  updateMilestoneSchema,
+  updateAssertionSchema,
+  triggerResearchSchema,
+} from "./schemas.ts";
+import { AuthService } from "../lib/auth/auth-service.ts";
+import { authMiddleware } from "../lib/auth/middleware.ts";
+import type { AuthConfig } from "../lib/auth/types.ts";
+import { TunnelManager } from "../lib/tunnels/manager.ts";
+import { RemoteRegistry } from "../lib/hq/registry.ts";
+import { RegistrationPayloadSchema } from "../lib/hq/types.ts";
+import { dispatchResearch, loadResearchState } from "../lib/research.ts";
+import { serveDashboard } from "./static.ts";
+import { getOrchestratorHealth, getPaneContentHashMetrics } from "../lib/orchestrator.ts";
+import { handleWsEventsConnection, broadcastInitOutput, broadcastInitError } from "./ws-events.ts";
+import { createActionDispatcher } from "./actions/dispatcher.ts";
+import {
+  listProjects,
+  getProject,
+  registerProject,
+  unregisterProject,
+  refreshProject,
+  ProjectAlreadyRegisteredError,
+  ProjectDirNotFoundError,
+  ProjectNotFoundError,
+} from "../lib/project-registry.ts";
+import {
+  runInit,
+  ProjectInitFailedError,
+  ProjectInitTimeoutError,
+} from "../lib/project-init-runner.ts";
+import {
+  RegisterProjectRequestSchemaZ,
+  InitProjectRequestSchemaZ,
+  type ProjectTemplate,
+} from "../schemas/registry.ts";
+import {
+  InspectFilesystemRequestSchemaZ,
+  OnboardProjectRequestSchemaZ,
+} from "../schemas/inspect.ts";
+import {
+  browseDirectory,
+  InvalidPathError,
+  PathNotFoundError,
+  SandboxViolationError,
+  assertInsideSandbox,
+} from "../lib/filesystem-browser.ts";
+import { inspectProject, InspectDirNotFoundError } from "../lib/project-inspect.ts";
+import {
+  composeIdeYmlConfig,
+  assertNoExistingIdeYml,
+  OnboardConflictError,
+  OnboardInvalidInputError,
+} from "../lib/project-onboard.ts";
+import { realpathSync } from "node:fs";
+import { homedir } from "node:os";
+import { isAbsolute, resolve as pathResolve } from "node:path";
+import { randomUUID } from "node:crypto";
+import { WebSocketServer } from "ws";
+import {
+  initializeDefaultChatRuntime,
+  getDefaultPlanOrchestrator,
+  getDefaultPlanStore,
+  getDefaultThreadStore,
+  getDefaultSessionStore,
+  getDefaultCheckpointStore,
+} from "../chat/defaults.ts";
+import type { ThreadStore } from "../chat/thread-store.ts";
+import type { SessionStore } from "../chat/session-store.ts";
+import type { CheckpointStore } from "../chat/checkpoint-store.ts";
+import {
+  discoverProviders,
+  type ProviderInfo as ChatProviderInfo,
+  type ProviderDiscoveryOptions,
+} from "../chat/provider-discovery.ts";
+import { broadcastChatEvent } from "./ws-events.ts";
+import {
+  PlanAlreadyImplementedError,
+  PlanAlreadyRejectedError,
+  TurnAlreadyRunningError,
+} from "../chat/plan-orchestrator.ts";
+import { PlanNotFoundError } from "../chat/plan-store.ts";
+import {
+  PlanApproveBodyZ,
+  PlanRejectBodyZ,
+  ChatThreadCreateInputZ,
+} from "@tmux-ide/contracts";
+import {
+  makeProviderStore,
+  ProviderStoreError,
+  type ProviderStore,
+} from "../chat/provider-store.ts";
+import { ProviderInstanceZ } from "@tmux-ide/contracts";
+
+export interface CreateAppOptions {
+  authService?: AuthService;
+  authConfig?: AuthConfig;
+  tunnelManager?: TunnelManager;
+  remoteRegistry?: RemoteRegistry;
+  remoteAccess?: {
+    bindHostname?: string;
+    token?: string | null;
+    localBypassToken?: string | null;
+  };
+  /**
+   * Provider instance store (T080). Backs `/api/providers` GET/POST/DELETE
+   * over `~/.tmux-ide/providers.json`. Override in tests to point at a
+   * tmpdir; production code uses the default file location.
+   */
+  providerStore?: ProviderStore;
+  /**
+   * Chat stores backing `/api/threads` and `/api/chat/providers`. Override
+   * in tests to hermetic in-memory stores. Production defaults to the
+   * singletons in `chat/defaults.ts`.
+   */
+  chatStores?: {
+    threadStore?: ThreadStore;
+    sessionStore?: SessionStore;
+    checkpointStore?: CheckpointStore;
+  };
+  /** Inject the provider-discovery probe (tests pass stubs). */
+  providerDiscovery?: ProviderDiscoveryOptions;
+}
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+// Resolve our package.json's version. The lookup needs to handle BOTH
+// dev (this file lives at src/command-center/, so the workspace root
+// is two levels up) AND the packaged Electron bundle (this file is
+// flattened into app.asar/dist-electron/, so the bundled package.json
+// is ONE level up; two levels up escapes the asar). Try the candidates
+// in order; fall back to a sentinel if neither is readable.
+function resolvePackageVersion(): string {
+  const candidates = [join(__dirname, "../../package.json"), join(__dirname, "../package.json")];
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(readFileSync(candidate, "utf-8")) as { version?: string };
+      if (typeof parsed.version === "string") return parsed.version;
+    } catch {
+      /* try the next candidate */
+    }
+  }
+  return "0.0.0";
+}
+const pkgVersion: string = resolvePackageVersion();
+let projectStreamConnections = 0;
+
+function bearerToken(authHeader: string | undefined): string | null {
+  if (!authHeader?.startsWith("Bearer ")) return null;
+  return authHeader.slice("Bearer ".length);
+}
+
+function requireAuth(token: string | null, localBypassToken: string | null): MiddlewareHandler {
+  return async (c, next) => {
+    if (!token) return next();
+    const url = new URL(c.req.url);
+    const suppliedToken =
+      bearerToken(c.req.header("Authorization")) ?? url.searchParams.get("token");
+    if (suppliedToken === token || (localBypassToken && suppliedToken === localBypassToken)) {
+      return next();
+    }
+    return c.json({ error: "Remote access token required" }, 401);
+  };
+}
+
+function remoteAccessAuth(options: CreateAppOptions): {
+  token: string | null;
+  localBypassToken: string | null;
+} {
+  const bindHostname = options.remoteAccess?.bindHostname ?? "127.0.0.1";
+  return {
+    token: bindHostname === "127.0.0.1" ? null : (options.remoteAccess?.token ?? null),
+    localBypassToken: options.remoteAccess?.localBypassToken ?? null,
+  };
+}
+
+const ALLOWED_MILESTONE_TRANSITIONS = new Map([
+  ["locked", new Set(["active"])],
+  ["active", new Set(["validating"])],
+  ["validating", new Set(["done", "active"])],
+  ["done", new Set<string>()],
+]);
+
+const sseMetrics = {
+  connections: 0,
+  messagesSent: 0,
+};
+
+export function getSseMetrics(): { connections: number; messagesSent: number } {
+  return { ...sseMetrics };
+}
+
+function freezePayload<T>(payload: T): T {
+  if (payload && typeof payload === "object") {
+    for (const value of Object.values(payload as Record<string, unknown>)) {
+      freezePayload(value);
+    }
+    Object.freeze(payload);
+  }
+  return payload;
+}
+
+function isPathInside(path: string | null | undefined, root: string): boolean {
+  if (!path) return false;
+  return path === root || path.startsWith(root + "/");
+}
+
+function safePlanName(filename: string): string {
+  return filename.replace(/[^a-zA-Z0-9_\-. ]/g, "");
+}
+
+function planFilePath(projectDir: string, filename: string): string {
+  const safeName = safePlanName(filename);
+  return join(projectDir, "plans", safeName.endsWith(".md") ? safeName : `${safeName}.md`);
+}
+
+function writePlanAtomic(filePath: string, content: string): number {
+  const dir = dirname(filePath);
+  mkdirSync(dir, { recursive: true });
+  const tmpPath = join(dir, `.${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`);
+  try {
+    writeFileSync(tmpPath, content);
+    renameSync(tmpPath, filePath);
+  } finally {
+    if (existsSync(tmpPath)) {
+      try {
+        unlinkSync(tmpPath);
+      } catch {
+        // Best effort cleanup; the real write has either completed or failed.
+      }
+    }
+  }
+  return statSync(filePath).mtimeMs;
+}
+
+function parsePlanFrontmatterSummary(content: string): {
+  owner: string | null;
+  status: string | null;
+} {
+  if (!content.startsWith("---\n")) return { owner: null, status: null };
+  const end = content.indexOf("\n---", 4);
+  if (end === -1) return { owner: null, status: null };
+  let owner: string | null = null;
+  let status: string | null = null;
+  for (const line of content.slice(4, end).split("\n")) {
+    const match = line.match(/^([A-Za-z][A-Za-z0-9_-]*):\s*(.+)$/);
+    if (!match) continue;
+    const key = match[1]!.toLowerCase();
+    const value = match[2]!.trim().replace(/^["']|["']$/g, "");
+    if (key === "owner") owner = value;
+    if (key === "status") status = value.toLowerCase().replace(/\s+/g, "-");
+  }
+  return { owner, status };
+}
+
+function patchPlanStatus(content: string, status: string): string {
+  if (content.startsWith("---\n")) {
+    const end = content.indexOf("\n---", 4);
+    if (end !== -1) {
+      const block = content.slice(4, end);
+      const rest = content.slice(end);
+      if (/^status:\s*.*$/im.test(block)) {
+        return `---\n${block.replace(/^status:\s*.*$/im, `status: ${status}`)}${rest}`;
+      }
+      return `---\nstatus: ${status}\n${block}${rest}`;
+    }
+  }
+
+  if (/\*\*Status:\*\*\s*`[^`]+`/.test(content)) {
+    return content.replace(/\*\*Status:\*\*\s*`[^`]+`/, `**Status:** \`${status}\``);
+  }
+  return `---\nstatus: ${status}\n---\n${content}`;
+}
+
+function isValidMilestoneTransition(
+  from: "locked" | "active" | "done" | "validating",
+  to: "locked" | "active" | "done" | "validating",
+): boolean {
+  if (from === to) return true;
+  return ALLOWED_MILESTONE_TRANSITIONS.get(from)?.has(to) ?? false;
+}
+
+type DiscoveredSession = ReturnType<typeof discoverSessions>[number];
+
+function validationSummary(dir: string): {
+  total: number;
+  passing: number;
+  failing: number;
+  pending: number;
+  blocked: number;
+} {
+  const valState = loadValidationState(dir);
+  const assertions = valState ? Object.values(valState.assertions) : [];
+  return {
+    total: assertions.length,
+    passing: assertions.filter((a) => a.status === "passing").length,
+    failing: assertions.filter((a) => a.status === "failing").length,
+    pending: assertions.filter((a) => a.status === "pending").length,
+    blocked: assertions.filter((a) => a.status === "blocked").length,
+  };
+}
+
+function buildProjectStreamSnapshot(session: DiscoveredSession) {
+  const project = buildProjectDetail(session);
+  const mission = loadMission(session.dir);
+  const tasks = loadTasks(session.dir);
+  const milestones = mission
+    ? [...mission.milestones]
+        .sort((a, b) => a.order - b.order)
+        .map((milestone) => {
+          const milestoneTasks = tasks.filter((task) => task.milestone === milestone.id);
+          return {
+            ...milestone,
+            taskCount: milestoneTasks.length,
+            tasksDone: milestoneTasks.filter((task) => task.status === "done").length,
+          };
+        })
+    : [];
+
+  return {
+    project,
+    mission: mission ? { mission, validationSummary: validationSummary(session.dir) } : null,
+    milestones,
+    goals: project.goals,
+    tasks: project.tasks,
+    skills: loadSkills(session.dir),
+    agents: project.agents,
+    events: readEvents(session.dir).slice(-100).reverse(),
+  };
+}
+
+/**
+ * Resolve a user-supplied directory to a canonical absolute path and verify
+ * it lives inside the filesystem-browser sandbox. Used by `/api/filesystem/
+ * inspect` and `/api/projects/onboard` so unregistered directories get the
+ * same protection as the directory browser. Returns either the canonical
+ * path or a structured error suitable for `c.json`.
+ *
+ * Tilde-expansion mirrors `/api/filesystem/browse`: `~` and `~/sub` map to
+ * `homedir()`. The sandbox roots are owned by `assertInsideSandbox`.
+ */
+type SandboxResolveOk = { canonical: string };
+type SandboxResolveErr = {
+  error: "invalid-path" | "not-found" | "outside-sandbox";
+  message: string;
+  status: 400 | 403 | 404;
+};
+function sandboxResolveDir(rawDir: string): SandboxResolveOk | SandboxResolveErr {
+  const trimmed = rawDir.trim();
+  if (!trimmed) return { error: "invalid-path", message: "Path must not be empty", status: 400 };
+  if (trimmed.includes("\0")) {
+    return { error: "invalid-path", message: "Path contains a null byte", status: 400 };
+  }
+  const home =
+    process.env.TMUX_IDE_HOME_OVERRIDE && process.env.TMUX_IDE_HOME_OVERRIDE.trim().length > 0
+      ? process.env.TMUX_IDE_HOME_OVERRIDE
+      : homedir();
+  let candidate = trimmed;
+  if (candidate === "~") {
+    candidate = home;
+  } else if (candidate.startsWith("~/")) {
+    candidate = `${home.replace(/\/+$/, "")}/${candidate.slice(2)}`;
+  }
+  if (!isAbsolute(candidate)) {
+    return { error: "invalid-path", message: "Path must be absolute", status: 400 };
+  }
+  const resolved = pathResolve(candidate);
+  let canonical: string;
+  try {
+    canonical = realpathSync(resolved);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return {
+        error: "not-found",
+        message: `Path "${resolved}" does not exist`,
+        status: 404,
+      };
+    }
+    throw err;
+  }
+  try {
+    assertInsideSandbox(canonical, home);
+  } catch (err) {
+    if (err instanceof SandboxViolationError) {
+      return { error: "outside-sandbox", message: err.message, status: 403 };
+    }
+    throw err;
+  }
+  return { canonical };
+}
+
+export function createApp(options: CreateAppOptions = {}): Hono {
+  const authConfig: AuthConfig = options.authConfig ?? { method: "none", token_expiry: 86400 };
+  const authService = options.authService ?? new AuthService();
+  initializeDefaultChatRuntime();
+
+  const app = new Hono();
+
+  // Allow cross-origin (Next.js dashboard, Tailscale, etc.)
+  app.use("/*", cors());
+
+  // Remote access bearer gate. Local Electron access uses a per-daemon
+  // bypass token from preload; loopback IPs are not implicitly trusted.
+  const remoteAuth = remoteAccessAuth(options);
+  app.use("/api/*", requireAuth(remoteAuth.token, remoteAuth.localBypassToken));
+
+  // Auth middleware — passes through when method is "none"
+  app.use("/*", authMiddleware(authService, authConfig));
+
+  // Global error handler
+  app.onError((err, c) => {
+    console.error("[command-center]", err.message);
+    return c.json({ error: err.message }, 500);
+  });
+
+  // --- Auth routes (always available, bypassed by middleware) ---
+
+  app.post("/api/auth/challenge", async (c) => {
+    const body = await c.req.json();
+    const userId = body.userId ?? authService.getCurrentUser();
+    const challenge = authService.createChallenge(userId);
+    return c.json(challenge);
+  });
+
+  app.post("/api/auth/verify", async (c) => {
+    const body = await c.req.json();
+    const result = await authService.authenticateWithSSHKey({
+      publicKey: body.publicKey,
+      signature: body.signature,
+      challengeId: body.challengeId,
+    });
+    if (!result.success) {
+      return c.json({ error: result.error }, 401);
+    }
+    return c.json({ token: result.token, userId: result.userId });
+  });
+
+  app.post("/api/auth/token", async (c) => {
+    if (authConfig.method !== "none") {
+      return c.json({ error: "Direct token generation requires auth method 'none'" }, 403);
+    }
+    const body = await c.req.json();
+    const userId = body.userId ?? authService.getCurrentUser();
+    const token = authService.generateToken(userId);
+    return c.json({ token, userId });
+  });
+
+  // --- v2 action dispatcher (single typed entry-point for state-changing
+  //     project / terminal operations — see src/command-center/actions/) ---
+
+  app.post("/api/v2/action/:name", createActionDispatcher());
+
+  // --- /api/providers — ProviderInstance CRUD over ~/.tmux-ide/providers.json
+  // (T080). The dashboard's ProvidersPanel reads/writes through this surface;
+  // summaries are redacted (no apiKey) so secrets stay daemon-side.
+  const providerStore: ProviderStore =
+    options.providerStore ?? makeProviderStore();
+
+  function providerErrorStatus(err: ProviderStoreError): 400 | 404 | 409 {
+    if (err.code === "not_found") return 404;
+    if (err.code === "duplicate_id") return 409;
+    return 400;
+  }
+
+  app.get("/api/providers", (c) => {
+    return c.json({ providers: providerStore.summaries() });
+  });
+
+  app.post("/api/providers", async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "Body must be valid JSON" }, 400);
+    }
+    const parsed = ProviderInstanceZ.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        {
+          error: "Invalid provider instance",
+          issues: parsed.error.issues.map((i) => ({
+            path: i.path.join("."),
+            message: i.message,
+          })),
+        },
+        400,
+      );
+    }
+    try {
+      const created = providerStore.add(parsed.data);
+      return c.json({ provider: created.id, summary: providerStore.summaries().find((s) => s.id === created.id) }, 201);
+    } catch (err) {
+      if (err instanceof ProviderStoreError) {
+        return c.json({ error: err.message, code: err.code }, providerErrorStatus(err));
+      }
+      throw err;
+    }
+  });
+
+  app.delete("/api/providers/:id", (c) => {
+    const id = c.req.param("id");
+    const removed = providerStore.remove(id);
+    if (!removed) {
+      return c.json({ error: `Provider not found: ${id}` }, 404);
+    }
+    return c.json({ removed: id });
+  });
+
+  // --- API routes ---
+
+  app.get("/api/widget/:name/spawn", async (c) => {
+    const { resolveWidgetSpawn, WIDGET_TYPES } = await import("../widgets/resolve.ts");
+    const name = c.req.param("name");
+    if (!WIDGET_TYPES.includes(name)) {
+      return c.json({ error: `unknown widget: ${name}`, available: WIDGET_TYPES }, 404);
+    }
+    const session = c.req.query("session");
+    const dir = c.req.query("dir");
+    if (!session || !dir) {
+      return c.json({ error: "session and dir query params are required" }, 400);
+    }
+    const target = c.req.query("target") ?? null;
+    const themeRaw = c.req.query("theme");
+    let theme: unknown = null;
+    if (themeRaw) {
+      try {
+        theme = JSON.parse(themeRaw);
+      } catch {
+        return c.json({ error: "theme must be valid JSON" }, 400);
+      }
+    }
+    try {
+      const spec = resolveWidgetSpawn(name, {
+        session,
+        dir,
+        target,
+        theme: theme as never,
+      });
+      return c.json(spec);
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
+    }
+  });
+
+  // T067: /healthz — minimal liveness probe used by daemon-client.
+  // Intentionally NOT under /api so it bypasses the auth middleware on
+  // every consumer. Returns ok + version + uptime (ms since boot).
+  const HEALTHZ_BOOTED_AT = Date.now();
+  app.get("/healthz", (c) => {
+    return c.json({
+      ok: true,
+      version: process.env.npm_package_version ?? "dev",
+      uptimeMs: Date.now() - HEALTHZ_BOOTED_AT,
+    });
+  });
+
+  app.get("/api/sessions", (c) => {
+    const sessions = discoverSessions();
+    const overviews = buildOverviews(sessions);
+    return c.json({ sessions: overviews });
+  });
+
+  // ---------------------------------------------------------------------
+  // /api/workspaces — registry-backed CRUD. The registry is the source of
+  // truth for which projects the daemon serves. WS frames `workspace.added`
+  // and `workspace.removed` are emitted by the registry's emitter, picked
+  // up by ws-events' ensureWorkspaceRegistryListener and fanned to clients.
+  // ---------------------------------------------------------------------
+
+  app.get("/api/workspaces", (c) => {
+    const registry = getDefaultWorkspaceRegistry();
+    return c.json({ workspaces: registry.list() });
+  });
+
+  app.get("/api/workspaces/:name", (c) => {
+    const name = c.req.param("name");
+    const registry = getDefaultWorkspaceRegistry();
+    const workspace = registry.get(name);
+    if (!workspace) return c.json({ error: "Workspace not found" }, 404);
+    return c.json({ workspace });
+  });
+
+  app.post("/api/workspaces", zValidator("json", AddWorkspaceRequestSchemaZ), (c) => {
+    const body = c.req.valid("json");
+    const registry = getDefaultWorkspaceRegistry();
+    const name = body.name ?? basename(body.projectDir);
+    if (!name || name.length === 0) {
+      return c.json({ error: "Cannot derive workspace name from projectDir" }, 400);
+    }
+    try {
+      const workspace = registry.add({
+        name,
+        sessionName: body.sessionName,
+        projectDir: body.projectDir,
+        ideConfigPath: body.ideConfigPath ?? null,
+      });
+      return c.json({ workspace }, 201);
+    } catch (err) {
+      if (err instanceof WorkspaceAlreadyExistsError) {
+        return c.json({ error: err.message, code: err.code }, 409);
+      }
+      throw err;
+    }
+  });
+
+  // --- /api/threads — top-level thread CRUD over the daemon-side
+  // `threadStore`. Companion to the action-dispatcher path; the v2 chat
+  // UI (dashboard/app/v2/_lib/V2ChatView.tsx + components/chat/NewChatPicker.tsx)
+  // talks directly to these routes.
+  const threadStore: ThreadStore =
+    options.chatStores?.threadStore ?? getDefaultThreadStore();
+  const sessionStore: SessionStore =
+    options.chatStores?.sessionStore ?? getDefaultSessionStore();
+  const checkpointStore: CheckpointStore =
+    options.chatStores?.checkpointStore ?? getDefaultCheckpointStore();
+
+  app.get("/api/threads", async (c) => {
+    const threads = await threadStore.list();
+    return c.json({ threads });
+  });
+
+  app.post("/api/threads", zValidator("json", ChatThreadCreateInputZ), async (c) => {
+    const body = c.req.valid("json");
+    const state = await threadStore.create(body);
+    const entry = (await threadStore.list()).find((t) => t.id === state.id);
+    broadcastChatEvent({
+      type: "chat.thread.index",
+      threads: await threadStore.list(),
+    });
+    // Return both the index entry (used by the rail) and the full state.
+    return c.json({ thread: entry ?? null, state }, 201);
+  });
+
+  app.get("/api/threads/:threadId", async (c) => {
+    const threadId = c.req.param("threadId");
+    if (!threadId) return c.json({ error: "threadId is required" }, 400);
+    const state = await threadStore.get(threadId);
+    if (!state) return c.json({ error: `Thread ${threadId} not found` }, 404);
+    return c.json({ thread: state });
+  });
+
+  app.delete("/api/threads/:threadId", async (c) => {
+    const threadId = c.req.param("threadId");
+    if (!threadId) return c.json({ error: "threadId is required" }, 400);
+    const state = await threadStore.get(threadId);
+    if (!state) return c.json({ error: `Thread ${threadId} not found` }, 404);
+    // Mirror chat-integration-harness.deleteThread: clear sessions and
+    // checkpoints before removing the thread so nothing leaks.
+    sessionStore.clear(threadId);
+    checkpointStore.clear(threadId);
+    await threadStore.delete(threadId);
+    broadcastChatEvent({
+      type: "chat.thread.index",
+      threads: await threadStore.list(),
+    });
+    return c.json({ deleted: true });
+  });
+
+  // GET /api/chat/providers — discovery (claude-code / codex binaries on
+  // PATH). Distinct from `/api/providers`, which serves the redacted
+  // user-configured `ProviderInstanceSummary` set (T079).
+  app.get("/api/chat/providers", async (c) => {
+    const providers: ChatProviderInfo[] = await discoverProviders(
+      options.providerDiscovery,
+    );
+    return c.json({ providers });
+  });
+
+  app.get("/api/threads/:threadId/plans", (c) => {
+    const threadId = c.req.param("threadId");
+    if (!threadId) return c.json({ error: "threadId is required" }, 400);
+    const plans = getDefaultPlanStore().list(threadId);
+    return c.json({ plans });
+  });
+
+  app.post(
+    "/api/threads/:threadId/plans/:planId/approve",
+    zValidator("json", PlanApproveBodyZ),
+    async (c) => {
+      const threadId = c.req.param("threadId");
+      const planId = c.req.param("planId");
+      const body = c.req.valid("json");
+      const orchestrator = getDefaultPlanOrchestrator();
+      try {
+        const result = await orchestrator.approve({
+          threadId,
+          planId,
+          ...(body.runtimeMode ? { runtimeMode: body.runtimeMode } : {}),
+        });
+        return c.json({ plan: result.plan, turnId: result.turnId });
+      } catch (err) {
+        if (err instanceof PlanNotFoundError) {
+          return c.json({ error: err.message, code: "plan_not_found" }, 404);
+        }
+        if (
+          err instanceof PlanAlreadyImplementedError ||
+          err instanceof PlanAlreadyRejectedError ||
+          err instanceof TurnAlreadyRunningError
+        ) {
+          return c.json({ error: err.message, code: err.name }, 409);
+        }
+        throw err;
+      }
+    },
+  );
+
+  app.post(
+    "/api/threads/:threadId/plans/:planId/reject",
+    zValidator("json", PlanRejectBodyZ),
+    (c) => {
+      const threadId = c.req.param("threadId");
+      const planId = c.req.param("planId");
+      const body = c.req.valid("json");
+      const orchestrator = getDefaultPlanOrchestrator();
+      try {
+        const plan = orchestrator.reject({
+          threadId,
+          planId,
+          ...(body.reason !== undefined ? { reason: body.reason } : {}),
+        });
+        return c.json({ plan });
+      } catch (err) {
+        if (err instanceof PlanNotFoundError) {
+          return c.json({ error: err.message, code: "plan_not_found" }, 404);
+        }
+        if (
+          err instanceof PlanAlreadyImplementedError ||
+          err instanceof PlanAlreadyRejectedError
+        ) {
+          return c.json({ error: err.message, code: err.name }, 409);
+        }
+        throw err;
+      }
+    },
+  );
+
+  app.delete("/api/workspaces/:name", (c) => {
+    const name = c.req.param("name");
+    const registry = getDefaultWorkspaceRegistry();
+    try {
+      registry.remove(name);
+      return c.body(null, 204);
+    } catch (err) {
+      if (err instanceof WorkspaceNotFoundError) {
+        return c.json({ error: err.message, code: err.code }, 404);
+      }
+      throw err;
+    }
+  });
+
+  app.get("/api/project/:name", (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+    const detail = buildProjectDetail(session);
+    const orchestratorSnapshot = buildOrchestratorSnapshot(session);
+    let orchestratorConfig: { enabled: boolean; dispatchMode: string } | null = null;
+    try {
+      const { config } = readConfig(session.dir);
+      const orch = config.orchestrator;
+      if (orch) {
+        orchestratorConfig = {
+          enabled: orch.enabled ?? false,
+          dispatchMode: orch.dispatch_mode ?? "tasks",
+        };
+      }
+    } catch {
+      // unreadable ide.yml
+    }
+    return c.json({ ...detail, orchestratorSnapshot, orchestratorConfig });
+  });
+
+  app.get("/api/project/:name/panes", (c) => {
+    const name = c.req.param("name");
+    let panes: ReturnType<typeof listSessionPanes>;
+    try {
+      panes = listSessionPanes(name);
+    } catch {
+      return c.json({ error: "Session not found" }, 404);
+    }
+    if (panes.length === 0) {
+      // Verify the session actually exists before returning empty
+      const sessions = discoverSessions();
+      if (!sessions.find((s) => s.name === name)) {
+        return c.json({ error: "Session not found" }, 404);
+      }
+    }
+    return c.json({
+      panes: panes.map((p) => ({
+        id: p.id,
+        index: p.index,
+        title: p.title,
+        currentCommand: p.currentCommand,
+        width: p.width,
+        height: p.height,
+        active: p.active,
+        role: p.role,
+        name: p.name,
+        type: p.type,
+      })),
+    });
+  });
+
+  app.post("/api/project/:name/task/:id", zValidator("json", updateTaskSchema), async (c) => {
+    const name = c.req.param("name");
+    const taskId = c.req.param("id");
+
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    const body = c.req.valid("json");
+    try {
+      const { task } = updateTaskRecord(session.dir, {
+        taskId,
+        status: body.status,
+        assignee: body.assignee,
+        title: body.title,
+        description: body.description,
+        priority: body.priority,
+      });
+      return c.json({ ok: true, task });
+    } catch (err) {
+      if (err instanceof TaskActionError && err.code === "task_not_found") {
+        return c.json({ error: "Task not found" }, 404);
+      }
+      return c.json({ error: "Task not found" }, 404);
+    }
+  });
+
+  // Create task
+  app.post("/api/project/:name/task", zValidator("json", createTaskSchema), async (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    const body = c.req.valid("json");
+
+    const { task } = createTaskRecord(session.dir, {
+      title: body.title,
+      description: body.description,
+      priority: body.priority,
+      goalId: body.goal,
+      tags: body.tags,
+    });
+    return c.json({ ok: true, task }, 201);
+  });
+
+  // Delete task
+  app.delete("/api/project/:name/task/:id", (c) => {
+    const name = c.req.param("name");
+    const taskId = c.req.param("id");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    try {
+      deleteTaskRecord(session.dir, taskId);
+    } catch (err) {
+      if (err instanceof TaskActionError && err.code === "task_not_found") {
+        return c.json({ error: "Task not found" }, 404);
+      }
+      throw err;
+    }
+    return c.json({ ok: true, deleted: taskId });
+  });
+
+  // List plan files with status metadata
+  app.get("/api/project/:name/plans", (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    const plans = loadPlans(session.dir).map((p) => {
+      const filePath = join(session.dir, "plans", `${p.name}.md`);
+      const raw = existsSync(filePath) ? readFileSync(filePath, "utf-8") : "";
+      const frontmatter = parsePlanFrontmatterSummary(raw);
+      return {
+        name: p.name,
+        path: `${p.name}.md`,
+        title: p.title,
+        status: frontmatter.status ?? p.status,
+        effort: p.effort ?? null,
+        owner: frontmatter.owner,
+        updated: existsSync(filePath) ? statSync(filePath).mtime.toISOString() : null,
+        completed: p.completed ?? null,
+      };
+    });
+
+    return c.json({ plans });
+  });
+
+  // Read a single plan file
+  app.get("/api/project/:name/plans/:filename", (c) => {
+    const name = c.req.param("name");
+    const filename = c.req.param("filename");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    // Sanitize filename — no path traversal
+    const safeName = safePlanName(filename);
+    const filePath = planFilePath(session.dir, filename);
+
+    if (!existsSync(filePath)) {
+      return c.json({ error: "Plan not found" }, 404);
+    }
+
+    const raw = readFileSync(filePath, "utf-8");
+    const { content, marks } = extractMarks(raw);
+    const stats = marks ? calculateStats(marks.marks) : null;
+    return c.json({
+      name: safeName.replace(/\.md$/, ""),
+      content,
+      marks: marks?.marks ?? null,
+      stats,
+      mtime: statSync(filePath).mtimeMs,
+    });
+  });
+
+  // Save a plan file (with authorship tagging)
+  app.post("/api/project/:name/plans/:filename", zValidator("json", savePlanSchema), async (c) => {
+    const name = c.req.param("name");
+    const filename = c.req.param("filename");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    const body = c.req.valid("json");
+
+    const filePath = planFilePath(session.dir, filename);
+
+    // Auto-tag uncovered character ranges as human-authored
+    const tagged = tagContent(body.content, "human");
+    const mtime = writePlanAtomic(filePath, tagged);
+
+    return c.json({ ok: true, mtime });
+  });
+
+  app.post(
+    "/api/project/:name/plans/:filename/content",
+    zValidator("json", savePlanContentSchema),
+    async (c) => {
+      const name = c.req.param("name");
+      const filename = c.req.param("filename");
+      const sessions = discoverSessions();
+      const session = sessions.find((s) => s.name === name);
+      if (!session) {
+        return c.json({ error: "Session not found" }, 404);
+      }
+
+      const filePath = planFilePath(session.dir, filename);
+      if (!existsSync(filePath)) {
+        return c.json({ error: "Plan not found" }, 404);
+      }
+
+      const body = c.req.valid("json");
+      const mtime = writePlanAtomic(filePath, body.content);
+      return c.json({ ok: true, mtime });
+    },
+  );
+
+  // Delete a plan file
+  app.delete("/api/project/:name/plans/:filename", (c) => {
+    const name = c.req.param("name");
+    const filename = c.req.param("filename");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    const safeName = safePlanName(filename);
+    const filePath = planFilePath(session.dir, filename);
+
+    if (!existsSync(filePath)) {
+      return c.json({ error: "Plan not found" }, 404);
+    }
+
+    unlinkSync(filePath);
+    return c.json({ ok: true, deleted: safeName });
+  });
+
+  // Mark a plan as done
+  app.post("/api/project/:name/plans/:filename/done", (c) => {
+    const name = c.req.param("name");
+    const filename = c.req.param("filename");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    const safeName = filename.replace(/[^a-zA-Z0-9_\-. ]/g, "").replace(/\.md$/, "");
+    const result = markPlanDone(session.dir, safeName);
+    if (!result) {
+      return c.json({ error: "Plan not found" }, 404);
+    }
+
+    return c.json({ ok: true, plan: result });
+  });
+
+  app.post("/api/project/:name/plans/:filename/status", async (c) => {
+    const name = c.req.param("name");
+    const filename = c.req.param("filename");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+    const status = (body as { status?: unknown })?.status;
+    if (
+      status !== "pending" &&
+      status !== "in-progress" &&
+      status !== "done" &&
+      status !== "archived"
+    ) {
+      return c.json({ error: "Invalid status" }, 400);
+    }
+
+    if (status === "done") {
+      const safeName = safePlanName(filename).replace(/\.md$/, "");
+      const result = markPlanDone(session.dir, safeName);
+      if (!result) return c.json({ error: "Plan not found" }, 404);
+      return c.json({ ok: true, plan: result });
+    }
+
+    const filePath = planFilePath(session.dir, filename);
+    if (!existsSync(filePath)) {
+      return c.json({ error: "Plan not found" }, 404);
+    }
+    const patched = patchPlanStatus(readFileSync(filePath, "utf-8"), status);
+    const mtime = writePlanAtomic(filePath, patched);
+    return c.json({ ok: true, mtime });
+  });
+
+  // --- Checkpoints ---
+
+  app.get("/api/project/:name/checkpoints", (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const taskId = c.req.query("task");
+    const list = taskId
+      ? loadCheckpointsForTask(session.dir, taskId)
+      : loadCheckpoints(session.dir);
+    return c.json({ checkpoints: list });
+  });
+
+  app.get("/api/project/:name/checkpoints/:id", (c) => {
+    const name = c.req.param("name");
+    const id = c.req.param("id");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const cp = loadCheckpoint(session.dir, id);
+    if (!cp) return c.json({ error: "Checkpoint not found" }, 404);
+    return c.json({ checkpoint: cp });
+  });
+
+  app.post("/api/project/:name/checkpoints", async (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const body = await c.req.json();
+    const now = new Date().toISOString();
+    const id = nextCheckpointId(session.dir);
+    const checkpoint: Checkpoint = {
+      id,
+      taskId: body.taskId ?? "",
+      title: body.title ?? `Checkpoint ${id}`,
+      description: body.description ?? "",
+      status: "pending",
+      createdBy: body.createdBy ?? "",
+      reviewedBy: null,
+      created: now,
+      updated: now,
+      diff: body.diff ?? null,
+      files: body.files ?? [],
+      comments: [],
+    };
+    saveCheckpoint(session.dir, checkpoint);
+    return c.json({ ok: true, checkpoint }, 201);
+  });
+
+  app.post("/api/project/:name/checkpoints/:id", async (c) => {
+    const name = c.req.param("name");
+    const id = c.req.param("id");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const existing = loadCheckpoint(session.dir, id);
+    if (!existing) return c.json({ error: "Checkpoint not found" }, 404);
+    const body = await c.req.json();
+    const updated: Checkpoint = {
+      ...existing,
+      ...body,
+      id: existing.id,
+      created: existing.created,
+      updated: new Date().toISOString(),
+    };
+    saveCheckpoint(session.dir, updated);
+    return c.json({ ok: true, checkpoint: updated });
+  });
+
+  app.delete("/api/project/:name/checkpoints/:id", (c) => {
+    const name = c.req.param("name");
+    const id = c.req.param("id");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    if (!deleteCheckpoint(session.dir, id)) return c.json({ error: "Checkpoint not found" }, 404);
+    return c.json({ ok: true, deleted: id });
+  });
+
+  // --- Reviews ---
+
+  app.get("/api/project/:name/reviews", (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const taskId = c.req.query("task");
+    const list = taskId ? loadReviewsForTask(session.dir, taskId) : loadReviews(session.dir);
+    return c.json({ reviews: list });
+  });
+
+  app.get("/api/project/:name/reviews/:id", (c) => {
+    const name = c.req.param("name");
+    const id = c.req.param("id");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const review = loadReview(session.dir, id);
+    if (!review) return c.json({ error: "Review not found" }, 404);
+    return c.json({ review });
+  });
+
+  app.post("/api/project/:name/reviews", async (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const body = await c.req.json();
+    const now = new Date().toISOString();
+    const id = nextReviewId(session.dir);
+    const review: ReviewRequest = {
+      id,
+      taskId: body.taskId ?? "",
+      checkpointId: body.checkpointId ?? null,
+      title: body.title ?? `Review ${id}`,
+      description: body.description ?? "",
+      status: "open",
+      requestedBy: body.requestedBy ?? "",
+      reviewer: body.reviewer ?? null,
+      created: now,
+      updated: now,
+      comments: [],
+    };
+    saveReview(session.dir, review);
+    return c.json({ ok: true, review }, 201);
+  });
+
+  app.post("/api/project/:name/reviews/:id", async (c) => {
+    const name = c.req.param("name");
+    const id = c.req.param("id");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const existing = loadReview(session.dir, id);
+    if (!existing) return c.json({ error: "Review not found" }, 404);
+    const body = await c.req.json();
+    const updated: ReviewRequest = {
+      ...existing,
+      ...body,
+      id: existing.id,
+      created: existing.created,
+      updated: new Date().toISOString(),
+    };
+    saveReview(session.dir, updated);
+    return c.json({ ok: true, review: updated });
+  });
+
+  app.post("/api/project/:name/reviews/:id/comment", async (c) => {
+    const name = c.req.param("name");
+    const id = c.req.param("id");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const existing = loadReview(session.dir, id);
+    if (!existing) return c.json({ error: "Review not found" }, 404);
+    const body = await c.req.json();
+    const comment: ReviewComment = {
+      author: body.author ?? "",
+      body: body.body ?? "",
+      created: new Date().toISOString(),
+    };
+    existing.comments.push(comment);
+    existing.updated = comment.created;
+    saveReview(session.dir, existing);
+    return c.json({ ok: true, review: existing });
+  });
+
+  app.delete("/api/project/:name/reviews/:id", (c) => {
+    const name = c.req.param("name");
+    const id = c.req.param("id");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    if (!deleteReview(session.dir, id)) return c.json({ error: "Review not found" }, 404);
+    return c.json({ ok: true, deleted: id });
+  });
+
+  app.get("/api/project/:name/files", async (c) => {
+    const { createIgnoreFilter, readDirectory } = await import("../widgets/lib/files.ts");
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+    const MAX_DEPTH = 5;
+    const MAX_NODES = 5000;
+    const ig = createIgnoreFilter(session.dir);
+    let nodeBudget = MAX_NODES;
+    interface FileNode {
+      path: string;
+      name: string;
+      isDirectory: boolean;
+      children?: FileNode[];
+      truncated?: true;
+    }
+    const walk = (dir: string, depth: number): FileNode[] => {
+      if (nodeBudget <= 0) return [];
+      const entries = readDirectory(dir, session.dir, ig, false);
+      const out: FileNode[] = [];
+      for (const e of entries) {
+        if (nodeBudget <= 0) break;
+        nodeBudget--;
+        const node: FileNode = { path: e.path, name: e.name, isDirectory: e.isDir };
+        if (e.isDir) {
+          if (depth + 1 < MAX_DEPTH) {
+            node.children = walk(e.absolutePath, depth + 1);
+          } else {
+            node.truncated = true;
+          }
+        }
+        out.push(node);
+      }
+      return out;
+    };
+    const tree = walk(session.dir, 0);
+    return c.json({ tree, maxDepth: MAX_DEPTH, truncated: nodeBudget <= 0 });
+  });
+
+  app.get("/api/project/:name/diff", (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    // Bumped from execFileSync's 1 MB default — real diffs in active repos
+    // routinely exceed it (a 3+ MB diff was silently dropping into an empty
+    // string before, since the buffer-overflow throw was caught and ignored).
+    // 64 MB is more than enough for any sane review session.
+    const DIFF_MAX_BUFFER = 64 * 1024 * 1024;
+
+    // Get git diff (staged + unstaged vs HEAD)
+    let diff = "";
+    try {
+      diff = execFileSync("git", ["diff", "HEAD"], {
+        cwd: session.dir,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"],
+        maxBuffer: DIFF_MAX_BUFFER,
+      });
+    } catch {
+      // No HEAD yet or not a git repo — try unstaged only
+    }
+    if (!diff) {
+      try {
+        diff = execFileSync("git", ["diff"], {
+          cwd: session.dir,
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"],
+          maxBuffer: DIFF_MAX_BUFFER,
+        });
+      } catch {
+        // Not a git repo
+      }
+    }
+
+    // Get list of changed files with stats
+    interface DiffFile {
+      file: string;
+      additions: number;
+      deletions: number;
+    }
+    let files: DiffFile[] = [];
+    try {
+      const numstat = execFileSync("git", ["diff", "--numstat", "HEAD"], {
+        cwd: session.dir,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"],
+        maxBuffer: DIFF_MAX_BUFFER,
+      });
+      files = numstat
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => {
+          const [added, removed, file] = line.split("\t");
+          return {
+            file: file!,
+            additions: parseInt(added!, 10) || 0,
+            deletions: parseInt(removed!, 10) || 0,
+          };
+        });
+    } catch {
+      // Fall back to unstaged
+      try {
+        const numstat = execFileSync("git", ["diff", "--numstat"], {
+          cwd: session.dir,
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"],
+          maxBuffer: DIFF_MAX_BUFFER,
+        });
+        files = numstat
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => {
+            const [added, removed, file] = line.split("\t");
+            return {
+              file: file!,
+              additions: parseInt(added!, 10) || 0,
+              deletions: parseInt(removed!, 10) || 0,
+            };
+          });
+      } catch {
+        // Not a git repo
+      }
+    }
+
+    return c.json({ diff, files });
+  });
+
+  // Per-file diff endpoint
+  app.get("/api/project/:name/diff/:file{.+}", (c) => {
+    const name = c.req.param("name");
+    const file = c.req.param("file");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+
+    // Same buffer-overflow bug fix as the parent handler: a single-file diff
+    // can still exceed 1 MB on a generated/large file. 64 MB is generous.
+    const PER_FILE_MAX_BUFFER = 64 * 1024 * 1024;
+
+    let diff = "";
+    try {
+      diff = execFileSync("git", ["diff", "HEAD", "--", file], {
+        cwd: session.dir,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"],
+        maxBuffer: PER_FILE_MAX_BUFFER,
+      });
+    } catch {
+      // no committed diff
+    }
+    if (!diff) {
+      try {
+        diff = execFileSync("git", ["diff", "--", file], {
+          cwd: session.dir,
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"],
+          maxBuffer: PER_FILE_MAX_BUFFER,
+        });
+      } catch {
+        // no working-tree diff
+      }
+    }
+
+    return c.json({ file, diff });
+  });
+
+  // GET /api/project/:name/preview/:file — read a file's contents from inside
+  // the session's working directory. The path is sandboxed: we resolve it
+  // against session.dir and reject anything that escapes (symlink-aware via
+  // realpath). Used by the v2 Preview surface to render file contents in the
+  // browser without giving general filesystem access.
+  app.get("/api/project/:name/preview/:file{.+}", (c) => {
+    const name = c.req.param("name");
+    const file = c.req.param("file");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+
+    const requested = pathResolve(session.dir, file);
+    let resolvedRoot: string;
+    let resolvedTarget: string;
+    try {
+      resolvedRoot = realpathSync(session.dir);
+    } catch {
+      return c.json({ error: "Session directory not accessible" }, 500);
+    }
+    try {
+      resolvedTarget = realpathSync(requested);
+    } catch {
+      return c.json({ file, exists: false, content: "" });
+    }
+    if (!resolvedTarget.startsWith(resolvedRoot + "/") && resolvedTarget !== resolvedRoot) {
+      return c.json({ error: "Path outside session" }, 403);
+    }
+    let stat;
+    try {
+      stat = statSync(resolvedTarget);
+    } catch {
+      return c.json({ file, exists: false, content: "" });
+    }
+    if (!stat.isFile()) {
+      return c.json({ error: "Not a regular file" }, 400);
+    }
+    if (stat.size > 1_000_000) {
+      return c.json({ error: "File too large", size: stat.size }, 413);
+    }
+    let content: string;
+    try {
+      content = readFileSync(resolvedTarget, "utf-8");
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : "read failed" }, 500);
+    }
+    return c.json({ file, exists: true, content, size: stat.size, mtimeMs: stat.mtimeMs });
+  });
+
+  // --- Milestone endpoints ---
+
+  app.get("/api/project/:name/milestones", (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const mission = loadMission(session.dir);
+    if (!mission) return c.json({ milestones: [] });
+    const tasks = loadTasks(session.dir);
+    const milestones = [...mission.milestones]
+      .sort((a, b) => a.order - b.order)
+      .map((m) => {
+        const mTasks = tasks.filter((t) => t.milestone === m.id);
+        return {
+          ...m,
+          taskCount: mTasks.length,
+          tasksDone: mTasks.filter((t) => t.status === "done").length,
+        };
+      });
+    return c.json({ milestones });
+  });
+
+  app.get("/api/project/:name/milestones/:id", (c) => {
+    const name = c.req.param("name");
+    const milestoneId = c.req.param("id");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const mission = loadMission(session.dir);
+    if (!mission) return c.json({ error: "No mission" }, 404);
+    const milestone = mission.milestones.find((m) => m.id === milestoneId);
+    if (!milestone) return c.json({ error: "Milestone not found" }, 404);
+    const tasks = loadTasks(session.dir).filter((t) => t.milestone === milestoneId);
+    return c.json({ milestone, tasks });
+  });
+
+  app.post(
+    "/api/project/:name/milestones",
+    zValidator("json", createMilestoneSchema),
+    async (c) => {
+      const name = c.req.param("name");
+      const sessions = discoverSessions();
+      const session = sessions.find((s) => s.name === name);
+      if (!session) return c.json({ error: "Session not found" }, 404);
+      const mission = loadMission(session.dir);
+      if (!mission) return c.json({ error: "No mission" }, 404);
+      const body = c.req.valid("json");
+      const id = `M${body.sequence}`;
+      if (mission.milestones.find((m) => m.id === id)) {
+        return c.json({ error: `Milestone ${id} already exists` }, 409);
+      }
+      const now = new Date().toISOString();
+      const hasActive = mission.milestones.some(
+        (m) => m.status === "active" || m.status === "done",
+      );
+      const milestone = {
+        id,
+        title: body.title,
+        description: body.description ?? "",
+        status: (hasActive ? "locked" : "active") as "locked" | "active",
+        order: body.sequence,
+        created: now,
+        updated: now,
+      };
+      mission.milestones.push(milestone);
+      mission.milestones.sort((a, b) => a.order - b.order);
+      mission.updated = now;
+      saveMission(session.dir, mission);
+      return c.json({ ok: true, milestone }, 201);
+    },
+  );
+
+  app.post(
+    "/api/project/:name/milestones/:id",
+    zValidator("json", updateMilestoneSchema),
+    async (c) => {
+      const name = c.req.param("name");
+      const milestoneId = c.req.param("id");
+      const sessions = discoverSessions();
+      const session = sessions.find((s) => s.name === name);
+      if (!session) return c.json({ error: "Session not found" }, 404);
+      const mission = loadMission(session.dir);
+      if (!mission) return c.json({ error: "No mission" }, 404);
+      const milestone = mission.milestones.find((m) => m.id === milestoneId);
+      if (!milestone) return c.json({ error: "Milestone not found" }, 404);
+      const body = c.req.valid("json");
+      if (body.status && !isValidMilestoneTransition(milestone.status, body.status)) {
+        return c.json(
+          {
+            error: `Invalid milestone status transition: ${milestone.status} -> ${body.status}`,
+          },
+          409,
+        );
+      }
+      if (body.status) milestone.status = body.status;
+      if (body.title) milestone.title = body.title;
+      if (body.description !== undefined) milestone.description = body.description;
+      milestone.updated = new Date().toISOString();
+      mission.updated = milestone.updated;
+      saveMission(session.dir, mission);
+      return c.json({ ok: true, milestone });
+    },
+  );
+
+  // --- Validation endpoints ---
+
+  app.get("/api/project/:name/validation", (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const state = loadValidationState(session.dir);
+    const contract = loadValidationContract(session.dir);
+    return c.json({ contract: contract ?? null, state: state ?? null });
+  });
+
+  app.get("/api/project/:name/validation/coverage", (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    return c.json(checkCoverage(session.dir));
+  });
+
+  app.post(
+    "/api/project/:name/validation/assert/:assertId",
+    zValidator("json", updateAssertionSchema),
+    async (c) => {
+      const name = c.req.param("name");
+      const assertId = c.req.param("assertId");
+      const sessions = discoverSessions();
+      const session = sessions.find((s) => s.name === name);
+      if (!session) return c.json({ error: "Session not found" }, 404);
+      const body = c.req.valid("json");
+      ensureTasksDir(session.dir);
+      const state = loadValidationState(session.dir) ?? { assertions: {}, lastVerified: null };
+      state.assertions[assertId] = {
+        status: body.status,
+        verifiedBy: body.verifiedBy ?? null,
+        verifiedAt: new Date().toISOString(),
+        evidence: body.evidence ?? null,
+        blockedBy: body.status === "blocked" ? (body.evidence ?? null) : null,
+      };
+      state.lastVerified = new Date().toISOString();
+      saveValidationState(session.dir, state);
+      return c.json({ ok: true, assertionId: assertId, ...state.assertions[assertId] });
+    },
+  );
+
+  app.get("/api/project/:name/research", (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+
+    const state = loadResearchState(session.dir);
+    const tasks = loadTasks(session.dir);
+    const activeTask =
+      state.activeResearchTaskId != null
+        ? (tasks.find((task) => task.id === state.activeResearchTaskId) ?? null)
+        : null;
+    const findings = tasks
+      .filter((task) => task.tags.includes("research") && task.status === "done")
+      .sort((a, b) => Date.parse(b.updated) - Date.parse(a.updated))
+      .slice(0, 10);
+
+    return c.json({ state, activeTask, findings });
+  });
+
+  app.post(
+    "/api/project/:name/research/trigger",
+    zValidator("json", triggerResearchSchema),
+    async (c) => {
+      const name = c.req.param("name");
+      const sessions = discoverSessions();
+      const session = sessions.find((s) => s.name === name);
+      if (!session) return c.json({ error: "Session not found" }, 404);
+
+      const body = c.req.valid("json");
+      const tasks = loadTasks(session.dir);
+      const researchState = loadResearchState(session.dir);
+
+      let maxConcurrentAgents = 10;
+      let masterPane: string | null = null;
+      let researchEnabled = true;
+      try {
+        const { config } = readConfig(session.dir);
+        maxConcurrentAgents = config.orchestrator?.max_concurrent_agents ?? 10;
+        masterPane = config.orchestrator?.master_pane ?? null;
+        researchEnabled = config.orchestrator?.research?.enabled ?? true;
+      } catch {
+        // ide.yml unreadable — use defaults
+      }
+
+      const task = dispatchResearch(
+        {
+          session: name,
+          dir: session.dir,
+          masterPane,
+          maxConcurrentAgents,
+          research: { enabled: researchEnabled },
+        },
+        {
+          lastActivity: new Map(),
+          previousTasks: new Map(),
+          claimedTasks: new Set(),
+          taskClaimTimes: new Map(),
+          inflightDispatches: new Map(),
+          completedDispatches: new Set(),
+          stallNudges: new Map(),
+          totalDispatched: 0,
+          totalCompleted: 0,
+          totalFailed: 0,
+          lastTickMs: 0,
+          ticking: false,
+          idleAgents: 0,
+          queuedDispatches: 0,
+          lastError: null,
+          lastReconcileMs: 0,
+        },
+        researchState,
+        tasks,
+        listSessionPanes(name),
+        {
+          type: body.type,
+          reason: `Manual research trigger: ${body.type}`,
+        },
+      );
+
+      if (!task) {
+        return c.json({ error: `Unable to dispatch research trigger "${body.type}"` }, 409);
+      }
+
+      return c.json({ ok: true, task }, 201);
+    },
+  );
+
+  // --- Skill endpoints ---
+
+  app.get("/api/project/:name/skills", (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const skills = loadSkills(session.dir);
+    return c.json({ skills });
+  });
+
+  app.get("/api/project/:name/skills/:skillName", (c) => {
+    const name = c.req.param("name");
+    const skillName = c.req.param("skillName");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const skill = loadSkill(session.dir, skillName);
+    if (!skill) return c.json({ error: "Skill not found" }, 404);
+    return c.json({ skill });
+  });
+
+  // --- Mission endpoints ---
+
+  app.get("/api/project/:name/mission", (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const mission = loadMission(session.dir);
+    if (!mission) return c.json({ error: "No mission" }, 404);
+    const valState = loadValidationState(session.dir);
+    const assertions = valState ? Object.values(valState.assertions) : [];
+    const validationSummary = {
+      total: assertions.length,
+      passing: assertions.filter((a) => a.status === "passing").length,
+      failing: assertions.filter((a) => a.status === "failing").length,
+      pending: assertions.filter((a) => a.status === "pending").length,
+      blocked: assertions.filter((a) => a.status === "blocked").length,
+    };
+    return c.json({ mission, validationSummary });
+  });
+
+  app.post("/api/project/:name/mission/plan-complete", async (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const mission = loadMission(session.dir);
+    if (!mission) return c.json({ error: "No mission" }, 404);
+    if (mission.status !== "planning") {
+      return c.json({ error: `Mission is "${mission.status}", expected "planning"` }, 409);
+    }
+    mission.status = "active";
+    const sorted = [...mission.milestones].sort((a, b) => a.order - b.order);
+    const first = sorted.find((m) => m.status === "locked");
+    if (first) {
+      first.status = "active";
+      first.updated = new Date().toISOString();
+    }
+    mission.updated = new Date().toISOString();
+    saveMission(session.dir, mission);
+    return c.json({ ok: true, mission });
+  });
+
+  // --- Metrics endpoints ---
+
+  app.get("/api/project/:name/metrics", (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    return c.json(computeMetrics(session.dir));
+  });
+
+  app.get("/api/project/:name/metrics/agents", (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    return c.json({ agents: computeMetrics(session.dir).agents });
+  });
+
+  app.get("/api/project/:name/metrics/timeline", (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    return c.json({ timeline: computeMetrics(session.dir).timeline });
+  });
+
+  app.get("/api/project/:name/metrics/history", (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    return c.json({ history: loadMissionHistory(session.dir) });
+  });
+
+  // Events endpoint — returns recent orchestrator events
+  app.get("/api/project/:name/events", (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    const allEvents = readEvents(session.dir);
+    // Return last 50 events, newest first
+    const recent = allEvents.slice(-50).reverse();
+
+    // Add relative timestamps
+    const now = Date.now();
+    const withRelative = recent.map((e) => {
+      const ms = now - new Date(e.timestamp).getTime();
+      let relative: string;
+      if (ms < 60000) relative = `${Math.floor(ms / 1000)}s ago`;
+      else if (ms < 3600000) relative = `${Math.floor(ms / 60000)}m ago`;
+      else if (ms < 86400000) relative = `${Math.floor(ms / 3600000)}h ago`;
+      else relative = `${Math.floor(ms / 86400000)}d ago`;
+      return { ...e, relative };
+    });
+
+    return c.json({ events: withRelative });
+  });
+
+  app.get("/api/project/:name/stream", (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    return streamSSE(c, async (stream) => {
+      projectStreamConnections += 1;
+      sseMetrics.connections = projectStreamConnections;
+      let closed = false;
+      let changeQueued = false;
+      let previousSnapshotHash = "";
+      let previousTaskHashes = new Map<string, string>();
+      let previousGoalHashes = new Map<string, string>();
+      let previousMilestoneHashes = new Map<string, string>();
+      let previousAgentHashes = new Map<string, string>();
+      let previousMissionHash = "";
+      let eventCursor = 0;
+      let lastPing = Date.now();
+      const tasksRoot = join(session.dir, ".tasks");
+
+      function writeSse(event: string, payload: unknown): void {
+        sseMetrics.messagesSent += 1;
+        void stream.writeSSE({ event, data: JSON.stringify(freezePayload(payload)) });
+      }
+
+      function writeSnapshot(currentSession: DiscoveredSession): void {
+        const snapshot = buildProjectStreamSnapshot(currentSession);
+        previousSnapshotHash = JSON.stringify(snapshot);
+        previousTaskHashes = new Map(snapshot.tasks.map((task) => [task.id, JSON.stringify(task)]));
+        previousGoalHashes = new Map(snapshot.goals.map((goal) => [goal.id, JSON.stringify(goal)]));
+        previousMilestoneHashes = new Map(
+          snapshot.milestones.map((milestone) => [milestone.id, JSON.stringify(milestone)]),
+        );
+        previousAgentHashes = new Map(
+          snapshot.agents.map((agent) => [agent.paneId, JSON.stringify(agent)]),
+        );
+        previousMissionHash = JSON.stringify(snapshot.mission);
+        eventCursor = readEvents(currentSession.dir).length;
+        writeSse("snapshot", snapshot);
+      }
+
+      function writeChanges(currentSession: DiscoveredSession): void {
+        const snapshot = buildProjectStreamSnapshot(currentSession);
+        const snapshotHash = JSON.stringify(snapshot);
+        if (!previousSnapshotHash) {
+          writeSnapshot(currentSession);
+          return;
+        }
+
+        const missionHash = JSON.stringify(snapshot.mission);
+        if (missionHash !== previousMissionHash) {
+          writeSse("mission.changed", {});
+          previousMissionHash = missionHash;
+        }
+
+        const nextTaskHashes = new Map(
+          snapshot.tasks.map((task) => [task.id, JSON.stringify(task)]),
+        );
+        for (const task of snapshot.tasks) {
+          if (nextTaskHashes.get(task.id) !== previousTaskHashes.get(task.id)) {
+            const op = previousTaskHashes.has(task.id) ? "update" : "create";
+            writeSse("task.changed", { id: task.id, op });
+          }
+        }
+        for (const id of previousTaskHashes.keys()) {
+          if (!nextTaskHashes.has(id)) {
+            writeSse("task.changed", { id, op: "delete" });
+          }
+        }
+        previousTaskHashes = nextTaskHashes;
+
+        const nextGoalHashes = new Map(
+          snapshot.goals.map((goal) => [goal.id, JSON.stringify(goal)]),
+        );
+        for (const goal of snapshot.goals) {
+          if (nextGoalHashes.get(goal.id) !== previousGoalHashes.get(goal.id)) {
+            const op = previousGoalHashes.has(goal.id) ? "update" : "create";
+            writeSse("goal.changed", { id: goal.id, op });
+          }
+        }
+        for (const id of previousGoalHashes.keys()) {
+          if (!nextGoalHashes.has(id)) {
+            writeSse("goal.changed", { id, op: "delete" });
+          }
+        }
+        previousGoalHashes = nextGoalHashes;
+
+        const nextMilestoneHashes = new Map(
+          snapshot.milestones.map((milestone) => [milestone.id, JSON.stringify(milestone)]),
+        );
+        for (const milestone of snapshot.milestones) {
+          if (nextMilestoneHashes.get(milestone.id) !== previousMilestoneHashes.get(milestone.id)) {
+            const op = previousMilestoneHashes.has(milestone.id) ? "update" : "create";
+            writeSse("milestone.changed", { id: milestone.id, op });
+          }
+        }
+        for (const id of previousMilestoneHashes.keys()) {
+          if (!nextMilestoneHashes.has(id)) {
+            writeSse("milestone.changed", { id, op: "delete" });
+          }
+        }
+        previousMilestoneHashes = nextMilestoneHashes;
+
+        const nextAgentHashes = new Map(
+          snapshot.agents.map((agent) => [agent.paneId, JSON.stringify(agent)]),
+        );
+        for (const agent of snapshot.agents) {
+          if (nextAgentHashes.get(agent.paneId) !== previousAgentHashes.get(agent.paneId)) {
+            writeSse("agent.changed", {
+              paneId: agent.paneId,
+              status: agent.isBusy ? "busy" : "idle",
+            });
+          }
+        }
+        previousAgentHashes = nextAgentHashes;
+
+        const events = readEvents(currentSession.dir);
+        const effectiveCursor = events.length < eventCursor ? 0 : eventCursor;
+        for (const event of events.slice(effectiveCursor)) {
+          writeSse("event.appended", event);
+        }
+        eventCursor = events.length;
+
+        if (snapshotHash !== previousSnapshotHash) {
+          writeSse("snapshot", snapshot);
+          previousSnapshotHash = snapshotHash;
+        }
+      }
+
+      function queueChanges(): void {
+        if (closed || changeQueued) return;
+        changeQueued = true;
+        queueMicrotask(() => {
+          changeQueued = false;
+          const current = discoverSessions().find((candidate) => candidate.name === name);
+          if (current) writeChanges(current);
+        });
+      }
+
+      const onTaskStoreChange = (change: TaskStoreChangeEvent) => {
+        if (!isPathInside(change.path, tasksRoot) && change.path !== null) return;
+        queueChanges();
+      };
+
+      const onEventAppended = (message: { dir: string; event: unknown }) => {
+        if (message.dir !== session.dir) return;
+        queueChanges();
+      };
+
+      try {
+        stream.onAbort(() => {
+          closed = true;
+        });
+        taskStore.on("change", onTaskStoreChange);
+        eventLogEmitter.on("event", onEventAppended);
+        writeSnapshot(session);
+        while (!closed) {
+          await stream.sleep(250);
+          const current = discoverSessions().find((candidate) => candidate.name === name);
+          if (!current) break;
+          writeChanges(current);
+          const now = Date.now();
+          if (now - lastPing >= 25_000) {
+            writeSse("ping", { at: new Date().toISOString() });
+            lastPing = now;
+          }
+        }
+      } finally {
+        closed = true;
+        taskStore.off("change", onTaskStoreChange);
+        eventLogEmitter.off("event", onEventAppended);
+        projectStreamConnections = Math.max(0, projectStreamConnections - 1);
+        sseMetrics.connections = projectStreamConnections;
+      }
+    });
+  });
+
+  app.get("/api/daemon/metrics", (c) => {
+    const metrics = getTaskStoreMetrics();
+    return c.json({
+      uptimeMs: metrics.uptimeMs,
+      cache: metrics.cache,
+      watcher: metrics.watcher,
+      reconcile: metrics.reconcile,
+      sse: getSseMetrics(),
+      writes: metrics.writes,
+      paneContentHash: getPaneContentHashMetrics(),
+    });
+  });
+
+  app.get("/api/project/:name/orchestrator/health", (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    const live = getOrchestratorHealth(name);
+    if (live) return c.json(live);
+
+    const tasks = loadTasks(session.dir);
+    const panes: ReturnType<typeof listSessionPanes> = (() => {
+      try {
+        return listSessionPanes(name);
+      } catch {
+        return [];
+      }
+    })();
+    const inProgress = tasks.filter((task) => task.status === "in-progress");
+    const busyAssignees = new Set(inProgress.map((task) => task.assignee).filter(Boolean));
+    const idleAgents = panes.filter((pane) => {
+      if (pane.role === "lead") return false;
+      const agentName = pane.name ?? pane.title;
+      return !busyAssignees.has(agentName);
+    }).length;
+
+    return c.json({
+      ticking: false,
+      lastTickMs: 0,
+      inflight: inProgress.length,
+      idleAgents,
+      queuedDispatches: tasks.filter((task) => task.status === "todo").length,
+      lastError: null,
+      totalDispatched: 0,
+      totalCompleted: tasks.filter((task) => task.status === "done").length,
+      totalFailed: tasks.filter((task) => task.status === "review").length,
+    });
+  });
+
+  // --- Remote command execution endpoints ---
+
+  app.post("/api/project/:name/inject", async (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return c.json({ error: "Invalid request body" }, 400);
+    }
+
+    const text = (body as { text?: unknown }).text;
+    const paneId = (body as { paneId?: unknown }).paneId;
+    const sendEnter = (body as { sendEnter?: unknown }).sendEnter;
+
+    if (typeof text !== "string" || text.trim().length === 0) {
+      return c.json({ error: "text must be a non-empty string" }, 400);
+    }
+    if (paneId !== undefined && (typeof paneId !== "string" || !/^%\d+$/.test(paneId))) {
+      return c.json({ error: "paneId must match /^%\\d+$/" }, 400);
+    }
+    if (sendEnter !== undefined && typeof sendEnter !== "boolean") {
+      return c.json({ error: "sendEnter must be a boolean" }, 400);
+    }
+
+    const panes = listSessionPanes(name);
+    const pane = paneId
+      ? panes.find((candidate) => candidate.id === paneId)
+      : panes.find((p) => p.active);
+    if (!pane) {
+      return c.json({ error: "Pane not found" }, 404);
+    }
+
+    sendLiteralToPane(name, pane.id, text);
+    if (sendEnter) sendEnterToPane(name, pane.id);
+
+    appendEvent(session.dir, {
+      timestamp: new Date().toISOString(),
+      type: "send",
+      target: pane.name ?? pane.title,
+      paneId: pane.id,
+      message: text.length > 100 ? text.slice(0, 100) + "..." : text,
+    });
+
+    return c.json({ ok: true });
+  });
+
+  // Send message to a pane by name/title/role/ID
+  app.post("/api/project/:name/send", zValidator("json", sendCommandSchema), async (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    const { target, message, noEnter } = c.req.valid("json");
+
+    const panes = listSessionPanes(name);
+    const pane = resolvePane(panes, target);
+    if (!pane) {
+      const available = panes.map((p) => ({
+        id: p.id,
+        title: p.title,
+        name: p.name,
+        role: p.role,
+      }));
+      return c.json({ error: "Pane not found", target, available }, 404);
+    }
+
+    const busyStatus = getPaneBusyStatus(name, pane.id);
+
+    // Collapse multiline for agent panes
+    const prepared = busyStatus === "agent" ? message.replace(/\n+/g, " ").trim() : message;
+
+    if (noEnter) {
+      sendText(name, pane.id, prepared);
+    } else {
+      sendCommand(name, pane.id, prepared);
+    }
+
+    appendEvent(session.dir, {
+      timestamp: new Date().toISOString(),
+      type: "send",
+      target: pane.name ?? pane.title,
+      paneId: pane.id,
+      message: prepared.length > 100 ? prepared.slice(0, 100) + "..." : prepared,
+    });
+
+    return c.json({
+      ok: true,
+      session: name,
+      target: {
+        paneId: pane.id,
+        name: pane.name,
+        title: pane.title,
+        role: pane.role,
+      },
+      busyStatus,
+    });
+  });
+
+  // GET /api/project/:name/config — read parsed ide.yml + raw text. Used by
+  // the v2 Config editor to hydrate the form.
+  app.get("/api/project/:name/config", (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    try {
+      const { config, configPath } = readConfig(session.dir);
+      return c.json({ ok: true, config, configPath });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "Failed to read ide.yml", detail: message }, 500);
+    }
+  });
+
+  // POST /api/project/:name/config — accept a full IdeConfig payload, validate
+  // against IdeConfigSchema, and write to ide.yml. Returns the persisted
+  // config so the client can re-hydrate without a follow-up GET.
+  app.post("/api/project/:name/config", async (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+    const parsed = IdeConfigSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: "Invalid config", details: parsed.error.issues }, 400);
+    }
+    try {
+      const configPath = writeConfig(session.dir, parsed.data);
+      return c.json({ ok: true, config: parsed.data, configPath });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "Failed to write ide.yml", detail: message }, 500);
+    }
+  });
+
+  // Launch a tmux-ide session (shells out to CLI since launch has complex side effects)
+  const execFileAsync = promisify(execFile);
+
+  // POST /api/project/:name/restart — fire `tmux-ide restart` async. The CLI
+  // handles stop+launch; this endpoint is fire-and-forget aside from a short
+  // 30s timeout so the client can retry on its own.
+  app.post("/api/project/:name/restart", async (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    try {
+      await execFileAsync("tmux-ide", ["restart", "--json"], {
+        cwd: session.dir,
+        timeout: 30000,
+        env: { ...process.env, TMUX: "" },
+      });
+      return c.json({ ok: true, session: name, status: "restarted" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "Restart failed", detail: message }, 500);
+    }
+  });
+
+  app.post("/api/project/:name/launch", async (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    // Check if already running
+    const state = getSessionState(name);
+    if (state.running) {
+      return c.json({ ok: true, session: name, status: "already_running" });
+    }
+
+    try {
+      await execFileAsync("tmux-ide", ["--json"], {
+        cwd: session.dir,
+        timeout: 30000,
+        env: { ...process.env, TMUX: "" }, // Clear TMUX to avoid nesting
+      });
+      return c.json({ ok: true, session: name, status: "launched" });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "Launch failed", detail: message }, 500);
+    }
+  });
+
+  // Stop a tmux-ide session
+  app.post("/api/project/:name/stop", async (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    const state = getSessionState(name);
+    if (!state.running) {
+      return c.json({ ok: true, session: name, status: "not_running" });
+    }
+
+    stopSessionMonitor(name);
+    const result = killSession(name);
+    if (result.stopped) {
+      return c.json({ ok: true, session: name, status: "stopped" });
+    }
+    return c.json({ error: "Stop failed", reason: result.reason }, 500);
+  });
+
+  // SSE endpoint — cursor-based event streaming with orchestrator state
+  app.get("/api/events", (c) => {
+    return streamSSE(c, async (stream) => {
+      let prevOverviews: SessionOverview[] = [];
+      let prevDetails = new Map<string, ProjectDetail>();
+      const eventCursors = new Map<string, number>(); // session → last-seen event count
+      let prevOrchHashes = new Map<string, string>(); // session → orchestrator snapshot hash
+
+      const poll = () => {
+        const sessions = discoverSessions();
+        const overviews = buildOverviews(sessions);
+
+        // Detect session-level changes
+        const prevNames = new Set(prevOverviews.map((s) => s.name));
+        const currNames = new Set(overviews.map((s) => s.name));
+
+        for (const overview of overviews) {
+          if (!prevNames.has(overview.name)) {
+            stream.writeSSE({
+              event: "session_added",
+              data: JSON.stringify(overview),
+            });
+            continue;
+          }
+
+          const prev = prevOverviews.find((s) => s.name === overview.name);
+          if (
+            prev &&
+            (prev.stats.doneTasks !== overview.stats.doneTasks ||
+              prev.stats.totalTasks !== overview.stats.totalTasks ||
+              prev.stats.activeAgents !== overview.stats.activeAgents)
+          ) {
+            stream.writeSSE({
+              event: "session_update",
+              data: JSON.stringify(overview),
+            });
+          }
+        }
+
+        for (const prev of prevOverviews) {
+          if (!currNames.has(prev.name)) {
+            stream.writeSSE({
+              event: "session_removed",
+              data: JSON.stringify({ name: prev.name }),
+            });
+          }
+        }
+
+        // Per-session: event log cursor + orchestrator state + task/agent diffs
+        for (const session of sessions) {
+          // Cursor-based event streaming from event log
+          const events = readEvents(session.dir);
+          const cursor = eventCursors.get(session.name) ?? 0;
+
+          // Handle log rotation: if events.length < cursor, log was rotated
+          const effectiveCursor = events.length < cursor ? 0 : cursor;
+          const newEvents = events.slice(effectiveCursor);
+
+          for (const evt of newEvents) {
+            const eventId = `${evt.timestamp}:${evt.type}:${evt.taskId ?? ""}`;
+            stream.writeSSE({
+              id: eventId,
+              event: "orchestrator_event",
+              data: JSON.stringify({ session: session.name, ...evt }),
+            });
+          }
+          eventCursors.set(session.name, events.length);
+
+          // Orchestrator state snapshot (emit only on change)
+          const orchSnapshot = buildOrchestratorSnapshot(session);
+          const orchHash = JSON.stringify(orchSnapshot);
+          const prevHash = prevOrchHashes.get(session.name);
+          if (orchHash !== prevHash) {
+            stream.writeSSE({
+              event: "orchestrator_state",
+              data: JSON.stringify({ session: session.name, ...orchSnapshot }),
+            });
+            prevOrchHashes.set(session.name, orchHash);
+          }
+
+          // Task-level and agent-level diffs (existing logic)
+          const detail = buildProjectDetail(session);
+          const prevDetail = prevDetails.get(session.name);
+
+          if (prevDetail) {
+            const prevTaskMap = new Map(prevDetail.tasks.map((t) => [t.id, t]));
+            for (const task of detail.tasks) {
+              const prevTask = prevTaskMap.get(task.id);
+              if (!prevTask) {
+                stream.writeSSE({
+                  event: "task_update",
+                  data: JSON.stringify({
+                    session: session.name,
+                    taskId: task.id,
+                    status: task.status,
+                    title: task.title,
+                  }),
+                });
+              } else if (prevTask.status !== task.status || prevTask.assignee !== task.assignee) {
+                stream.writeSSE({
+                  event: "task_update",
+                  data: JSON.stringify({
+                    session: session.name,
+                    taskId: task.id,
+                    status: task.status,
+                    assignee: task.assignee,
+                  }),
+                });
+              }
+            }
+
+            // Detect agent status changes
+            const prevAgentMap = new Map(prevDetail.agents.map((a) => [a.paneTitle, a]));
+            for (const agent of detail.agents) {
+              const prevAgent = prevAgentMap.get(agent.paneTitle);
+              if (!prevAgent || prevAgent.isBusy !== agent.isBusy) {
+                stream.writeSSE({
+                  event: "agent_status",
+                  data: JSON.stringify({
+                    session: session.name,
+                    agent: agent.paneTitle,
+                    busy: agent.isBusy,
+                    taskId: agent.taskId,
+                  }),
+                });
+              }
+            }
+          }
+
+          prevDetails.set(session.name, detail);
+        }
+
+        prevOverviews = overviews;
+      };
+
+      // Initial snapshot
+      poll();
+
+      // Poll every 2 seconds
+      while (true) {
+        await stream.sleep(2000);
+        poll();
+      }
+    });
+  });
+
+  // --- HQ endpoints ---
+
+  const remoteRegistry = options.remoteRegistry ?? null;
+
+  app.post("/api/hq/register", async (c) => {
+    if (!remoteRegistry) return c.json({ error: "HQ registry not enabled" }, 501);
+    const body = await c.req.json();
+    const parsed = RegistrationPayloadSchema.safeParse(body);
+    if (!parsed.success)
+      return c.json({ error: "Invalid payload", details: parsed.error.issues }, 400);
+    try {
+      const machine = remoteRegistry.register(parsed.data);
+      return c.json({
+        ok: true,
+        id: machine.id,
+        name: machine.name,
+        registeredAt: machine.registeredAt.toISOString(),
+      });
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 409);
+    }
+  });
+
+  app.get("/api/hq/machines", (c) => {
+    if (!remoteRegistry) return c.json({ machines: [] });
+    const machines = remoteRegistry.getMachines().map((m) => ({
+      id: m.id,
+      name: m.name,
+      url: m.url,
+      registeredAt: m.registeredAt.toISOString(),
+      lastHeartbeat: m.lastHeartbeat.toISOString(),
+      sessions: Array.from(m.sessionIds),
+    }));
+    return c.json({ machines });
+  });
+
+  app.get("/api/hq/machines/:id", (c) => {
+    if (!remoteRegistry) return c.json({ error: "HQ registry not enabled" }, 501);
+    const machine = remoteRegistry.getMachine(c.req.param("id"));
+    if (!machine) return c.json({ error: "Machine not found" }, 404);
+    return c.json({
+      id: machine.id,
+      name: machine.name,
+      url: machine.url,
+      registeredAt: machine.registeredAt.toISOString(),
+      lastHeartbeat: machine.lastHeartbeat.toISOString(),
+      sessions: Array.from(machine.sessionIds),
+    });
+  });
+
+  app.delete("/api/hq/machines/:id", (c) => {
+    if (!remoteRegistry) return c.json({ error: "HQ registry not enabled" }, 501);
+    const removed = remoteRegistry.unregister(c.req.param("id"));
+    if (!removed) return c.json({ error: "Machine not found" }, 404);
+    return c.json({ ok: true });
+  });
+
+  // --- Tunnel endpoints ---
+
+  const tunnelManager = options.tunnelManager ?? null;
+
+  app.get("/api/tunnel", async (c) => {
+    if (!tunnelManager) return c.json({ running: false, provider: null });
+    const status = await tunnelManager.status();
+    return c.json(status);
+  });
+
+  app.post("/api/tunnel/start", async (c) => {
+    if (!tunnelManager) return c.json({ error: "Tunnel manager not configured" }, 501);
+    const body = await c.req.json().catch(() => ({}));
+    const { tunnelConfigSchema } = await import("../lib/tunnels/types.ts");
+    const parsed = tunnelConfigSchema.safeParse(body);
+    if (!parsed.success)
+      return c.json({ error: "Invalid tunnel config", details: parsed.error.issues }, 400);
+    const status = await tunnelManager.start(parsed.data);
+    return c.json(status);
+  });
+
+  app.post("/api/tunnel/stop", async (c) => {
+    if (!tunnelManager) return c.json({ error: "Tunnel manager not configured" }, 501);
+    await tunnelManager.stop();
+    return c.json({ ok: true });
+  });
+
+  // Health check for daemon liveness probes
+  app.get("/health", (c) => {
+    return c.json({
+      ok: true,
+      uptime: Math.round(process.uptime()),
+      version: pkgVersion,
+    });
+  });
+
+  // --- Project registry ---
+
+  app.get("/api/projects", (c) => {
+    return c.json({ projects: listProjects() });
+  });
+
+  app.get("/api/projects/templates", (c) => {
+    return c.json({ templates: listAvailableTemplates() });
+  });
+
+  app.post("/api/projects", async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+    const parsed = RegisterProjectRequestSchemaZ.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: "Invalid request", details: parsed.error.issues }, 400);
+    }
+    try {
+      const project = await registerProject({
+        dir: parsed.data.dir,
+        name: parsed.data.name,
+      });
+      return c.json({ project }, 201);
+    } catch (err) {
+      if (err instanceof ProjectDirNotFoundError) {
+        return c.json({ error: err.message, code: err.code }, 400);
+      }
+      if (err instanceof ProjectAlreadyRegisteredError) {
+        return c.json({ error: err.message, code: err.code, suggestion: err.suggestion }, 409);
+      }
+      throw err;
+    }
+  });
+
+  app.delete("/api/projects/:name", (c) => {
+    const name = c.req.param("name");
+    try {
+      unregisterProject(name);
+      return c.json({ ok: true });
+    } catch (err) {
+      if (err instanceof ProjectNotFoundError) {
+        return c.json({ error: err.message, code: err.code }, 404);
+      }
+      throw err;
+    }
+  });
+
+  app.get("/api/filesystem/browse", (c) => {
+    const rawPath = c.req.query("path");
+    const showHiddenRaw = c.req.query("showHidden");
+    const showHidden = showHiddenRaw === "1" || showHiddenRaw === "true";
+    try {
+      const result = browseDirectory({
+        path: rawPath ?? null,
+        showHidden,
+      });
+      return c.json(result);
+    } catch (err) {
+      if (err instanceof SandboxViolationError) {
+        return c.json({ error: "outside-sandbox", message: err.message }, 403);
+      }
+      if (err instanceof PathNotFoundError) {
+        return c.json({ error: "not-found", message: err.message }, 404);
+      }
+      if (err instanceof InvalidPathError) {
+        return c.json({ error: "invalid-path", message: err.message }, 400);
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/projects/:name/probe", async (c) => {
+    const name = c.req.param("name");
+    if (!getProject(name)) {
+      return c.json({ error: `Project "${name}" not found in registry`, code: "NOT_FOUND" }, 404);
+    }
+    try {
+      const project = await refreshProject(name);
+      return c.json({ project });
+    } catch (err) {
+      if (err instanceof ProjectNotFoundError) {
+        return c.json({ error: err.message, code: err.code }, 404);
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/projects/init", async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+    const parsed = InitProjectRequestSchemaZ.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: "Invalid request", details: parsed.error.issues }, 400);
+    }
+    if (!existsSync(parsed.data.dir)) {
+      return c.json({ error: `Directory "${parsed.data.dir}" does not exist` }, 400);
+    }
+
+    const jobId = randomUUID();
+    const command = process.env.TMUX_IDE_INIT_COMMAND ?? "tmux-ide";
+
+    // Fire-and-forget — runs in the background and streams chunks via WS.
+    void (async () => {
+      try {
+        await runInit({
+          cwd: parsed.data.dir,
+          template: parsed.data.template,
+          command,
+          onChunk: (chunk) => {
+            broadcastInitOutput(jobId, chunk);
+          },
+        });
+        // Mark stream complete
+        broadcastInitOutput(jobId, "", true);
+
+        // Probe + register the freshly-init'd project so it shows up in
+        // the registry — also broadcasts `projects.changed`.
+        try {
+          await registerProject({ dir: parsed.data.dir });
+        } catch (err) {
+          // Already-registered is benign here; report anything else.
+          if (
+            !(err instanceof ProjectAlreadyRegisteredError) &&
+            !(err instanceof ProjectDirNotFoundError)
+          ) {
+            broadcastInitError(jobId, (err as Error).message);
+          }
+        }
+      } catch (err) {
+        if (err instanceof ProjectInitTimeoutError) {
+          broadcastInitError(jobId, err.message);
+        } else if (err instanceof ProjectInitFailedError) {
+          broadcastInitError(jobId, err.message);
+        } else {
+          broadcastInitError(jobId, (err as Error).message);
+        }
+      }
+    })();
+
+    return c.json({ jobId }, 202);
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/filesystem/inspect — registry-agnostic directory inspection.
+  // POST /api/projects/onboard   — generate ide.yml + register the project.
+  // -------------------------------------------------------------------------
+
+  app.post("/api/filesystem/inspect", async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "invalid-path", message: "Invalid JSON body" }, 400);
+    }
+    const parsed = InspectFilesystemRequestSchemaZ.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: "invalid-path", message: "Invalid request" }, 400);
+    }
+    const sandboxResult = sandboxResolveDir(parsed.data.dir);
+    if ("error" in sandboxResult) {
+      return c.json(
+        { error: sandboxResult.error, message: sandboxResult.message },
+        sandboxResult.status,
+      );
+    }
+    try {
+      const project = await inspectProject(sandboxResult.canonical);
+      return c.json({ project });
+    } catch (err) {
+      if (err instanceof InspectDirNotFoundError) {
+        return c.json({ error: "not-found", message: err.message }, 404);
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/projects/onboard", async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+    const parsed = OnboardProjectRequestSchemaZ.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: "Invalid request", details: parsed.error.issues }, 400);
+    }
+    const sandboxResult = sandboxResolveDir(parsed.data.dir);
+    if ("error" in sandboxResult) {
+      return c.json(
+        { error: sandboxResult.error, message: sandboxResult.message },
+        sandboxResult.status,
+      );
+    }
+
+    const dir = sandboxResult.canonical;
+    let inspect;
+    try {
+      inspect = await inspectProject(dir);
+    } catch (err) {
+      if (err instanceof InspectDirNotFoundError) {
+        return c.json({ error: "not-found", message: err.message }, 404);
+      }
+      throw err;
+    }
+
+    // Never overwrite an existing ide.yml.
+    try {
+      assertNoExistingIdeYml(dir);
+    } catch (err) {
+      if (err instanceof OnboardConflictError) {
+        return c.json({ error: err.message, code: err.code }, 409);
+      }
+      throw err;
+    }
+
+    // Compose the config from inputs (defaults to inspect.name).
+    const finalName = parsed.data.name?.trim() || inspect.name;
+    let config;
+    try {
+      config = composeIdeYmlConfig({
+        name: finalName,
+        agents: parsed.data.agents,
+        agentNames: parsed.data.agentNames,
+        devCommand: parsed.data.devCommand ?? null,
+        testCommand: parsed.data.testCommand ?? null,
+        lintCommand: parsed.data.lintCommand ?? null,
+      });
+    } catch (err) {
+      if (err instanceof OnboardInvalidInputError) {
+        return c.json({ error: err.message, code: err.code }, 400);
+      }
+      throw err;
+    }
+
+    writeConfig(dir, config);
+
+    // Now register — this also broadcasts `projects.changed`.
+    try {
+      const project = await registerProject({ dir, name: finalName });
+      return c.json({ project }, 201);
+    } catch (err) {
+      if (err instanceof ProjectAlreadyRegisteredError) {
+        return c.json({ error: err.message, code: err.code, suggestion: err.suggestion }, 409);
+      }
+      if (err instanceof ProjectDirNotFoundError) {
+        return c.json({ error: err.message, code: err.code }, 400);
+      }
+      throw err;
+    }
+  });
+
+  // Serve the Next.js static dashboard for all non-API routes
+  app.use("*", serveDashboard());
+
+  return app;
+}
+
+/**
+ * Discover bundled templates by reading `templates/*.yml`. Hardcoded
+ * descriptions for the canonical set; unknown templates surface with a
+ * generic label so we don't break if templates are added without updating
+ * this map.
+ */
+function listAvailableTemplates(): ProjectTemplate[] {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dir = dirname(__filename);
+  const templatesDir = join(__dir, "..", "..", "templates");
+  if (!existsSync(templatesDir)) return [];
+  const labels: Record<string, { label: string; description: string }> = {
+    default: { label: "Default", description: "Single Claude pane + dev/shell row" },
+    nextjs: {
+      label: "Next.js",
+      description: "Two Claude panes + Next.js dev server + shell",
+    },
+    vite: { label: "Vite", description: "Vite dev server + Claude + shell" },
+    convex: {
+      label: "Convex",
+      description: "Convex dev + Next.js + Claude pane",
+    },
+    python: { label: "Python", description: "Python project with Claude + tests" },
+    go: { label: "Go", description: "Go project with Claude + tests + shell" },
+    "agent-team": {
+      label: "Agent Team",
+      description: "Lead + teammate Claude panes for coordinated multi-agent work",
+    },
+    "agent-team-nextjs": {
+      label: "Agent Team — Next.js",
+      description: "Agent team layout tuned for a Next.js app",
+    },
+    "agent-team-monorepo": {
+      label: "Agent Team — Monorepo",
+      description: "Agent team layout for monorepos with multiple apps",
+    },
+    missions: {
+      label: "Missions",
+      description: "Mission-driven layout with planner, validator, and researcher",
+    },
+  };
+  const entries = readdirSync(templatesDir).filter((f) => f.endsWith(".yml"));
+  return entries
+    .map((file) => {
+      const id = file.replace(/\.yml$/, "");
+      const meta = labels[id];
+      return {
+        id,
+        label: meta?.label ?? id,
+        description: meta?.description ?? `Template: ${id}`,
+      };
+    })
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/**
+ * Attach the unified `/ws/events` push channel to a Node HTTP server. The
+ * daemon calls this once after binding the command-center port. Existing
+ * SSE endpoints (`/api/events`, `/api/project/<name>/stream`) continue to
+ * work alongside this — they will be retired in a follow-up slice.
+ */
+export function attachWsEvents(server: import("node:http").Server): {
+  close: () => void;
+} {
+  const wss = new WebSocketServer({ noServer: true });
+
+  const upgradeListener = (
+    req: import("node:http").IncomingMessage,
+    socket: import("node:net").Socket,
+    head: Buffer,
+  ): void => {
+    const url = req.url ?? "/";
+    const pathname = url.split("?")[0];
+    if (pathname !== "/ws/events") return;
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      handleWsEventsConnection(ws);
+    });
+  };
+
+  server.on("upgrade", upgradeListener);
+
+  return {
+    close: () => {
+      server.off("upgrade", upgradeListener);
+      wss.close();
+    },
+  };
+}
