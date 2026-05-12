@@ -200,7 +200,7 @@ function MissionViewReact({ sessionName }: MissionViewProps) {
     return (
       <Panel testId="mission-view" className="font-sans">
         <PanelHeader title="Mission" />
-        <PanelBody className="space-y-4 p-4">
+        <PanelBody className="space-y-4 p-4 sm:p-5">
           <SkeletonCard />
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {Array.from({ length: 4 }, (_, i) => (
@@ -220,7 +220,10 @@ function MissionViewReact({ sessionName }: MissionViewProps) {
       <Panel testId="mission-view" className="font-sans">
         <PanelHeader title="Mission" />
         <PanelBody className="flex items-center justify-center p-8 text-center">
-          <SurfaceCard padded="md" className="max-w-md p-5">
+          <SurfaceCard
+            padded="md"
+            className="max-w-md rounded-2xl border border-border/45 bg-card/25 p-5"
+          >
             <EmptyState
               title="No active mission"
               body="Set a mission to connect goals, milestones, and validation into one project narrative."

@@ -49,7 +49,7 @@ function SettingRow({
   children: ReactNode;
 }) {
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-b border-[var(--border-weak)] py-3">
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-t border-border px-4 py-3 first:border-t-0 sm:px-5">
       <div className="min-w-0">
         <div className="text-[13px] text-[var(--fg)]">{title}</div>
         {description && <div className="mt-0.5 text-[11px] text-[var(--dim)]">{description}</div>}
@@ -136,7 +136,7 @@ export function SettingsView() {
         <aside className="hidden w-[200px] shrink-0 border-r border-[var(--border-weak)] bg-[var(--bg-weak)] sm:block">
           <SettingsNavigator active={active} onChange={setActive} />
         </aside>
-        <main className="min-w-0 flex-1 space-y-5 overflow-auto p-4">
+        <main className="min-w-0 flex-1 space-y-4 overflow-auto p-4 sm:p-5">
           {active === "general" && (
             <section data-testid="settings-section-general" className="max-w-3xl">
               <SectionHeader label="General" />
@@ -214,7 +214,7 @@ export function SettingsView() {
           {active === "appearance" && (
             <section data-testid="settings-section-appearance" className="max-w-4xl">
               <SectionHeader label="Appearance" />
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {themes.map((theme) => (
                   <button
                     key={theme.id}

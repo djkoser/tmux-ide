@@ -68,7 +68,7 @@ export function TurnBlock({
   if (group.turnId === null) {
     // Ambient activities — no header, no checkpoint chip.
     return (
-      <section data-testid="turn-block-ambient" className="flex flex-col gap-0.5 px-2 py-1">
+      <section data-testid="turn-block-ambient" className="flex flex-col gap-1 px-2.5 py-1.5">
         {group.activities.map((a) => (
           <ActivityRow key={a.id} activity={a} />
         ))}
@@ -82,9 +82,9 @@ export function TurnBlock({
       data-turn-id={group.turnId}
       data-state={group.state}
       data-unfinished={group.unfinished ? "true" : "false"}
-      className="flex flex-col gap-1 border-t border-[var(--border-weak)] px-2 py-2"
+      className="flex flex-col gap-1.5 border-t border-border/60 px-3 py-3"
     >
-      <header className="flex items-center gap-2 text-[11px]">
+      <header className="flex items-center gap-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/80">
         {checkpoint ? <CheckpointChip checkpoint={checkpoint} onRevert={onRevert} /> : null}
         <span className="font-medium text-[var(--fg)]">
           Turn {group.ordinal} —{" "}
