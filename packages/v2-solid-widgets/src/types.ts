@@ -140,3 +140,83 @@ export interface MissionControlDashboardMountHandle {
   unmount(): void;
   setOptions(next: Partial<MissionControlDashboardMountOptions>): void;
 }
+
+// ---------------------------------------------------------------------------
+// CostsDashboard — prop-driven Solid widget for the dashboard's metrics
+// surface (dashboard/components/views/MetricsView.tsx). The widget reads
+// task throughput, per-agent utilization, milestone progress, mission
+// validation, and a recent timeline. Cost in the tmux-ide context is
+// "what the agent fleet is burning through" — task-minutes per agent,
+// retry rate, completion rate — not LLM tokens (token tracking lives
+// elsewhere in chat usage).
+// ---------------------------------------------------------------------------
+
+export interface CostsAgentEntry {
+  name: string;
+  totalTimeMs: number;
+  activeTimeMs: number;
+  idleTimeMs: number;
+  taskCount: number;
+  retryCount: number;
+  utilization: number;
+  specialties: string[];
+}
+
+export interface CostsMilestoneEntry {
+  id: string;
+  title: string;
+  status: string;
+  taskCount: number;
+  completedCount: number;
+  durationMs: number;
+}
+
+export interface CostsTimelineEntry {
+  timestamp: string;
+  completedTasks: number;
+  activeTasks: number;
+  busyAgents: number;
+  idleAgents: number;
+}
+
+export interface CostsDashboardSnapshot {
+  session: {
+    startedAt: string | null;
+    durationMs: number;
+    status: string;
+    agentCount: number;
+  };
+  tasks: {
+    total: number;
+    completed: number;
+    failed: number;
+    retried: number;
+    completionRate: number;
+    retryRate: number;
+    avgDurationMs: number;
+    medianDurationMs: number;
+    p90DurationMs: number;
+    byMilestone: CostsMilestoneEntry[];
+  };
+  agents: CostsAgentEntry[];
+  mission: {
+    title: string | null;
+    status: string | null;
+    milestonesCompleted: number;
+    validationPassRate: number;
+    wallClockMs: number;
+  };
+  timeline: CostsTimelineEntry[];
+}
+
+export interface CostsDashboardMountOptions {
+  /** Live metrics snapshot from the React host's polling loop. */
+  snapshot?: CostsDashboardSnapshot | null;
+  /** Recent-timeline limit; defaults to 20. */
+  timelineLimit?: number;
+}
+
+export interface CostsDashboardMountHandle {
+  unmount(): void;
+  setOptions(next: Partial<CostsDashboardMountOptions>): void;
+}

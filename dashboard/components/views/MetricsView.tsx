@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { fetchMetrics, type MetricsData } from "@/lib/api";
 import { usePolling } from "@/lib/usePolling";
 import { ProgressBar } from "@/components/ProgressBar";
+import { CostsBridge } from "@/components/costs-bridge";
 import {
   KpiCard,
   Panel,
@@ -39,6 +41,23 @@ function milestoneVariant(status: string): StatusPillVariant {
 }
 
 export function MetricsView({ sessionName }: MetricsViewProps) {
+  // Feature flag: `?costs=solid` swaps the React MetricsView body for
+  // the Solid CostsDashboard widget. Identical data source (polled
+  // fetchMetrics) and same KPI / milestone / agent / timeline layout;
+  // the Solid version uses fine-grained signals so only the changed
+  // rows re-render on each tick. Default keeps the React tree.
+  const searchParams = useSearchParams();
+  if (searchParams?.get("costs") === "solid") {
+    return (
+      <Panel testId="metrics-view">
+        <CostsBridge sessionName={sessionName} />
+      </Panel>
+    );
+  }
+  return <MetricsViewReact sessionName={sessionName} />;
+}
+
+function MetricsViewReact({ sessionName }: MetricsViewProps) {
   const metricsFetcher = useCallback(() => fetchMetrics(sessionName), [sessionName]);
   const { data: metrics } = usePolling<MetricsData | null>(metricsFetcher, 5000);
 

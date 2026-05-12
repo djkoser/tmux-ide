@@ -2,6 +2,7 @@ import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
 import { ChangesView } from "./widgets/Changes";
 import { CostsView } from "./widgets/Costs";
+import { CostsDashboardView } from "./widgets/CostsDashboard";
 import { DiffsViewerView } from "./widgets/DiffsViewer";
 import { ExplorerView } from "./widgets/Explorer";
 import { MissionControlView } from "./widgets/MissionControl";
@@ -9,6 +10,9 @@ import { MissionControlDashboardView } from "./widgets/MissionControlDashboard";
 import { PlansRailView } from "./widgets/PlansRail";
 import type {
   BaseMountOptions,
+  CostsDashboardMountHandle,
+  CostsDashboardMountOptions,
+  CostsDashboardSnapshot,
   DiffsViewerMountHandle,
   DiffsViewerMountOptions,
   ExplorerMountHandle,
@@ -23,6 +27,12 @@ import type {
 
 export type {
   BaseMountOptions,
+  CostsAgentEntry,
+  CostsDashboardMountHandle,
+  CostsDashboardMountOptions,
+  CostsDashboardSnapshot,
+  CostsMilestoneEntry,
+  CostsTimelineEntry,
   DashboardAgent,
   DashboardEvent,
   DashboardMilestone,
@@ -122,6 +132,36 @@ export function mountMissionControl(container: HTMLElement, opts: BaseMountOptio
   const [options, setOpts] = createSignal(opts);
   container.classList.add("v2-solid-widget");
   const dispose = render(() => <MissionControlView options={options} />, container);
+
+  return {
+    unmount() {
+      dispose();
+      container.classList.remove("v2-solid-widget");
+    },
+    setOptions(next) {
+      setOpts((current) => ({ ...current, ...next }));
+    },
+  };
+}
+
+/**
+ * Mount the Costs dashboard — prop-driven Solid port of
+ * dashboard/components/views/MetricsView.tsx. Same data flow as the
+ * Mission Control dashboard: React host owns the polling loop and
+ * pushes MetricsData snapshots through `setOptions({ snapshot })`.
+ *
+ * Renders: KPI grid (session duration / completion rate / avg
+ * utilization / retry rate), task summary line, milestone progress
+ * rows, per-agent utilization bars, mission validation card, recent
+ * activity timeline.
+ */
+export function mountCostsDashboard(
+  container: HTMLElement,
+  opts: CostsDashboardMountOptions,
+): CostsDashboardMountHandle {
+  const [options, setOpts] = createSignal(opts);
+  container.classList.add("v2-solid-widget");
+  const dispose = render(() => <CostsDashboardView options={options} />, container);
 
   return {
     unmount() {
