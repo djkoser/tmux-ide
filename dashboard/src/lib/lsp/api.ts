@@ -61,6 +61,44 @@ export interface LspDiagnostic {
   message: string;
 }
 
+export interface LspSymbolInformation {
+  name: string;
+  kind: number;
+  containerName?: string;
+  location: { uri: string; range: LspRange };
+}
+
+export interface LspTextEdit {
+  range: LspRange;
+  newText: string;
+}
+
+export interface LspTextDocumentEdit {
+  textDocument: { uri: string; version?: number | null };
+  edits: LspTextEdit[];
+}
+
+export interface LspWorkspaceEdit {
+  changes?: Record<string, LspTextEdit[]>;
+  documentChanges?: Array<LspTextDocumentEdit | { kind: string; [k: string]: unknown }>;
+}
+
+export interface LspCommand {
+  title: string;
+  command: string;
+  arguments?: unknown[];
+}
+
+export interface LspCodeAction {
+  title: string;
+  kind?: string;
+  diagnostics?: LspDiagnostic[];
+  isPreferred?: boolean;
+  disabled?: { reason: string };
+  edit?: LspWorkspaceEdit;
+  command?: LspCommand;
+}
+
 interface PositionBody {
   file: string;
   line: number;
@@ -129,5 +167,35 @@ export function lspDiagnostics(
   return postJson(
     `/api/project/${encodeURIComponent(sessionName)}/lsp/diagnostics`,
     { file },
+  );
+}
+
+export function lspSymbols(
+  sessionName: string,
+  query: string,
+): Promise<{ symbols: LspSymbolInformation[] }> {
+  return postJson(
+    `/api/project/${encodeURIComponent(sessionName)}/lsp/symbols`,
+    { query },
+  );
+}
+
+export function lspRename(
+  sessionName: string,
+  body: PositionBody & { newName: string },
+): Promise<{ edit: LspWorkspaceEdit | null }> {
+  return postJson(
+    `/api/project/${encodeURIComponent(sessionName)}/lsp/rename`,
+    body,
+  );
+}
+
+export function lspCodeActions(
+  sessionName: string,
+  body: PositionBody & { endLine?: number; endColumn?: number },
+): Promise<{ actions: LspCodeAction[] }> {
+  return postJson(
+    `/api/project/${encodeURIComponent(sessionName)}/lsp/codeActions`,
+    body,
   );
 }

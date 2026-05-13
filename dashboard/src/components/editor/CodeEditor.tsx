@@ -25,6 +25,8 @@ import { modelRegistry } from "@/lib/monaco/model-registry";
 import { bufferState } from "@/lib/editor/buffer-store";
 import { wireLspToEditor } from "@/lib/lsp/wire-editor";
 import { LspHoverTooltip } from "@/components/editor/LspHoverTooltip";
+import { LspRenameModal } from "@/components/editor/LspRenameModal";
+import { LspCodeActionLightbulb } from "@/components/editor/LspCodeActionLightbulb";
 
 export interface CodeEditorProps {
   /**
@@ -224,11 +226,23 @@ export function CodeEditor(props: CodeEditorProps) {
       <div ref={host} class="min-h-0 flex-1" />
       <Show when={activeBufferMeta()}>
         {(meta) => (
-          <LspHoverTooltip
-            editor={editorSignal}
-            sessionName={meta().sessionName}
-            filePath={meta().filePath}
-          />
+          <>
+            <LspHoverTooltip
+              editor={editorSignal}
+              sessionName={meta().sessionName}
+              filePath={meta().filePath}
+            />
+            <LspCodeActionLightbulb
+              editor={editorSignal}
+              sessionName={meta().sessionName}
+              filePath={meta().filePath}
+            />
+            <LspRenameModal
+              editor={editorSignal}
+              sessionName={meta().sessionName}
+              filePath={meta().filePath}
+            />
+          </>
         )}
       </Show>
     </div>

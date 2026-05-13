@@ -37,6 +37,7 @@ import { FilesSurface } from "@/components/files/FilesSurface";
 import { MonacoDiffsView } from "@/components/diffs/MonacoDiffsView";
 import { SearchView } from "@/components/search/SearchView";
 import { ExplorerContextMenu } from "@/components/search/ExplorerContextMenu";
+import { SymbolPicker } from "@/components/v2/SymbolPicker";
 import {
   BottomPanelView,
   CostsView,
@@ -99,6 +100,7 @@ export default function ProjectV2Route(): JSX.Element {
           rows in the Files surface. Always mounted so the menu
           works from any view — closes itself on switch. */}
       <ExplorerContextMenu onRequestSearchView={() => setView("search")} />
+      <SymbolPicker sessionName={projectName()} rootPath="/" />
       <div class="flex flex-1 min-h-0">
         <V2ActivityBar view={view()} onView={onActivityBarView} />
 

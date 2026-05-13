@@ -203,7 +203,7 @@ import {
 import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, resolve as pathResolve } from "node:path";
-import { getLspClientForFile } from "../lsp/registry.ts";
+import { getLspClient, getLspClientForFile } from "../lsp/registry.ts";
 import { randomUUID } from "node:crypto";
 import { WebSocketServer } from "ws";
 import {
@@ -3045,6 +3045,135 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     await client.ensureOpen(sandbox.target);
     const diagnostics = await client.waitForDiagnostics(sandbox.target, 1500);
     return c.json({ diagnostics });
+  });
+
+  // POST /api/project/:name/lsp/symbols { query } — workspace-wide symbol
+  // search. No file required — the language server is keyed on the session
+  // root. The endpoint always boots the typescript server for the workspace;
+  // future languages can be added by trying additional registry keys.
+  app.post("/api/project/:name/lsp/symbols", async (c) => {
+    let body: { query?: unknown };
+    try {
+      body = (await c.req.json()) as { query?: unknown };
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+    const query = typeof body?.query === "string" ? body.query : "";
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    let root: string;
+    try {
+      root = realpathSync(session.dir);
+    } catch {
+      return c.json({ error: "Session directory not accessible" }, 404);
+    }
+    const client = await getLspClient(root, "typescript").catch(
+      (err) =>
+        ({
+          __error: err instanceof Error ? err.message : String(err),
+        }) as const,
+    );
+    if (client && "__error" in client) {
+      return c.json({ error: `LSP failed to start: ${client.__error}` }, 500);
+    }
+    const symbols = await client.workspaceSymbols(query);
+    return c.json({ symbols: symbols ?? [] });
+  });
+
+  // POST /api/project/:name/lsp/rename { file, line, column, newName }
+  //
+  // Returns the raw LSP `WorkspaceEdit` describing changes the dashboard
+  // should preview + apply. The daemon never writes files itself —
+  // the IDE is the source of truth for "do you actually want this edit
+  // applied", since rename touches multiple files and may step on
+  // unsaved buffer state.
+  app.post("/api/project/:name/lsp/rename", async (c) => {
+    let raw: unknown;
+    try {
+      raw = await c.req.json();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+    const parsed = parseLspPositionBody(raw);
+    if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+    const newName = (raw as { newName?: unknown })?.newName;
+    if (typeof newName !== "string" || !newName.trim()) {
+      return c.json({ error: "Missing `newName`" }, 400);
+    }
+    const sandbox = resolveLspTarget(c.req.param("name"), parsed.file);
+    if (!sandbox.ok) return c.json({ error: sandbox.error }, sandbox.status);
+    const client = await getLspClientForFile(sandbox.root, sandbox.target).catch(
+      (err) =>
+        ({
+          __error: err instanceof Error ? err.message : String(err),
+        }) as const,
+    );
+    if (client && "__error" in client) {
+      return c.json({ error: `LSP failed to start: ${client.__error}` }, 500);
+    }
+    if (!client) {
+      return c.json({ error: "No LSP server registered for this file type" }, 400);
+    }
+    const edit = await client.rename(
+      sandbox.target,
+      parsed.line,
+      parsed.column,
+      newName,
+    );
+    return c.json({ edit });
+  });
+
+  // POST /api/project/:name/lsp/codeActions
+  //   { file, line, column, endLine?, endColumn? }
+  //
+  // Returns the LSP `(Command | CodeAction)[]` array for the cursor or
+  // selection. End line/column default to start when omitted (point
+  // selection). Diagnostics for the file are forwarded as context so
+  // the server can return quick-fixes that match the current squigglies.
+  app.post("/api/project/:name/lsp/codeActions", async (c) => {
+    let raw: unknown;
+    try {
+      raw = await c.req.json();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+    const parsed = parseLspPositionBody(raw);
+    if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+    const body = raw as { endLine?: unknown; endColumn?: unknown };
+    const endLine =
+      typeof body?.endLine === "number" && body.endLine >= 0
+        ? body.endLine
+        : parsed.line;
+    const endColumn =
+      typeof body?.endColumn === "number" && body.endColumn >= 0
+        ? body.endColumn
+        : parsed.column;
+    const sandbox = resolveLspTarget(c.req.param("name"), parsed.file);
+    if (!sandbox.ok) return c.json({ error: sandbox.error }, sandbox.status);
+    const client = await getLspClientForFile(sandbox.root, sandbox.target).catch(
+      (err) =>
+        ({
+          __error: err instanceof Error ? err.message : String(err),
+        }) as const,
+    );
+    if (client && "__error" in client) {
+      return c.json({ error: `LSP failed to start: ${client.__error}` }, 500);
+    }
+    if (!client) {
+      return c.json({ error: "No LSP server registered for this file type" }, 400);
+    }
+    const diagnostics = client.diagnostics(sandbox.target);
+    const actions = await client.codeActions(
+      sandbox.target,
+      {
+        start: { line: parsed.line, character: parsed.column },
+        end: { line: endLine, character: endColumn },
+      },
+      diagnostics,
+    );
+    return c.json({ actions: actions ?? [] });
   });
 
   app.get("/api/daemon/metrics", (c) => {
