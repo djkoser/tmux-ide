@@ -118,13 +118,20 @@ const VIEWS: ViewSpec[] = [
   { id: "costs", label: "Costs", glyph: "◍" },
 ];
 const VIEW_IDS = new Set<string>(VIEWS.map((v) => v.id));
+const isViewId = (v: string): v is ViewId => VIEW_IDS.has(v);
 
 export default function ProjectV2Page() {
   const params = useParams<{ name: string }>();
   const projectName = params?.name ?? "__fallback";
   const { snapshot } = useSessionStream(projectName === "__fallback" ? null : projectName);
 
-  const [view, setView] = useState<ViewId>("kanban");
+  // View state is URL-synced via `?view=<id>` so deep-links + reload
+  // land on the same surface (WN2 of docs/app-wiring-audit.md). The
+  // default view (`kanban`) drops the param so the canonical URL stays
+  // clean. Setter signature matches the previous useState tuple — every
+  // call site (palette CustomEvent, ActivityBar onView, sidebar
+  // buttons) is unchanged.
+  const [view, setView] = useViewParam<ViewId>("kanban", isViewId);
   // Layout persistence keys mirror the VSCode-style regions:
   //   shell-h        = sidebar | editor | inspector horizontal split
   //   shell-v        = upper | bottom-panel vertical split
