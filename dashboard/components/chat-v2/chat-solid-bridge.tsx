@@ -41,6 +41,13 @@ interface ChatSolidBridgeProps {
   mentionCandidates?: ReadonlyArray<MentionCandidate>;
   /** File-link click handler. Routes to the host preview view. */
   onOpenFile?: (meta: MarkdownFileLinkMeta) => void;
+  /** Fired when the chat header's Close button is clicked. Forwarded
+   *  into `ChatMountOptions.onClose`. The host decides what closing
+   *  means — typically deselect the active thread, which causes this
+   *  bridge to render its empty-state placeholder. Omit to hide the
+   *  Close affordance entirely (chat-solid's ChatHeader only renders
+   *  the button when `onClose` is truthy). */
+  onClose?: () => void;
 }
 
 export function ChatSolidBridge({
@@ -48,6 +55,7 @@ export function ChatSolidBridge({
   sessionName,
   mentionCandidates,
   onOpenFile,
+  onClose,
 }: ChatSolidBridgeProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const handleRef = useRef<ChatHandle | null>(null);
@@ -57,6 +65,8 @@ export function ChatSolidBridge({
   // closure-trapped-stale problem.
   const onOpenFileRef = useRef(onOpenFile);
   onOpenFileRef.current = onOpenFile;
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   const mentionCandidatesMemo = useMemo<ReadonlyArray<MentionCandidate>>(
     () => mentionCandidates ?? [],
@@ -125,6 +135,14 @@ export function ChatSolidBridge({
         mentionCandidates: mentionCandidatesMemo,
         onOpenFile: (meta) => onOpenFileRef.current?.(meta),
         onProviderChange,
+        // Ref-indirect when the host provided a handler at mount,
+        // strictly undefined otherwise. chat-solid's ChatHeader only
+        // renders the Close affordance when `onClose` is truthy, so
+        // suppressing it requires omitting (not just stubbing) the
+        // field. Hosts that swap the handler mid-mount get the
+        // freshest closure for free; hosts that need to hide the
+        // button after mount must remount (rare; not a feature).
+        ...(onClose ? { onClose: () => onCloseRef.current?.() } : {}),
       };
       handleRef.current = chatSolid.mount(el, opts);
     })();

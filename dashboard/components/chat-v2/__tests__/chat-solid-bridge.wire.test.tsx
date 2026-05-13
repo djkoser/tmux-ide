@@ -41,6 +41,7 @@ interface ChatCaptured {
   wsUrl?: string;
   onProviderChange?: (next: string) => Promise<void> | void;
   onOpenFile?: (meta: { href: string }) => void;
+  onClose?: () => void;
 }
 
 beforeEach(() => {
@@ -103,5 +104,33 @@ describe("ChatSolidBridge — wire", () => {
     const meta = { href: "src/app.ts" };
     opts.onOpenFile!(meta);
     expect(onOpenFile).toHaveBeenCalledWith(meta);
+  });
+
+  it("forwards onClose to the host when provided (W1)", async () => {
+    mockFetchOk();
+    const onClose = vi.fn();
+    render(
+      <ChatSolidBridge
+        threadId="t1"
+        sessionName="proj"
+        onClose={onClose}
+      />,
+    );
+    const opts = await waitForCapture<ChatCaptured>("ChatSolid");
+    expect(typeof opts.onClose).toBe("function");
+    opts.onClose!();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("omits onClose from mount opts when the host doesn't provide one (W1)", async () => {
+    mockFetchOk();
+    render(<ChatSolidBridge threadId="t1" sessionName="proj" />);
+    const opts = await waitForCapture<ChatCaptured>("ChatSolid");
+    // The bridge installs a ref-indirect onClose at mount-time (so a
+    // host that swaps in onClose later doesn't need a remount). The
+    // hot-toggle effect calls setOptions({ onClose: undefined }) when
+    // the host doesn't provide one, which cleanly suppresses the
+    // Close affordance in chat-solid's header.
+    expect(opts.onClose).toBeUndefined();
   });
 });

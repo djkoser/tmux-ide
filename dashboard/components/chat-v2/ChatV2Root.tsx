@@ -42,6 +42,14 @@ export interface ChatV2RootProps {
   mentionCandidates?: ReadonlyArray<MentionCandidate>;
   /** Routes a markdown file-link click to the host's preview view. */
   onOpenFile?: (meta: MarkdownFileLinkMeta) => void;
+  /**
+   * Fired when the chat header's Close button is clicked. Host
+   * typically deselects the active thread (`onPickThread(null)`
+   * equivalent), which causes the right pane to drop to its empty
+   * state. Omit to hide the Close affordance entirely — chat-solid's
+   * header only renders the button when this is provided.
+   */
+  onClose?: () => void;
 }
 
 export function ChatV2Root(props: ChatV2RootProps) {
@@ -76,6 +84,7 @@ export function ChatV2Root(props: ChatV2RootProps) {
         sessionName={props.projectName}
         mentionCandidates={props.mentionCandidates}
         onOpenFile={props.onOpenFile}
+        onClose={props.onClose}
       />
     </div>
   );

@@ -190,6 +190,7 @@ export function V2ChatView({ projectName }: V2ChatViewProps) {
         onPickThread={setActiveThreadId}
         onNewThread={handleNewThread}
         onDeleteThread={handleDelete}
+        onClose={() => setActiveThreadId(null)}
         onSend={(threadId, text) => {
           const trimmed = text.trim();
           if (!trimmed) return;
