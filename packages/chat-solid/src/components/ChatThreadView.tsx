@@ -5,6 +5,10 @@ import { chatProvidersList, type ApiRuntime } from "../api";
 import type { ChatMountOptions } from "../types";
 import { ChatComposer } from "./ChatComposer";
 import { ChatHeader } from "./ChatHeader";
+import {
+  ComposerPlanFollowUpBanner,
+  type PlanFollowUpPayload,
+} from "./ComposerPlanFollowUpBanner";
 import { MessagesTimeline } from "./MessagesTimeline";
 import { PermissionDialog } from "./PermissionDialog";
 import { ProviderStatusBanner } from "./ProviderStatusBanner";
@@ -42,6 +46,24 @@ export function ChatThreadView(props: { options: Accessor<ChatMountOptions> }) {
     const key = `${err.message}:${err.stack ?? ""}`;
     if (dismissedErrorKey() === key) return null;
     return { message: err.message, stack: err.stack };
+  });
+
+  // Plan follow-up payload — derive a UI-friendly shape from the
+  // hook's pendingPlan accessor. Title is pulled from the first
+  // markdown heading when present (so the banner shows
+  // "Implement OAuth" instead of just "Plan ready"); otherwise null.
+  const planPayload = createMemo<PlanFollowUpPayload | null>(() => {
+    const plan = chat.pendingPlan();
+    if (!plan) return null;
+    const firstHeading = plan.planMarkdown
+      .split("\n")
+      .map((line) => line.trim())
+      .find((line) => line.startsWith("#"));
+    const title = firstHeading ? firstHeading.replace(/^#+\s*/, "") : null;
+    return {
+      planId: plan.id,
+      title: title && title.length > 0 ? title : null,
+    };
   });
 
   return (
@@ -95,6 +117,17 @@ export function ChatThreadView(props: { options: Accessor<ChatMountOptions> }) {
             cwd={() => chat.thread()?.projectDir}
             onOpenFile={props.options().onOpenFile}
             onSendPlanRequest={chat.prefillPrompt}
+          />
+          <ComposerPlanFollowUpBanner
+            plan={planPayload}
+            isResponding={chat.planResponding}
+            onApply={(planId) => {
+              void chat.approvePendingPlan(planId);
+            }}
+            onReject={(planId) => {
+              void chat.rejectPendingPlan(planId);
+            }}
+            onModify={(planId) => chat.modifyPendingPlan(planId)}
           />
           <ChatComposer
             disabled={chat.inflight}

@@ -3,6 +3,7 @@ import type {
   ChatThreadUsageSummary,
   ComposerTerminalPane,
   ContentBlock,
+  ProposedPlanSummary,
   ThreadIndexEntry,
   ThreadState,
 } from "./types";
@@ -232,6 +233,96 @@ export async function fetchProjectPanes(
     sessionName,
     currentCommand: pane.currentCommand,
   }));
+}
+
+/**
+ * Plan store routes.
+ *
+ * The daemon exposes these as REST endpoints (not actions) under
+ * `/api/threads/:threadId/plans` — list, approve, reject. Modify
+ * doesn't exist on the daemon yet (see audit §4 D3); chat-solid
+ * surfaces a "modify" affordance that prefills the composer with the
+ * plan markdown instead, so the user can edit + send manually.
+ */
+
+function planHeaders(runtime: ApiRuntime, contentType = false): Headers {
+  const headers = new Headers();
+  if (contentType) headers.set("Content-Type", "application/json");
+  if (runtime.bearerToken) headers.set("Authorization", `Bearer ${runtime.bearerToken}`);
+  return headers;
+}
+
+export async function chatPlanList(
+  runtime: ApiRuntime,
+  threadId: string,
+): Promise<{ plans: ProposedPlanSummary[] }> {
+  const url = `${runtime.apiBaseUrl}/api/threads/${encodeURIComponent(threadId)}/plans`;
+  const res = await fetch(url, { headers: planHeaders(runtime), cache: "no-store" });
+  if (!res.ok) {
+    throw new ChatSolidApiError(`Failed to fetch plans (HTTP ${res.status})`, "plan_fetch_failed", {
+      status: res.status,
+    });
+  }
+  const data = (await res.json()) as { plans?: ProposedPlanSummary[] };
+  return { plans: Array.isArray(data.plans) ? data.plans : [] };
+}
+
+export async function chatPlanApprove(
+  runtime: ApiRuntime,
+  threadId: string,
+  planId: string,
+): Promise<{ plan: ProposedPlanSummary; turnId: string }> {
+  const url = `${runtime.apiBaseUrl}/api/threads/${encodeURIComponent(threadId)}/plans/${encodeURIComponent(planId)}/approve`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: planHeaders(runtime, true),
+    body: JSON.stringify({}),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    let detail: { error?: string; code?: string } | null = null;
+    try {
+      detail = (await res.json()) as { error?: string; code?: string };
+    } catch {
+      // ignore — fall back to generic message
+    }
+    throw new ChatSolidApiError(
+      detail?.error ?? `Failed to approve plan (HTTP ${res.status})`,
+      detail?.code ?? "plan_approve_failed",
+      { status: res.status },
+    );
+  }
+  return (await res.json()) as { plan: ProposedPlanSummary; turnId: string };
+}
+
+export async function chatPlanReject(
+  runtime: ApiRuntime,
+  threadId: string,
+  planId: string,
+  reason?: string,
+): Promise<{ plan: ProposedPlanSummary }> {
+  const url = `${runtime.apiBaseUrl}/api/threads/${encodeURIComponent(threadId)}/plans/${encodeURIComponent(planId)}/reject`;
+  const body = reason !== undefined ? { reason } : {};
+  const res = await fetch(url, {
+    method: "POST",
+    headers: planHeaders(runtime, true),
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    let detail: { error?: string; code?: string } | null = null;
+    try {
+      detail = (await res.json()) as { error?: string; code?: string };
+    } catch {
+      // ignore
+    }
+    throw new ChatSolidApiError(
+      detail?.error ?? `Failed to reject plan (HTTP ${res.status})`,
+      detail?.code ?? "plan_reject_failed",
+      { status: res.status },
+    );
+  }
+  return (await res.json()) as { plan: ProposedPlanSummary };
 }
 
 export function withAuthQuery(url: string, bearerToken: string | null): string {

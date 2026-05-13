@@ -3,6 +3,9 @@ import { createStore, produce } from "solid-js/store";
 import {
   chatContextCaptureTerminal,
   chatPermissionRespond,
+  chatPlanApprove,
+  chatPlanList,
+  chatPlanReject,
   chatSessionCancel,
   chatSessionSend,
   chatThreadGet,
@@ -22,11 +25,28 @@ import type {
   ComposerTerminalPane,
   ContentBlock,
   PermissionRequest,
+  ProposedPlanSummary,
   SessionUpdate,
   StopReason,
   ThreadMessage,
   ThreadState,
 } from "../types";
+
+function isPlanPending(plan: ProposedPlanSummary): boolean {
+  return plan.implementedAt === null && !plan.rejected;
+}
+
+function latestPending(plans: ProposedPlanSummary[]): ProposedPlanSummary | null {
+  // Stable order from the daemon is by createdAt asc; the *latest*
+  // pending plan is what we want to surface (the user has acted on
+  // older ones already if they're resolved). Walk the array in
+  // reverse so we pick up the freshest pending entry.
+  for (let i = plans.length - 1; i >= 0; i -= 1) {
+    const plan = plans[i];
+    if (plan && isPlanPending(plan)) return plan;
+  }
+  return null;
+}
 
 interface ChatStore {
   messages: ThreadMessage[];
@@ -47,6 +67,8 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
   const [attachments, setAttachments] = createSignal<ComposerAttachment[]>([]);
   const [terminalPanes, setTerminalPanes] = createSignal<ComposerTerminalPane[]>([]);
   const [prefillPromptText, setPrefillPromptText] = createSignal<string | null>(null);
+  const [plans, setPlans] = createSignal<ProposedPlanSummary[]>([]);
+  const [planResponding, setPlanResponding] = createSignal(false);
   const [store, setStore] = createStore<ChatStore>({ messages: [] });
 
   const runtime = createMemo<ApiRuntime>(() => ({
@@ -90,6 +112,8 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
     setPendingPromptId(null);
     setPendingPermission(null);
     setUsage(null);
+    setPlans([]);
+    setPlanResponding(false);
     void refetch();
   });
 
@@ -102,6 +126,24 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
       })
       .catch(() => {
         if (active) setUsage(null);
+      });
+    onCleanup(() => {
+      active = false;
+    });
+  });
+
+  // Seed the per-thread plan list so the follow-up banner shows the
+  // freshest pending plan immediately after a thread switch. WS frames
+  // (chat.plan.upserted) keep the list current after that.
+  createEffect(() => {
+    const opts = options();
+    let active = true;
+    void chatPlanList(runtime(), opts.threadId)
+      .then(({ plans: list }) => {
+        if (active) setPlans(list);
+      })
+      .catch(() => {
+        if (active) setPlans([]);
       });
     onCleanup(() => {
       active = false;
@@ -142,6 +184,16 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
       if (!frame || !frame.type.startsWith("chat.") || frame.threadId !== opts.threadId) return;
       if (frame.type === "chat.thread.usage") {
         setUsage(frame.usage);
+        return;
+      }
+      if (frame.type === "chat.plan.upserted") {
+        const incoming = frame.plan;
+        setPlans((current) => {
+          const next = current.filter((plan) => plan.id !== incoming.id);
+          next.push(incoming);
+          next.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+          return next;
+        });
         return;
       }
       if (frame.type === "chat.permission.request") {
@@ -319,6 +371,57 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
     setPrefillPromptText(text);
   }
 
+  const pendingPlan = createMemo<ProposedPlanSummary | null>(() => latestPending(plans()));
+
+  async function approvePendingPlan(planId: string): Promise<void> {
+    if (planResponding()) return;
+    setPlanResponding(true);
+    try {
+      const result = await chatPlanApprove(runtime(), options().threadId, planId);
+      // The daemon broadcasts a fresh chat.plan.upserted with
+      // implementedAt set, which the WS effect above flips into the
+      // store. Patch optimistically in case the socket is slow.
+      setPlans((current) =>
+        current.map((plan) => (plan.id === planId ? result.plan : plan)),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error(String(err)));
+      throw err;
+    } finally {
+      setPlanResponding(false);
+    }
+  }
+
+  async function rejectPendingPlan(planId: string, reason?: string): Promise<void> {
+    if (planResponding()) return;
+    setPlanResponding(true);
+    try {
+      const result = await chatPlanReject(runtime(), options().threadId, planId, reason);
+      setPlans((current) =>
+        current.map((plan) => (plan.id === planId ? result.plan : plan)),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error(String(err)));
+      throw err;
+    } finally {
+      setPlanResponding(false);
+    }
+  }
+
+  /**
+   * "Modify" path. The daemon doesn't expose a modify route yet (see
+   * audit §4 D3); the chat-solid surface bridges that gap by prefilling
+   * the composer with the plan markdown so the user can edit + send a
+   * fresh turn manually. The plan stays pending — choosing to send is
+   * a separate user action, and approve / reject still close out the
+   * follow-up banner.
+   */
+  function modifyPendingPlan(planId: string): void {
+    const plan = plans().find((candidate) => candidate.id === planId);
+    if (!plan) return;
+    setPrefillPromptText(plan.planMarkdown);
+  }
+
   return {
     thread,
     loading,
@@ -341,6 +444,11 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
     cancel,
     rename,
     respondToPermission,
+    pendingPlan,
+    planResponding,
+    approvePendingPlan,
+    rejectPendingPlan,
+    modifyPendingPlan,
     refetch,
   };
 }

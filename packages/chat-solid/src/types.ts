@@ -164,11 +164,39 @@ export type ChatPermissionRequestEvent = {
   options: PermissionOption[];
 };
 
+/**
+ * Wire shape of a daemon-side `ProposedPlan` snapshot. Mirrors the
+ * contract in `@tmux-ide/contracts` so chat-solid doesn't import from
+ * the contracts package directly (keeps the package self-contained).
+ *
+ * A plan is "pending" when both `implementedAt` is null *and*
+ * `rejected` is absent — the daemon's plan-orchestrator emits a fresh
+ * `chat.plan.upserted` event on every state transition so this view
+ * stays current.
+ */
+export interface ProposedPlanSummary {
+  id: string;
+  turnId: string | null;
+  planMarkdown: string;
+  implementedAt: string | null;
+  implementationThreadId: string | null;
+  rejected?: { at: string; reason?: string };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ChatPlanUpsertedEvent = {
+  type: "chat.plan.upserted";
+  threadId: string;
+  plan: ProposedPlanSummary;
+};
+
 export type ChatBusEvent =
   | ChatThreadUpdateEvent
   | ChatThreadStopEvent
   | ChatThreadUsageEvent
-  | ChatPermissionRequestEvent;
+  | ChatPermissionRequestEvent
+  | ChatPlanUpsertedEvent;
 
 export type ChatMessage =
   | {
