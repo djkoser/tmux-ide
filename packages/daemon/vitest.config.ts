@@ -27,6 +27,7 @@ export default defineConfig({
       "src/chat/provider-store.test.ts",
       "src/terminal/__tests__/*.test.ts",
       "src/git/__tests__/*.test.ts",
+      "src/lib/__tests__/*.test.ts",
     ],
     coverage: {
       provider: "v8",

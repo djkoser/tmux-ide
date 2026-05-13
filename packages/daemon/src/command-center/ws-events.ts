@@ -53,6 +53,7 @@ interface ClientHandle {
   broadcastValidationChanged(sessionName: string): void;
   broadcastConfigChanged(sessionName: string): void;
   broadcastChatEvent(event: ChatEvent): void;
+  broadcastTerminalsChanged(sessionName: string): void;
 }
 const allClients = new Set<ClientHandle>();
 let sessionsPollTimer: ReturnType<typeof setInterval> | null = null;
@@ -143,6 +144,10 @@ export function broadcastValidationChanged(sessionName: string): void {
 
 export function broadcastConfigChanged(sessionName: string): void {
   for (const client of allClients) client.broadcastConfigChanged(sessionName);
+}
+
+export function broadcastTerminalsChanged(sessionName: string): void {
+  for (const client of allClients) client.broadcastTerminalsChanged(sessionName);
 }
 
 export function broadcastChatEvent(event: ChatEvent): void {
@@ -292,6 +297,10 @@ export function handleWsEventsConnection(socket: WebSocket | WsLike): void {
     send(event as ServerFrame);
   };
 
+  const broadcastTerminalsChangedForClient = (sessionName: string): void => {
+    send({ type: "terminals.changed", sessionName } as ServerFrame);
+  };
+
   // Per-connection subscription to the current workspace-registry singleton.
   // Resolved at connection time so test overrides via
   // `_setDefaultWorkspaceRegistryForTests` are picked up. Cleaned up on close.
@@ -315,6 +324,7 @@ export function handleWsEventsConnection(socket: WebSocket | WsLike): void {
     broadcastValidationChanged: broadcastValidationChangedForClient,
     broadcastConfigChanged: broadcastConfigChangedForClient,
     broadcastChatEvent: broadcastChatEventForClient,
+    broadcastTerminalsChanged: broadcastTerminalsChangedForClient,
   };
   allClients.add(clientHandle);
   ensureSessionsPoller();

@@ -159,6 +159,11 @@ const ConfigChangedFrameZ = z.object({
   sessionName: z.string(),
 });
 
+const TerminalsChangedFrameZ = z.object({
+  type: z.literal("terminals.changed"),
+  sessionName: z.string(),
+});
+
 const ChatSessionUpdateZ = z.object({ sessionUpdate: z.string() }).passthrough();
 
 const ChatThreadIndexEntryZ = z
@@ -243,6 +248,7 @@ export const ServerFrameSchemaZ = z.discriminatedUnion("type", [
   SkillsChangedFrameZ,
   ValidationChangedFrameZ,
   ConfigChangedFrameZ,
+  TerminalsChangedFrameZ,
   ChatThreadUpdateFrameZ,
   ChatThreadUsageFrameZ,
   ChatThreadStopFrameZ,

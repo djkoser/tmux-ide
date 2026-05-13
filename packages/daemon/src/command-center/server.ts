@@ -129,7 +129,21 @@ import {
   stageRequestSchema,
   unstageRequestSchema,
   createPrRequestSchema,
+  createScriptTerminalId,
+  terminalCreateRequestSchema,
+  terminalRenameRequestSchema,
+  type Terminal,
+  type TerminalListResponse,
+  type TerminalRuntime,
 } from "@tmux-ide/contracts";
+import {
+  deleteTerminal as deleteTerminalRecord,
+  loadTerminals,
+  renameTerminal as renameTerminalRecord,
+  upsertTerminal as upsertTerminalRecord,
+} from "../lib/terminals-store.ts";
+import { defaultPtyBridgeRegistry } from "../server/ws-route.ts";
+import { broadcastTerminalsChanged } from "./ws-events.ts";
 import { AuthService } from "../lib/auth/auth-service.ts";
 import { authMiddleware } from "../lib/auth/middleware.ts";
 import type { AuthConfig } from "../lib/auth/types.ts";
@@ -2327,6 +2341,128 @@ export function createApp(options: CreateAppOptions = {}): Hono {
       );
     },
   );
+
+  // --- Terminals registry (G20-P1) ---------------------------------
+  //
+  // Tab-strip metadata for the multi-terminal panel. The actual PTY
+  // process lives in `PtyBridgeRegistry` (see ws-route.ts); this
+  // surface persists tab labels + scopes so the strip can restore
+  // them across browser reloads. Listing combines the JSON store with
+  // a live `registry.peek(id)` so the UI knows which tabs are
+  // currently running.
+
+  app.get("/api/project/:name/terminals", async (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const records = loadTerminals(session.dir);
+    const terminals = records.map((t) => {
+      const bridge = defaultPtyBridgeRegistry.peek(t.id) as
+        | (Parameters<typeof defaultPtyBridgeRegistry.peek>[0] extends never
+            ? never
+            : null)
+        | (Record<string, unknown> & { running?: boolean; cols?: number | null; rows?: number | null; getReplayBuffer?: () => Buffer })
+        | null;
+      let runtime: TerminalRuntime = { running: false };
+      if (bridge) {
+        const cols = typeof bridge.cols === "number" ? bridge.cols : undefined;
+        const rows = typeof bridge.rows === "number" ? bridge.rows : undefined;
+        const replay =
+          typeof bridge.getReplayBuffer === "function"
+            ? bridge.getReplayBuffer().byteLength
+            : undefined;
+        runtime = {
+          running: bridge.running !== false,
+          ...(cols !== undefined ? { cols } : {}),
+          ...(rows !== undefined ? { rows } : {}),
+          ...(replay !== undefined ? { replayBytes: replay } : {}),
+        };
+      }
+      return { ...t, runtime };
+    });
+    return c.json({ terminals } satisfies TerminalListResponse);
+  });
+
+  app.post(
+    "/api/project/:name/terminals",
+    zValidator("json", terminalCreateRequestSchema),
+    async (c) => {
+      const name = c.req.param("name");
+      const sessions = discoverSessions();
+      const session = sessions.find((s) => s.name === name);
+      if (!session) return c.json({ error: "Session not found" }, 404);
+      const body = c.req.valid("json");
+      // Pick the id: explicit > deterministic (when script provided) >
+      // UUID. The script-derived id collapse is the load-bearing bit
+      // for "two callers asking for the same run-script tab share a
+      // bridge + scrollback".
+      let id = body.id;
+      let scripted = false;
+      const kind = body.kind ?? "shell";
+      if (!id && body.script) {
+        id = await createScriptTerminalId({
+          projectId: name,
+          scopeId: body.scopeId,
+          kind,
+          script: body.script,
+        });
+        scripted = true;
+      }
+      if (!id) id = randomUUID();
+      try {
+        const upsertInput: Parameters<typeof upsertTerminalRecord>[1] = {
+          id,
+          projectId: name,
+          scopeId: body.scopeId,
+          name: body.name,
+          kind,
+        };
+        if (scripted) upsertInput.scripted = true;
+        const record = upsertTerminalRecord(session.dir, upsertInput);
+        broadcastTerminalsChanged(name);
+        return c.json({ ok: true, terminal: record satisfies Terminal });
+      } catch (err) {
+        return c.json({ error: (err as Error).message }, 400);
+      }
+    },
+  );
+
+  app.post(
+    "/api/project/:name/terminals/:id/rename",
+    zValidator("json", terminalRenameRequestSchema),
+    async (c) => {
+      const name = c.req.param("name");
+      const id = c.req.param("id");
+      const sessions = discoverSessions();
+      const session = sessions.find((s) => s.name === name);
+      if (!session) return c.json({ error: "Session not found" }, 404);
+      try {
+        const record = renameTerminalRecord(session.dir, id, c.req.valid("json").name);
+        if (!record) return c.json({ error: "Terminal not found" }, 404);
+        broadcastTerminalsChanged(name);
+        return c.json({ ok: true, terminal: record satisfies Terminal });
+      } catch (err) {
+        return c.json({ error: (err as Error).message }, 400);
+      }
+    },
+  );
+
+  app.delete("/api/project/:name/terminals/:id", async (c) => {
+    const name = c.req.param("name");
+    const id = c.req.param("id");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const removedRecord = deleteTerminalRecord(session.dir, id);
+    // Kill the live bridge too — keep store + registry consistent.
+    const killed = defaultPtyBridgeRegistry.delete(id);
+    if (!removedRecord && !killed) {
+      return c.json({ error: "Terminal not found" }, 404);
+    }
+    broadcastTerminalsChanged(name);
+    return c.json({ ok: true });
+  });
 
   // --- Mission endpoints ---
 
