@@ -51,6 +51,7 @@ import {
   TaskActionError,
 } from "../lib/task-actions.ts";
 import { readEvents, appendEvent, eventLogEmitter } from "../lib/event-log.ts";
+import { getLogBuffer, subscribeLogs, type LogEntry } from "../lib/log.ts";
 import { extractMarks, calculateStats, tagContent } from "../lib/authorship.ts";
 import {
   loadValidationState,
@@ -284,6 +285,26 @@ const sseMetrics = {
 
 export function getSseMetrics(): { connections: number; messagesSent: number } {
   return { ...sseMetrics };
+}
+
+/**
+ * Resolve a BottomPanel Output-tab channel id to a `LogEntry` predicate.
+ * Channels are simple component-prefix filters over the single in-process
+ * structured logger. Returns `null` for unknown channels (handler emits
+ * 404). Add new channels here when adding new log components.
+ */
+function matchLogChannel(channel: string): ((entry: LogEntry) => boolean) | null {
+  switch (channel) {
+    case "daemon":
+      return () => true;
+    case "hq":
+      return (entry) =>
+        entry.component.startsWith("hq") || entry.component.startsWith("remote");
+    case "watchdog":
+      return (entry) => entry.component.startsWith("watchdog");
+    default:
+      return null;
+  }
 }
 
 function freezePayload<T>(payload: T): T {
@@ -2574,6 +2595,57 @@ export function createApp(options: CreateAppOptions = {}): Hono {
       while (true) {
         await stream.sleep(2000);
         poll();
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // GET /api/logs/:channel — SSE stream of structured logger entries.
+  //
+  // Channels are filtered views over the single in-process logger:
+  //   - "daemon"   → no component filter (all entries)
+  //   - "hq"       → component starts with "hq" or "remote"
+  //   - "watchdog" → component starts with "watchdog"
+  // The dashboard BottomPanel Output tab opens one EventSource per
+  // selected channel. Backfill from the in-memory ring buffer is sent
+  // first as `event: "backfill"` followed by a `bookmark` event so the
+  // client can render history immediately; new entries arrive as
+  // `event: "entry"` data.
+  // ---------------------------------------------------------------------
+  app.get("/api/logs/:channel", (c) => {
+    const channel = c.req.param("channel");
+    const match = matchLogChannel(channel);
+    if (!match) {
+      return c.json({ error: `Unknown log channel: ${channel}` }, 404);
+    }
+    return streamSSE(c, async (stream) => {
+      // 1. Backfill from the ring buffer.
+      const backfill = getLogBuffer().filter(match);
+      for (const entry of backfill) {
+        await stream.writeSSE({ event: "entry", data: JSON.stringify(entry) });
+      }
+      await stream.writeSSE({ event: "bookmark", data: String(backfill.length) });
+      // 2. Subscribe to live entries.
+      const queue: LogEntry[] = [];
+      let cancelled = false;
+      const unsub = subscribeLogs((entry) => {
+        if (cancelled) return;
+        if (match(entry)) queue.push(entry);
+      });
+      try {
+        while (!cancelled) {
+          if (queue.length === 0) {
+            await stream.sleep(500);
+            continue;
+          }
+          const drained = queue.splice(0, queue.length);
+          for (const entry of drained) {
+            await stream.writeSSE({ event: "entry", data: JSON.stringify(entry) });
+          }
+        }
+      } finally {
+        cancelled = true;
+        unsub();
       }
     });
   });

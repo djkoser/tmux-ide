@@ -1,5 +1,25 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// Global EventSource stub installed by the Output-stream tests via
+// `installEventSourceStub()`. The plain BottomPanel render mounts the
+// OutputStream behind `display: none`, but its useEffect still runs and
+// would throw `ReferenceError: EventSource is not defined` under jsdom.
+// A no-op default keeps every other test happy.
+class NoopEventSource {
+  url: string;
+  closed = false;
+  constructor(url: string) {
+    this.url = url;
+  }
+  close() {
+    this.closed = true;
+  }
+  addEventListener() {}
+  removeEventListener() {}
+}
+(globalThis as { EventSource: unknown }).EventSource =
+  NoopEventSource as unknown as typeof EventSource;
 
 import {
   BottomPanel,
@@ -108,5 +128,164 @@ describe("BottomPanel", () => {
     fireEvent.change(picker, { target: { value: "hq-log" } });
     expect((picker as HTMLSelectElement).value).toBe("hq-log");
     expect(screen.getByTestId("bottom-panel-output").textContent).toContain("HQ");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Output stream — EventSource lifecycle + Clear + Pause
+// ---------------------------------------------------------------------------
+
+describe("BottomPanel Output stream", () => {
+  type Listener = (ev: { data: string }) => void;
+  interface StubSource {
+    url: string;
+    closed: boolean;
+    listeners: Map<string, Set<Listener>>;
+    onmessage: Listener | null;
+    onerror: ((ev: Event) => void) | null;
+    close(): void;
+    addEventListener(type: string, fn: Listener): void;
+    removeEventListener(type: string, fn: Listener): void;
+    emit(type: string, data: string): void;
+  }
+  let opened: StubSource[] = [];
+
+  beforeEach(() => {
+    opened = [];
+    (globalThis as { EventSource: unknown }).EventSource = class {
+      url: string;
+      closed = false;
+      listeners = new Map<string, Set<Listener>>();
+      onmessage: Listener | null = null;
+      onerror: ((ev: Event) => void) | null = null;
+      constructor(url: string) {
+        this.url = url;
+        opened.push(this as unknown as StubSource);
+      }
+      close() {
+        this.closed = true;
+      }
+      addEventListener(type: string, fn: Listener) {
+        let bucket = this.listeners.get(type);
+        if (!bucket) {
+          bucket = new Set();
+          this.listeners.set(type, bucket);
+        }
+        bucket.add(fn);
+      }
+      removeEventListener(type: string, fn: Listener) {
+        this.listeners.get(type)?.delete(fn);
+      }
+      emit(type: string, data: string) {
+        const bucket = this.listeners.get(type);
+        if (bucket) for (const fn of bucket) fn({ data });
+        if (type === "message" && this.onmessage) this.onmessage({ data });
+      }
+    } as unknown as typeof EventSource;
+  });
+
+  afterEach(() => {
+    // Restore the file-level no-op stub.
+    (globalThis as { EventSource: unknown }).EventSource =
+      NoopEventSource as unknown as typeof EventSource;
+  });
+
+  function openOutput(channelOverride?: OutputChannel) {
+    const channels: OutputChannel[] = [
+      channelOverride ?? {
+        id: "daemon-log",
+        label: "Daemon",
+        streamUrl: "http://x/api/logs/daemon",
+      },
+    ];
+    const utils = render(<BottomPanel projectName="demo" outputChannels={channels} />);
+    fireEvent.click(screen.getByTestId("bottom-panel-tab-output"));
+    return utils;
+  }
+
+  it("opens an EventSource when the Output tab activates a streamed channel", () => {
+    openOutput();
+    expect(opened).toHaveLength(1);
+    expect(opened[0].url).toBe("http://x/api/logs/daemon");
+    expect(opened[0].closed).toBe(false);
+  });
+
+  it("renders streamed log entries with level + component", () => {
+    openOutput();
+    act(() =>
+      opened[0].emit(
+        "entry",
+        JSON.stringify({
+          ts: "2026-05-13T10:11:12.000Z",
+          level: "warn",
+          component: "watchdog",
+          msg: "respawning daemon",
+        }),
+      ),
+    );
+    const stream = screen.getByTestId("bottom-panel-output-stream");
+    expect(stream.textContent).toContain("10:11:12");
+    expect(stream.textContent).toContain("warn");
+    expect(stream.textContent).toContain("watchdog");
+    expect(stream.textContent).toContain("respawning daemon");
+  });
+
+  it("Clear button drops the visible buffer", () => {
+    openOutput();
+    act(() =>
+      opened[0].emit(
+        "entry",
+        JSON.stringify({ level: "info", component: "daemon", msg: "tick" }),
+      ),
+    );
+    expect(screen.getByTestId("bottom-panel-output-stream").textContent).toContain("tick");
+    fireEvent.click(screen.getByTestId("bottom-panel-output-clear"));
+    expect(screen.getByTestId("bottom-panel-output-stream").textContent).toContain(
+      "Waiting for data",
+    );
+  });
+
+  it("Pause stops appending; Resume flushes pending entries", () => {
+    openOutput();
+    fireEvent.click(screen.getByTestId("bottom-panel-output-pause"));
+    act(() =>
+      opened[0].emit(
+        "entry",
+        JSON.stringify({ level: "info", component: "daemon", msg: "first" }),
+      ),
+    );
+    act(() =>
+      opened[0].emit(
+        "entry",
+        JSON.stringify({ level: "info", component: "daemon", msg: "second" }),
+      ),
+    );
+    // Paused → not visible.
+    expect(screen.getByTestId("bottom-panel-output-stream").textContent).not.toContain("first");
+    // Resume → drained.
+    fireEvent.click(screen.getByTestId("bottom-panel-output-pause"));
+    const stream = screen.getByTestId("bottom-panel-output-stream");
+    expect(stream.textContent).toContain("first");
+    expect(stream.textContent).toContain("second");
+    // EventSource was NOT recreated by the pause/resume toggle.
+    expect(opened).toHaveLength(1);
+  });
+
+  it("closes the EventSource when the channel switches", () => {
+    const channels: OutputChannel[] = [
+      { id: "daemon-log", label: "Daemon", streamUrl: "http://x/api/logs/daemon" },
+      { id: "hq-log", label: "HQ", streamUrl: "http://x/api/logs/hq" },
+    ];
+    render(<BottomPanel projectName="demo" outputChannels={channels} />);
+    fireEvent.click(screen.getByTestId("bottom-panel-tab-output"));
+    expect(opened).toHaveLength(1);
+    const first = opened[0];
+    expect(first.closed).toBe(false);
+    fireEvent.change(screen.getByTestId("bottom-panel-output-channel"), {
+      target: { value: "hq-log" },
+    });
+    expect(first.closed).toBe(true);
+    expect(opened).toHaveLength(2);
+    expect(opened[1].url).toBe("http://x/api/logs/hq");
   });
 });

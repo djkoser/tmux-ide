@@ -20,8 +20,18 @@
  * refactor (pane 1) — this commit only ships the composite.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Terminal } from "@/components/Terminal";
+import { API_BASE } from "@/lib/api";
+
+interface LogLine {
+  ts?: string;
+  level?: "debug" | "info" | "warn" | "error";
+  component?: string;
+  msg?: string;
+  /** Free-form payload — anything not in the structured fields above. */
+  raw?: string;
+}
 
 export type BottomPanelTab = "terminal" | "problems" | "output";
 
@@ -63,11 +73,14 @@ export interface OutputChannel {
   streamUrl?: string;
 }
 
+// Defaults wired to the daemon's /api/logs/:channel SSE endpoint. Channels
+// are component-prefix filters over the in-process structured logger; the
+// matching server-side predicates live in
+// packages/daemon/src/command-center/server.ts → `matchLogChannel`.
 const DEFAULT_CHANNELS: ReadonlyArray<OutputChannel> = [
-  { id: "daemon-log", label: "Daemon" },
-  { id: "hq-log", label: "HQ" },
-  { id: "watchdog-log", label: "Watchdog" },
-  { id: "command-center", label: "Command center" },
+  { id: "daemon-log", label: "Daemon", streamUrl: `${API_BASE}/api/logs/daemon` },
+  { id: "hq-log", label: "HQ", streamUrl: `${API_BASE}/api/logs/hq` },
+  { id: "watchdog-log", label: "Watchdog", streamUrl: `${API_BASE}/api/logs/watchdog` },
 ];
 
 export function BottomPanel({
@@ -324,27 +337,82 @@ function OutputView({ channels }: { channels: ReadonlyArray<OutputChannel> }) {
   );
 }
 
+function parseLogLine(data: string): LogLine {
+  try {
+    const obj = JSON.parse(data) as Partial<LogLine>;
+    if (obj && typeof obj === "object") return obj as LogLine;
+  } catch {
+    /* fall through to raw */
+  }
+  return { raw: data };
+}
+
 function OutputStream({ channel }: { channel: OutputChannel }) {
-  const [lines, setLines] = useState<string[]>([]);
+  const [lines, setLines] = useState<LogLine[]>([]);
+  const [paused, setPaused] = useState(false);
+  // Streaming queue: when paused, new lines accumulate here and flush
+  // into `lines` on resume. Toggle flips instantly; the queue keeps the
+  // user-visible scroll state stable while paused.
+  const pendingRef = useRef<LogLine[]>([]);
+  // Read the current `paused` state from inside the EventSource handler
+  // WITHOUT making `paused` a dep of the stream-lifecycle effect (which
+  // would tear down + recreate the connection on every Pause/Resume).
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
   const scrollRef = useRef<HTMLPreElement | null>(null);
 
-  useEffect(() => {
+  const clear = useCallback(() => {
+    pendingRef.current = [];
     setLines([]);
-    if (!channel.streamUrl) return;
-    const source = new EventSource(channel.streamUrl);
-    source.onmessage = (ev) => {
-      setLines((prev) => [...prev.slice(-499), String(ev.data)]);
-    };
-    source.onerror = () => {
-      setLines((prev) => [...prev, `[stream error: ${channel.id}]`]);
-    };
-    return () => source.close();
-  }, [channel.id, channel.streamUrl]);
+  }, []);
 
   useEffect(() => {
+    // Reset on channel switch so the new stream starts clean.
+    pendingRef.current = [];
+    setLines([]);
+    if (!channel.streamUrl) return;
+
+    const source = new EventSource(channel.streamUrl);
+
+    const onEntry = (ev: MessageEvent) => {
+      const line = parseLogLine(String(ev.data));
+      if (pausedRef.current) {
+        pendingRef.current.push(line);
+        if (pendingRef.current.length > 1_000) {
+          pendingRef.current = pendingRef.current.slice(-1_000);
+        }
+      } else {
+        setLines((prev) => [...prev.slice(-499), line]);
+      }
+    };
+    source.addEventListener("entry", onEntry as EventListener);
+    source.onmessage = onEntry;
+    source.onerror = () => {
+      setLines((prev) => [
+        ...prev,
+        { level: "error", component: "stream", msg: `[stream error: ${channel.id}]` },
+      ]);
+    };
+    return () => {
+      source.removeEventListener("entry", onEntry as EventListener);
+      source.close();
+    };
+  }, [channel.id, channel.streamUrl]);
+
+  // Flush pending lines when user un-pauses.
+  useEffect(() => {
+    if (paused) return;
+    if (pendingRef.current.length === 0) return;
+    const drained = pendingRef.current;
+    pendingRef.current = [];
+    setLines((prev) => [...prev, ...drained].slice(-500));
+  }, [paused]);
+
+  useEffect(() => {
+    if (paused) return;
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [lines]);
+  }, [lines, paused]);
 
   if (!channel.streamUrl) {
     return (
@@ -356,20 +424,79 @@ function OutputStream({ channel }: { channel: OutputChannel }) {
   }
 
   return (
-    <pre
-      ref={scrollRef}
-      data-testid="bottom-panel-output-stream"
-      className="flex-1 overflow-auto px-3 py-2 font-mono text-[11px] leading-snug text-foreground"
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex h-6 shrink-0 items-center gap-2 border-b border-border/45 bg-[var(--bg-strong)] px-3 text-[10px]">
+        <span className="text-muted-foreground">
+          {lines.length} line{lines.length === 1 ? "" : "s"}
+          {paused && pendingRef.current.length > 0 ? (
+            <span className="ml-1 text-warning-foreground">
+              · {pendingRef.current.length} paused
+            </span>
+          ) : null}
+        </span>
+        <span className="ml-auto" />
+        <button
+          type="button"
+          data-testid="bottom-panel-output-pause"
+          aria-pressed={paused}
+          onClick={() => setPaused((p) => !p)}
+          className={`rounded-sm px-2 py-px text-[11px] transition-colors ${
+            paused
+              ? "bg-warning text-warning-foreground"
+              : "border border-input bg-[var(--surface)] text-foreground hover:bg-[var(--surface-hover)]"
+          }`}
+        >
+          {paused ? "Resume" : "Pause"}
+        </button>
+        <button
+          type="button"
+          data-testid="bottom-panel-output-clear"
+          onClick={clear}
+          className="rounded-sm border border-input bg-[var(--surface)] px-2 py-px text-[11px] text-foreground hover:bg-[var(--surface-hover)]"
+        >
+          Clear
+        </button>
+      </div>
+      <pre
+        ref={scrollRef}
+        data-testid="bottom-panel-output-stream"
+        className="flex-1 overflow-auto px-3 py-2 font-mono text-[11px] leading-snug text-foreground"
+      >
+        {lines.length === 0 ? (
+          <span className="text-muted-foreground">Waiting for data…</span>
+        ) : (
+          lines.map((line, i) => <OutputLogLine key={i} line={line} />)
+        )}
+      </pre>
+    </div>
+  );
+}
+
+function OutputLogLine({ line }: { line: LogLine }) {
+  if (line.raw !== undefined) {
+    return <div className="whitespace-pre-wrap text-foreground">{line.raw}</div>;
+  }
+  const level = line.level ?? "info";
+  const levelClass =
+    level === "error"
+      ? "text-destructive-foreground"
+      : level === "warn"
+        ? "text-warning-foreground"
+        : level === "debug"
+          ? "text-muted-foreground"
+          : "text-foreground";
+  // Compact `HH:MM:SS [level] component  msg` row, structured for the
+  // common case; falls back gracefully when fields are missing.
+  const ts = line.ts ? line.ts.slice(11, 19) : "        ";
+  return (
+    <div
+      data-level={level}
+      className={`grid grid-cols-[5rem_3.5rem_6rem_1fr] gap-2 whitespace-pre-wrap ${levelClass}`}
     >
-      {lines.length === 0 ? (
-        <span className="text-muted-foreground">Waiting for data…</span>
-      ) : (
-        lines.map((line, i) => (
-          <div key={i} className="whitespace-pre-wrap">
-            {line}
-          </div>
-        ))
-      )}
-    </pre>
+      <span className="text-subtle-foreground">{ts}</span>
+      <span className="uppercase tracking-wider">{level}</span>
+      <span className="truncate text-muted-foreground">{line.component ?? ""}</span>
+      <span>{line.msg ?? ""}</span>
+    </div>
   );
 }
