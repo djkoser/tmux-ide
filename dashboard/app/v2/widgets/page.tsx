@@ -22,8 +22,10 @@
  * or description (case-insensitive substring).
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { fetchSessions } from "@/lib/api";
+import type { SessionOverview } from "@/lib/types";
 import {
   Activity,
   AppWindow,
@@ -305,6 +307,25 @@ function matchesSearch(entry: WidgetEntry, query: string): boolean {
 export default function WidgetsGalleryPage() {
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
   const [query, setQuery] = useState("");
+  const [activeSession, setActiveSession] = useState<SessionOverview | null>(null);
+
+  // TUI tiles need a real session+dir to render. Pick the first
+  // registered workspace; `null` falls back to a /v2 redirect.
+  useEffect(() => {
+    let cancelled = false;
+    fetchSessions()
+      .then((sessions) => {
+        if (cancelled) return;
+        setActiveSession(sessions[0] ?? null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setActiveSession(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filtered = useMemo(
     () => WIDGETS.filter((w) => matchesKind(w, kindFilter) && matchesSearch(w, query)),
@@ -393,7 +414,11 @@ export default function WidgetsGalleryPage() {
         }}
       >
         {filtered.map((entry) => (
-          <WidgetTile key={`${entry.kind}:${entry.id}`} entry={entry} />
+          <WidgetTile
+            key={`${entry.kind}:${entry.id}`}
+            entry={entry}
+            activeSession={activeSession}
+          />
         ))}
         {filtered.length === 0 && (
           <div
@@ -408,10 +433,27 @@ export default function WidgetsGalleryPage() {
   );
 }
 
-function WidgetTile({ entry }: { entry: WidgetEntry }) {
+function WidgetTile({
+  entry,
+  activeSession,
+}: {
+  entry: WidgetEntry;
+  activeSession: SessionOverview | null;
+}) {
+  // TUI widget tiles deep-link to /v2/widget/<name> which requires
+  // ?session=NAME&dir=PATH. Without those params the target page errors
+  // "WIDGET UNAVAILABLE — missing widget name, session, or dir query
+  // params". Append them from the first registered workspace; if no
+  // workspace exists yet, fall back to a friendly /v2 redirect.
+  const href =
+    entry.kind === "tui"
+      ? activeSession
+        ? `${entry.href}?session=${encodeURIComponent(activeSession.name)}&dir=${encodeURIComponent(activeSession.dir)}`
+        : "/v2"
+      : entry.href;
   return (
     <Link
-      href={entry.href}
+      href={href}
       data-testid="widget-tile"
       data-widget-id={entry.id}
       data-widget-kind={entry.kind}
