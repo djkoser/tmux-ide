@@ -1,5 +1,9 @@
 import type { z } from "zod";
 import { createTmuxTools, type TmuxToolDeps, type ToolResult } from "./tools/tmux.ts";
+import {
+  createLspTools,
+  type LspBackend,
+} from "./tools/lsp.ts";
 
 export interface ChatTool<TIn = unknown, TOut = unknown> {
   name: string;
@@ -21,15 +25,30 @@ export interface ChatToolRegistry {
 export interface BuildChatToolRegistryOptions {
   session: string;
   tmuxDeps?: TmuxToolDeps;
-  /** Additional tools to register beyond the built-in tmux ops. */
+  /** Workspace root for `lsp.*` tools. When omitted (or null), the
+   *  registry skips registering the LSP suite — the daemon mounts the
+   *  REST endpoints anyway, but tool-loop agents need this set to
+   *  invoke them. */
+  lsp?: {
+    sessionDir: string;
+    /** Optional test override for the LSP backend. Production leaves
+     *  it unset and the default impl calls the in-process LSP client
+     *  registry shipped with G21-P1. */
+    backend?: LspBackend;
+    /** Test override for the realpath resolver. */
+    resolveRoot?: (sessionDir: string) => string;
+  };
+  /** Additional tools to register beyond the built-in suites. */
   extraTools?: ChatTool[];
 }
 
 /**
  * Build a ChatToolRegistry for a given tmux session. Always registers the
  * three built-in tmux ops (`send_to_pane`, `read_pane`, `capture_pane`) so
- * the chat agent (ACP or codex) can orchestrate panes once the registry is
- * wired into thread-manager.
+ * the chat agent (ACP or codex) can orchestrate panes. When `lsp` is set,
+ * also registers `lsp.hover` / `lsp.definition` / `lsp.references` /
+ * `lsp.diagnostics` so the agent can navigate code via the language
+ * servers G21-P1 stood up.
  */
 export function buildChatToolRegistry(opts: BuildChatToolRegistryOptions): ChatToolRegistry {
   const tmuxTools = createTmuxTools(opts.session, opts.tmuxDeps);
@@ -37,8 +56,21 @@ export function buildChatToolRegistry(opts: BuildChatToolRegistryOptions): ChatT
     tmuxTools.send_to_pane as unknown as ChatTool,
     tmuxTools.read_pane as unknown as ChatTool,
     tmuxTools.capture_pane as unknown as ChatTool,
-    ...(opts.extraTools ?? []),
   ];
+  if (opts.lsp) {
+    const lspTools = createLspTools({
+      sessionDir: opts.lsp.sessionDir,
+      ...(opts.lsp.backend ? { lspBackend: opts.lsp.backend } : {}),
+      ...(opts.lsp.resolveRoot ? { resolveRoot: opts.lsp.resolveRoot } : {}),
+    });
+    all.push(
+      lspTools["lsp.hover"] as unknown as ChatTool,
+      lspTools["lsp.definition"] as unknown as ChatTool,
+      lspTools["lsp.references"] as unknown as ChatTool,
+      lspTools["lsp.diagnostics"] as unknown as ChatTool,
+    );
+  }
+  if (opts.extraTools) all.push(...opts.extraTools);
   const map = new Map<string, ChatTool>();
   for (const tool of all) {
     if (map.has(tool.name)) {
@@ -61,6 +93,7 @@ export function buildChatToolRegistry(opts: BuildChatToolRegistryOptions): ChatT
 }
 
 export { createTmuxTools } from "./tools/tmux.ts";
+export { createLspTools } from "./tools/lsp.ts";
 export type {
   TmuxToolDeps,
   ToolResult,
@@ -71,3 +104,13 @@ export type {
   CapturePaneInput,
   CapturePaneOutput,
 } from "./tools/tmux.ts";
+export type {
+  CreateLspToolsOptions,
+  LspBackend,
+  LspPositionInput,
+  LspDiagnosticsInput,
+  LspHoverOutput,
+  LspDefinitionOutput,
+  LspReferencesOutput,
+  LspDiagnosticsOutput,
+} from "./tools/lsp.ts";
