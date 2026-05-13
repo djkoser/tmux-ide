@@ -118,10 +118,11 @@ describe("FilesSurface", () => {
     const rows = await findAllByTestId("v2-files-row");
     const indexTs = rows.find((r) => r.getAttribute("data-file-path") === "src/index.ts")!;
     fireEvent.click(indexTs);
-    // Wait for the disk registration to complete + the editor to
-    // attach.
+    // G17-P5: text files now route through the buffer store and
+    // mount against the writable `file://` URI; the read-only
+    // `disk://` URI is no longer the editor's attach target.
     const editor = await findByTestId("code-editor-stub");
-    expect(editor.getAttribute("data-uri")).toBe("disk:///repo/src/index.ts");
+    expect(editor.getAttribute("data-uri")).toBe("file:///repo/src/index.ts");
   });
 
   it("clicking a markdown file routes to MarkdownRenderer (not CodeEditor)", async () => {

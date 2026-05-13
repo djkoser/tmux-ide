@@ -1290,3 +1290,94 @@ describe("GET /api/project/:name/git/file", () => {
     expect(body.content).toBe("hello working tree");
   });
 });
+
+describe("PUT /api/project/:name/file", () => {
+  it("returns 400 when ?path= is missing", async () => {
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/file", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "hi" }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Missing ?path=" });
+  });
+
+  it("rejects absolute / `..` paths", async () => {
+    const app = createApp();
+    const abs = await app.request("/api/project/test-project/file?path=/etc/passwd", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "x" }),
+    });
+    expect(abs.status).toBe(403);
+    const esc = await app.request("/api/project/test-project/file?path=../escape.ts", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "x" }),
+    });
+    expect(esc.status).toBe(403);
+  });
+
+  it("rejects an invalid JSON body", async () => {
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/file?path=x.txt", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: "{not json",
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Invalid JSON body" });
+  });
+
+  it("rejects when `content` is not a string", async () => {
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/file?path=x.txt", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: 42 }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 404 for an unknown session", async () => {
+    const app = createApp();
+    const res = await app.request("/api/project/no-such-session/file?path=x.txt", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "x" }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("writes the body content to the sandboxed path and returns ok: true", async () => {
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/file?path=note.txt", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "hello G17-P5" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; path: string; bytes: number };
+    expect(body.ok).toBe(true);
+    expect(body.path).toBe("note.txt");
+    expect(body.bytes).toBe(12);
+    // Verify the file actually landed on disk under tmpDir.
+    const written = readFileSync(join(tmpDir, "note.txt"), "utf-8");
+    expect(written).toBe("hello G17-P5");
+  });
+
+  it("404s when the parent directory does not exist", async () => {
+    const app = createApp();
+    const res = await app.request(
+      "/api/project/test-project/file?path=nope/no/yet.txt",
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: "x" }),
+      },
+    );
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Parent directory not found" });
+  });
+});

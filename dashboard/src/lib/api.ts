@@ -196,6 +196,34 @@ export interface GitFileContent {
   content: string;
 }
 
+/**
+ * Save a file's contents to disk via `PUT /api/project/:name/file`.
+ * Used by the buffer-store's Cmd+S save action.
+ */
+export interface SaveFileResult {
+  ok: boolean;
+  path: string;
+  bytes: number;
+}
+
+export function saveFile(
+  sessionName: string,
+  filePath: string,
+  content: string,
+): Effect.Effect<SaveFileResult, ApiError> {
+  const normalized = filePath.replace(/^\/+/g, "");
+  const params = new URLSearchParams();
+  params.set("path", normalized);
+  return request<SaveFileResult>(
+    `/api/project/${encodeURIComponent(sessionName)}/file?${params.toString()}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    },
+  );
+}
+
 export function fetchGitFile(
   sessionName: string,
   filePath: string,

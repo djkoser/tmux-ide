@@ -405,6 +405,102 @@ export class MonacoModelRegistry {
   }
 
   /**
+   * Register (or increment refcount on) a writable `file://` buffer
+   * model seeded with the supplied content. Unlike `registerDisk`,
+   * this is purely synchronous — the host already has the content
+   * (typically from a freshly-resolved `fetchFilePreview` call) and
+   * just wants Monaco to wrap it in an editable model.
+   *
+   * The buffer-store uses this to mount an editable `file://`
+   * model behind each open tab; edits flow back to the buffer
+   * store via the editor's `onDidChangeModelContent`.
+   *
+   * Returns the buffer URI string.
+   */
+  registerBuffer(input: {
+    sessionName: string;
+    rootPath: string;
+    filePath: string;
+    language: string;
+    initialContent: string;
+  }): string {
+    const bufferUri = buildMonacoModelPath(input.rootPath, input.filePath);
+
+    const existing = this.modelMap.get(bufferUri);
+    if (existing?.type === "buffer") {
+      existing.refs += 1;
+      const timer = this.evictionTimers.get(bufferUri);
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        this.evictionTimers.delete(bufferUri);
+      }
+      return bufferUri;
+    }
+
+    const m = getMonacoFromGlobal();
+    if (!m) {
+      throw new ModelRegistryError({
+        uri: bufferUri,
+        stage: "monaco-load",
+        message:
+          "registerBuffer requires Monaco to be loaded (call codeEditorPool.init() first)",
+      });
+    }
+
+    const monacoUri = m.Uri.parse(bufferUri);
+    let model = m.editor.getModel(monacoUri);
+    if (!model) {
+      model = m.editor.createModel(input.initialContent, input.language, monacoUri);
+    } else {
+      // Existing Monaco model with the same URI but not yet tracked
+      // by the registry — reset its value to the freshly fetched
+      // content so the editor isn't showing stale data.
+      try {
+        model.setValue(input.initialContent);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    const entry: BufferModelEntry = {
+      type: "buffer",
+      model,
+      refs: 1,
+      sessionName: input.sessionName,
+      filePath: input.filePath,
+      language: input.language,
+      viewState: null,
+    };
+    this.modelMap.set(bufferUri, entry);
+    this.setState("modelStatus", bufferUri, "ready");
+    this.setState("bufferVersions", bufferUri, 1);
+    return bufferUri;
+  }
+
+  /**
+   * Bump the version counter for a buffer URI. Consumers that read
+   * the buffer's text via memo can subscribe to the version to
+   * re-run on edit. Returns the new version.
+   */
+  bumpBufferVersion(bufferUri: string): number {
+    const next = (this.state.bufferVersions[bufferUri] ?? 0) + 1;
+    this.setState("bufferVersions", bufferUri, next);
+    return next;
+  }
+
+  /**
+   * Set the dirty bit for a buffer URI. Drives the tab strip's
+   * dirty indicator (`•`).
+   */
+  setDirty(bufferUri: string, dirty: boolean): void {
+    if (dirty) {
+      this.setState("dirtyUris", bufferUri, true);
+    } else {
+      this.setState("dirtyUris", bufferUri, undefined as unknown as true);
+    }
+  }
+
+  /**
    * Decrement the ref count on a URI. When refs reach 0, schedule a
    * 60s eviction timer; re-registering within that window cancels it.
    *

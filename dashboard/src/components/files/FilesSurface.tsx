@@ -1,35 +1,45 @@
 /**
- * FilesSurface — Solid Explorer rail + canonical preview body.
+ * FilesSurface — Explorer rail + tab strip + canonical preview body.
  *
- * Renders the project's file tree from `/api/project/:name/files`
- * on the left, the file renderer dispatch on the right. Clicking a
- * file triggers:
+ * Renders the project's file tree on the left, a multi-tab editor
+ * surface on the right. Clicking a file in the rail:
  *
- *   1. `getFileKind(path)` (G17-P2 pure helper) — picks a kind.
- *   2. For text kinds: `modelRegistry.registerDisk({...})` so the
- *      registry fetches the file content via `/preview/:file` and
- *      flips `modelStatus[diskUri]` to `'ready'`.
- *   3. `<FileRenderer file={...}>` — dispatches to one of the five
- *      stateless renderers (Binary / Image / Markdown / Svg /
- *      TooLarge) or, for text, the leased `<CodeEditor>` mounted
- *      against the freshly-registered disk URI.
+ *   1. `getFileKind(path)` picks a kind.
+ *   2. For text kinds: `openBuffer(...)` seeds the buffer-store
+ *      with a loading entry, `fetchFilePreview` resolves the
+ *      content, and `markReady` flips the buffer to 'ready' +
+ *      registers a writable `file://` Monaco model.
+ *   3. For non-Monaco kinds (image / markdown / svg / binary):
+ *      registers the `disk://` model so the file renderer
+ *      dispatch can read text via the registry.
  *
- * Read-only for G17-P4. Multi-tab + dirty state + save lands in
- * G17-P5.
+ * The right side carries:
+ *   - `<TabStrip>` showing every open buffer with a dirty `•` +
+ *     close `×`. Active tab styling reflects `activeUri`.
+ *   - Preview body: `<CodeEditor>` for text (writable, wired to
+ *     `markContent`) OR `<FileRenderer>` for the non-text kinds.
+ *
+ * Cmd+S (Ctrl+S on Linux/Windows) saves the active buffer via
+ * the daemon's `PUT /api/project/:name/file` endpoint. The
+ * keybind installs while the surface is mounted and tears down
+ * on unmount.
  */
 
 import {
+  createEffect,
   createMemo,
   createResource,
   createSignal,
   For,
   onCleanup,
+  onMount,
   Show,
   type JSX,
 } from "solid-js";
 import { Effect } from "effect";
 import { ChevronDown, ChevronRight, File, Folder, FolderOpen } from "lucide-solid";
 import {
+  fetchFilePreview,
   fetchProjectFiles,
   type ProjectFileNode,
 } from "@/lib/api";
@@ -39,7 +49,17 @@ import {
   type ManagedFile,
   type ManagedFileKind,
 } from "@/lib/editor";
+import {
+  bufferState,
+  markContent,
+  markError,
+  markReady,
+  openBuffer,
+  save,
+  setActiveBuffer,
+} from "@/lib/editor/buffer-store";
 import { CodeEditor } from "@/components/editor/CodeEditor";
+import { TabStrip } from "@/components/editor/TabStrip";
 import { modelRegistry } from "@/lib/monaco/model-registry";
 import { buildMonacoModelPath, toDiskUri } from "@/lib/monaco/model-path";
 
@@ -49,8 +69,8 @@ interface FilesSurfaceProps {
   modelRootPath?: string;
 }
 
-// Minimal extension → Monaco language id table. Read-only for now;
-// expand as the editor surface grows.
+// Minimal extension → Monaco language id table. Expand as the editor
+// surface grows.
 const LANGUAGE_BY_EXT: Record<string, string> = {
   ts: "typescript",
   tsx: "typescript",
@@ -104,40 +124,90 @@ function languageFor(filePath: string): string {
 
 export function FilesSurface(props: FilesSurfaceProps): JSX.Element {
   const rootPath = () => props.modelRootPath ?? "/";
-  const [activePath, setActivePath] = createSignal<string | null>(null);
-  const [activeKind, setActiveKind] = createSignal<ManagedFileKind | null>(null);
+  // Non-Monaco preview surfaces (image / markdown / svg / binary)
+  // route through the FileRenderer dispatch. Text kinds drive the
+  // tab strip instead.
+  const [previewPath, setPreviewPath] = createSignal<string | null>(null);
+  const [previewKind, setPreviewKind] = createSignal<ManagedFileKind | null>(null);
 
   const [tree] = createResource(
     () => props.projectName,
     async (sessionName) => Effect.runPromise(fetchProjectFiles(sessionName)),
   );
 
-  // Track every URI we've ever registered so we can unregister on
-  // unmount + on path swap. The registry's 60s eviction handles the
-  // common case (rapid switch back to a recently-closed file is
-  // free); we just need to drop refs on cleanup.
-  const registeredUris = new Set<string>();
+  // Track disk URIs registered for non-text kinds (markdown / svg
+  // need the registry for content reads; image / binary skip it).
+  const registeredDiskUris = new Set<string>();
+
+  // Install the Cmd/Ctrl+S keybind while the surface is mounted.
+  onMount(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (!(event.metaKey || event.ctrlKey)) return;
+      if (event.key !== "s" && event.key !== "S") return;
+      const uri = bufferState.activeUri;
+      if (!uri) return;
+      event.preventDefault();
+      void save(uri);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    onCleanup(() => window.removeEventListener("keydown", onKeyDown));
+  });
 
   onCleanup(() => {
-    for (const uri of registeredUris) modelRegistry.unregisterModel(uri);
-    registeredUris.clear();
+    for (const uri of registeredDiskUris) modelRegistry.unregisterModel(uri);
+    registeredDiskUris.clear();
+  });
+
+  // Auto-open a non-Monaco preview path when the buffer store has no
+  // active buffer (image-only / binary-only navigation).
+  createEffect(() => {
+    if (bufferState.activeUri && previewPath() !== null) {
+      // A text tab is active — drop the non-Monaco preview state
+      // so the body switches to the editor.
+      setPreviewPath(null);
+      setPreviewKind(null);
+    }
   });
 
   function openFile(path: string) {
     const kind = getFileKind(path);
-    setActivePath(path);
-    setActiveKind(kind);
 
-    // Only text / markdown / svg need the model registered — image
-    // renders from `file.content`, binary just renders a placeholder.
-    // `getFileKind` never emits `'too-large'` — that lands later via
-    // the FS-layer's truncation flag.
+    if (kind === "text") {
+      // Open or focus the editor tab.
+      const { existed } = openBuffer({
+        sessionName: props.projectName,
+        rootPath: rootPath(),
+        filePath: path,
+        language: languageFor(path),
+      });
+      if (existed) return;
+      // Fetch initial content + hydrate.
+      const bufferUri = buildMonacoModelPath(rootPath(), path);
+      void Effect.runPromise(fetchFilePreview(props.projectName, path))
+        .then((preview) => {
+          if (!preview.exists) {
+            markError(bufferUri, "File not found");
+            return;
+          }
+          markReady(bufferUri, preview.content);
+        })
+        .catch((err) => {
+          markError(bufferUri, err instanceof Error ? err.message : String(err));
+        });
+      return;
+    }
+
+    // Non-text kinds preview via FileRenderer. `getFileKind` never
+    // emits `'too-large'` — that lands later from the FS layer's
+    // truncation flag, so the body of this branch is the
+    // image / markdown / svg / binary path.
+    setActiveBuffer(null);
+    setPreviewPath(path);
+    setPreviewKind(kind);
+
     if (kind === "binary" || kind === "image") return;
-
-    const bufferUri = buildMonacoModelPath(rootPath(), path);
-    const diskUri = toDiskUri(bufferUri);
+    const diskUri = toDiskUri(buildMonacoModelPath(rootPath(), path));
     if (modelRegistry.modelStatus(diskUri) === "ready") return;
-
     void Effect.runPromise(
       modelRegistry.registerDisk({
         sessionName: props.projectName,
@@ -146,15 +216,17 @@ export function FilesSurface(props: FilesSurfaceProps): JSX.Element {
         language: languageFor(path),
       }),
     )
-      .then(() => {
-        registeredUris.add(diskUri);
-      })
-      .catch(() => {
-        // Registry already flipped status to 'error' for this URI;
-        // the renderer dispatch falls through to the binary
-        // placeholder via the dispatch's fallback Match clause.
-      });
+      .then(() => registeredDiskUris.add(diskUri))
+      .catch(() => {});
   }
+
+  const activeUri = () => bufferState.activeUri;
+  const hasPreview = () => activeUri() !== null || previewPath() !== null;
+  const railSelectedPath = () => {
+    const uri = activeUri();
+    if (uri) return bufferState.buffers[uri]?.filePath ?? null;
+    return previewPath();
+  };
 
   return (
     <div
@@ -188,7 +260,7 @@ export function FilesSurface(props: FilesSurfaceProps): JSX.Element {
             <FileTree
               nodes={tree()?.tree ?? []}
               depth={0}
-              activePath={activePath()}
+              activePath={railSelectedPath()}
               onPick={openFile}
             />
           </Show>
@@ -199,56 +271,92 @@ export function FilesSurface(props: FilesSurfaceProps): JSX.Element {
         data-testid="v2-files-preview"
         class="flex flex-1 min-w-0 min-h-0 flex-col"
       >
-        <Show
-          when={activePath() !== null}
-          fallback={
-            <div
-              data-testid="v2-files-empty-preview"
-              class="flex h-full items-center justify-center text-[11px] text-[var(--dim)]"
-            >
-              Pick a file from the rail to preview it.
-            </div>
-          }
-        >
-          {(_) => <PreviewBody
-            path={activePath()!}
-            kind={activeKind()!}
-            rootPath={rootPath()}
-          />}
-        </Show>
+        <TabStrip />
+        <div class="flex flex-1 min-w-0 min-h-0 flex-col">
+          <Show
+            when={hasPreview()}
+            fallback={
+              <div
+                data-testid="v2-files-empty-preview"
+                class="flex h-full items-center justify-center text-[11px] text-[var(--dim)]"
+              >
+                Pick a file from the rail to preview it.
+              </div>
+            }
+          >
+            <PreviewBody
+              activeUri={activeUri()}
+              previewPath={previewPath()}
+              previewKind={previewKind()}
+              rootPath={rootPath()}
+            />
+          </Show>
+        </div>
       </main>
     </div>
   );
 }
 
-function PreviewBody(props: { path: string; kind: ManagedFileKind; rootPath: string }) {
-  const file = createMemo<ManagedFile>(() => ({
-    path: props.path,
-    kind: props.kind,
-    content: "",
-    isLoading: false,
-    tabId: props.path,
-  }));
-
-  const bufferUri = createMemo(() =>
-    buildMonacoModelPath(props.rootPath, props.path),
+function PreviewBody(props: {
+  activeUri: string | null;
+  previewPath: string | null;
+  previewKind: ManagedFileKind | null;
+  rootPath: string;
+}) {
+  // Active text buffer wins; otherwise fall through to the non-text
+  // preview routing.
+  const activeBuffer = createMemo(() =>
+    props.activeUri ? bufferState.buffers[props.activeUri] ?? null : null,
   );
 
-  // Text dispatches to a leased Monaco editor; the FileRenderer's
-  // built-in text slot is still the G17-P2 placeholder, so we
-  // bypass it for text and call CodeEditor directly.
+  const previewFile = createMemo<ManagedFile | null>(() => {
+    if (!props.previewPath || !props.previewKind) return null;
+    return {
+      path: props.previewPath,
+      kind: props.previewKind,
+      content: "",
+      isLoading: false,
+      tabId: props.previewPath,
+    };
+  });
+
   return (
     <Show
-      when={props.kind === "text"}
+      when={activeBuffer()}
       fallback={
-        <FileRenderer
-          file={file()}
-          modelRootPath={props.rootPath}
-          onEditSource={undefined}
-        />
+        <Show when={previewFile()}>
+          {(f) => (
+            <FileRenderer
+              file={f()}
+              modelRootPath={props.rootPath}
+              onEditSource={undefined}
+            />
+          )}
+        </Show>
       }
     >
-      <CodeEditor uri={toDiskUri(bufferUri())} />
+      {(buf) => (
+        <Show
+          when={buf().status === "ready"}
+          fallback={
+            <div
+              data-testid="v2-files-buffer-loading"
+              data-buffer-status={buf().status}
+              class="flex h-full items-center justify-center text-[11px] text-[var(--dim)]"
+            >
+              <Show when={buf().status === "loading"} fallback={<span>{buf().saveError ?? "failed to load file"}</span>}>
+                loading…
+              </Show>
+            </div>
+          }
+        >
+          <CodeEditor
+            uri={buf().bufferUri}
+            readOnly={false}
+            onContentChange={(value) => markContent(buf().bufferUri, value)}
+          />
+        </Show>
+      )}
     </Show>
   );
 }

@@ -34,6 +34,13 @@ export interface CodeEditorProps {
   readOnly?: boolean;
   /** Notify when the leased editor is mounted (or unmounted = null). */
   onEditorChange?: (editor: monaco.editor.IStandaloneCodeEditor | null) => void;
+  /**
+   * Fired when the attached Monaco model's text changes. The
+   * buffer-store wires this into `markContent(uri, value)` so the
+   * tab-strip's dirty indicator + Cmd+S flow stay in sync. Omit
+   * for read-only mounts.
+   */
+  onContentChange?: (value: string) => void;
 }
 
 export function CodeEditor(props: CodeEditorProps) {
@@ -41,6 +48,7 @@ export function CodeEditor(props: CodeEditorProps) {
   let entry: CodePoolEntry | null = null;
   let cancelled = false;
   let lastAttachedUri: string | undefined;
+  let contentDisposable: monaco.IDisposable | null = null;
 
   onMount(() => {
     void codeEditorPool.lease().then((leased) => {
@@ -60,12 +68,15 @@ export function CodeEditor(props: CodeEditorProps) {
       leased.editor.updateOptions({ readOnly: props.readOnly ?? true });
       props.onEditorChange?.(leased.editor);
       tryAttachModel();
+      installContentListener();
       leased.editor.layout();
     });
   });
 
   onCleanup(() => {
     cancelled = true;
+    contentDisposable?.dispose();
+    contentDisposable = null;
     if (entry) {
       props.onEditorChange?.(null);
       try {
@@ -78,6 +89,17 @@ export function CodeEditor(props: CodeEditorProps) {
       lastAttachedUri = undefined;
     }
   });
+
+  function installContentListener() {
+    const e = entry?.editor;
+    if (!e) return;
+    contentDisposable?.dispose();
+    contentDisposable = e.onDidChangeModelContent(() => {
+      if (!props.onContentChange) return;
+      const value = e.getModel()?.getValue();
+      if (typeof value === "string") props.onContentChange(value);
+    });
+  }
 
   // Reactive attach: re-run whenever the URI changes or the
   // registry's status for that URI flips to 'ready'.

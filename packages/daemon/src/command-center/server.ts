@@ -157,6 +157,7 @@ import {
   runSearch,
   type SearchFrame,
 } from "./search.ts";
+import { executeReplace, ReplaceRequestZ } from "./search-replace.ts";
 import { serveDashboard } from "./static.ts";
 import { getOrchestratorHealth, getPaneContentHashMetrics } from "../lib/orchestrator.ts";
 import { handleWsEventsConnection, broadcastInitOutput, broadcastInitError } from "./ws-events.ts";
@@ -1722,6 +1723,87 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     return c.json({ path, ref, exists, content });
   });
 
+  // PUT /api/project/:name/file?path=...
+  // Writes the request body's `{ content: string }` to the
+  // workspace-relative path. Used by the dashboard's buffer-store
+  // save action (Cmd+S) to persist edits made in the leased Monaco
+  // editor.
+  //
+  // Identity is sandboxed: path must be relative, no `..` segments,
+  // resolved target must stay under session.dir (realpath-checked).
+  // Parent directories must already exist — the endpoint refuses to
+  // create new directories, since "Cmd+S in an open editor" never
+  // wants to materialise a tree the user can't see.
+  app.put("/api/project/:name/file", async (c) => {
+    const name = c.req.param("name");
+    const path = c.req.query("path") ?? "";
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+
+    if (!path) return c.json({ error: "Missing ?path=" }, 400);
+    if (
+      path.startsWith("/") ||
+      path.split("/").some((seg) => seg === ".." || seg === ".")
+    ) {
+      return c.json({ error: "Path escapes workspace" }, 403);
+    }
+
+    let body: { content?: string };
+    try {
+      body = (await c.req.json()) as { content?: string };
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+    if (typeof body?.content !== "string") {
+      return c.json({ error: "Body must be `{ content: string }`" }, 400);
+    }
+
+    let resolvedRoot: string;
+    try {
+      resolvedRoot = realpathSync(session.dir);
+    } catch {
+      return c.json({ error: "Session directory not accessible" }, 500);
+    }
+
+    const requested = pathResolve(session.dir, path);
+    // Validate the *parent* dir exists + lives inside the workspace.
+    // The target file may not exist yet (first save of a freshly-
+    // created path), so realpath the parent instead.
+    const parent = requested.substring(0, requested.lastIndexOf("/"));
+    let resolvedParent: string;
+    try {
+      resolvedParent = realpathSync(parent);
+    } catch {
+      return c.json({ error: "Parent directory not found" }, 404);
+    }
+    if (
+      !resolvedParent.startsWith(resolvedRoot + "/") &&
+      resolvedParent !== resolvedRoot
+    ) {
+      return c.json({ error: "Path escapes workspace" }, 403);
+    }
+
+    const target = `${resolvedParent}/${requested.substring(requested.lastIndexOf("/") + 1)}`;
+
+    try {
+      writeFileSync(target, body.content, "utf-8");
+    } catch (err) {
+      return c.json(
+        { error: err instanceof Error ? err.message : String(err) },
+        500,
+      );
+    }
+
+    let bytes = 0;
+    try {
+      bytes = statSync(target).size;
+    } catch {
+      /* size is best-effort — the write succeeded */
+    }
+    return c.json({ ok: true, path, bytes });
+  });
+
   // GET /api/project/:name/search?q=&include=&exclude=&case=&regex=&context=&maxResults=&maxFileSize=
   //
   // Streams NDJSON (`Content-Type: application/x-ndjson`) one frame per
@@ -1786,6 +1868,44 @@ export function createApp(options: CreateAppOptions = {}): Hono {
         );
       }
     });
+  });
+
+  // POST /api/project/:name/search/replace
+  // Offset-based replacement across N files, gated by an optional
+  // per-file mtime guard so files modified since the search snapshot
+  // are skipped (not silently corrupted). See `./search-replace.ts`.
+  app.post("/api/project/:name/search/replace", async (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "Body must be valid JSON" }, 400);
+    }
+    const parsed = ReplaceRequestZ.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        {
+          error: "Invalid replace request",
+          issues: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
+        },
+        400,
+      );
+    }
+
+    let searchRoot: string;
+    try {
+      searchRoot = realpathSync(session.dir);
+    } catch {
+      return c.json({ error: "Session directory not accessible" }, 500);
+    }
+
+    const result = executeReplace(searchRoot, parsed.data);
+    return c.json(result);
   });
 
   // GET /api/project/:name/preview/:file — read a file's contents from inside
