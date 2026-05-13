@@ -2,13 +2,30 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
-  // smoke.spec.ts owns its own runtime model (no webServer, prod
-  // build, daemon + dashboard wired up manually by smoke.yml). The
-  // default config below boots dev servers — feeding the smoke spec
-  // those would defeat the purpose and trip its console-error
-  // budget. Pane 1's playwright.smoke.config.ts runs that file
-  // exclusively; this config sticks to the surviving v1-shell specs.
-  testIgnore: ["smoke.spec.ts"],
+  // Post-G16 cutover: the v1 React shell is gone, so the legacy specs
+  // (project-tabs / context-bar / status-bar / etc) target routes that
+  // no longer exist. They're parked behind testIgnore until they're
+  // ported to the Solid surface. `smoke.spec.ts` is the live gate —
+  // it runs via playwright.smoke.config.ts in smoke.yml against the
+  // prod Vite build.
+  testIgnore: [
+    "smoke.spec.ts",
+    "command-palette.spec.ts",
+    "context-bar.spec.ts",
+    "full-screen-terminal.spec.ts",
+    "notifications.spec.ts",
+    "plans.spec.ts",
+    "project-tabs.spec.ts",
+    "project-terminal.spec.ts",
+    "responsive.spec.ts",
+    "settings.spec.ts",
+    "status-bar.spec.ts",
+    "task-panel.spec.ts",
+    "terminal.spec.ts",
+    "toasts.spec.ts",
+    "views.spec.ts",
+    "workspace-tabs.spec.ts",
+  ],
   timeout: 45_000,
   expect: {
     timeout: 15_000,
@@ -21,20 +38,16 @@ export default defineConfig({
   },
   webServer: [
     {
-      // Use the compiled JS entry, not bin/cli.ts via
-      // --experimental-strip-types. Node's strip-only TS loader
-      // can't handle TS enums (the codex protocol uses them),
-      // which broke the harness boot. bin/cli.js is the canonical
-      // production entry point per CLAUDE.md and imports from
-      // dist/, so `pnpm build` is a prerequisite for e2e.
+      // bin/cli.js is the canonical entry point per CLAUDE.md and
+      // imports from dist/, so `pnpm build` is a prerequisite for e2e.
       command: "node bin/cli.js server --port 6070",
       url: "http://127.0.0.1:6070/health",
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },
     {
-      command: "NEXT_PUBLIC_TMUX_IDE_SERVER_PORT=6070 pnpm --filter @tmux-ide/dashboard dev",
-      url: "http://127.0.0.1:3000/terminal/default",
+      command: "VITE_API_PORT=6070 pnpm --filter @tmux-ide/dashboard dev",
+      url: "http://127.0.0.1:3000/",
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },

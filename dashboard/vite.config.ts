@@ -4,7 +4,7 @@ import solid from "vite-plugin-solid";
 import tailwindcss from "@tailwindcss/vite";
 
 /**
- * Goal-16 dashboard-solid Vite config.
+ * Dashboard Vite config (post-G16 Solid SPA).
  *
  * `dedupe: ['solid-js']` is load-bearing — when v2-solid-widgets or
  * chat-solid are consumed via workspace alias, vite must collapse them
@@ -20,7 +20,7 @@ export default defineConfig({
     dedupe: ["solid-js"],
   },
   server: {
-    port: 3001,
+    port: 3000,
     strictPort: true,
   },
   build: {

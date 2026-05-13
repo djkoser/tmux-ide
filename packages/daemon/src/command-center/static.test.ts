@@ -5,8 +5,12 @@ import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
 import { serveDashboard } from "./static.ts";
 
-const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const outDir = join(pkgRoot, "dashboard", "out");
+// Post-G16 cutover: the dashboard SPA bundle lives at dashboard/dist/.
+// Build-dependent tests look there and self-skip when the workspace
+// hasn't run `pnpm --filter @tmux-ide/dashboard build` yet (CI lights
+// it up via the build:dashboard step).
+const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
+const outDir = join(pkgRoot, "dashboard", "dist");
 const hasDashboardBuild = existsSync(join(outDir, "index.html"));
 
 describe("serveDashboard", () => {
@@ -45,19 +49,21 @@ describe("serveDashboard", () => {
     expect(body).toEqual({ ok: true });
   });
 
-  it("serves fallback HTML for /project/any-name/", async () => {
+  it("serves SPA fallback HTML for unknown client routes", async () => {
     if (!hasDashboardBuild) return; // skip in CI where dashboard isn't built
 
     const app = new Hono();
     app.use("*", serveDashboard());
 
-    const res = await app.request("/project/my-project/");
+    // Solid Router owns `/v2/project/:name` on the client — the server
+    // just needs to hand back index.html for every non-asset path.
+    const res = await app.request("/v2/project/my-project");
     expect(res.status).toBe(200);
     const contentType = res.headers.get("content-type");
     expect(contentType).toContain("text/html");
   });
 
-  it("sets immutable cache for _next/static assets", async () => {
+  it("sets immutable cache for hashed /assets/ bundles", async () => {
     if (!hasDashboardBuild) return; // skip in CI where dashboard isn't built
 
     const app = new Hono();
@@ -65,28 +71,12 @@ describe("serveDashboard", () => {
 
     const { readdirSync } = await import("node:fs");
 
-    const staticDir = join(outDir, "_next", "static");
-    if (!existsSync(staticDir)) return;
+    const assetsDir = join(outDir, "assets");
+    if (!existsSync(assetsDir)) return;
 
-    const findFile = (dir: string): string | null => {
-      for (const entry of readdirSync(dir, { withFileTypes: true })) {
-        if (entry.isFile() && entry.name.endsWith(".js")) {
-          return `/_next/static/${dir.slice(staticDir.length + 1)}/${entry.name}`.replace(
-            /\/+/g,
-            "/",
-          );
-        }
-        if (entry.isDirectory()) {
-          const found = findFile(join(dir, entry.name));
-          if (found) return found;
-        }
-      }
-      return null;
-    };
-
-    const jsFile = findFile(staticDir);
+    const jsFile = readdirSync(assetsDir).find((f) => f.endsWith(".js"));
     if (jsFile) {
-      const res = await app.request(jsFile);
+      const res = await app.request(`/assets/${jsFile}`);
       expect(res.status).toBe(200);
       const cacheControl = res.headers.get("cache-control");
       expect(cacheControl).toContain("immutable");

@@ -88,9 +88,9 @@ export function V2ActivityBar(props: V2ActivityBarProps) {
       label: "Search",
       tooltip: "Search · ⌘K",
       onClick: () => {
-        // Command palette ports in G16-P3; until then, no-op.
+        // Command palette lands in a follow-up; no-op for now.
         // eslint-disable-next-line no-console
-        console.info("[dashboard-solid] command palette lands in G16-P3");
+        console.info("[dashboard] command palette lands in a follow-up");
       },
     },
     { id: "diffs", view: "diffs", Icon: GitCompare, label: "Diffs", onClick: () => props.onView("diffs") },

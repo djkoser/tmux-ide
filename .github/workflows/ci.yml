@@ -82,9 +82,9 @@ jobs:
       - name: Build CLI (dashboard may depend on dist/)
         run: pnpm build
 
-      - name: Build dashboard
+      - name: Build dashboard (Vite SPA)
         working-directory: dashboard
-        run: npx next build
+        run: pnpm build
 
       - name: Run dashboard tests
         run: cd dashboard && pnpm test

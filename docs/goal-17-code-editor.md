@@ -114,7 +114,7 @@ Solid expression:
 - `dirtyUris` and `bufferVersions` become two more `createStore` instances. Reactive without listing the URI in any dep array.
 - The non-reactive `modelMap`, `evictionTimers`, `bufferContentDisposables`, `bufferAutosaveTimers`, `pendingFetches` are plain `Map<>` / `Set<>` instances — Monaco models are imperative; trying to make them reactive is a category error.
 
-Wrap the whole thing in an `Effect.Service` (mirroring how the dashboard-solid `fetchSessions` service is shaped — `src/lib/api.ts`). Public methods return `Effect.Effect<…, DomainError>`; the internal map mutations + Monaco calls stay synchronous inside the effect bodies. This buys typed error channels for the RPC fetches (`registerDisk` / `registerGit`) without inventing a parallel error type system on top of MobX.
+Wrap the whole thing in an `Effect.Service` (mirroring how the dashboard `fetchSessions` service is shaped — `src/lib/api.ts`). Public methods return `Effect.Effect<…, DomainError>`; the internal map mutations + Monaco calls stay synchronous inside the effect bodies. This buys typed error channels for the RPC fetches (`registerDisk` / `registerGit`) without inventing a parallel error type system on top of MobX.
 
 ```ts
 // Sketch
@@ -209,7 +209,7 @@ The dispatch table maps 1:1. The renderers themselves are tiny (10–70 LOC each
 | Reference file | Solid port (target) | Notes |
 | --- | --- | --- |
 | `fileKind.ts` | `dashboard/src/lib/editor/fileKind.ts` | Pure — copy unchanged. |
-| `binary-renderer.tsx` | `dashboard/src/components/editor/BinaryRenderer.tsx` | Trivial JSX rewrite. Replace `lucide-react` with `lucide-solid` (already in dashboard-solid deps via the widgets package, confirm at port time). |
+| `binary-renderer.tsx` | `dashboard/src/components/editor/BinaryRenderer.tsx` | Trivial JSX rewrite. Replace `lucide-react` with `lucide-solid` (already in dashboard deps via the widgets package, confirm at port time). |
 | `image-renderer.tsx` | `…/ImageRenderer.tsx` | Same. `<img src={file.content}>` — content is a data URL provided by the daemon (new endpoint, see §4). |
 | `markdown-renderer.tsx` | `…/MarkdownRenderer.tsx` | Reuses the dashboard's existing markdown renderer (chat-solid's `lib/markdown.ts` or whatever the post-cutover surface has). Reactive read of `registry.bufferVersions[uri]` triggers re-render when the source pane edits. |
 | `svg-renderer.tsx` | `…/SvgRenderer.tsx` | `URL.createObjectURL(new Blob([content], {type:'image/svg+xml'}))` + `onCleanup(() => URL.revokeObjectURL(url))`. |

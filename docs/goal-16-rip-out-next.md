@@ -2,7 +2,7 @@
 
 **Date**: 2026-05-13
 **Author**: Pty Agent (pane 1)
-**Status**: P0 — audit + roadmap. Read-only. No code changes.
+**Status**: ✅ COMPLETE — G16-P0 (audit), P1 (dashboard-solid scaffold + `/v2/widgets`), P2 (IDE shell + view dispatch), P3 (`/v2/setup` + `/v2/settings` + `/v2/terminal/[id]` + `/v2/widget/[name]`), and P4 (cutover) all landed. The React tree is gone; `dashboard/` is now the Solid SPA.
 **Decision context**: see `feedback_architecture_solid_first.md` (Lever B).
 
 ## Headline

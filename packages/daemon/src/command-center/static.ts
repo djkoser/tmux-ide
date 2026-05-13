@@ -29,30 +29,21 @@ const fileCache = new Map<string, { content: Uint8Array; mimeType: string }>();
  *     package root.
  *  3. Standalone daemon install — caller passes `TMUX_IDE_DASHBOARD_OUT`.
  *
- * Goal-16 flavor switch: `DASHBOARD_FLAVOR=solid` looks for the Solid
- * SPA's `dashboard-solid/dist` instead of the React `dashboard/out`.
- * Default stays React until G16-P4 cutover. The override env var also
- * supports either flavor — caller passes the full absolute path.
+ * The dashboard is a Vite SPA build (Goal-16 cutover); output lives at
+ * `dashboard/dist/`. Callers can override via the `TMUX_IDE_DASHBOARD_OUT`
+ * env var with an absolute path.
  */
 function resolveDashboardOut(): string | null {
   const override = process.env.TMUX_IDE_DASHBOARD_OUT;
   if (override) return existsSync(override) ? override : null;
 
-  const flavor = process.env.DASHBOARD_FLAVOR === "solid" ? "solid" : "react";
-  const candidates =
-    flavor === "solid"
-      ? [["dashboard-solid", "dist"]]
-      : [["dashboard", "out"]];
-
   const here = dirname(fileURLToPath(import.meta.url));
-  // Walk up looking for a sibling build directory. Stops at filesystem
-  // root.
+  // Walk up looking for a sibling `dashboard/dist` directory. Stops at
+  // filesystem root.
   let current = here;
   for (let i = 0; i < 10; i += 1) {
-    for (const segments of candidates) {
-      const candidate = join(current, ...segments);
-      if (existsSync(candidate)) return candidate;
-    }
+    const candidate = join(current, "dashboard", "dist");
+    if (existsSync(candidate)) return candidate;
     const parent = resolve(current, "..");
     if (parent === current) break;
     current = parent;
@@ -80,19 +71,18 @@ function readCached(filePath: string): { content: Uint8Array; mimeType: string }
 /**
  * Determine the Cache-Control header for a given URL path.
  */
-function cacheControl(urlPath: string, mimeType: string): string {
-  if (urlPath.startsWith("/_next/static/")) {
-    return "public, max-age=31536000, immutable";
-  }
+function cacheControl(_urlPath: string, mimeType: string): string {
   if (mimeType.startsWith("text/html")) {
     return "no-cache";
   }
-  return "public, max-age=3600";
+  // Vite emits hashed asset filenames under /assets/, so the body is
+  // immutable; the rest (sourcemaps, fonts) gets a moderate TTL.
+  return "public, max-age=31536000, immutable";
 }
 
 /**
- * Hono middleware that serves the Next.js static export from dashboard/out/.
- * Gracefully no-ops if the out/ directory does not exist.
+ * Hono middleware that serves the dashboard SPA bundle from
+ * `dashboard/dist/`. Gracefully no-ops if the directory does not exist.
  */
 export function serveDashboard(): MiddlewareHandler {
   const outDir = resolveDashboardOut();
@@ -125,29 +115,18 @@ export function serveDashboard(): MiddlewareHandler {
         },
       });
 
-    // 1. Try exact file match (e.g. /_next/static/chunks/abc.js)
+    // 1. Try exact file match (e.g. /assets/index-abc123.js)
     const exactPath = join(outDir, normalized);
     const exactFile = readCached(exactPath);
     if (exactFile) return serve(exactFile);
 
-    // 2. Try index.html inside directory (e.g. /foo/ -> out/foo/index.html)
-    const indexPath = join(outDir, normalized, "index.html");
-    const indexFile = readCached(indexPath);
-    if (indexFile) return serve(indexFile);
-
-    // 3. SPA fallback for /project/* dynamic routes
-    if (normalized.startsWith("/project/")) {
-      const fallbackPath = join(outDir, "project", "__fallback", "index.html");
-      const fallbackFile = readCached(fallbackPath);
-      if (fallbackFile) return serve(fallbackFile);
-    }
-
-    // 4. General SPA fallback — serve out/index.html for client-side routing
+    // 2. SPA fallback — every unmatched path renders index.html so the
+    //    Solid Router can take over on the client side.
     const rootIndex = join(outDir, "index.html");
     const rootFile = readCached(rootIndex);
     if (rootFile) return serve(rootFile);
 
-    // Nothing found; let other handlers take over
+    // Nothing found; let other handlers take over.
     await next();
   };
 }

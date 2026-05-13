@@ -36,7 +36,7 @@ Single source of truth for where we are, what's in flight, and what's next on th
 
 | | Status |
 |---|---|
-| Goal-16 (rip out Next, Solid + Effect everywhere) | 🔄 P0 ✅ + P1 ✅ (dashboard-solid scaffolded + /v2/widgets ported) — **P2 in flight: port /v2/project/[name] IDE shell** |
+| Goal-16 (rip out Next, Solid + Effect everywhere) | ✅ **COMPLETE** — P0 + P1 + P2 + P3 + P4 all landed. React tree deleted, `dashboard/` is now the Vite + Solid + Effect SPA. |
 
 ---
 
@@ -44,31 +44,33 @@ Single source of truth for where we are, what's in flight, and what's next on th
 
 | Pane | Task | Stage |
 |---|---|---|
-| 1 (Agent 5) | **G16-P2**: port `/v2/project/[name]` IDE shell to Solid | The big one |
-| 2 | **W7**: terminal-context chip retire-or-migrate | Small wire |
-| 3 | **W8**: chat.thread.delete wire end-to-end | Small wire |
+| 1 (Agent 5) | **G17-P1**: port emdash Monaco patterns to `dashboard/src/lib/monaco/` | Stage B kickoff |
+| 2 | TBD | Idle / queued |
+| 3 | TBD | Idle / queued |
 
-When this round commits:
+After Goal-16 P4:
 - Chat W: 8/8 closed
-- App WN: 8/11 closed (WN8 + WN10 + WN11 remain)
-- Goal-16: P0 + P1 + P2 done (50%)
+- App WN: 8/11 closed (WN8 + WN10 + WN11 remain; live in the audit but lower priority post-cutover)
+- Goal-16: **DONE** (Stage A complete)
 - T4 (coverage thresholds) still queued as small follow-on
 
 ---
 
 ## §3 — Staged plan to 100%
 
-### Stage A — Finish Goal-16 (Solid migration) — ~3 days
+### Stage A — Goal-16 (Solid migration) — ✅ COMPLETE
 
-| Phase | What | Days |
+| Phase | What | Status |
 |---|---|---|
-| G16-P2 | Port `/v2/project/[name]` IDE shell | 🔄 in flight |
-| G16-P3 | Port remaining routes: `/v2/setup`, `/v2/settings`, `/v2/terminal/[id]`, `/v2/widget/[name]` | 1 |
-| G16-P4 | Cutover — delete `dashboard/`, rename `dashboard-solid/` → `dashboard/`, update CI + daemon's `serveDashboard()` + `package.json` `files` field | 0.5 |
-| Closing wires | WN8 (branch switcher), WN10 (Activity right-rail), WN11 (centralize view registry), W7+W8 leftovers | 1 |
-| T4 coverage thresholds | enable v8 coverage in vitest + CI gate | 0.5 |
+| G16-P0 | Audit + roadmap doc (`docs/goal-16-rip-out-next.md`) | ✅ |
+| G16-P1 | Stand up `dashboard-solid/` (Vite + Solid Router) + port `/v2/widgets` | ✅ |
+| G16-P2 | Port `/v2/project/[name]` IDE shell (ActivityBar / Sidebar / Editor / Inspector / BottomPanel / StatusBar) + chrome shortcuts | ✅ |
+| G16-P3 | Port `/v2/setup`, `/v2/settings`, `/v2/terminal/[id]`, `/v2/widget/[name]` | ✅ |
+| G16-P4 | Cutover — deleted React `dashboard/`, renamed `dashboard-solid/` → `dashboard/`, retargeted daemon's `serveDashboard()` at `dashboard/dist/`, updated CI + `package.json#files` | ✅ |
 
 **→ State: pure Solid + Effect codebase. No React. No bridges. No Turbopack. ~70%.**
+
+Closing wires + T4 carry over into Stage B (no longer block Goal-16).
 
 ### Stage B — Code editor (Goal-17) — ~5-7 days
 

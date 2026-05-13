@@ -57,11 +57,11 @@ jobs:
             > .smoke-logs/daemon.log 2>&1 &
           echo $! > .smoke-logs/daemon.pid
 
-      - name: Start dashboard (next start)
+      - name: Start dashboard (Vite preview)
         working-directory: dashboard
         run: |
           mkdir -p ../.smoke-logs
-          nohup pnpm start --port 3000 \
+          nohup pnpm preview --port 3000 \
             > ../.smoke-logs/dashboard.log 2>&1 &
           echo $! > ../.smoke-logs/dashboard.pid
 
