@@ -263,9 +263,24 @@ importers:
       '@solidjs/router':
         specifier: ^0.16.0
         version: 0.16.1(solid-js@1.9.11)
+      '@tmux-ide/chat-solid':
+        specifier: workspace:*
+        version: link:../packages/chat-solid
       '@tmux-ide/contracts':
         specifier: workspace:*
         version: link:../packages/contracts
+      '@tmux-ide/v2-solid-widgets':
+        specifier: workspace:*
+        version: link:../packages/v2-solid-widgets
+      '@xterm/addon-fit':
+        specifier: ^0.11.0
+        version: 0.11.0
+      '@xterm/addon-webgl':
+        specifier: ^0.19.0
+        version: 0.19.0
+      '@xterm/xterm':
+        specifier: ^6.0.0
+        version: 6.0.0
       effect:
         specifier: ^3.20.4
         version: 3.21.2
