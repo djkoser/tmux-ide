@@ -129,7 +129,7 @@ describe("MonacoModelRegistry", () => {
       }),
     );
     const diskUri = bufferUri.replace("file://", "disk://");
-    const model = modelRegistry.getModelByUri(diskUri) as StubModel;
+    const model = modelRegistry.getModelByUri(diskUri) as unknown as StubModel;
     expect(model.disposed).toBe(false);
     modelRegistry.unregisterModel(diskUri);
     // Force-eviction (instead of waiting 60s).
