@@ -66,7 +66,16 @@ import { BottomPanel } from "@/components/BottomPanel";
 import { useChromeLayout, setLeftSidebarOpen, setRightInspectorOpen, setBottomPanelOpen } from "@/lib/useChromeLayout";
 import { useChromeShortcuts } from "@/lib/useChromeShortcuts";
 import { TooltipProvider } from "@/components/ui";
-import { V2ActivityBar, type ActivityBarViewId } from "../../_lib/V2ActivityBar";
+import type { ActivityBarViewId } from "../../_lib/V2ActivityBar";
+
+// V2ActivityBar uses Base UI tooltips whose auto-generated IDs differ
+// between SSR and client → hydration mismatch. The bar is purely
+// client-interactive (no SEO value, no static content), so lazy-load
+// it client-only and skip SSR entirely.
+const V2ActivityBar = dynamic(
+  () => import("../../_lib/V2ActivityBar").then((m) => m.V2ActivityBar),
+  { ssr: false, loading: () => <nav aria-label="Activity bar" className="flex h-full w-12 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg-weak)]" /> },
+);
 import { useStoredLayout } from "../../_lib/useStoredLayout";
 import { Terminal } from "@/components/Terminal";
 
