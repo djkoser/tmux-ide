@@ -4,6 +4,7 @@ import {
   Files,
   Search,
   GitCompare,
+  Grid3X3,
   ListTodo,
   CheckSquare,
   Target,
@@ -38,7 +39,8 @@ export type ActivityBarViewId =
   | "skills"
   | "mission"
   | "chat"
-  | "terminal";
+  | "terminal"
+  | "widgets";
 
 interface ActivityBarItem {
   id: ActivityBarViewId | "search" | "settings" | "account";
@@ -125,6 +127,20 @@ export function V2ActivityBar({ view, onView }: V2ActivityBarProps) {
       Icon: TerminalIcon,
       label: "Terminal",
       onClick: () => onView("terminal"),
+    },
+    {
+      id: "widgets",
+      Icon: Grid3X3,
+      label: "Widgets",
+      tooltip: "Widgets gallery",
+      // The gallery is a standalone top-level route (/v2/widgets), not
+      // a project-scoped view, so we navigate the browser rather than
+      // switching the project page's view state. Activity-bar items
+      // already allow free-form onClick, so this stays consistent with
+      // the existing Search entry's openCommandPalette pattern.
+      onClick: () => {
+        if (typeof window !== "undefined") window.location.assign("/v2/widgets");
+      },
     },
   ];
 
