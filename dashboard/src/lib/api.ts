@@ -155,6 +155,28 @@ export function dispatchAction(name: string, input: unknown): Effect.Effect<unkn
 }
 
 // ---------------------------------------------------------------------
+// File content — used by the Monaco model registry to fetch on-disk
+// content for `disk://` models. The daemon sandboxes the path under
+// the session's working directory (realpath-aware).
+// ---------------------------------------------------------------------
+
+export interface FilePreview {
+  file: string;
+  exists: boolean;
+  content: string;
+}
+
+export function fetchFilePreview(
+  sessionName: string,
+  filePath: string,
+): Effect.Effect<FilePreview, ApiError> {
+  const normalized = filePath.replace(/^\/+/g, "");
+  return request<FilePreview>(
+    `/api/project/${encodeURIComponent(sessionName)}/preview/${encodeURI(normalized)}`,
+  );
+}
+
+// ---------------------------------------------------------------------
 // Widget spawn — used by /v2/widget/[name] to ask the daemon where the
 // widget binary lives + how to invoke it, then drive a Terminal via the
 // same WS protocol the tmux panes use.
