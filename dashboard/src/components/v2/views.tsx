@@ -43,6 +43,7 @@ import {
   type TasksTask,
 } from "@tmux-ide/v2-solid-widgets";
 import { Terminal } from "@/components/Terminal";
+import { API_BASE } from "@/lib/api";
 import { WidgetHost } from "./widgetHost";
 import {
   createMetrics,
@@ -179,7 +180,7 @@ export function PlansSurfaceView(props: ProjectProps): JSX.Element {
   async function loadPlanBody(filename: string): Promise<void> {
     try {
       const res = await fetch(
-        `/api/project/${encodeURIComponent(props.projectName)}/plans/${encodeURIComponent(filename)}`,
+        `${API_BASE}/api/project/${encodeURIComponent(props.projectName)}/plans/${encodeURIComponent(filename)}`,
         { cache: "no-store" },
       );
       if (!res.ok) return;
@@ -209,7 +210,7 @@ export function PlansSurfaceView(props: ProjectProps): JSX.Element {
 
   const railOptions = createMemo<PlansRailMountOptions>(() => ({
     sessionName: props.projectName,
-    apiBaseUrl: "",
+    apiBaseUrl: API_BASE,
     bearerToken: null,
     selectedFile: selected(),
     onSelect: (filename: string) => {
@@ -254,9 +255,10 @@ export function SkillsSurfaceView(props: ProjectProps): JSX.Element {
 
   async function loadList(): Promise<void> {
     try {
-      const res = await fetch(`/api/project/${encodeURIComponent(props.projectName)}/skills`, {
-        cache: "no-store",
-      });
+      const res = await fetch(
+        `${API_BASE}/api/project/${encodeURIComponent(props.projectName)}/skills`,
+        { cache: "no-store" },
+      );
       if (!res.ok) return;
       const json = (await res.json()) as { skills?: SkillSummary[] };
       if (json.skills) setSkills(json.skills);
