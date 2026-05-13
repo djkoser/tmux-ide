@@ -266,6 +266,17 @@ export interface ChatMountOptions {
    */
   onProviderChange?: (next: AgentProvider) => void;
   /**
+   * Fired when the header's Delete button is clicked. The host owns
+   * the actual delete dispatch (DELETE /api/threads/:id +
+   * thread-list reconciliation) plus any destructive-action confirm
+   * prompt. Receives the active thread id so the host doesn't have
+   * to track it separately. Omit to hide the Delete affordance —
+   * chat-solid's header only renders the button when this is
+   * provided. The rail-side per-thread delete (ThreadListRail) is
+   * an independent surface and stays wired regardless.
+   */
+  onDelete?: (threadId: string) => void;
+  /**
    * Host-supplied banners that surface in the `ComposerBannerStack`
    * alongside the chat surface's own banners (plan follow-up, future
    * approval verdicts, etc). Use this for project-scoped warnings the

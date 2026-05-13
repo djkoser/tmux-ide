@@ -17,6 +17,10 @@ interface ChatHeaderProps {
   onCancel(): void;
   onRename(title: string): Promise<void>;
   onClose?: () => void;
+  /** Fires when the Delete button is clicked. Host owns the
+   *  destructive-action confirm and the daemon dispatch — see
+   *  ChatMountOptions.onDelete for the contract. */
+  onDelete?: () => void;
 }
 
 export function ChatHeader(props: ChatHeaderProps) {
@@ -98,9 +102,24 @@ export function ChatHeader(props: ChatHeaderProps) {
           Stop
         </button>
       </Show>
+      <Show when={props.onDelete}>
+        {(onDelete) => (
+          <button
+            data-testid="chat-header-delete"
+            class="h-7 cursor-pointer rounded-md border border-border bg-surface px-2 text-[12px] text-fg-secondary hover:border-red/60 hover:text-red"
+            type="button"
+            onClick={onDelete()}
+            title="Delete this thread"
+            aria-label="Delete thread"
+          >
+            Delete
+          </button>
+        )}
+      </Show>
       <Show when={props.onClose}>
         {(onClose) => (
           <button
+            data-testid="chat-header-close"
             class="h-7 cursor-pointer rounded-md border border-border bg-surface px-2 text-[12px] text-fg-secondary hover:border-accent hover:text-accent"
             type="button"
             onClick={onClose()}

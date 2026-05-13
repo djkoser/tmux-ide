@@ -50,6 +50,15 @@ export interface ChatV2RootProps {
    * header only renders the button when this is provided.
    */
   onClose?: () => void;
+  /**
+   * Fired when the chat header's Delete button is clicked. Host
+   * owns the daemon dispatch (DELETE /api/threads/:id), the
+   * thread-list reconciliation, AND any destructive-action confirm
+   * prompt. Receives the active thread id. Omit to hide the Delete
+   * affordance. The rail-side per-thread × stays wired independently
+   * via `onDeleteThread`.
+   */
+  onDelete?: (threadId: string) => void;
 }
 
 export function ChatV2Root(props: ChatV2RootProps) {
@@ -85,6 +94,7 @@ export function ChatV2Root(props: ChatV2RootProps) {
         mentionCandidates={props.mentionCandidates}
         onOpenFile={props.onOpenFile}
         onClose={props.onClose}
+        onDelete={props.onDelete}
       />
     </div>
   );

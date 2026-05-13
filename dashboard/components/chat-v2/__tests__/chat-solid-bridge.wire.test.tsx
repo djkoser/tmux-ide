@@ -42,6 +42,7 @@ interface ChatCaptured {
   onProviderChange?: (next: string) => Promise<void> | void;
   onOpenFile?: (meta: { href: string }) => void;
   onClose?: () => void;
+  onDelete?: (threadId: string) => void;
 }
 
 beforeEach(() => {
@@ -132,5 +133,28 @@ describe("ChatSolidBridge — wire", () => {
     // the host doesn't provide one, which cleanly suppresses the
     // Close affordance in chat-solid's header.
     expect(opts.onClose).toBeUndefined();
+  });
+
+  it("forwards onDelete with the active thread id to the host (W8)", async () => {
+    mockFetchOk();
+    const onDelete = vi.fn();
+    render(
+      <ChatSolidBridge
+        threadId="t1"
+        sessionName="proj"
+        onDelete={onDelete}
+      />,
+    );
+    const opts = await waitForCapture<ChatCaptured>("ChatSolid");
+    expect(typeof opts.onDelete).toBe("function");
+    opts.onDelete!("t1");
+    expect(onDelete).toHaveBeenCalledExactlyOnceWith("t1");
+  });
+
+  it("omits onDelete from mount opts when the host doesn't provide one (W8)", async () => {
+    mockFetchOk();
+    render(<ChatSolidBridge threadId="t1" sessionName="proj" />);
+    const opts = await waitForCapture<ChatCaptured>("ChatSolid");
+    expect(opts.onDelete).toBeUndefined();
   });
 });

@@ -100,6 +100,15 @@ export function ChatThreadView(props: { options: Accessor<ChatMountOptions> }) {
             onCancel={() => void chat.cancel()}
             onRename={chat.rename}
             onClose={props.options().onClose}
+            onDelete={
+              props.options().onDelete
+                ? () => {
+                    const id = chat.thread()?.id;
+                    if (!id) return;
+                    props.options().onDelete?.(id);
+                  }
+                : undefined
+            }
           />
           <ProviderStatusBanner
             runtime={runtime}

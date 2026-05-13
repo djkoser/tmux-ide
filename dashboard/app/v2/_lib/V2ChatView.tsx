@@ -191,6 +191,22 @@ export function V2ChatView({ projectName }: V2ChatViewProps) {
         onNewThread={handleNewThread}
         onDeleteThread={handleDelete}
         onClose={() => setActiveThreadId(null)}
+        onDelete={(threadId) => {
+          // The header Delete is more conspicuous than the rail
+          // hover-× and lives adjacent to Close — gate it behind a
+          // confirm so a misclick doesn't trash a thread mid-turn.
+          // The rail-side × stays confirm-free; it's a discoverable,
+          // low-traffic gesture and adding a prompt there is a
+          // separate UX decision.
+          const target = threads.find((t) => t.id === threadId);
+          const label = target?.title?.trim() || "this thread";
+          if (typeof window !== "undefined" && typeof window.confirm === "function") {
+            if (!window.confirm(`Delete "${label}"? This cannot be undone.`)) {
+              return;
+            }
+          }
+          void handleDelete(threadId);
+        }}
         onSend={(threadId, text) => {
           const trimmed = text.trim();
           if (!trimmed) return;

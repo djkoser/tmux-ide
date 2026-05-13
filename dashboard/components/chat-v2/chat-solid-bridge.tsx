@@ -48,6 +48,12 @@ interface ChatSolidBridgeProps {
    *  Close affordance entirely (chat-solid's ChatHeader only renders
    *  the button when `onClose` is truthy). */
   onClose?: () => void;
+  /** Fired when the chat header's Delete button is clicked. Host
+   *  owns the actual DELETE /api/threads/:id dispatch + any
+   *  destructive-action confirm prompt + thread-list reconciliation.
+   *  Receives the active thread id from chat-solid. Omit to hide the
+   *  Delete affordance entirely. */
+  onDelete?: (threadId: string) => void;
 }
 
 export function ChatSolidBridge({
@@ -56,6 +62,7 @@ export function ChatSolidBridge({
   mentionCandidates,
   onOpenFile,
   onClose,
+  onDelete,
 }: ChatSolidBridgeProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const handleRef = useRef<ChatHandle | null>(null);
@@ -67,6 +74,8 @@ export function ChatSolidBridge({
   onOpenFileRef.current = onOpenFile;
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const onDeleteRef = useRef(onDelete);
+  onDeleteRef.current = onDelete;
 
   const mentionCandidatesMemo = useMemo<ReadonlyArray<MentionCandidate>>(
     () => mentionCandidates ?? [],
@@ -137,12 +146,15 @@ export function ChatSolidBridge({
         onProviderChange,
         // Ref-indirect when the host provided a handler at mount,
         // strictly undefined otherwise. chat-solid's ChatHeader only
-        // renders the Close affordance when `onClose` is truthy, so
-        // suppressing it requires omitting (not just stubbing) the
-        // field. Hosts that swap the handler mid-mount get the
-        // freshest closure for free; hosts that need to hide the
-        // button after mount must remount (rare; not a feature).
+        // renders the Close / Delete affordances when their handler
+        // is truthy, so suppressing them requires omitting (not just
+        // stubbing) the field. Hosts that swap a handler mid-mount
+        // get the freshest closure for free; hosts that need to hide
+        // a button after mount must remount (rare; not a feature).
         ...(onClose ? { onClose: () => onCloseRef.current?.() } : {}),
+        ...(onDelete
+          ? { onDelete: (id: string) => onDeleteRef.current?.(id) }
+          : {}),
       };
       handleRef.current = chatSolid.mount(el, opts);
     })();
