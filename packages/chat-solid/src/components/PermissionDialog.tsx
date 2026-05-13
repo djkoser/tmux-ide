@@ -11,12 +11,49 @@ import type { PermissionOption, PermissionRequest, ToolCallContent } from "../ty
 
 const AUTO_REJECT_MS = 60_000;
 
+/**
+ * Button variant per daemon option kind. Replaces the binary
+ * allow/reject treatment so the four-state vocabulary the daemon
+ * already emits (allow_once / allow_always / reject_once /
+ * reject_always) reads as four distinct decisions rather than
+ * "green vs red". Approve-once is the typical action and gets the
+ * primary slot; reject_always is the strong commit and gets the
+ * destructive treatment.
+ *
+ * Single source of truth for the four-button verdict cluster — the
+ * standalone `ComposerPendingApprovalPanel` shape was retired in
+ * favor of feeding everything through this dialog (audit §W6).
+ */
+type OptionVariant = "primary" | "allow-outline" | "reject-outline" | "destructive";
+
+function variantFor(option: PermissionOption): OptionVariant {
+  switch (option.kind) {
+    case "allow_once":
+      return "primary";
+    case "allow_always":
+      return "allow-outline";
+    case "reject_once":
+      return "reject-outline";
+    case "reject_always":
+      return "destructive";
+  }
+}
+
+const VARIANT_CLASS: Record<OptionVariant, string> = {
+  primary:
+    "border-transparent bg-green text-bg hover:opacity-90",
+  "allow-outline":
+    "border-green/40 text-green hover:bg-green/10",
+  "reject-outline":
+    "border-red/40 text-red hover:bg-red/10",
+  destructive:
+    "border-transparent bg-red text-bg hover:opacity-90",
+};
+
 function optionClass(option: PermissionOption): string {
   const base =
     "h-9 rounded-md border px-3 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50";
-  return option.kind.startsWith("allow")
-    ? `${base} border-green/40 text-green hover:bg-green/10`
-    : `${base} border-red/40 text-red hover:bg-red/10`;
+  return `${base} ${VARIANT_CLASS[variantFor(option)]}`;
 }
 
 function fallbackRejectOption(options: PermissionOption[]): PermissionOption | null {
@@ -177,6 +214,7 @@ export function PermissionDialog(props: {
                     class={optionClass(option)}
                     data-option-id={option.optionId}
                     data-option-kind={option.kind}
+                    data-variant={variantFor(option)}
                     disabled={Boolean(submittingOptionId())}
                     onClick={() => void respond(option.optionId)}
                   >
