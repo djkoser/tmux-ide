@@ -17,7 +17,7 @@ import { Badge, Card, RowSpaceBetween } from "@/components/v2-primitives";
 import { usePolling } from "@/lib/usePolling";
 import { useToasts } from "@/lib/useToasts";
 import { AuthorshipBar } from "@/components/AuthorshipBar";
-import { MarkdownEditor } from "@/components/MarkdownEditor";
+import { MarkdownEditor } from "@/components/plans/MarkdownEditor";
 import { PlansPanelBridge } from "@/components/plans-panel-bridge";
 import type { Task } from "@/lib/types";
 
