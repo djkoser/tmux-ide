@@ -18,6 +18,9 @@ export type { PoolEntry, MonacoPoolOptions } from "./pool";
 export { codeEditorPool } from "./code-pool";
 export type { CodePoolEntry } from "./code-pool";
 
+export { diffEditorPool } from "./diff-pool";
+export type { DiffPoolEntry } from "./diff-pool";
+
 export {
   modelRegistry,
   MonacoModelRegistry,

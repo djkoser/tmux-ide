@@ -1209,3 +1209,84 @@ describe("GET /api/project/:name/turn-diffs/*", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("GET /api/project/:name/git/file", () => {
+  it("returns 400 when ?path= is missing", async () => {
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/git/file");
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Missing ?path=" });
+  });
+
+  it("rejects absolute paths", async () => {
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/git/file?path=/etc/passwd");
+    expect(res.status).toBe(403);
+  });
+
+  it("rejects paths with `..` segments", async () => {
+    const app = createApp();
+    const res = await app.request(
+      "/api/project/test-project/git/file?path=../escape.ts",
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("rejects malformed refs", async () => {
+    const app = createApp();
+    const res = await app.request(
+      "/api/project/test-project/git/file?path=src/x.ts&ref=$(rm%20-rf)",
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Invalid ref" });
+  });
+
+  it("returns 404 for an unknown session", async () => {
+    const app = createApp();
+    const res = await app.request(
+      "/api/project/no-such-session/git/file?path=src/x.ts",
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("falls through to exists=false when the file isn't tracked at the ref", async () => {
+    // Tmp dir created by beforeEach isn't a git repo — `git show
+    // HEAD:src/x.ts` fails. The endpoint catches that and returns
+    // a 200 envelope with exists:false rather than 500.
+    const app = createApp();
+    const res = await app.request(
+      "/api/project/test-project/git/file?path=src/x.ts&ref=HEAD",
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      path: string;
+      ref: string;
+      exists: boolean;
+      content: string;
+    };
+    expect(body.path).toBe("src/x.ts");
+    expect(body.ref).toBe("HEAD");
+    expect(body.exists).toBe(false);
+    expect(body.content).toBe("");
+  });
+
+  it("WORKING ref reads the file from the working tree", async () => {
+    // tmpDir is a real directory created by beforeEach. Drop a file
+    // in there and ask the endpoint for its WORKING content.
+    writeFileSync(join(tmpDir, "scratch.txt"), "hello working tree");
+    const app = createApp();
+    const res = await app.request(
+      "/api/project/test-project/git/file?path=scratch.txt&ref=WORKING",
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      path: string;
+      ref: string;
+      exists: boolean;
+      content: string;
+    };
+    expect(body.ref).toBe("WORKING");
+    expect(body.exists).toBe(true);
+    expect(body.content).toBe("hello working tree");
+  });
+});

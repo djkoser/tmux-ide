@@ -33,7 +33,7 @@
 import { createStore, type SetStoreFunction } from "solid-js/store";
 import { Effect, Data } from "effect";
 import type * as monaco from "monaco-editor";
-import { fetchFilePreview, ApiError } from "@/lib/api";
+import { fetchFilePreview, fetchGitFile, ApiError, type GitRef } from "@/lib/api";
 import { buildMonacoModelPath, toDiskUri, toGitUri } from "./model-path";
 import { getMonacoFromGlobal } from "./pool";
 
@@ -296,12 +296,126 @@ export class MonacoModelRegistry {
   }
 
   /**
+   * Register (or increment refcount on) a `git://...` model — the
+   * read-only snapshot of `filePath` at `ref`. Same lifecycle as
+   * `registerDisk`: ref-counted, in-flight-dedup'd, status-tracked.
+   *
+   * Returns the git URI string (not the buffer URI) — diff editors
+   * pin the original side to this URI directly.
+   */
+  registerGit(input: {
+    sessionName: string;
+    rootPath: string;
+    filePath: string;
+    language: string;
+    ref?: GitRef;
+  }): Effect.Effect<string, ModelRegistryError> {
+    const ref = input.ref ?? "HEAD";
+    return Effect.tryPromise({
+      try: () =>
+        this.registerGitAsync(
+          input.sessionName,
+          input.rootPath,
+          input.filePath,
+          input.language,
+          ref,
+        ),
+      catch: (cause) => {
+        const bufferUri = buildMonacoModelPath(input.rootPath, input.filePath);
+        return cause instanceof ModelRegistryError
+          ? cause
+          : new ModelRegistryError({
+              uri: toGitUri(bufferUri, String(ref)),
+              stage: "create-model",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            });
+      },
+    });
+  }
+
+  private async registerGitAsync(
+    sessionName: string,
+    rootPath: string,
+    filePath: string,
+    language: string,
+    ref: GitRef,
+  ): Promise<string> {
+    const bufferUri = buildMonacoModelPath(rootPath, filePath);
+    const gitUri = toGitUri(bufferUri, String(ref));
+
+    // Fast path: already registered at this exact ref.
+    const existing = this.modelMap.get(gitUri);
+    if (existing?.type === "git" && existing.ref === ref) {
+      existing.refs += 1;
+      const timer = this.evictionTimers.get(gitUri);
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        this.evictionTimers.delete(gitUri);
+      }
+      return gitUri;
+    }
+
+    this.setState("modelStatus", gitUri, "loading");
+
+    let content: string;
+    let m: typeof monaco;
+    try {
+      const fetchKey = `${sessionName}:${filePath}:git:${ref}`;
+      [content, m] = await Promise.all([
+        this.dedupFetch(fetchKey, () =>
+          Effect.runPromise(fetchGitFile(sessionName, filePath, ref)).then((result) => {
+            // Missing-at-ref is NOT an error — the side just renders
+            // empty (added since / never tracked / deleted). Return
+            // empty content so the diff editor still mounts.
+            return result.exists ? result.content : "";
+          }),
+        ),
+        this.waitForMonaco(),
+      ]);
+    } catch (err) {
+      this.setState("modelStatus", gitUri, "error");
+      if (err instanceof ModelRegistryError) throw err;
+      if (err instanceof ApiError) {
+        throw new ModelRegistryError({
+          uri: gitUri,
+          stage: "fetch",
+          message: err.message,
+          cause: err,
+        });
+      }
+      throw err;
+    }
+
+    const monacoUri = m.Uri.parse(gitUri);
+    let model = m.editor.getModel(monacoUri);
+    if (!model) model = m.editor.createModel(content, language, monacoUri);
+    const entry: GitModelEntry = {
+      type: "git",
+      model,
+      refs: 1,
+      sessionName,
+      filePath,
+      language,
+      ref: String(ref),
+    };
+    this.modelMap.set(gitUri, entry);
+    this.setState("modelStatus", gitUri, "ready");
+    return gitUri;
+  }
+
+  /**
    * Decrement the ref count on a URI. When refs reach 0, schedule a
    * 60s eviction timer; re-registering within that window cancels it.
+   *
+   * Resolves the buffer / disk / git scheme variants of the same
+   * file body so callers can pass any of them.
    */
   unregisterModel(uri: string): void {
-    // The buffer URI is the canonical handle; consumers may pass any
-    // of the three schemes. Resolve to the actual map key.
+    // Direct hit first (exact URI was passed in); otherwise expand to
+    // the buffer + disk-URI pair (git URIs are scheme-specific and
+    // never collapse into the buffer URI, so they only resolve
+    // directly).
     const candidates = [uri, toDiskUri(uri)];
     for (const key of candidates) {
       const entry = this.modelMap.get(key);

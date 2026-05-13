@@ -177,6 +177,40 @@ export function fetchFilePreview(
 }
 
 // ---------------------------------------------------------------------
+// Git file content — used by the Monaco model registry to populate
+// the `git://...` side of a StickyDiffEditor. Refs:
+//   HEAD     — current branch tip
+//   STAGED   — git index (the `:path` form)
+//   WORKING  — working-tree mirror (the same content the disk:// URI
+//              shows, but reachable via the same endpoint so callers
+//              don't have to swap routes between the three sides)
+//   <sha> / <branch>  — arbitrary ref (`origin/main`, a short SHA, etc.)
+// ---------------------------------------------------------------------
+
+export type GitRef = "HEAD" | "STAGED" | "WORKING" | (string & {});
+
+export interface GitFileContent {
+  path: string;
+  ref: string;
+  exists: boolean;
+  content: string;
+}
+
+export function fetchGitFile(
+  sessionName: string,
+  filePath: string,
+  ref: GitRef = "HEAD",
+): Effect.Effect<GitFileContent, ApiError> {
+  const normalized = filePath.replace(/^\/+/g, "");
+  const params = new URLSearchParams();
+  params.set("path", normalized);
+  params.set("ref", ref);
+  return request<GitFileContent>(
+    `/api/project/${encodeURIComponent(sessionName)}/git/file?${params.toString()}`,
+  );
+}
+
+// ---------------------------------------------------------------------
 // Widget spawn — used by /v2/widget/[name] to ask the daemon where the
 // widget binary lives + how to invoke it, then drive a Terminal via the
 // same WS protocol the tmux panes use.
