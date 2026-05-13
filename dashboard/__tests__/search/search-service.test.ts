@@ -12,7 +12,10 @@ import { createRoot } from "solid-js";
 import { createStore } from "solid-js/store";
 import {
   consumeNdjson,
+  iterateMatches,
   segmentLine,
+  stepMatch,
+  type FlatMatch,
   type SearchFrame,
   type SearchState,
 } from "@/lib/search";
@@ -70,6 +73,98 @@ describe("segmentLine", () => {
       { kind: "match", text: "a" },
       { kind: "plain", text: "bc" },
     ]);
+  });
+});
+
+describe("iterateMatches", () => {
+  function fixtureState(): SearchState {
+    return {
+      status: "done",
+      fileOrder: ["a.ts", "b.ts"],
+      summary: null,
+      error: null,
+      byFile: {
+        "a.ts": {
+          path: "a.ts",
+          expanded: true,
+          snapshotMs: 0,
+          contextByLine: {},
+          matches: [
+            { line: 1, text: "first", submatches: [{ start: 0, end: 5 }] },
+            {
+              line: 2,
+              text: "second",
+              submatches: [
+                { start: 1, end: 3 },
+                { start: 4, end: 6 },
+              ],
+            },
+          ],
+        },
+        "b.ts": {
+          path: "b.ts",
+          expanded: true,
+          snapshotMs: 0,
+          contextByLine: {},
+          matches: [
+            { line: 10, text: "tenth", submatches: [{ start: 2, end: 4 }] },
+          ],
+        },
+      },
+    };
+  }
+
+  it("flattens file order × match order with per-line first-submatch column", () => {
+    const flat = iterateMatches(fixtureState());
+    expect(
+      flat.map((m) => ({ path: m.path, line: m.line, column: m.column, length: m.length })),
+    ).toEqual([
+      { path: "a.ts", line: 1, column: 0, length: 5 },
+      { path: "a.ts", line: 2, column: 1, length: 2 },
+      { path: "b.ts", line: 10, column: 2, length: 2 },
+    ]);
+  });
+
+  it("emits a stable id per match", () => {
+    const flat = iterateMatches(fixtureState());
+    expect(new Set(flat.map((m) => m.id)).size).toBe(flat.length);
+    expect(flat[0]!.id).toBe("a.ts:1:0");
+  });
+});
+
+describe("stepMatch", () => {
+  const flat: FlatMatch[] = [
+    { path: "a", line: 1, column: 0, length: 1, fileIndex: 0, matchIndex: 0, id: "a:1:0" },
+    { path: "a", line: 2, column: 0, length: 1, fileIndex: 0, matchIndex: 1, id: "a:2:0" },
+    { path: "b", line: 5, column: 0, length: 1, fileIndex: 1, matchIndex: 0, id: "b:5:0" },
+  ];
+
+  it("returns the first match when no current id (direction=next)", () => {
+    expect(stepMatch(flat, null, "next")?.id).toBe("a:1:0");
+  });
+
+  it("returns the last match when no current id (direction=prev)", () => {
+    expect(stepMatch(flat, null, "prev")?.id).toBe("b:5:0");
+  });
+
+  it("advances forward + wraps around at the end", () => {
+    expect(stepMatch(flat, "a:1:0", "next")?.id).toBe("a:2:0");
+    expect(stepMatch(flat, "a:2:0", "next")?.id).toBe("b:5:0");
+    expect(stepMatch(flat, "b:5:0", "next")?.id).toBe("a:1:0");
+  });
+
+  it("advances backward + wraps around at the start", () => {
+    expect(stepMatch(flat, "a:2:0", "prev")?.id).toBe("a:1:0");
+    expect(stepMatch(flat, "a:1:0", "prev")?.id).toBe("b:5:0");
+  });
+
+  it("falls back to first/last when the current id has fallen out of the list", () => {
+    expect(stepMatch(flat, "gone:0:0", "next")?.id).toBe("a:1:0");
+    expect(stepMatch(flat, "gone:0:0", "prev")?.id).toBe("b:5:0");
+  });
+
+  it("returns null on an empty list", () => {
+    expect(stepMatch([], null, "next")).toBeNull();
   });
 });
 

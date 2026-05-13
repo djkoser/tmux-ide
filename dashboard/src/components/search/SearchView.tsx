@@ -40,17 +40,55 @@ import {
   X,
 } from "lucide-solid";
 import {
+  iterateMatches,
   makeSearchService,
   segmentLine,
+  stepMatch,
   type FileMatch,
+  type FlatMatch,
   type ReplaceResult,
   type SearchService,
 } from "@/lib/search";
+import { openFileAt } from "@/lib/editorOpen";
 
 const SEARCH_DEBOUNCE_MS = 250;
 
 interface SearchViewProps {
   projectName: string;
+  /**
+   * Workspace root used to build the Monaco buffer URI when a match
+   * is clicked. Defaults to "/" — matches `FilesSurface`'s default
+   * so the URIs collide on the same file.
+   */
+  modelRootPath?: string;
+}
+
+const LANGUAGE_BY_EXT: Record<string, string> = {
+  ts: "typescript",
+  tsx: "typescript",
+  js: "javascript",
+  jsx: "javascript",
+  json: "json",
+  md: "markdown",
+  mdx: "markdown",
+  css: "css",
+  scss: "scss",
+  html: "html",
+  yaml: "yaml",
+  yml: "yaml",
+  toml: "ini",
+  sh: "shell",
+  py: "python",
+  go: "go",
+  rs: "rust",
+  java: "java",
+  rb: "ruby",
+  sql: "sql",
+};
+
+function languageFor(filePath: string): string {
+  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+  return LANGUAGE_BY_EXT[ext] ?? "plaintext";
 }
 
 export function SearchView(props: SearchViewProps): JSX.Element {
@@ -60,9 +98,13 @@ export function SearchView(props: SearchViewProps): JSX.Element {
   const [confirmAcrossFiles, setConfirmAcrossFiles] = createSignal(false);
   const [pendingReplace, setPendingReplace] = createSignal<ReplaceResult | null>(null);
   const [replaceError, setReplaceError] = createSignal<string | null>(null);
+  // Active match id for F3 / Shift+F3 navigation. The clicked row +
+  // the row F3 lands on share the same selection visual.
+  const [activeMatchId, setActiveMatchId] = createSignal<string | null>(null);
   const navigate = useNavigate();
 
   service = makeSearchService(props.projectName);
+  const rootPath = (): string => props.modelRootPath ?? "/";
 
   let debounceHandle: ReturnType<typeof setTimeout> | null = null;
   function scheduleRun(): void {
@@ -75,11 +117,25 @@ export function SearchView(props: SearchViewProps): JSX.Element {
 
   onMount(() => {
     queryInputRef?.focus();
+    window.addEventListener("keydown", onGlobalKey, true);
   });
   onCleanup(() => {
     if (debounceHandle) clearTimeout(debounceHandle);
     service.cancel();
+    window.removeEventListener("keydown", onGlobalKey, true);
   });
+
+  // F3 / Shift+F3 — step through matches across files (panel-wide,
+  // VS Code-style "Go to next match"). Wrap-around at both ends.
+  function onGlobalKey(event: KeyboardEvent): void {
+    if (event.key !== "F3") return;
+    const flat = iterateMatches(service.state);
+    if (flat.length === 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const next = stepMatch(flat, activeMatchId(), event.shiftKey ? "prev" : "next");
+    if (next) jumpToMatch(next);
+  }
 
   const totals = createMemo(() => {
     const summary = service.state.summary;
@@ -98,12 +154,47 @@ export function SearchView(props: SearchViewProps): JSX.Element {
     scheduleRun();
   }
 
-  function openFile(path: string, line: number): void {
+  /**
+   * Click handler for a single match row. Three coordinated steps:
+   *   1. Activate the match id so F3 keeps stepping from here.
+   *   2. Drive `openFileAt` — opens (or focuses) the buffer + queues
+   *      a pending-reveal request the editor consumes on attach
+   *      (G19-P3 / pane 1 G17-P6).
+   *   3. Switch the view to `files` via URL nav so the editor pane
+   *      becomes the visible surface.
+   */
+  function openMatch(path: string, line: number, column = 0, length = 0): void {
+    setActiveMatchId(`${path}:${line}:${column}`);
+    openFileAt({
+      sessionName: props.projectName,
+      rootPath: rootPath(),
+      filePath: path,
+      language: languageFor(path),
+      line,
+      column,
+      length,
+    });
     const search = new URLSearchParams();
     search.set("view", "files");
     search.set("path", path);
     search.set("line", String(line));
     navigate(`/v2/project/${encodeURIComponent(props.projectName)}?${search.toString()}`);
+  }
+
+  /**
+   * F3 step target. Selects the row visually + opens the file at
+   * line via `openMatch`. Pulls cursor + selection range straight
+   * from the FlatMatch so the same column/length the editor reveals
+   * matches the panel's highlighted submatch.
+   */
+  function jumpToMatch(target: FlatMatch): void {
+    setActiveMatchId(target.id);
+    openMatch(target.path, target.line, target.column, target.length);
+  }
+
+  /** Click handler for a context line — just open the file there. */
+  function openContextLine(path: string, line: number): void {
+    openMatch(path, line, 0, 0);
   }
 
   function buildReplaceFilesPayload(targetPaths: string[]) {
@@ -335,8 +426,12 @@ export function SearchView(props: SearchViewProps): JSX.Element {
               {(file) => (
                 <FileGroup
                   file={file()}
+                  activeMatchId={activeMatchId()}
                   onToggle={() => service.toggleFile(path)}
-                  onOpenMatch={(line) => openFile(path, line)}
+                  onOpenMatch={(line, column, length) =>
+                    openMatch(path, line, column, length)
+                  }
+                  onOpenContext={(line) => openContextLine(path, line)}
                   replaceVisible={replaceOpen()}
                   replaceDisabled={service.replaceWith().length === 0}
                   onReplaceFile={() => void replacePaths([path])}
@@ -379,8 +474,13 @@ export function SearchView(props: SearchViewProps): JSX.Element {
 
 interface FileGroupProps {
   file: FileMatch;
+  /** Currently F3-selected match id (or null). The matching row
+   *  picks up an `aria-current="true"` + accent ring so keyboard
+   *  navigation has a visible anchor. */
+  activeMatchId: string | null;
   onToggle: () => void;
-  onOpenMatch: (line: number) => void;
+  onOpenMatch: (line: number, column: number, length: number) => void;
+  onOpenContext: (line: number) => void;
   replaceVisible: boolean;
   replaceDisabled: boolean;
   onReplaceFile: () => void;
@@ -451,7 +551,7 @@ function FileGroup(props: FileGroupProps): JSX.Element {
                       <button
                         type="button"
                         class="block w-full px-3 py-0.5 text-left text-[var(--dim)] hover:bg-[var(--surface-hover,var(--bg-strong))]"
-                        onClick={() => props.onOpenMatch(ctxLine)}
+                        onClick={() => props.onOpenContext(ctxLine)}
                       >
                         <span class="mr-3 inline-block w-8 text-right tabular-nums">
                           {ctxLine}
@@ -461,38 +561,63 @@ function FileGroup(props: FileGroupProps): JSX.Element {
                     </Show>
                   )}
                 </For>
-                <button
-                  type="button"
-                  data-testid="search-match-row"
-                  data-line={match.line}
-                  class="block w-full px-3 py-0.5 text-left hover:bg-[var(--surface-hover,var(--bg-strong))]"
-                  onClick={() => props.onOpenMatch(match.line)}
-                >
-                  <span class="mr-3 inline-block w-8 text-right tabular-nums text-[var(--dim)]">
-                    {match.line}
-                  </span>
-                  <For each={segmentLine(match.text, match.submatches)}>
-                    {(seg) =>
-                      seg.kind === "match" ? (
-                        <mark
-                          data-testid="search-match-highlight"
-                          class="rounded bg-[color-mix(in_oklab,var(--accent)_25%,transparent)] px-0.5 text-[var(--fg)]"
-                        >
-                          {seg.text}
-                        </mark>
-                      ) : (
-                        <span>{seg.text}</span>
-                      )
-                    }
-                  </For>
-                </button>
+                {(() => {
+                  const first = match.submatches[0];
+                  const col = first?.start ?? 0;
+                  const len = first ? first.end - first.start : 0;
+                  const matchId = `${props.file.path}:${match.line}:${col}`;
+                  const isActive = props.activeMatchId === matchId;
+                  return (
+                    <button
+                      type="button"
+                      data-testid="search-match-row"
+                      data-line={match.line}
+                      data-match-id={matchId}
+                      ref={(el) => {
+                        // Scroll the active match into view when F3
+                        // moves to it (or any other reactive change
+                        // that flips this row's active state).
+                        if (isActive && el) {
+                          queueMicrotask(() =>
+                            el.scrollIntoView({ block: "nearest", inline: "nearest" }),
+                          );
+                        }
+                      }}
+                      aria-current={isActive ? "true" : undefined}
+                      class={`block w-full px-3 py-0.5 text-left hover:bg-[var(--surface-hover,var(--bg-strong))] ${
+                        isActive
+                          ? "bg-[color-mix(in_oklab,var(--accent)_18%,transparent)] outline outline-1 outline-[var(--accent)]"
+                          : ""
+                      }`}
+                      onClick={() => props.onOpenMatch(match.line, col, len)}
+                    >
+                      <span class="mr-3 inline-block w-8 text-right tabular-nums text-[var(--dim)]">
+                        {match.line}
+                      </span>
+                      <For each={segmentLine(match.text, match.submatches)}>
+                        {(seg) =>
+                          seg.kind === "match" ? (
+                            <mark
+                              data-testid="search-match-highlight"
+                              class="rounded bg-[color-mix(in_oklab,var(--accent)_25%,transparent)] px-0.5 text-[var(--fg)]"
+                            >
+                              {seg.text}
+                            </mark>
+                          ) : (
+                            <span>{seg.text}</span>
+                          )
+                        }
+                      </For>
+                    </button>
+                  );
+                })()}
                 <For each={contextLinesForMatch(match.line, 3)}>
                   {(ctxLine) => (
                     <Show when={ctxLine > match.line}>
                       <button
                         type="button"
                         class="block w-full px-3 py-0.5 text-left text-[var(--dim)] hover:bg-[var(--surface-hover,var(--bg-strong))]"
-                        onClick={() => props.onOpenMatch(ctxLine)}
+                        onClick={() => props.onOpenContext(ctxLine)}
                       >
                         <span class="mr-3 inline-block w-8 text-right tabular-nums">
                           {ctxLine}

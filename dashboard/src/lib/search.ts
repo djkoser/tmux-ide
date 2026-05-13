@@ -394,6 +394,80 @@ function applyLine(line: string, setState: SetStoreFunction<SearchState>): void 
 }
 
 // ---------------------------------------------------------------------
+// iterateMatches — flatten the result store for F3 / next-match nav.
+// ---------------------------------------------------------------------
+
+export interface FlatMatch {
+  path: string;
+  line: number;
+  /** 0-based column of the FIRST submatch on this line — the one
+   *  Monaco's cursor lands at. */
+  column: number;
+  /** Length of the first submatch — used to build `setSelection`. */
+  length: number;
+  fileIndex: number;
+  matchIndex: number;
+  /** Stable id so the panel can highlight the current row regardless
+   *  of list re-renders. */
+  id: string;
+}
+
+/**
+ * Flatten the search state into a linear array of `{path, line, …}`
+ * tuples in display order (file order × match order within file).
+ * Used by F3 / Shift+F3 to step through matches one at a time.
+ *
+ * Pure — pinned by unit tests. Each tuple keeps fileIndex +
+ * matchIndex so callers can locate the source row.
+ */
+export function iterateMatches(state: SearchState): FlatMatch[] {
+  const out: FlatMatch[] = [];
+  state.fileOrder.forEach((path, fileIndex) => {
+    const file = state.byFile[path];
+    if (!file) return;
+    file.matches.forEach((match, matchIndex) => {
+      const first = match.submatches[0];
+      out.push({
+        path,
+        line: match.line,
+        column: first?.start ?? 0,
+        length: first ? first.end - first.start : 0,
+        fileIndex,
+        matchIndex,
+        id: `${path}:${match.line}:${first?.start ?? 0}`,
+      });
+    });
+  });
+  return out;
+}
+
+/**
+ * Step from `currentId` to the next match in the flattened list.
+ * Wraps around at the ends; returns the first match when no current
+ * id is provided (next) or the last (prev).
+ *
+ * Pure — pinned by unit tests.
+ */
+export function stepMatch(
+  matches: FlatMatch[],
+  currentId: string | null,
+  direction: "next" | "prev",
+): FlatMatch | null {
+  if (matches.length === 0) return null;
+  if (!currentId) {
+    return direction === "next" ? matches[0]! : matches[matches.length - 1]!;
+  }
+  const idx = matches.findIndex((m) => m.id === currentId);
+  if (idx === -1) {
+    return direction === "next" ? matches[0]! : matches[matches.length - 1]!;
+  }
+  if (direction === "next") {
+    return matches[(idx + 1) % matches.length]!;
+  }
+  return matches[(idx - 1 + matches.length) % matches.length]!;
+}
+
+// ---------------------------------------------------------------------
 // Pure helpers — used by the UI to render highlighted spans.
 // ---------------------------------------------------------------------
 
