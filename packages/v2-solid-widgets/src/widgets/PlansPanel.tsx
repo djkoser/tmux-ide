@@ -208,6 +208,36 @@ export function PlansPanelView(props: PlansPanelViewProps) {
                 [edit]
               </button>
             </Show>
+            <Show when={props.options().onDelete}>
+              <button
+                type="button"
+                data-testid="plans-panel-delete"
+                onClick={() => {
+                  // Destructive action — confirm before firing.
+                  // The host issues the actual API call after this
+                  // callback returns; staying single-step (confirm
+                  // here, mutate there) keeps the destructive surface
+                  // in one place.
+                  const ok =
+                    typeof window === "undefined" ||
+                    window.confirm(
+                      `Delete plan "${p().title || p().name}"? This cannot be undone.`,
+                    );
+                  if (ok) props.options().onDelete?.();
+                }}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--red, var(--accent))",
+                  cursor: "pointer",
+                  "font-size": "11px",
+                  "font-family": "inherit",
+                  padding: "0",
+                }}
+              >
+                [delete]
+              </button>
+            </Show>
           </header>
         )}
       </Show>

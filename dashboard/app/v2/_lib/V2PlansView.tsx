@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Group, Panel } from "react-resizable-panels";
 import { VSeparator, HSeparator } from "./Separators";
 import {
+  deletePlan,
   fetchPlan,
   fetchPlans,
   markPlanDone,
@@ -122,8 +123,38 @@ export function V2PlansView({ sessionName, tasks }: V2PlansViewProps) {
 
   async function handleMarkDone() {
     if (!selectedPlan) return;
+    // Optimistic: flip the status pill immediately, refresh on response.
+    const previous = selectedPlan.status;
+    setSelectedPlan({ ...selectedPlan, status: "done" });
     const ok = await markPlanDone(sessionName, selectedPlan.name);
-    if (ok) refreshPlans();
+    if (!ok) {
+      // Rollback if the daemon rejected the mutation.
+      setSelectedPlan({ ...selectedPlan, status: previous });
+      push({ kind: "error", title: "Failed to mark plan done", body: selectedPlan.name });
+      return;
+    }
+    refreshPlans();
+  }
+
+  async function handleDelete() {
+    if (!selectedPlan) return;
+    const filename = selectedPlan.name;
+    // Clear selection optimistically so the panel doesn't keep
+    // rendering a plan we just asked the daemon to remove. The
+    // refresh below picks the next plan or falls back to "none".
+    const previous = selectedPlan;
+    setSelectedFile(null);
+    setSelectedPlan(null);
+    const ok = await deletePlan(sessionName, filename);
+    if (!ok) {
+      // Roll back the selection so the user can retry.
+      setSelectedFile(previous.name);
+      setSelectedPlan(previous);
+      push({ kind: "error", title: "Failed to delete plan", body: filename });
+      return;
+    }
+    push({ kind: "info", title: "Plan deleted", body: filename });
+    refreshPlans();
   }
 
   function handleConvert() {
@@ -280,7 +311,16 @@ export function V2PlansView({ sessionName, tasks }: V2PlansViewProps) {
                     data-testid="v2-plans-markdown"
                     className="flex h-full min-h-0 flex-col overflow-hidden"
                   >
-                    <PlansPanelBridge plan={selectedPlan} planData={planData} />
+                    <PlansPanelBridge
+                      plan={selectedPlan}
+                      planData={planData}
+                      onEdit={() => {
+                        setEditContent(planData.content);
+                        setEditing(true);
+                      }}
+                      onMarkDone={() => void handleMarkDone()}
+                      onDelete={() => void handleDelete()}
+                    />
                   </div>
                 ) : (
                   <div className="flex h-full items-center justify-center text-[var(--dim)]">

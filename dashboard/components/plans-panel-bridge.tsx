@@ -20,6 +20,7 @@ interface PlansPanelBridgeProps {
   planData: PlanData;
   onEdit?: () => void;
   onMarkDone?: () => void;
+  onDelete?: () => void;
 }
 
 type PlansPanelMountHandle = {
@@ -29,6 +30,7 @@ type PlansPanelMountHandle = {
     planData?: PlanData | null;
     onEdit?: () => void;
     onMarkDone?: () => void;
+    onDelete?: () => void;
   }): void;
 };
 
@@ -37,6 +39,7 @@ export function PlansPanelBridge({
   planData,
   onEdit,
   onMarkDone,
+  onDelete,
 }: PlansPanelBridgeProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const handleRef = useRef<PlansPanelMountHandle | null>(null);
@@ -53,6 +56,7 @@ export function PlansPanelBridge({
         planData,
         onEdit,
         onMarkDone,
+        onDelete,
       });
     })();
     return () => {
@@ -65,8 +69,8 @@ export function PlansPanelBridge({
   }, []);
 
   useEffect(() => {
-    handleRef.current?.setOptions({ plan, planData, onEdit, onMarkDone });
-  }, [plan, planData, onEdit, onMarkDone]);
+    handleRef.current?.setOptions({ plan, planData, onEdit, onMarkDone, onDelete });
+  }, [plan, planData, onEdit, onMarkDone, onDelete]);
 
   return (
     <div

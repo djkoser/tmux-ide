@@ -88,6 +88,13 @@ export interface PlansPanelMountOptions {
   onEdit?: () => void;
   /** Fired when the user clicks [mark done]. Host issues the API mutation. */
   onMarkDone?: () => void;
+  /**
+   * Fired when the user clicks the [delete] chip and confirms. Host
+   * issues the API mutation. The widget renders no chip when this
+   * handler is omitted — keeps the destructive affordance invisible
+   * unless a host has explicitly opted in.
+   */
+  onDelete?: () => void;
 }
 
 export interface PlansPanelMountHandle {
