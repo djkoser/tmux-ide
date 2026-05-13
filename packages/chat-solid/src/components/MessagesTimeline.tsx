@@ -29,6 +29,12 @@ import {
 } from "solid-js";
 import { useAutoScroll } from "../hooks/useAutoScroll";
 import { deriveChangedFiles } from "../lib/changedFiles";
+import { collectImageBlocks, previewAt } from "../lib/imageBlocks";
+import {
+  ImageExpandContext,
+  useImageExpand,
+  type ImageExpandHandler,
+} from "../lib/imageExpand";
 import { renderMarkdown } from "../lib/markdown";
 import { resolveMarkdownFileLinkMeta } from "../lib/markdownLinks";
 import type {
@@ -40,6 +46,13 @@ import type {
   ToolCallView,
 } from "../types";
 import { ChangedFilesTree } from "./ChangedFilesTree";
+import {
+  ExpandedImageDialog,
+} from "./ExpandedImageDialog";
+import {
+  InlineImagePreview,
+  type ExpandedImagePreview,
+} from "./ExpandedImagePreview";
 import { MessageCopyButton } from "./MessageCopyButton";
 import { MessageRoleHeader } from "./MessageRoleHeader";
 import {
@@ -65,6 +78,7 @@ export function MessagesTimeline(props: {
 }) {
   const [container, setContainer] = createSignal<HTMLElement>();
   const [sentinel, setSentinel] = createSignal<HTMLElement>();
+  const [expandedPreview, setExpandedPreview] = createSignal<ExpandedImagePreview | null>(null);
   const changedFiles = createMemo(() => deriveChangedFiles(props.messages()));
   const followSignal = createMemo(() => props.rows().map(rowSignature).join("|"));
   const terminalAssistantIds = createMemo(() =>
@@ -72,41 +86,52 @@ export function MessagesTimeline(props: {
   );
   useAutoScroll(container, sentinel, followSignal);
 
+  // Single dialog mount hoisted to the timeline so user / assistant
+  // / tool-call image clicks all open the same overlay. Closing seeds
+  // `null` back into the signal so `<ExpandedImageDialog>` unmounts.
+  const onExpand: ImageExpandHandler = (preview) => setExpandedPreview(preview);
+
   return (
-    <Show
-      when={props.rows().length > 0}
-      fallback={
-        <div
-          data-testid="messages-timeline-empty"
-          class="flex min-h-0 flex-1 items-center justify-center text-[13px] text-[var(--fg-muted,var(--dim))]"
-        >
-          Send a message to start this chat.
-        </div>
-      }
-    >
-      <div
-        ref={setContainer}
-        data-testid="messages-timeline"
-        class="min-h-0 flex-1 overflow-auto bg-[var(--bg)]"
+    <ImageExpandContext.Provider value={onExpand}>
+      <Show
+        when={props.rows().length > 0}
+        fallback={
+          <div
+            data-testid="messages-timeline-empty"
+            class="flex min-h-0 flex-1 items-center justify-center text-[13px] text-[var(--fg-muted,var(--dim))]"
+          >
+            Send a message to start this chat.
+          </div>
+        }
       >
-        <div class="mx-auto flex w-full max-w-3xl flex-col px-4 py-5">
-          <ChangedFilesTree files={changedFiles} />
-          <For each={props.rows()}>
-            {(row) => (
-              <TimelineRow
-                row={row}
-                providerName={props.providerName}
-                cwd={props.cwd}
-                onOpenFile={props.onOpenFile}
-                onSendPlanRequest={props.onSendPlanRequest}
-                isTerminalAssistant={(id) => terminalAssistantIds().has(id)}
-              />
-            )}
-          </For>
-          <div ref={setSentinel} />
+        <div
+          ref={setContainer}
+          data-testid="messages-timeline"
+          class="min-h-0 flex-1 overflow-auto bg-[var(--bg)]"
+        >
+          <div class="mx-auto flex w-full max-w-3xl flex-col px-4 py-5">
+            <ChangedFilesTree files={changedFiles} />
+            <For each={props.rows()}>
+              {(row) => (
+                <TimelineRow
+                  row={row}
+                  providerName={props.providerName}
+                  cwd={props.cwd}
+                  onOpenFile={props.onOpenFile}
+                  onSendPlanRequest={props.onSendPlanRequest}
+                  isTerminalAssistant={(id) => terminalAssistantIds().has(id)}
+                />
+              )}
+            </For>
+            <div ref={setSentinel} />
+          </div>
         </div>
-      </div>
-    </Show>
+      </Show>
+      <ExpandedImageDialog
+        preview={expandedPreview}
+        onClose={() => setExpandedPreview(null)}
+      />
+    </ImageExpandContext.Provider>
   );
 }
 
@@ -190,6 +215,8 @@ function UserRow(props: {
   onOpenFile?: (meta: MarkdownFileLinkMeta) => void;
 }): JSX.Element {
   const plainText = createMemo(() => extractUserPlainText(props.message.content));
+  const imageEntries = createMemo(() => collectImageBlocks(props.message.content));
+  const onExpand = useImageExpand();
   return (
     <section
       data-testid="message-row"
@@ -205,11 +232,19 @@ function UserRow(props: {
       />
       <div class="min-w-0 text-[13px] leading-relaxed text-[var(--fg)]">
         <For each={props.message.content}>
-          {(block) => (
+          {(block, index) => (
             <UserContentBlockView
               block={block}
               cwd={props.cwd}
               onOpenFile={props.onOpenFile}
+              onExpandImage={
+                onExpand
+                  ? () => {
+                      const cursor = previewAt(imageEntries(), index());
+                      if (cursor) onExpand(cursor);
+                    }
+                  : undefined
+              }
             />
           )}
         </For>
@@ -398,7 +433,42 @@ function UserContentBlockView(props: {
   block: ContentBlock;
   cwd?: Accessor<string | undefined>;
   onOpenFile?: (meta: MarkdownFileLinkMeta) => void;
+  /** Set by the parent `UserRow` for image blocks. Anchors the modal
+   *  cursor at this block within the message's image siblings. */
+  onExpandImage?: () => void;
 }): JSX.Element {
+  if (props.block.type === "image") {
+    const block = props.block;
+    const src = createMemo(() => {
+      if (typeof block.data !== "string" || block.data.length === 0) return "";
+      const mime = block.mimeType || "image/png";
+      return `data:${mime};base64,${block.data}`;
+    });
+    return (
+      <Show
+        when={src().length > 0}
+        fallback={
+          <p
+            data-testid="user-image-block-missing"
+            class="text-[12px] text-[var(--fg-muted,var(--dim))]"
+          >
+            (image attachment unavailable)
+          </p>
+        }
+      >
+        <div
+          data-testid="user-image-block"
+          class="my-1.5 inline-block max-w-[400px]"
+        >
+          <InlineImagePreview
+            src={src}
+            alt={() => `image (${block.mimeType || "image"})`}
+            onExpand={props.onExpandImage}
+          />
+        </div>
+      </Show>
+    );
+  }
   if (props.block.type !== "text") return <ContentBlockView block={props.block} />;
   const block = props.block;
   const renderedText = createMemo(() => renderMarkdown(block.text, { cwd: props.cwd?.() }));
