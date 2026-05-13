@@ -327,7 +327,7 @@ export default function WidgetsGalleryPage() {
         data-testid="widgets-gallery-header"
         className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-strong)] px-4 py-3 text-[12px]"
       >
-        <Grid3X3 size={16} class="text-[var(--accent)]" aria-hidden="true" />
+        <Grid3X3 size={16} className="text-[var(--accent)]" aria-hidden="true" />
         <h1 className="text-[13px] font-medium text-[var(--fg)]">Widgets</h1>
         <span className="text-[11px] text-[var(--dim)]">
           ({filtered.length}/{WIDGETS.length})
