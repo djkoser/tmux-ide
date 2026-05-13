@@ -45,7 +45,7 @@ export function ChatThreadView(props: { options: Accessor<ChatMountOptions> }) {
   });
 
   return (
-    <div class="absolute inset-0 flex min-h-0 flex-col bg-bg">
+    <div class="flex h-full min-h-0 w-full flex-col bg-bg">
       <Show
         when={!chat.loading()}
         fallback={
