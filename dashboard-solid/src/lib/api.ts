@@ -73,3 +73,108 @@ export function fetchSessions(): Effect.Effect<readonly SessionOverview[], ApiEr
     Effect.map((data) => data.sessions ?? []),
   );
 }
+
+// ---------------------------------------------------------------------
+// Setup wizard
+// ---------------------------------------------------------------------
+
+export interface ProjectInspectDetected {
+  packageManager: "pnpm" | "npm" | "yarn" | "bun" | null;
+  frameworks: string[];
+  devCommand: string | null;
+  testCommand: string | null;
+}
+
+export interface ProjectInspect {
+  name: string;
+  dir: string;
+  hasIdeYml: boolean;
+  gitOrigin: string | null;
+  gitBranch: string | null;
+  detected: ProjectInspectDetected;
+}
+
+export function inspectDirectory(dir: string): Effect.Effect<ProjectInspect, ApiError> {
+  return request<{ project: ProjectInspect }>("/api/filesystem/inspect", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dir }),
+  }).pipe(Effect.map((data) => data.project));
+}
+
+export interface OnboardProjectInput {
+  dir: string;
+  name?: string;
+  agents: number;
+  agentNames?: string[];
+  devCommand?: string | null;
+  testCommand?: string | null;
+}
+
+export interface OnboardedProject {
+  name: string;
+  dir: string;
+}
+
+export function onboardProject(
+  input: OnboardProjectInput,
+): Effect.Effect<OnboardedProject, ApiError> {
+  return request<OnboardedProject>("/api/projects/onboard", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+/**
+ * Fire a v2 typed action by name. The daemon's envelope is
+ * `{ ok: true, data }` or `{ ok: false, error }`; we only surface
+ * the wire-level success/failure here — the setup wizard maps that to
+ * its dispatch-style state.
+ */
+export function dispatchAction(name: string, input: unknown): Effect.Effect<unknown, ApiError> {
+  return request<{ ok: boolean; data?: unknown; error?: { message: string } }>(
+    `/api/v2/action/${encodeURIComponent(name)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  ).pipe(
+    Effect.flatMap((envelope) =>
+      envelope.ok
+        ? Effect.succeed(envelope.data)
+        : Effect.fail(
+            new ApiError({
+              status: 0,
+              message: envelope.error?.message ?? `Action "${name}" failed`,
+            }),
+          ),
+    ),
+  );
+}
+
+// ---------------------------------------------------------------------
+// Widget spawn — used by /v2/widget/[name] to ask the daemon where the
+// widget binary lives + how to invoke it, then drive a Terminal via the
+// same WS protocol the tmux panes use.
+// ---------------------------------------------------------------------
+
+export interface WidgetSpawnSpec {
+  cwd: string;
+  cmd: string[];
+}
+
+export function fetchWidgetSpawn(
+  name: string,
+  query: { session: string; dir: string; target?: string | null; theme?: unknown },
+): Effect.Effect<WidgetSpawnSpec, ApiError> {
+  const params = new URLSearchParams();
+  params.set("session", query.session);
+  params.set("dir", query.dir);
+  if (query.target) params.set("target", query.target);
+  if (query.theme !== undefined) params.set("theme", JSON.stringify(query.theme));
+  return request<WidgetSpawnSpec>(
+    `/api/widget/${encodeURIComponent(name)}/spawn?${params.toString()}`,
+  );
+}
