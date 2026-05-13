@@ -336,7 +336,12 @@ export default function ProjectV2Page() {
                       if (open !== chrome.rightInspectorOpen) setRightInspectorOpen(open);
                     }}
                   >
-                    <InspectorBridge projectName={projectName} currentView={view} />
+                    <InspectorBridge
+                      projectName={projectName}
+                      currentView={view}
+                      expanded={chrome.rightInspectorOpen}
+                      onToggleExpanded={(next) => setRightInspectorOpen(next)}
+                    />
                   </Panel>
                 </Group>
               </Panel>
