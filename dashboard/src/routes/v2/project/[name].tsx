@@ -48,6 +48,7 @@ import {
   SkillsSurfaceView,
   TasksDashboardView,
 } from "@/components/v2/views";
+import { MissionStatementView } from "@/components/v2/MissionStatementView";
 import { chrome, useChromeShortcuts } from "@/lib/chrome";
 import { useViewParam } from "@/lib/viewParam";
 import { DEFAULT_VIEW, isViewId, VIEWS, type ViewId } from "@/lib/views";
@@ -235,7 +236,10 @@ function MainContent(props: { projectName: string; view: ViewId }) {
           }}
         />
       </Show>
-      <Show when={props.view === "mission" || props.view === "mission-control"}>
+      <Show when={props.view === "mission"}>
+        <MissionStatementView projectName={props.projectName} />
+      </Show>
+      <Show when={props.view === "mission-control"}>
         <MissionControlView projectName={props.projectName} />
       </Show>
       <Show when={props.view === "kanban"}>

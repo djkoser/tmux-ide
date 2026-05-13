@@ -29,7 +29,16 @@ export interface ProjectDetailLike {
       tasksDone?: number;
     }>;
   } | null;
-  goals?: Array<{ id: string; title: string }>;
+  goals?: Array<{
+    id: string;
+    title: string;
+    description?: string;
+    status?: string;
+    acceptance?: string;
+    priority?: number;
+    assignee?: string | null;
+    milestone?: string | null;
+  }>;
   tasks?: Array<{
     id: string;
     title: string;
