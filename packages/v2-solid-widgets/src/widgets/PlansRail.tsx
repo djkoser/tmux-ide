@@ -237,27 +237,40 @@ export function PlansRailView(props: PlansRailViewProps) {
         </select>
       </div>
 
-      <Show when={error()}>
+      {/* Body — grouped sections, OR the offline empty state when the
+          daemon is unreachable and we don't have stale plans to show.
+          A transient failure with stale plans in hand keeps the list
+          visible; only a cold-start error swaps in the empty state. */}
+      <Show when={error() && plans().length === 0}>
         <div
+          data-testid="plans-rail-offline"
           style={{
-            padding: "4px 12px",
-            color: "var(--red)",
-            "background-color": "var(--bg-strong)",
-            "border-bottom": "1px solid var(--red)",
-            "font-size": "11px",
+            flex: "1",
+            display: "flex",
+            "flex-direction": "column",
+            "align-items": "center",
+            "justify-content": "center",
+            gap: "6px",
+            padding: "24px 16px",
+            "text-align": "center",
+            color: "var(--dim)",
           }}
         >
-          {error()}
+          <div style={{ color: "var(--fg-secondary)", "font-size": "12px" }}>
+            Couldn't reach the daemon
+          </div>
+          <div style={{ "font-size": "10px" }}>
+            The plans rail will refresh automatically once the connection is back.
+          </div>
         </div>
       </Show>
-
-      {/* Body — grouped sections */}
       <div
         data-testid="plans-rail-list"
         style={{
           "min-height": "0",
           flex: "1",
           "overflow-y": "auto",
+          display: error() && plans().length === 0 ? "none" : "block",
         }}
       >
         <For each={planGroups()}>
