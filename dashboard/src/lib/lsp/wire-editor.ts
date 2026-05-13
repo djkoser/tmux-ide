@@ -36,6 +36,7 @@ import {
   clearDiagnosticsForBuffer,
   setDiagnosticsForBuffer,
 } from "./diagnostics-store";
+import { computePollBackoffDelay } from "./poll-backoff";
 
 export interface WireLspInput {
   editor: monaco.editor.IStandaloneCodeEditor;
@@ -52,6 +53,11 @@ export interface WireLspInput {
 const MARKER_OWNER = "lsp-daemon";
 const DIAGNOSTIC_POLL_INTERVAL_MS = 5_000;
 const FIRST_DIAGNOSTIC_DELAY_MS = 300;
+/** Worst-case backoff. After this many consecutive errors the poll
+ *  caps at 60s so a stale-daemon dashboard doesn't generate runaway
+ *  request volume. A successful response resets the backoff. */
+const DIAGNOSTIC_BACKOFF_MAX_MS = 60_000;
+const DIAGNOSTIC_BACKOFF_FACTOR = 2;
 
 /** LSP severity → Monaco MarkerSeverity. Falls back to Error for unknown
  *  inputs since "no severity" almost always means "fatal". */
@@ -213,15 +219,23 @@ export function wireLspToEditor(input: WireLspInput): () => void {
   // (2) Diagnostics — initial fetch + periodic refresh. The first
   // fetch is delayed so the daemon's LSP has a chance to index the
   // file post-didOpen.
-  async function pollDiagnosticsOnce(): Promise<void> {
-    if (pollAborted) return;
+  //
+  // Consecutive errors back the poll cadence off exponentially (5s →
+  // 10s → 20s → 40s → 60s cap). A successful response resets it. The
+  // common trigger is "daemon was started before the LSP routes
+  // landed" — the dashboard otherwise spams the same 404 every 5s
+  // until the daemon is restarted, generating useless request volume
+  // visible in devtools.
+  let consecutiveErrors = 0;
+  async function pollDiagnosticsOnce(): Promise<boolean> {
+    if (pollAborted) return false;
     let result: { diagnostics: LspDiagnostic[] };
     try {
       result = await lspDiagnostics(input.sessionName, input.filePath);
     } catch {
-      return;
+      return false;
     }
-    if (pollAborted) return;
+    if (pollAborted) return false;
     const model = input.editor.getModel();
     if (model) {
       const markers = result.diagnostics.map((d) => lspDiagnosticToMonaco(m, d));
@@ -236,14 +250,28 @@ export function wireLspToEditor(input: WireLspInput): () => void {
       diagnostics: result.diagnostics,
       fetchedAt: Date.now(),
     });
+    return true;
+  }
+
+  function nextPollDelay(): number {
+    return computePollBackoffDelay(consecutiveErrors, {
+      intervalMs: DIAGNOSTIC_POLL_INTERVAL_MS,
+      maxMs: DIAGNOSTIC_BACKOFF_MAX_MS,
+      factor: DIAGNOSTIC_BACKOFF_FACTOR,
+    });
   }
 
   function schedulePoll(delay: number): void {
     if (pollAborted) return;
     pollTimer = setTimeout(async () => {
       pollTimer = null;
-      await pollDiagnosticsOnce();
-      schedulePoll(DIAGNOSTIC_POLL_INTERVAL_MS);
+      const ok = await pollDiagnosticsOnce();
+      if (ok) {
+        consecutiveErrors = 0;
+      } else {
+        consecutiveErrors += 1;
+      }
+      schedulePoll(nextPollDelay());
     }, delay);
   }
 
