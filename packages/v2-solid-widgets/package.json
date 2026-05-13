@@ -25,6 +25,7 @@
     "solid-js": "^1.9.11"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
     "@types/node": "^25.5.0",
     "happy-dom": "^20.8.4",
     "typescript": "^5.9.3",

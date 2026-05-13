@@ -58,6 +58,10 @@ dashboard/public/fonts/private/*
 test-results/
 playwright-report/
 
+# Vitest v8 coverage reports (per-package, written by `pnpm test --coverage`)
+coverage/
+**/coverage/
+
 # Stray npm lockfiles (project uses pnpm)
 package-lock.json
 dashboard/package-lock.json

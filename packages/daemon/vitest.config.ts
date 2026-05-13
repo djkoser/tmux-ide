@@ -27,5 +27,31 @@ export default defineConfig({
       "src/chat/provider-store.test.ts",
       "src/terminal/__tests__/*.test.ts",
     ],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "html", "json-summary"],
+      reportsDirectory: "./coverage",
+      // Scope coverage to the files exercised by this vitest harness.
+      // The bun-driven test suite covers the rest of src/ and reports
+      // separately — counting both under one threshold would double-
+      // dip files that have no vitest harness yet.
+      include: ["src/chat/**/*.ts", "src/terminal/**/*.ts"],
+      exclude: [
+        "**/*.test.ts",
+        "**/__tests__/**",
+        "**/__mocks__/**",
+        "**/types.ts",
+        "**/index.ts",
+      ],
+      // Thresholds pin the *floor* — set just below current numbers
+      // so a regression fails CI but today's coverage passes. Bump
+      // toward the audit target (70%) as new tests land.
+      thresholds: {
+        lines: 65, // target: 70
+        functions: 60, // target: 70
+        statements: 60, // target: 70
+        branches: 45, // target: 65
+      },
+    },
   },
 });
