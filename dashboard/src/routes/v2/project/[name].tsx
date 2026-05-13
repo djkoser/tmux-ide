@@ -26,7 +26,7 @@
  *     the React `useViewParam.ts`).
  */
 
-import { Show, type JSX } from "solid-js";
+import { onCleanup, onMount, Show, type JSX } from "solid-js";
 import { useParams } from "@solidjs/router";
 import { V2ActivityBar, type ActivityBarViewId } from "@/components/ActivityBar";
 import { StatusBar } from "@/components/StatusBar";
@@ -35,12 +35,14 @@ import { ChatView } from "@/components/ChatView";
 import { DiffsView } from "@/components/DiffsView";
 import { FilesSurface } from "@/components/files/FilesSurface";
 import { MonacoDiffsView } from "@/components/diffs/MonacoDiffsView";
+import { SearchView } from "@/components/search/SearchView";
 import { chrome, useChromeShortcuts } from "@/lib/chrome";
 import { useViewParam } from "@/lib/viewParam";
 import { DEFAULT_VIEW, isViewId, VIEWS, type ViewId } from "@/lib/views";
 
 const ACTIVITY_BAR_VIEWS = new Set<ActivityBarViewId>([
   "files",
+  "search",
   "diffs",
   "plans",
   "tasks",
@@ -63,6 +65,22 @@ export default function ProjectV2Route(): JSX.Element {
     // guarantees both contain "files" / "chat" / "terminal" / etc.
     if (ACTIVITY_BAR_VIEWS.has(id) && isViewId(id)) setView(id);
   }
+
+  // Global Cmd+Shift+F (Mac) / Ctrl+Shift+F (other) → repo search view.
+  // Mirrors VS Code; reachable from any view, scrolls focus into the
+  // SearchView's query input on mount.
+  onMount(() => {
+    function onKey(event: KeyboardEvent): void {
+      const mod = navigator.platform.toLowerCase().includes("mac")
+        ? event.metaKey
+        : event.ctrlKey;
+      if (!mod || !event.shiftKey || event.key.toLowerCase() !== "f") return;
+      event.preventDefault();
+      setView("search");
+    }
+    window.addEventListener("keydown", onKey);
+    onCleanup(() => window.removeEventListener("keydown", onKey));
+  });
 
   return (
     <div class="flex h-screen w-screen min-h-0 min-w-0 flex-col bg-[var(--bg)] text-[var(--fg)]">
@@ -208,6 +226,9 @@ function MainContent(props: { projectName: string; view: ViewId }) {
       <Show when={props.view === "files"}>
         <FilesSurface projectName={props.projectName} />
       </Show>
+      <Show when={props.view === "search"}>
+        <SearchView projectName={props.projectName} />
+      </Show>
       <Show when={props.view === "diffs"}>
         <DiffsView projectName={props.projectName} />
       </Show>
@@ -232,6 +253,7 @@ function MainContent(props: { projectName: string; view: ViewId }) {
           props.view !== "chat" &&
           props.view !== "terminal" &&
           props.view !== "files" &&
+          props.view !== "search" &&
           props.view !== "diffs" &&
           props.view !== "changes"
         }

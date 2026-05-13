@@ -36,6 +36,7 @@ type IconComponent = Component<{ size?: number; strokeWidth?: number; class?: st
 
 export type ActivityBarViewId =
   | "files"
+  | "search"
   | "diffs"
   | "plans"
   | "tasks"
@@ -46,7 +47,7 @@ export type ActivityBarViewId =
   | "widgets";
 
 interface ActivityBarItem {
-  id: ActivityBarViewId | "search" | "settings" | "account";
+  id: ActivityBarViewId | "settings" | "account";
   Icon: IconComponent;
   label: string;
   tooltip?: string;
@@ -84,14 +85,11 @@ export function V2ActivityBar(props: V2ActivityBarProps) {
     { id: "files", view: "files", Icon: Files, label: "Files", onClick: () => props.onView("files") },
     {
       id: "search",
+      view: "search",
       Icon: Search,
       label: "Search",
-      tooltip: "Search · ⌘K",
-      onClick: () => {
-        // Command palette lands in a follow-up; no-op for now.
-        // eslint-disable-next-line no-console
-        console.info("[dashboard] command palette lands in a follow-up");
-      },
+      tooltip: "Search · ⇧⌘F",
+      onClick: () => props.onView("search"),
     },
     { id: "diffs", view: "diffs", Icon: GitCompare, label: "Diffs", onClick: () => props.onView("diffs") },
     { id: "plans", view: "plans", Icon: ListTodo, label: "Plans", onClick: () => props.onView("plans") },
