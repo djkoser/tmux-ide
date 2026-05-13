@@ -26,6 +26,7 @@ export default defineConfig({
       "src/chat/provider-registry.test.ts",
       "src/chat/provider-store.test.ts",
       "src/terminal/__tests__/*.test.ts",
+      "src/git/__tests__/*.test.ts",
     ],
     coverage: {
       provider: "v8",
@@ -35,7 +36,7 @@ export default defineConfig({
       // The bun-driven test suite covers the rest of src/ and reports
       // separately — counting both under one threshold would double-
       // dip files that have no vitest harness yet.
-      include: ["src/chat/**/*.ts", "src/terminal/**/*.ts"],
+      include: ["src/chat/**/*.ts", "src/terminal/**/*.ts", "src/git/**/*.ts"],
       exclude: [
         "**/*.test.ts",
         "**/__tests__/**",

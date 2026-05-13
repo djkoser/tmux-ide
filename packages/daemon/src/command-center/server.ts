@@ -105,6 +105,20 @@ import {
   createSkillSchema,
   updateSkillSchema,
 } from "./schemas.ts";
+import { Effect } from "effect";
+import {
+  branches as gitBranches,
+  checkout as gitCheckout,
+  commit as gitCommit,
+  push as gitPush,
+  status as gitStatus,
+} from "../git/git-service.ts";
+import { toPayload as gitErrorToPayload } from "../git/errors.ts";
+import {
+  checkoutRequestSchema,
+  commitRequestSchema,
+  pushRequestSchema,
+} from "@tmux-ide/contracts";
 import { AuthService } from "../lib/auth/auth-service.ts";
 import { authMiddleware } from "../lib/auth/middleware.ts";
 import type { AuthConfig } from "../lib/auth/types.ts";
@@ -1954,6 +1968,104 @@ export function createApp(options: CreateAppOptions = {}): Hono {
       return c.json({ error: (err as Error).message }, 400);
     }
   });
+
+  // --- Git endpoints (G18-P1) -----------------------------------------
+  //
+  // Thin Effect-backed shell-outs to the host `git`. Each handler
+  // resolves the session dir, runs the matching service function, and
+  // maps tagged errors to the wire payload shape consumers know how to
+  // render. Larger surface (diffs, cat-file, watcher → WS broadcast)
+  // waits for G18-P2 per docs/goal-18-git-ops.md §G18-P1.
+
+  app.get("/api/project/:name/git/status", async (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    return Effect.runPromise(
+      gitStatus(session.dir).pipe(
+        Effect.match({
+          onFailure: (err) => c.json({ error: gitErrorToPayload(err) }, 400),
+          onSuccess: (s) => c.json({ status: s }),
+        }),
+      ),
+    );
+  });
+
+  app.get("/api/project/:name/git/branches", async (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    return Effect.runPromise(
+      gitBranches(session.dir).pipe(
+        Effect.match({
+          onFailure: (err) => c.json({ error: gitErrorToPayload(err) }, 400),
+          onSuccess: (payload) => c.json(payload),
+        }),
+      ),
+    );
+  });
+
+  app.post(
+    "/api/project/:name/git/checkout",
+    zValidator("json", checkoutRequestSchema),
+    async (c) => {
+      const name = c.req.param("name");
+      const sessions = discoverSessions();
+      const session = sessions.find((s) => s.name === name);
+      if (!session) return c.json({ error: "Session not found" }, 404);
+      const body = c.req.valid("json");
+      return Effect.runPromise(
+        gitCheckout(session.dir, body).pipe(
+          Effect.match({
+            onFailure: (err) => c.json({ error: gitErrorToPayload(err) }, 400),
+            onSuccess: (r) => c.json({ ok: true, currentBranch: r.currentBranch }),
+          }),
+        ),
+      );
+    },
+  );
+
+  app.post(
+    "/api/project/:name/git/commit",
+    zValidator("json", commitRequestSchema),
+    async (c) => {
+      const name = c.req.param("name");
+      const sessions = discoverSessions();
+      const session = sessions.find((s) => s.name === name);
+      if (!session) return c.json({ error: "Session not found" }, 404);
+      const body = c.req.valid("json");
+      return Effect.runPromise(
+        gitCommit(session.dir, body).pipe(
+          Effect.match({
+            onFailure: (err) => c.json({ error: gitErrorToPayload(err) }, 400),
+            onSuccess: (r) => c.json({ ok: true, sha: r.sha }),
+          }),
+        ),
+      );
+    },
+  );
+
+  app.post(
+    "/api/project/:name/git/push",
+    zValidator("json", pushRequestSchema),
+    async (c) => {
+      const name = c.req.param("name");
+      const sessions = discoverSessions();
+      const session = sessions.find((s) => s.name === name);
+      if (!session) return c.json({ error: "Session not found" }, 404);
+      const body = c.req.valid("json");
+      return Effect.runPromise(
+        gitPush(session.dir, body).pipe(
+          Effect.match({
+            onFailure: (err) => c.json({ error: gitErrorToPayload(err) }, 400),
+            onSuccess: (r) => c.json({ ok: true, remote: r.remote, branch: r.branch }),
+          }),
+        ),
+      );
+    },
+  );
 
   // --- Mission endpoints ---
 

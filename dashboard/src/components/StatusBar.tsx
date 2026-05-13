@@ -6,7 +6,7 @@
  * the polling/SSE port in G16-P3.
  */
 
-import { Show, type Component } from "solid-js";
+import { createSignal, Show, type Component } from "solid-js";
 import { GitBranch, PanelLeft, PanelBottom, PanelRight } from "lucide-solid";
 import {
   chrome,
@@ -14,6 +14,8 @@ import {
   toggleLeftSidebar,
   toggleRightInspector,
 } from "@/lib/chrome";
+import { useGitStatus } from "@/lib/git";
+import { BranchPicker } from "@/components/BranchPicker";
 
 type IconComponent = Component<{ size?: number; class?: string }>;
 
@@ -25,16 +27,59 @@ interface StatusBarProps {
 }
 
 export function StatusBar(props: StatusBarProps) {
+  const [pickerOpen, setPickerOpen] = createSignal(false);
+  const [anchor, setAnchor] = createSignal<{ x: number; y: number } | undefined>();
+  const status = useGitStatus(() => props.projectName);
+  const branch = () => status()?.currentBranch ?? null;
+  const ahead = () => status()?.ahead ?? 0;
+  const behind = () => status()?.behind ?? 0;
+  const dirty = () => {
+    const s = status();
+    if (!s) return false;
+    return s.staged.length > 0 || s.unstaged.length > 0;
+  };
+
+  function openPicker(e: MouseEvent) {
+    const target = e.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    setAnchor({ x: rect.left, y: rect.top });
+    setPickerOpen(true);
+  }
+
   return (
     <footer
       data-testid="v2-status-bar"
       style={{ height: "24px" }}
       class="flex shrink-0 items-center gap-3 border-t border-[var(--border)] bg-[var(--bg-strong)] px-3 text-[11px] text-[var(--fg-muted,var(--fg-secondary))]"
     >
-      <span data-testid="status-bar-branch" class="inline-flex items-center gap-1 text-[var(--dim)]" title="Branch detection lands in G16-P3">
+      <button
+        type="button"
+        data-testid="status-bar-branch"
+        onClick={openPicker}
+        title={branch() ? `On branch ${branch()} — click to switch` : "Click to pick a branch"}
+        class="inline-flex items-center gap-1 rounded px-1 py-0.5 text-[var(--dim)] hover:bg-[var(--surface-hover,rgba(127,127,127,0.08))] hover:text-[var(--fg)]"
+      >
         <GitBranch aria-hidden="true" size={12} />
-        <span>—</span>
-      </span>
+        <span data-testid="status-bar-branch-name">{branch() ?? "—"}</span>
+        <Show when={dirty()}>
+          <span aria-hidden="true" class="text-[var(--accent)]" title="Uncommitted changes">●</span>
+        </Show>
+        <Show when={ahead() > 0}>
+          <span class="text-[10px] tabular-nums">↑{ahead()}</span>
+        </Show>
+        <Show when={behind() > 0}>
+          <span class="text-[10px] tabular-nums">↓{behind()}</span>
+        </Show>
+      </button>
+      <BranchPicker
+        sessionName={props.projectName}
+        open={pickerOpen()}
+        onClose={() => setPickerOpen(false)}
+        anchor={anchor()}
+        onCheckedOut={() => {
+          status.refetch();
+        }}
+      />
 
       <span aria-hidden="true" class="opacity-30">│</span>
 
