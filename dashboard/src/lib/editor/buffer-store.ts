@@ -28,6 +28,7 @@ import { batch } from "solid-js";
 import { Effect } from "effect";
 import { saveFile } from "@/lib/api";
 import { modelRegistry } from "@/lib/monaco/model-registry";
+import { codeEditorPool } from "@/lib/monaco/code-pool";
 import { buildMonacoModelPath } from "@/lib/monaco/model-path";
 
 // G17-P6 — autosave + crash recovery + external-change reseed.
@@ -162,12 +163,14 @@ export function openBuffer(input: {
 /**
  * Hydrate a buffer with its fetched initial content + register a
  * writable Monaco model behind the buffer URI. Flips status to
- * `'ready'`.
+ * `'ready'`. Awaits Monaco init so the registry call can't race
+ * the first editor lease.
  */
-export function markReady(bufferUri: string, initialContent: string): void {
+export async function markReady(bufferUri: string, initialContent: string): Promise<void> {
   const buf = state.buffers[bufferUri];
   if (!buf) return;
   try {
+    await codeEditorPool.init();
     modelRegistry.registerBuffer({
       sessionName: buf.sessionName,
       rootPath: buf.rootPath,
@@ -550,14 +553,14 @@ export function listRecoverableBuffers(sessionName?: string): RecoverableSnapsho
  * unsaved edits). Caller is responsible for prompting before
  * calling.
  */
-export function restoreRecoverableBuffer(snap: RecoverableSnapshot): void {
+export async function restoreRecoverableBuffer(snap: RecoverableSnapshot): Promise<void> {
   openBuffer({
     sessionName: snap.sessionName,
     rootPath: snap.rootPath,
     filePath: snap.filePath,
     language: snap.language,
   });
-  markReady(snap.bufferUri, snap.baseContent);
+  await markReady(snap.bufferUri, snap.baseContent);
   if (snap.content !== snap.baseContent) {
     // Reapply the dirty edits on top of baseContent. markContent
     // re-persists the snapshot, which is fine — it's a no-op write

@@ -231,12 +231,12 @@ export function FilesSurface(props: FilesSurfaceProps): JSX.Element {
       // Fetch initial content + hydrate.
       const bufferUri = buildMonacoModelPath(rootPath(), path);
       void Effect.runPromise(fetchFilePreview(props.projectName, path))
-        .then((preview) => {
+        .then(async (preview) => {
           if (!preview.exists) {
             markError(bufferUri, "File not found");
             return;
           }
-          markReady(bufferUri, preview.content);
+          await markReady(bufferUri, preview.content);
         })
         .catch((err) => {
           markError(bufferUri, err instanceof Error ? err.message : String(err));
@@ -322,7 +322,7 @@ export function FilesSurface(props: FilesSurfaceProps): JSX.Element {
           <RecoveryBanner
             snapshots={recoverable()}
             onRestore={(snap) => {
-              restoreRecoverableBuffer(snap);
+              void restoreRecoverableBuffer(snap);
               setRecoverable((prev) => prev.filter((s) => s.bufferUri !== snap.bufferUri));
             }}
             onDiscard={(snap) => {

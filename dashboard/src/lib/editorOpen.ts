@@ -143,12 +143,12 @@ export function openFileAt(input: OpenFileAtInput): { bufferUri: string; existed
   }
 
   void Effect.runPromise(fetchFilePreview(sessionName, filePath))
-    .then((preview) => {
+    .then(async (preview) => {
       if (!preview.exists) {
         markError(bufferUri, "File not found");
         return;
       }
-      markReady(bufferUri, preview.content);
+      await markReady(bufferUri, preview.content);
     })
     .catch((err) => {
       markError(bufferUri, err instanceof Error ? err.message : String(err));
