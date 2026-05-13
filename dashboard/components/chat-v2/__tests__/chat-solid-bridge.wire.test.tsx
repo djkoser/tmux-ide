@@ -67,7 +67,9 @@ describe("ChatSolidBridge — wire", () => {
     expect(opts.sessionName).toBe("proj");
     expect(typeof opts.apiBaseUrl).toBe("string");
     expect(opts.apiBaseUrl).toMatch(/^https?:\/\//);
-    expect(opts.wsUrl).toMatch(/^wss?:\/\/.*\/ws\/chat$/);
+    // The daemon's unified push channel is /ws/events — chat.* frames
+    // ride on it alongside task/mission/etc.
+    expect(opts.wsUrl).toMatch(/^wss?:\/\/.*\/ws\/events$/);
   });
 
   it("onProviderChange dispatches chatThreadSetProvider + refreshes the mount", async () => {

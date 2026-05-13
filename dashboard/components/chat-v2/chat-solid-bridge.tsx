@@ -87,8 +87,13 @@ export function ChatSolidBridge({
       if (cancelled) return;
       const apiBaseUrl = api.API_BASE;
       // chat-solid expects a fully-qualified ws:// URL it can hand
-      // directly to `new WebSocket(...)`. Mirror api.ts' host resolver.
-      const wsUrl = apiBaseUrl.replace(/^http/, "ws") + "/ws/chat";
+      // directly to `new WebSocket(...)`. The daemon's unified push
+      // channel is `/ws/events` (see ws-events.ts) — chat.* frames
+      // are broadcast on it alongside task/mission/etc. The
+      // useChatThread hook filters by `frame.type.startsWith("chat.")
+      // && frame.threadId === threadId`, so non-chat frames are
+      // dropped harmlessly.
+      const wsUrl = apiBaseUrl.replace(/^http/, "ws") + "/ws/events";
       const runtime = { apiBaseUrl, bearerToken: null as string | null };
 
       // Provider switcher: POST chat.thread.setProvider, then nudge
