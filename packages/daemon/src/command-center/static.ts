@@ -38,17 +38,33 @@ function resolveDashboardOut(): string | null {
   if (override) return existsSync(override) ? override : null;
 
   const here = dirname(fileURLToPath(import.meta.url));
-  // Walk up looking for a sibling `dashboard/dist` directory. Stops at
-  // filesystem root.
+
+  // Workspace-checkout preference: if a `pnpm-workspace.yaml` is in
+  // scope, prefer that workspace's `dashboard/dist`. This avoids the
+  // stale-bundle footgun where `pnpm --filter @tmux-ide/dashboard
+  // build` refreshes the workspace copy but the daemon keeps serving
+  // a copy from a prior `build:dashboard` run inside its own dist/.
+  //
+  // The walk also captures the first match (depth-first) so the
+  // npm-installed case — no workspace marker, daemon ships its own
+  // bundled `dist/dashboard/dist` — keeps working without changes.
   let current = here;
+  let workspaceMatch: string | null = null;
+  let firstMatch: string | null = null;
   for (let i = 0; i < 10; i += 1) {
     const candidate = join(current, "dashboard", "dist");
-    if (existsSync(candidate)) return candidate;
+    if (existsSync(candidate)) {
+      if (firstMatch === null) firstMatch = candidate;
+      if (existsSync(join(current, "pnpm-workspace.yaml"))) {
+        workspaceMatch = candidate;
+        break;
+      }
+    }
     const parent = resolve(current, "..");
     if (parent === current) break;
     current = parent;
   }
-  return null;
+  return workspaceMatch ?? firstMatch;
 }
 
 /**
