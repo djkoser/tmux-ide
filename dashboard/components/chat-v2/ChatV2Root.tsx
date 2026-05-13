@@ -46,10 +46,8 @@ export interface ChatV2RootProps {
 
 export function ChatV2Root(props: ChatV2RootProps) {
   // Keep the WS bridge alive so the local store's unread counter
-  // (read by ThreadListRail) ticks. The store's message-rendering
-  // selectors are now dead branches — those reducers run but nothing
-  // reads `activitiesByThread` / `turnsByThread` anymore. Cleanup
-  // tracked as a follow-up.
+  // (read by ThreadListRail) ticks. Post-WN7 cleanup the bridge only
+  // forwards `chat.activity.appended`; chat-solid owns everything else.
   useChatV2WsBridge(props.projectName);
 
   const setThreads = useChatStore((s) => s.setThreads);

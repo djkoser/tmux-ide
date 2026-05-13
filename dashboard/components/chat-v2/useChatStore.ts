@@ -1,39 +1,37 @@
 /**
- * T077 — Chat v2 zustand store.
+ * Chat v2 zustand store — post-migration trimmed surface.
  *
- * One global store keyed by threadId. The store is a thin reducer over
- * the t3-style events the daemon emits (T074). UI components subscribe
- * via narrow selectors; the WS bridge calls applyEvent() for every
- * incoming `chat.<aggregate>.<verb>` event.
+ * Before the chat-solid migration (20c5ebf), this store mirrored the
+ * full t3 chat aggregate (activities, turns, checkpoints, plans, revert
+ * markers). Post-migration chat-solid owns transcript state, so the
+ * only things the React side still reads are the thread index and the
+ * unread badge counter. The store has been trimmed accordingly:
  *
- * Surface:
- *   - `threads`: index of ThreadIndexEntry returned by the REST list.
- *   - `activeThreadId`: which thread the UI is focused on.
- *   - `activitiesByThread`: append-only ThreadActivity[] keyed by thread.
- *   - `turnsByThread`: per-thread Map<turnId, TurnSummary>.
- *   - `checkpointsByThread`: per-thread Map<turnId, CheckpointSummary>.
- *   - `unreadByThread`: per-thread count of events appended since the
- *     thread was last visited (`markVisited`).
+ *   - `threads`          — index of ThreadIndexEntry returned by REST list.
+ *   - `activeThreadId`   — which thread the UI is focused on.
+ *   - `unreadByThread`   — per-thread count of activity-appended events
+ *                          since the thread was last visited.
+ *   - `lastSeqByThread`  — highest seq seen per thread. Used both for
+ *                          replay-safe dedup of incoming WS events and
+ *                          as a future hook for catchup queries.
  *
- * Pure-data only — no DOM access, no fetch — so the store can be
- * unit-tested headlessly with vitest.
+ * `applyEvent` is now a one-case dispatcher: only
+ * `chat.activity.appended` is observed (to bump unread + seq). Other
+ * `chat.*` frames are intentionally ignored — chat-solid handles them.
+ *
+ * The `ActivityView` / `TurnSummary` / `CheckpointSummaryView` /
+ * `ProposedPlanView` type aliases are kept as exports because
+ * `dashboard/lib/historyBootstrap.ts` and the chat-v2 grouping helpers
+ * still reference them as function-parameter shapes. They no longer
+ * appear in `ChatV2State`.
  */
 
 import { create } from "zustand";
 import type {
   ChatActivityAppendedEvent,
   ChatBusEvent,
-  ChatCheckpointCreatedEvent,
-  ChatPlanUpsertedEvent,
-  ChatThreadRevertedEvent,
-  ChatTurnAbortedEvent,
-  ChatTurnCompletedEvent,
-  ChatTurnStartedEvent,
   ThreadIndexEntry,
-  ThreadMessage,
-  ThreadState,
 } from "./types";
-import { threadStateToActivities } from "./threadStateToActivities";
 
 export interface TurnSummary {
   threadId: string;
@@ -80,12 +78,8 @@ export interface ActivityView {
 export interface ChatV2State {
   threads: ThreadIndexEntry[];
   activeThreadId: string | null;
-  activitiesByThread: Record<string, ActivityView[]>;
-  turnsByThread: Record<string, Record<string, TurnSummary>>;
-  checkpointsByThread: Record<string, Record<string, CheckpointSummaryView>>;
-  plansByThread: Record<string, Record<string, ProposedPlanView>>;
   unreadByThread: Record<string, number>;
-  /** Highest seq we've ingested per thread — used for replay queries. */
+  /** Highest seq we've ingested per thread — used for replay dedup. */
   lastSeqByThread: Record<string, number>;
 }
 
@@ -96,19 +90,11 @@ export interface ChatV2Actions {
   setActiveThread(threadId: string | null): void;
   markVisited(threadId: string): void;
   /**
-   * Apply a single t3-style chat event to the store. The reducer is
-   * total over the discriminated union — every variant has a branch.
+   * Apply a single t3-style chat event. The reducer ignores every
+   * variant except `chat.activity.appended`, which bumps the unread
+   * counter (when the thread isn't active) and advances `lastSeq`.
    */
   applyEvent(event: ChatBusEvent): void;
-  /**
-   * Hydrate per-thread state from the materialized thread snapshot
-   * returned by `GET /api/threads/:id`. Used by orchestrationRecovery
-   * on chat-v2 mount / thread switch so the UI is non-empty before the
-   * WS bridge catches up. Idempotent — calling twice replaces whatever
-   * was synthesized last time; live WS events that arrive after this
-   * call are still applied (drop-dup is by activity.id).
-   */
-  hydrateFromThreadState(threadId: string, state: ThreadState): void;
   /** Reset store to initial state (testing). */
   reset(): void;
 }
@@ -116,10 +102,6 @@ export interface ChatV2Actions {
 const initialState: ChatV2State = {
   threads: [],
   activeThreadId: null,
-  activitiesByThread: {},
-  turnsByThread: {},
-  checkpointsByThread: {},
-  plansByThread: {},
   unreadByThread: {},
   lastSeqByThread: {},
 };
@@ -143,25 +125,13 @@ export const useChatStore = create<ChatV2State & ChatV2Actions>()((set, get) => 
 
   removeThread(threadId) {
     set((s) => {
-      const { [threadId]: _a, ...activitiesByThread } = s.activitiesByThread;
-      const { [threadId]: _t, ...turnsByThread } = s.turnsByThread;
-      const { [threadId]: _c, ...checkpointsByThread } = s.checkpointsByThread;
-      const { [threadId]: _p, ...plansByThread } = s.plansByThread;
       const { [threadId]: _u, ...unreadByThread } = s.unreadByThread;
       const { [threadId]: _s, ...lastSeqByThread } = s.lastSeqByThread;
-      void _a;
-      void _t;
-      void _c;
-      void _p;
       void _u;
       void _s;
       return {
         threads: s.threads.filter((t) => t.id !== threadId),
         activeThreadId: s.activeThreadId === threadId ? null : s.activeThreadId,
-        activitiesByThread,
-        turnsByThread,
-        checkpointsByThread,
-        plansByThread,
         unreadByThread,
         lastSeqByThread,
       };
@@ -180,49 +150,10 @@ export const useChatStore = create<ChatV2State & ChatV2Actions>()((set, get) => 
   },
 
   applyEvent(event) {
-    switch (event.type) {
-      case "chat.activity.appended":
-        return applyActivityAppended(set, get, event);
-      case "chat.turn.started":
-        return applyTurnStarted(set, event);
-      case "chat.turn.completed":
-        return applyTurnCompleted(set, event);
-      case "chat.turn.aborted":
-        return applyTurnAborted(set, event);
-      case "chat.checkpoint.created":
-        return applyCheckpointCreated(set, event);
-      case "chat.plan.upserted":
-        return applyPlanUpserted(set, event);
-      case "chat.thread.reverted":
-        return applyThreadReverted(set, event);
-      // Legacy / non-v2 events are ignored by this store. The bridge
-      // still passes them in so we can fan-out logging if needed.
-      default:
-        return;
+    if (event.type === "chat.activity.appended") {
+      applyActivityAppended(set, get, event);
     }
-  },
-
-  hydrateFromThreadState(threadId, state) {
-    const { activities, turns } = threadStateToActivities(threadId, state);
-    set((s) => ({
-      activitiesByThread: {
-        ...s.activitiesByThread,
-        [threadId]: activities,
-      },
-      turnsByThread: {
-        ...s.turnsByThread,
-        [threadId]: turns,
-      },
-      // Hydration produces synthetic seqs; track the highest one so the
-      // WS bridge can compare incoming live events against it.
-      lastSeqByThread: {
-        ...s.lastSeqByThread,
-        [threadId]: activities.reduce(
-          (max, a) => Math.max(max, a.sequence ?? -1),
-          s.lastSeqByThread[threadId] ?? -1,
-        ),
-      },
-    }));
+    // All other chat.* frames are owned by chat-solid post-migration.
   },
 
   reset() {
@@ -231,8 +162,8 @@ export const useChatStore = create<ChatV2State & ChatV2Actions>()((set, get) => 
 }));
 
 // ---------------------------------------------------------------------------
-// Reducer branches — kept as standalone functions so the test file can
-// exercise them without going through the store hook.
+// Reducer — kept standalone so the test file can exercise it without the
+// store hook.
 // ---------------------------------------------------------------------------
 
 type SetFn = (
@@ -244,129 +175,18 @@ type GetFn = () => ChatV2State & ChatV2Actions;
 
 function applyActivityAppended(set: SetFn, get: GetFn, event: ChatActivityAppendedEvent): void {
   const state = get();
-  const { threadId, activity, seq } = event;
-  const prior = state.activitiesByThread[threadId] ?? [];
-  // Idempotent — drop duplicates (replay can resend events we already have).
-  if (prior.some((a) => a.id === activity.id)) return;
+  const { threadId, seq } = event;
+  const lastSeq = state.lastSeqByThread[threadId] ?? -1;
+  // Idempotent over replay — the WS bus can resend frames the store
+  // already saw. Seq is monotonic per thread, so anything <= lastSeq
+  // is a duplicate.
+  if (seq <= lastSeq) return;
   set({
-    activitiesByThread: { ...state.activitiesByThread, [threadId]: [...prior, activity] },
-    lastSeqByThread: {
-      ...state.lastSeqByThread,
-      [threadId]: Math.max(state.lastSeqByThread[threadId] ?? -1, seq),
-    },
+    lastSeqByThread: { ...state.lastSeqByThread, [threadId]: seq },
     unreadByThread:
       state.activeThreadId === threadId
         ? state.unreadByThread
         : { ...state.unreadByThread, [threadId]: (state.unreadByThread[threadId] ?? 0) + 1 },
-  });
-}
-
-function applyTurnStarted(set: SetFn, event: ChatTurnStartedEvent): void {
-  set((s) => {
-    const threadTurns = s.turnsByThread[event.threadId] ?? {};
-    const turn: TurnSummary = {
-      threadId: event.threadId,
-      turnId: event.turnId,
-      state: "running",
-      requestedAt: event.requestedAt,
-      completedAt: null,
-      assistantMessageId: null,
-    };
-    return {
-      turnsByThread: {
-        ...s.turnsByThread,
-        [event.threadId]: { ...threadTurns, [event.turnId]: turn },
-      },
-    };
-  });
-}
-
-function applyTurnCompleted(set: SetFn, event: ChatTurnCompletedEvent): void {
-  set((s) => {
-    const threadTurns = s.turnsByThread[event.threadId] ?? {};
-    const existing = threadTurns[event.turnId];
-    const next: TurnSummary = {
-      threadId: event.threadId,
-      turnId: event.turnId,
-      state: event.state as TurnSummary["state"],
-      requestedAt: existing?.requestedAt ?? event.completedAt,
-      completedAt: event.completedAt,
-      assistantMessageId: event.assistantMessageId ?? existing?.assistantMessageId ?? null,
-    };
-    return {
-      turnsByThread: {
-        ...s.turnsByThread,
-        [event.threadId]: { ...threadTurns, [event.turnId]: next },
-      },
-    };
-  });
-}
-
-function applyTurnAborted(set: SetFn, event: ChatTurnAbortedEvent): void {
-  set((s) => {
-    const threadTurns = s.turnsByThread[event.threadId] ?? {};
-    const existing = threadTurns[event.turnId];
-    const aborted: TurnSummary = {
-      threadId: event.threadId,
-      turnId: event.turnId,
-      state: event.reason === "error" ? "error" : "interrupted",
-      requestedAt: existing?.requestedAt ?? new Date().toISOString(),
-      completedAt: existing?.completedAt ?? new Date().toISOString(),
-      assistantMessageId: existing?.assistantMessageId ?? null,
-      abortReason: event.reason,
-    };
-    return {
-      turnsByThread: {
-        ...s.turnsByThread,
-        [event.threadId]: { ...threadTurns, [event.turnId]: aborted },
-      },
-    };
-  });
-}
-
-function applyCheckpointCreated(set: SetFn, event: ChatCheckpointCreatedEvent): void {
-  set((s) => {
-    const threadCheckpoints = s.checkpointsByThread[event.threadId] ?? {};
-    return {
-      checkpointsByThread: {
-        ...s.checkpointsByThread,
-        [event.threadId]: { ...threadCheckpoints, [event.checkpoint.turnId]: event.checkpoint },
-      },
-    };
-  });
-}
-
-function applyPlanUpserted(set: SetFn, event: ChatPlanUpsertedEvent): void {
-  set((s) => {
-    const plans = s.plansByThread[event.threadId] ?? {};
-    return {
-      plansByThread: {
-        ...s.plansByThread,
-        [event.threadId]: { ...plans, [event.plan.id]: event.plan },
-      },
-    };
-  });
-}
-
-function applyThreadReverted(set: SetFn, event: ChatThreadRevertedEvent): void {
-  // No store mutation by itself — UI consumers may react (toast, scroll,
-  // dim the affected turn). We expose the event via a transient marker
-  // on the activity log so consumers can render a revert banner.
-  set((s) => {
-    const prior = s.activitiesByThread[event.threadId] ?? [];
-    const marker: ActivityView = {
-      id: `revert-${event.toCheckpointRef}`,
-      tone: "info",
-      kind: "revert",
-      summary: `Reverted to checkpoint ${event.toCheckpointRef.slice(0, 8)}`,
-      payload: { toCheckpointRef: event.toCheckpointRef },
-      turnId: null,
-      createdAt: new Date().toISOString(),
-    };
-    if (prior.some((a) => a.id === marker.id)) return s;
-    return {
-      activitiesByThread: { ...s.activitiesByThread, [event.threadId]: [...prior, marker] },
-    };
   });
 }
 

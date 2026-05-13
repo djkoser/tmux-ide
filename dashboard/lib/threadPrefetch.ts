@@ -11,10 +11,10 @@
  *      returns, call `bootstrapPrefetchFromList(threads, { topN: 5 })`.
  *      The cache eagerly fetches the top-N most-recently-updated threads
  *      in parallel.
- *   2. Hit: `useOrchestrationRecovery` (the only on-switch fetcher today)
- *      swaps `chatThreadGet(id)` for `getOrFetchThread(id)`. Cache hits
- *      resolve synchronously via a pre-resolved promise; misses fall
- *      back to `chatThreadGet` and populate the cache.
+ *   2. Hit: imperative callers swap `chatThreadGet(id)` for
+ *      `getOrFetchThread(id)`. Cache hits resolve synchronously via a
+ *      pre-resolved promise; misses fall back to `chatThreadGet` and
+ *      populate the cache.
  *   3. Stale-while-revalidate: on `document.visibilitychange` → visible,
  *      every cache entry older than `STALE_MS` re-fetches in the
  *      background. The hook keeps returning the old value until the
@@ -144,9 +144,9 @@ export function getCached(threadId: string): CacheEntry | undefined {
 export function getOrFetchThread(threadId: string): Promise<ThreadState | null> {
   // Side-effect: ensure the visibility listener is installed the first
   // time anyone touches the cache. The hook (`usePreloadedThread`) also
-  // calls this, but the imperative path (used by `useOrchestrationRecovery`)
-  // was bypassing it — meaning stale-while-revalidate never armed in
-  // production. Installing on first imperative call closes that gap.
+  // calls this, but imperative callers were bypassing it — meaning
+  // stale-while-revalidate never armed. Installing on first imperative
+  // call closes that gap.
   ensureVisibilityListener();
   const store = useThreadPrefetchStore.getState();
   const cached = store.cache[threadId];
