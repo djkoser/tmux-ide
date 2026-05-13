@@ -28,6 +28,7 @@ export default defineConfig({
       "src/terminal/__tests__/*.test.ts",
       "src/git/__tests__/*.test.ts",
       "src/lib/__tests__/*.test.ts",
+      "src/lsp/__tests__/*.test.ts",
     ],
     coverage: {
       provider: "v8",

@@ -13,40 +13,42 @@ import {
   HoverRequest,
   DefinitionRequest,
   ReferencesRequest,
+  WorkspaceSymbolRequest,
+  RenameRequest,
+  CodeActionRequest,
   PublishDiagnosticsNotification,
   ShutdownRequest,
   ExitNotification,
+  type CodeAction,
+  type Command,
   type Diagnostic,
   type Hover,
   type Location,
   type LocationLink,
+  type Range,
+  type SymbolInformation,
+  type WorkspaceSymbol,
+  type WorkspaceEdit,
 } from "vscode-languageserver-protocol/node.js";
-import { launchTypescriptLanguageServer } from "./launch.ts";
+import {
+  languageServerConfig,
+  languageServerConfigForFile,
+  launchLanguageServer,
+  type Language,
+} from "./launch.ts";
 
-export type Language = "typescript";
-
-const TS_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"]);
+export type { Language } from "./launch.ts";
 
 export function languageForFile(file: string): Language | undefined {
-  const ext = extname(file).toLowerCase();
-  if (TS_EXTENSIONS.has(ext)) return "typescript";
-  return undefined;
+  return languageServerConfigForFile(file)?.language;
 }
 
 function languageIdFor(file: string): string {
-  const ext = extname(file).toLowerCase();
-  switch (ext) {
-    case ".ts":
-    case ".mts":
-    case ".cts":
-      return "typescript";
-    case ".tsx":
-      return "typescriptreact";
-    case ".jsx":
-      return "javascriptreact";
-    default:
-      return "javascript";
-  }
+  const config = languageServerConfigForFile(file);
+  // Fall back to "plaintext" when the file extension isn't in the
+  // table — `ensureOpen` only reaches here after `languageForFile`
+  // already returned a non-undefined value, but we stay defensive.
+  return config ? config.languageIdFor(file) : "plaintext";
 }
 
 export interface LspClient {
@@ -66,6 +68,20 @@ export interface LspClient {
   ): Promise<Location[] | null>;
   diagnostics(file: string): Diagnostic[];
   waitForDiagnostics(file: string, timeoutMs: number): Promise<Diagnostic[]>;
+  workspaceSymbols(
+    query: string,
+  ): Promise<Array<SymbolInformation | WorkspaceSymbol> | null>;
+  rename(
+    file: string,
+    line: number,
+    character: number,
+    newName: string,
+  ): Promise<WorkspaceEdit | null>;
+  codeActions(
+    file: string,
+    range: Range,
+    diagnostics?: Diagnostic[],
+  ): Promise<Array<Command | CodeAction> | null>;
   shutdown(): Promise<void>;
 }
 
@@ -75,11 +91,19 @@ export async function createLspClient(input: {
   root: string;
   language: Language;
 }): Promise<LspClient> {
-  if (input.language !== "typescript") {
-    throw new Error(`Unsupported LSP language: ${input.language}`);
-  }
+  // Confirm the language is registered. Throws on a typo at call
+  // sites; an unregistered language is a bug, not a missing binary.
+  languageServerConfig(input.language);
 
-  const handle = launchTypescriptLanguageServer(input.root);
+  const handle = launchLanguageServer(input.language, input.root);
+  if (!handle) {
+    // Binary not on PATH and no workspace-local copy — degrade to a
+    // no-op client so the rest of the daemon (and the agent) keep
+    // going. The user might not have `pyright` / `rust-analyzer` /
+    // `gopls` installed but should still be able to edit those
+    // files without the LSP service crashing the chat loop.
+    return makeNoOpLspClient(input.root, input.language);
+  }
   handle.process.stderr.on("data", () => {
     /* swallow stderr — surface via logs separately if needed */
   });
@@ -129,11 +153,30 @@ export async function createLspClient(input: {
           hover: { contentFormat: ["markdown", "plaintext"] },
           definition: { linkSupport: true },
           references: {},
+          rename: { prepareSupport: false },
+          codeAction: {
+            codeActionLiteralSupport: {
+              codeActionKind: {
+                valueSet: [
+                  "",
+                  "quickfix",
+                  "refactor",
+                  "refactor.extract",
+                  "refactor.inline",
+                  "refactor.rewrite",
+                  "source",
+                  "source.organizeImports",
+                ],
+              },
+            },
+          },
           publishDiagnostics: { versionSupport: false },
         },
         workspace: {
           configuration: true,
           workspaceFolders: true,
+          symbol: {},
+          applyEdit: false,
         },
       },
       initializationOptions: {},
@@ -217,6 +260,33 @@ export async function createLspClient(input: {
     diagnostics(file) {
       return diagnosticsByFile.get(file) ?? [];
     },
+    async workspaceSymbols(query) {
+      return connection
+        .sendRequest(WorkspaceSymbolRequest.type, { query })
+        .catch(() => null);
+    },
+    async rename(file, line, character, newName) {
+      await ensureOpen(file);
+      await touch(file);
+      return connection
+        .sendRequest(RenameRequest.type, {
+          textDocument: { uri: pathToFileURL(file).href },
+          position: { line, character },
+          newName,
+        })
+        .catch(() => null);
+    },
+    async codeActions(file, range, diagnostics) {
+      await ensureOpen(file);
+      await touch(file);
+      return connection
+        .sendRequest(CodeActionRequest.type, {
+          textDocument: { uri: pathToFileURL(file).href },
+          range,
+          context: { diagnostics: diagnostics ?? [] },
+        })
+        .catch(() => null);
+    },
     async waitForDiagnostics(file, timeoutMs) {
       const existing = diagnosticsByFile.get(file);
       if (existing) return existing;
@@ -254,6 +324,61 @@ export async function createLspClient(input: {
       if (!handle.process.killed) {
         handle.process.kill();
       }
+    },
+  };
+}
+
+/**
+ * Construct a no-op LspClient — used when the language is registered
+ * (we know how it *would* spawn) but the binary isn't available on
+ * the host. Every verb resolves to the empty / null variant the
+ * G21-P1 REST endpoints already expose for "nothing to report":
+ *
+ *   hover            → null
+ *   definition       → null
+ *   references       → null
+ *   diagnostics      → []
+ *   workspaceSymbols → null
+ *   rename           → null
+ *   codeActions      → null
+ *
+ * The chat tools' wrapping envelope is unchanged so the agent sees a
+ * predictable empty response rather than a thrown exception
+ * propagating up the tool loop.
+ */
+function makeNoOpLspClient(root: string, language: Language): LspClient {
+  return {
+    root,
+    language,
+    async ensureOpen() {
+      // No server to notify.
+    },
+    async hover() {
+      return null;
+    },
+    async definition() {
+      return null;
+    },
+    async references() {
+      return null;
+    },
+    diagnostics() {
+      return [];
+    },
+    async waitForDiagnostics() {
+      return [];
+    },
+    async workspaceSymbols() {
+      return null;
+    },
+    async rename() {
+      return null;
+    },
+    async codeActions() {
+      return null;
+    },
+    async shutdown() {
+      // Nothing to tear down.
     },
   };
 }
