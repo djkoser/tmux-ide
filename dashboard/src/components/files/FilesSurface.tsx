@@ -66,6 +66,7 @@ import {
   type RecoverableSnapshot,
 } from "@/lib/editor/buffer-store";
 import { CodeEditor } from "@/components/editor/CodeEditor";
+import { MergeConflictPanel } from "@/components/editor/MergeConflictPanel";
 import { TabStrip } from "@/components/editor/TabStrip";
 import { startFsWatchClient } from "@/lib/editor/fs-watch-client";
 import { modelRegistry } from "@/lib/monaco/model-registry";
@@ -470,20 +471,32 @@ function PreviewBody(props: {
             </div>
           }
         >
-          <div class="flex h-full min-h-0 w-full min-w-0 flex-col">
-            <Show when={buf().externalContent !== null}>
-              <ExternalChangeBanner
-                filePath={buf().filePath}
-                onAccept={() => acceptExternalChange(buf().bufferUri)}
-                onDismiss={() => dismissExternalChange(buf().bufferUri)}
-              />
-            </Show>
-            <CodeEditor
-              uri={buf().bufferUri}
-              readOnly={false}
-              onContentChange={(value) => markContent(buf().bufferUri, value)}
-            />
-          </div>
+          <Show
+            when={buf().externalContent !== null && buf().dirty}
+            fallback={
+              <div class="flex h-full min-h-0 w-full min-w-0 flex-col">
+                <Show when={buf().externalContent !== null}>
+                  {/* Clean buffer that picked up an external write
+                      somehow — fall back to the simple banner. The
+                      G17-P6 silent re-sync path covers most cases;
+                      this branch only fires if `dirty` flips off
+                      between reseed and render. */}
+                  <ExternalChangeBanner
+                    filePath={buf().filePath}
+                    onAccept={() => acceptExternalChange(buf().bufferUri)}
+                    onDismiss={() => dismissExternalChange(buf().bufferUri)}
+                  />
+                </Show>
+                <CodeEditor
+                  uri={buf().bufferUri}
+                  readOnly={false}
+                  onContentChange={(value) => markContent(buf().bufferUri, value)}
+                />
+              </div>
+            }
+          >
+            <MergeConflictPanel buffer={buf()} />
+          </Show>
         </Show>
       )}
     </Show>

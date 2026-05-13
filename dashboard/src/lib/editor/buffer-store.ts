@@ -432,6 +432,50 @@ export function dismissExternalChange(bufferUri: string): void {
   setState("buffers", bufferUri, { ...buf, externalContent: null });
 }
 
+/**
+ * Three-way merge resolution. The user has reviewed base /
+ * external / local and produced a merged result via the
+ * `<MergeConflictPanel>`; apply it as the buffer's new live
+ * content and clear `externalContent`. Recovery snapshot +
+ * autosave + Monaco model + version + dirty flag all update.
+ *
+ * Dirty remains true (the merged result still hasn't been written
+ * to disk); the user's next save commits it. baseContent stays at
+ * the previous on-disk snapshot — the explicit save flow is what
+ * promotes the merged content to disk.
+ */
+export function resolveConflict(bufferUri: string, mergedContent: string): void {
+  const buf = state.buffers[bufferUri];
+  if (!buf) return;
+  // The panel is only visible when externalContent is set; tests
+  // and edge-cases can pass arbitrary content though, so the
+  // resolution path doesn't strictly require externalContent.
+  const dirty = mergedContent !== buf.baseContent;
+  const model = modelRegistry.getModelByUri(bufferUri);
+  try {
+    model?.setValue(mergedContent);
+  } catch {
+    /* model may have been disposed mid-flight */
+  }
+  batch(() => {
+    setState("buffers", bufferUri, {
+      ...buf,
+      content: mergedContent,
+      dirty,
+      externalContent: null,
+    });
+    modelRegistry.setDirty(bufferUri, dirty);
+    modelRegistry.bumpBufferVersion(bufferUri);
+  });
+  if (dirty) {
+    persistRecoverySnapshot(bufferUri);
+    scheduleAutosave(bufferUri);
+  } else {
+    cancelAutosave(bufferUri);
+    clearRecoverySnapshot(bufferUri);
+  }
+}
+
 // ---------------------------------------------------------------------
 // Crash-recovery persistence
 // ---------------------------------------------------------------------
