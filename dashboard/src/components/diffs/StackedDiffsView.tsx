@@ -1,25 +1,24 @@
 /**
- * MonacoDiffsView — file rail + StickyDiffEditor body for the
- * project's working-tree diff.
+ * StackedDiffsView — every changed file in one scroll surface, one
+ * `<StickyDiffEditor>` per file. Scroll position drives the active
+ * file in the left rail; clicking a rail entry scrolls the matching
+ * section into view.
  *
- * Listens for changes via `fetchProjectDiff`, renders a left rail of
- * changed files (same shape the v2-solid-widgets DiffsViewer uses).
- * Clicking a file opens a `<StickyDiffEditor>` with:
- *
- *   originalUri = git://<root>/<file>/HEAD         (read-only)
- *   modifiedUri = disk://<root>/<file>             (working tree)
- *
- * Hunk-by-hunk Accept / Reject buttons fire through the host's
- * callbacks; the per-hunk write-through is stubbed until G17-P5
- * (the host logs the hunk + path for now; the diff stays read-only
- * on disk).
- *
- * This surface coexists with the v2-solid-widgets DiffsViewer +
- * pane 2's DiffsView commit/PR surface — it lives behind
- * `?view=changes` while DiffsView holds `?view=diffs`.
+ * Coexists with `MonacoDiffsView` (rail + single editor). Both share
+ * the same `DiffToolbar` + `LargeDiffGuard` helpers so the per-file
+ * header + threshold UI stay consistent.
  */
 
-import { createMemo, createResource, createSignal, For, Show, onCleanup, type JSX } from "solid-js";
+import {
+  createMemo,
+  createResource,
+  createSignal,
+  For,
+  Show,
+  onCleanup,
+  onMount,
+  type JSX,
+} from "solid-js";
 import { Effect } from "effect";
 import { GitCompare } from "lucide-solid";
 import { fetchProjectDiff, type DiffFileEntry } from "@/lib/api";
@@ -32,15 +31,9 @@ import {
 } from "@/components/editor/StickyDiffEditor";
 import { DiffToolbar, LargeDiffGuard, isLargeDiff } from "@/components/diffs/DiffToolbar";
 
-interface MonacoDiffsViewProps {
+interface StackedDiffsViewProps {
   projectName: string;
-  /** Workspace root used to build Monaco model URIs. Defaults to "/". */
   modelRootPath?: string;
-  /**
-   * Hunk Accept/Reject callbacks. When omitted the editor still
-   * renders the hunk list but the Accept/Reject affordances stay
-   * hidden — matches the `StickyDiffEditor`'s opt-in contract.
-   */
   onAcceptHunk?: (file: string, hunk: DiffHunk) => void;
   onRejectHunk?: (file: string, hunk: DiffHunk) => void;
 }
@@ -82,32 +75,30 @@ function languageFor(filePath: string): string {
   }
 }
 
-function fileBasename(file: string): string {
+function basename(file: string): string {
   const idx = file.lastIndexOf("/");
   return idx === -1 ? file : file.slice(idx + 1);
 }
 
-function fileDirname(file: string): string {
+function dirname(file: string): string {
   const idx = file.lastIndexOf("/");
   return idx === -1 ? "" : file.slice(0, idx + 1);
 }
 
 const POLL_INTERVAL_MS = 5_000;
 
-export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
+export function StackedDiffsView(props: StackedDiffsViewProps): JSX.Element {
   const rootPath = () => props.modelRootPath ?? "/";
-  const [selectedFile, setSelectedFile] = createSignal<string | null>(null);
   const [diffStyle, setDiffStyle] = createSignal<DiffStyle>("split");
-  // Files for which the user has explicitly clicked "Load anyway",
-  // overriding the LARGE_DIFF_LINE_THRESHOLD guard.
+  const [activeFile, setActiveFile] = createSignal<string | null>(null);
   const [forcedLargeLoads, setForcedLargeLoads] = createSignal<Set<string>>(new Set());
+  const [scrollEl, setScrollEl] = createSignal<HTMLDivElement | null>(null);
 
   const [data, { refetch }] = createResource(
     () => props.projectName,
     async (sessionName) => Effect.runPromise(fetchProjectDiff(sessionName)),
   );
 
-  // Re-poll the summary every 5s; same cadence the widget version uses.
   const interval = setInterval(() => void refetch(), POLL_INTERVAL_MS);
   onCleanup(() => clearInterval(interval));
 
@@ -115,21 +106,20 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
   const totalAdditions = createMemo(() => files().reduce((s, f) => s + f.additions, 0));
   const totalDeletions = createMemo(() => files().reduce((s, f) => s + f.deletions, 0));
 
-  // Track URIs we've registered so we can drop refs on unmount + on
-  // file swap. The 60s registry TTL makes rapid switches free.
+  // Eagerly register git:// + disk:// models for every changed file
+  // that isn't gated by the large-diff threshold. The registry's 60s
+  // TTL handles cleanup on unmount.
   const registeredUris = new Set<string>();
   onCleanup(() => {
     for (const uri of registeredUris) modelRegistry.unregisterModel(uri);
     registeredUris.clear();
   });
 
-  function pickFile(file: string) {
-    setSelectedFile(file);
+  function ensureRegistered(file: string) {
     const language = languageFor(file);
     const bufferUri = buildMonacoModelPath(rootPath(), file);
     const diskUri = toDiskUri(bufferUri);
     const gitUri = toGitUri(bufferUri, "HEAD");
-
     if (modelRegistry.modelStatus(diskUri) !== "ready") {
       void Effect.runPromise(
         modelRegistry.registerDisk({
@@ -142,7 +132,6 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
         .then(() => registeredUris.add(diskUri))
         .catch(() => {});
     }
-
     if (modelRegistry.modelStatus(gitUri) !== "ready") {
       void Effect.runPromise(
         modelRegistry.registerGit({
@@ -158,29 +147,10 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
     }
   }
 
-  const selectedUris = createMemo(() => {
-    const file = selectedFile();
-    if (!file) return null;
-    const bufferUri = buildMonacoModelPath(rootPath(), file);
-    return {
-      file,
-      originalUri: toGitUri(bufferUri, "HEAD"),
-      modifiedUri: toDiskUri(bufferUri),
-    };
-  });
-
-  const selectedEntry = createMemo<DiffFileEntry | null>(() => {
-    const file = selectedFile();
-    if (!file) return null;
-    return files().find((f) => f.file === file) ?? null;
-  });
-
-  const selectedIsLarge = createMemo(() => {
-    const entry = selectedEntry();
-    if (!entry) return false;
+  function isFileLarge(entry: DiffFileEntry): boolean {
     if (forcedLargeLoads().has(entry.file)) return false;
     return isLargeDiff(entry.additions, entry.deletions);
-  });
+  }
 
   function forceLoadFile(file: string) {
     setForcedLargeLoads((prev) => {
@@ -190,14 +160,61 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
     });
   }
 
+  // Scroll-driven active file: an IntersectionObserver scoped to the
+  // scroll container picks the entry with the largest intersection
+  // ratio whenever the user scrolls. The default `activeFile`
+  // initializes to the first file once data arrives.
+  let observer: IntersectionObserver | null = null;
+  const sectionRefs = new Map<string, HTMLElement>();
+  function registerSection(file: string, el: HTMLElement | undefined) {
+    if (!el) {
+      sectionRefs.delete(file);
+      return;
+    }
+    sectionRefs.set(file, el);
+    if (observer) observer.observe(el);
+  }
+
+  onMount(() => {
+    const root = scrollEl();
+    if (!root) return;
+    observer = new IntersectionObserver(
+      (entries) => {
+        // Pick the visible entry with the largest intersection ratio.
+        let best: { file: string; ratio: number } | null = null;
+        for (const e of entries) {
+          const file = (e.target as HTMLElement).dataset.diffSection;
+          if (!file) continue;
+          if (!best || e.intersectionRatio > best.ratio) {
+            best = { file, ratio: e.intersectionRatio };
+          }
+        }
+        if (best && best.ratio > 0) setActiveFile(best.file);
+      },
+      { root, threshold: [0, 0.25, 0.5, 0.75, 1] },
+    );
+    for (const el of sectionRefs.values()) observer.observe(el);
+  });
+  onCleanup(() => {
+    observer?.disconnect();
+    observer = null;
+  });
+
+  function scrollToFile(file: string) {
+    const el = sectionRefs.get(file);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    setActiveFile(file);
+  }
+
   return (
     <div
-      data-testid="v2-monaco-diffs-view"
+      data-testid="v2-stacked-diffs-view"
       class="flex h-full min-h-0 w-full flex-col bg-[var(--bg)] text-[var(--fg)]"
     >
       <header class="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-3 text-[12px]">
         <GitCompare class="h-3 w-3 text-[var(--accent)]" aria-hidden="true" />
-        <span data-testid="v2-monaco-diffs-summary" class="text-[var(--dim)]">
+        <span data-testid="v2-stacked-diffs-summary" class="text-[var(--dim)]">
           {files().length} file{files().length !== 1 ? "s" : ""} changed
         </span>
         <Show when={files().length > 0}>
@@ -216,7 +233,7 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
             {(style) => (
               <button
                 type="button"
-                data-testid={`v2-monaco-diffs-style-${style}`}
+                data-testid={`v2-stacked-diffs-style-${style}`}
                 onClick={() => setDiffStyle(style)}
                 aria-pressed={diffStyle() === style}
                 class={
@@ -235,7 +252,7 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
 
       <div class="flex flex-1 min-h-0">
         <aside
-          data-testid="v2-monaco-diffs-file-list"
+          data-testid="v2-stacked-diffs-rail"
           class="flex w-64 shrink-0 flex-col overflow-y-auto border-r border-[var(--border)] bg-[var(--bg-weak)]"
         >
           <Show
@@ -246,7 +263,7 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
               when={files().length > 0}
               fallback={
                 <div
-                  data-testid="v2-monaco-diffs-empty"
+                  data-testid="v2-stacked-diffs-empty"
                   class="px-3 py-2 text-[11px] text-[var(--dim)]"
                 >
                   No uncommitted changes
@@ -255,13 +272,13 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
             >
               <For each={files()}>
                 {(f) => {
-                  const isActive = () => selectedFile() === f.file;
+                  const isActive = () => activeFile() === f.file;
                   return (
                     <button
                       type="button"
-                      data-testid="v2-monaco-diffs-file"
+                      data-testid="v2-stacked-diffs-rail-file"
                       data-diff-file-path={f.file}
-                      onClick={() => pickFile(f.file)}
+                      onClick={() => scrollToFile(f.file)}
                       aria-pressed={isActive()}
                       class={
                         "flex h-6 w-full items-center px-2 text-left text-[12px] " +
@@ -271,11 +288,11 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
                       }
                     >
                       <span class="flex-1 min-w-0 truncate">
-                        <Show when={fileDirname(f.file)}>
-                          <span class="text-[var(--dim)]">{fileDirname(f.file)}</span>
+                        <Show when={dirname(f.file)}>
+                          <span class="text-[var(--dim)]">{dirname(f.file)}</span>
                         </Show>
                         <span class={isActive() ? "text-[var(--accent)]" : "text-[var(--fg)]"}>
-                          {fileBasename(f.file)}
+                          {basename(f.file)}
                         </span>
                       </span>
                       <span class="ml-2 flex shrink-0 gap-1">
@@ -294,51 +311,85 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
           </Show>
         </aside>
 
-        <section data-testid="v2-monaco-diffs-body" class="flex flex-1 min-w-0 min-h-0 flex-col">
+        <section
+          ref={setScrollEl}
+          data-testid="v2-stacked-diffs-scroll"
+          class="flex flex-1 min-w-0 min-h-0 flex-col overflow-y-auto"
+        >
           <Show
-            when={selectedUris()}
+            when={files().length > 0}
             fallback={
-              <div
-                data-testid="v2-monaco-diffs-empty-preview"
-                class="flex h-full items-center justify-center text-[11px] text-[var(--dim)]"
-              >
-                Pick a file to diff.
+              <div class="flex h-full items-center justify-center text-[11px] text-[var(--dim)]">
+                No uncommitted changes
               </div>
             }
           >
-            {(uris) => (
-              <>
-                <DiffToolbar
-                  file={uris().file}
-                  additions={selectedEntry()?.additions ?? 0}
-                  deletions={selectedEntry()?.deletions ?? 0}
-                  badge="Changed"
-                />
-                <Show
-                  when={!selectedIsLarge()}
-                  fallback={
-                    <LargeDiffGuard
-                      file={uris().file}
-                      additions={selectedEntry()?.additions ?? 0}
-                      deletions={selectedEntry()?.deletions ?? 0}
-                      onLoadAnyway={() => forceLoadFile(uris().file)}
+            <For each={files()}>
+              {(f) => {
+                const bufferUri = buildMonacoModelPath(rootPath(), f.file);
+                const originalUri = toGitUri(bufferUri, "HEAD");
+                const modifiedUri = toDiskUri(bufferUri);
+                const large = () => isFileLarge(f);
+                // Kick off the model registration only when we're
+                // actually mounting the editor (i.e. not blocked by
+                // the large-diff guard).
+                const ensureLoaded = () => {
+                  if (!large()) ensureRegistered(f.file);
+                };
+                return (
+                  <div
+                    ref={(el) => registerSection(f.file, el)}
+                    data-diff-section={f.file}
+                    data-testid="v2-stacked-diffs-section"
+                    class="flex flex-col border-b border-[var(--border)]"
+                  >
+                    <DiffToolbar
+                      file={f.file}
+                      additions={f.additions}
+                      deletions={f.deletions}
+                      badge="Changed"
                     />
-                  }
-                >
-                  <StickyDiffEditor
-                    originalUri={uris().originalUri}
-                    modifiedUri={uris().modifiedUri}
-                    diffStyle={diffStyle()}
-                    onAcceptHunk={
-                      props.onAcceptHunk ? (h) => props.onAcceptHunk!(uris().file, h) : undefined
-                    }
-                    onRejectHunk={
-                      props.onRejectHunk ? (h) => props.onRejectHunk!(uris().file, h) : undefined
-                    }
-                  />
-                </Show>
-              </>
-            )}
+                    <Show
+                      when={!large()}
+                      fallback={
+                        <LargeDiffGuard
+                          file={f.file}
+                          additions={f.additions}
+                          deletions={f.deletions}
+                          onLoadAnyway={() => {
+                            forceLoadFile(f.file);
+                            ensureRegistered(f.file);
+                          }}
+                        />
+                      }
+                    >
+                      {(() => {
+                        ensureLoaded();
+                        return (
+                          <div class="min-h-[240px]">
+                            <StickyDiffEditor
+                              originalUri={originalUri}
+                              modifiedUri={modifiedUri}
+                              diffStyle={diffStyle()}
+                              onAcceptHunk={
+                                props.onAcceptHunk
+                                  ? (h) => props.onAcceptHunk!(f.file, h)
+                                  : undefined
+                              }
+                              onRejectHunk={
+                                props.onRejectHunk
+                                  ? (h) => props.onRejectHunk!(f.file, h)
+                                  : undefined
+                              }
+                            />
+                          </div>
+                        );
+                      })()}
+                    </Show>
+                  </div>
+                );
+              }}
+            </For>
           </Show>
         </section>
       </div>
