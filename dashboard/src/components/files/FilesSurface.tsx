@@ -63,6 +63,7 @@ import {
   openBuffer,
   restoreRecoverableBuffer,
   save,
+  saveAll,
   setActiveBuffer,
   type RecoverableSnapshot,
 } from "@/lib/editor/buffer-store";
@@ -256,9 +257,14 @@ export function FilesSurface(props: FilesSurfaceProps): JSX.Element {
       if (!(event.metaKey || event.ctrlKey)) return;
       const key = event.key;
       if (key === "s" || key === "S") {
+        event.preventDefault();
+        // Cmd/Ctrl+Shift+S = Save All; Cmd/Ctrl+S = Save active.
+        if (event.shiftKey) {
+          void saveAll();
+          return;
+        }
         const uri = bufferState.activeUri;
         if (!uri) return;
-        event.preventDefault();
         void save(uri);
         return;
       }
@@ -447,6 +453,7 @@ export function FilesSurface(props: FilesSurfaceProps): JSX.Element {
               previewPath={previewPath()}
               previewKind={previewKind()}
               rootPath={rootPath()}
+              sessionName={props.projectName}
             />
           </Show>
         </div>
@@ -514,6 +521,7 @@ function PreviewBody(props: {
   previewPath: string | null;
   previewKind: ManagedFileKind | null;
   rootPath: string;
+  sessionName: string;
 }) {
   // Active text buffer wins; otherwise fall through to the non-text
   // preview routing.
@@ -538,7 +546,12 @@ function PreviewBody(props: {
       fallback={
         <Show when={previewFile()}>
           {(f) => (
-            <FileRenderer file={f()} modelRootPath={props.rootPath} onEditSource={undefined} />
+            <FileRenderer
+              file={f()}
+              modelRootPath={props.rootPath}
+              sessionName={props.sessionName}
+              onEditSource={undefined}
+            />
           )}
         </Show>
       }

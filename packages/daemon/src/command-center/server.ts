@@ -1920,6 +1920,74 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     });
   });
 
+  // GET /api/project/:name/image/:file — read an image file inside
+  // the session directory and return it as a base64 `data:` URL. The
+  // path is sandboxed the same way as `/preview/:file` (realpath +
+  // session-root containment). Used by the dashboard's image
+  // renderer so it doesn't have to embed the raw text endpoint URL.
+  app.get("/api/project/:name/image/:file{.+}", (c) => {
+    const name = c.req.param("name");
+    const file = c.req.param("file");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+
+    const requested = pathResolve(session.dir, file);
+    let resolvedRoot: string;
+    let resolvedTarget: string;
+    try {
+      resolvedRoot = realpathSync(session.dir);
+    } catch {
+      return c.json({ error: "Session directory not accessible" }, 500);
+    }
+    try {
+      resolvedTarget = realpathSync(requested);
+    } catch {
+      return c.json({ error: "Not found" }, 404);
+    }
+    if (!resolvedTarget.startsWith(resolvedRoot + "/") && resolvedTarget !== resolvedRoot) {
+      return c.json({ error: "Path outside session" }, 403);
+    }
+    let stat;
+    try {
+      stat = statSync(resolvedTarget);
+    } catch {
+      return c.json({ error: "Not found" }, 404);
+    }
+    if (!stat.isFile()) return c.json({ error: "Not a regular file" }, 400);
+    // 25 MB hard cap. Images larger than this are almost certainly a
+    // wrong-file mistake; refusing keeps us from base64-encoding a
+    // 100 MB blob into a JSON response.
+    if (stat.size > 25 * 1024 * 1024) {
+      return c.json({ error: "Image too large", size: stat.size }, 413);
+    }
+    const ext = file.split(".").pop()?.toLowerCase() ?? "";
+    const mime =
+      ext === "png"
+        ? "image/png"
+        : ext === "jpg" || ext === "jpeg"
+          ? "image/jpeg"
+          : ext === "gif"
+            ? "image/gif"
+            : ext === "webp"
+              ? "image/webp"
+              : ext === "bmp"
+                ? "image/bmp"
+                : ext === "ico"
+                  ? "image/x-icon"
+                  : ext === "svg"
+                    ? "image/svg+xml"
+                    : "application/octet-stream";
+    let dataUrl: string;
+    try {
+      const bytes = readFileSync(resolvedTarget);
+      dataUrl = `data:${mime};base64,${bytes.toString("base64")}`;
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : "read failed" }, 500);
+    }
+    return c.json({ file, dataUrl, mime, size: stat.size });
+  });
+
   // --- Milestone endpoints ---
 
   app.get("/api/project/:name/milestones", (c) => {

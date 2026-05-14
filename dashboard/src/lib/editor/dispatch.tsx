@@ -26,6 +26,11 @@ export interface FileRendererProps {
   /** Workspace root used to build Monaco model URIs. */
   modelRootPath: string;
   /**
+   * Session name used by renderers that fetch from the daemon
+   * (currently the image renderer's data-URL pipeline).
+   */
+  sessionName?: string;
+  /**
    * Optional source-toggle handler. Markdown + SVG show an "Edit
    * source" affordance only when this is provided.
    */
@@ -36,7 +41,7 @@ export function FileRenderer(props: FileRendererProps): JSX.Element {
   return (
     <Switch fallback={<BinaryRenderer file={props.file} />}>
       <Match when={props.file.kind === "image"}>
-        <ImageRenderer file={props.file} />
+        <ImageRenderer file={props.file} sessionName={props.sessionName} />
       </Match>
       <Match when={props.file.kind === "svg"}>
         <SvgRenderer

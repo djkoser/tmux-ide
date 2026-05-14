@@ -419,6 +419,21 @@ export async function save(bufferUri: string): Promise<void> {
 }
 
 /**
+ * Save every dirty, ready buffer in parallel. Iterates a snapshot of
+ * `order` so a close/open mid-save doesn't perturb the loop. Errors
+ * on individual buffers surface via each buffer's `saveError` field —
+ * the returned promise resolves once every save has settled.
+ */
+export async function saveAll(): Promise<void> {
+  const targets = state.order
+    .map((uri) => state.buffers[uri])
+    .filter((b): b is OpenBuffer => !!b && b.status === "ready" && b.dirty && !b.saving)
+    .map((b) => b.bufferUri);
+  if (targets.length === 0) return;
+  await Promise.all(targets.map((uri) => save(uri)));
+}
+
+/**
  * Close a buffer. If `discardDirty` is false (default), the call is
  * a no-op when the buffer is dirty — the host can prompt the user
  * before passing `discardDirty: true`. Drops the buffer's
