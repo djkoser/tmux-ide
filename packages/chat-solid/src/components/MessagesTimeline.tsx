@@ -44,6 +44,7 @@ import { MessageRoleHeader } from "./MessageRoleHeader";
 import {
   deriveMessageTone,
   deriveTerminalAssistantMessageIds,
+  formatTurnDuration,
   resolveAssistantCopyState,
   rowSignature,
   splitWorkEntries,
@@ -207,17 +208,28 @@ function TimelineRow(props: TimelineRowProps): JSX.Element {
   }
   const messageRow = props.row;
   const showDivider = messageRow.message.role === "assistant" && messageRow.showCompletionDivider;
+  const dividerLabel = (): string => {
+    if (!showDivider) return "Completed turn";
+    const start = messageRow.completionTurnStartedAt;
+    const end = messageRow.message.role === "assistant"
+      ? (messageRow.message.completedAt ?? messageRow.createdAt)
+      : messageRow.createdAt;
+    if (!start) return "Completed turn";
+    const duration = formatTurnDuration(start, end);
+    return duration ? `Completed in ${duration}` : "Completed turn";
+  };
   return (
     <>
       <Show when={showDivider}>
         <div
           data-testid="message-completion-divider"
+          data-turn-started-at={messageRow.completionTurnStartedAt ?? ""}
           class="my-2 flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-[var(--fg-muted,var(--dim))]"
-          aria-hidden="true"
+          aria-label={dividerLabel()}
         >
-          <span class="h-px flex-1 bg-[var(--border-weak,var(--border))]" />
-          <span class="shrink-0">Completed turn</span>
-          <span class="h-px flex-1 bg-[var(--border-weak,var(--border))]" />
+          <span aria-hidden="true" class="h-px flex-1 bg-[var(--border-weak,var(--border))]" />
+          <span class="shrink-0">{dividerLabel()}</span>
+          <span aria-hidden="true" class="h-px flex-1 bg-[var(--border-weak,var(--border))]" />
         </div>
       </Show>
       <MessageRow
@@ -342,6 +354,7 @@ function UserRow(props: {
     typeof props.revertTurnCount === "number" &&
     props.revertTurnCount > 0 &&
     typeof props.onRevertFromMessage === "function";
+  const [revertConfirming, setRevertConfirming] = createSignal(false);
   return (
     <section
       data-testid="message-row"
@@ -356,16 +369,51 @@ function UserRow(props: {
         actions={
           <span class="flex items-center gap-1.5">
             <Show when={showRevert()}>
-              <button
-                type="button"
-                data-testid="message-revert-from-here"
-                data-revert-count={props.revertTurnCount ?? 0}
-                class="cursor-pointer rounded-sm border border-[var(--border-weak,var(--border))] px-1.5 py-0.5 text-[10px] text-[var(--fg-secondary)] opacity-0 transition-opacity hover:border-[var(--accent)] hover:text-[var(--accent)] group-hover/user:opacity-100"
-                onClick={() => props.onRevertFromMessage?.(props.message.id)}
-                title={`Revert ${props.revertTurnCount} turn${props.revertTurnCount === 1 ? "" : "s"} from here`}
+              <Show
+                when={revertConfirming()}
+                fallback={
+                  <button
+                    type="button"
+                    data-testid="message-revert-from-here"
+                    data-revert-count={props.revertTurnCount ?? 0}
+                    class="cursor-pointer rounded-sm border border-[var(--border-weak,var(--border))] px-1.5 py-0.5 text-[10px] text-[var(--fg-secondary)] opacity-0 transition-opacity hover:border-[var(--accent)] hover:text-[var(--accent)] group-hover/user:opacity-100"
+                    onClick={() => setRevertConfirming(true)}
+                    title={`Revert ${props.revertTurnCount} turn${props.revertTurnCount === 1 ? "" : "s"} from here`}
+                  >
+                    Revert {props.revertTurnCount} turn{props.revertTurnCount === 1 ? "" : "s"}
+                  </button>
+                }
               >
-                Revert {props.revertTurnCount} turn{props.revertTurnCount === 1 ? "" : "s"}
-              </button>
+                <span
+                  data-testid="message-revert-from-here-confirm"
+                  class="inline-flex items-center gap-1 rounded-sm border border-[var(--red,#c33)] bg-[var(--red,#c33)]/10 px-1.5 py-0.5 text-[10px] text-[var(--red,#c33)]"
+                  role="group"
+                  aria-label={`Confirm revert of ${props.revertTurnCount} turn${props.revertTurnCount === 1 ? "" : "s"}`}
+                >
+                  <span>
+                    Revert {props.revertTurnCount} turn{props.revertTurnCount === 1 ? "" : "s"}?
+                  </span>
+                  <button
+                    type="button"
+                    data-testid="message-revert-from-here-yes"
+                    class="cursor-pointer rounded-sm border-0 bg-transparent px-1 text-[10px] font-semibold text-[var(--red,#c33)] hover:underline"
+                    onClick={() => {
+                      props.onRevertFromMessage?.(props.message.id);
+                      setRevertConfirming(false);
+                    }}
+                  >
+                    Yes
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="message-revert-from-here-no"
+                    class="cursor-pointer rounded-sm border-0 bg-transparent px-1 text-[10px] text-[var(--fg-secondary)] hover:underline"
+                    onClick={() => setRevertConfirming(false)}
+                  >
+                    No
+                  </button>
+                </span>
+              </Show>
             </Show>
             <MessageCopyButton text={plainText()} class="opacity-0 group-hover/user:opacity-100" />
           </span>

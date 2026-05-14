@@ -17,6 +17,7 @@ import type {
   ContentBlock,
 } from "../types";
 import { AttachmentChip } from "./AttachmentChip";
+import { AttachmentCarousel } from "./AttachmentCarousel";
 import { AttachmentPicker } from "./AttachmentPicker";
 import { ComposerBannerStack, type ComposerBannerItem } from "./ComposerBannerStack";
 import {
@@ -70,6 +71,13 @@ export function ChatComposer(props: {
   onPrefillPromptConsumed?: () => void;
   onAddAttachment(attachment: ComposerAttachment): void;
   onRemoveAttachment(index: number): void;
+  /**
+   * Optional reorder callback wired to the `AttachmentCarousel`
+   * arrow buttons. Receives the source + destination indices; the
+   * host applies the move to its underlying list. When omitted,
+   * the carousel hides the reorder affordance entirely.
+   */
+  onReorderAttachment?: (fromIndex: number, toIndex: number) => void;
   onSend(content: ContentBlock[]): Promise<void>;
   onCancel(): Promise<void> | void;
   /**
@@ -455,16 +463,28 @@ export function ChatComposer(props: {
         />
       </Show>
       <Show when={props.attachments().length > 0}>
-        <div class="mb-2 flex flex-wrap gap-1.5">
-          <For each={props.attachments()}>
-            {(attachment, index) => (
-              <AttachmentChip
-                attachment={attachment}
-                onRemove={() => props.onRemoveAttachment(index())}
-              />
-            )}
-          </For>
-        </div>
+        <Show
+          when={props.attachments().length >= 3 || hasImageAttachment(props.attachments())}
+          fallback={
+            <div class="mb-2 flex flex-wrap gap-1.5">
+              <For each={props.attachments()}>
+                {(attachment, index) => (
+                  <AttachmentChip
+                    attachment={attachment}
+                    onRemove={() => props.onRemoveAttachment(index())}
+                  />
+                )}
+              </For>
+            </div>
+          }
+        >
+          <AttachmentCarousel
+            attachments={props.attachments}
+            onRemove={props.onRemoveAttachment}
+            onReorder={props.onReorderAttachment}
+            class="mb-2"
+          />
+        </Show>
       </Show>
       <div class="relative flex min-h-[88px] gap-2 rounded-md border border-border bg-surface p-2 focus-within:border-accent">
         <ComposerCommandMenu
@@ -556,4 +576,11 @@ export function ChatComposer(props: {
       </div>
     </form>
   );
+}
+
+function hasImageAttachment(attachments: ReadonlyArray<ComposerAttachment>): boolean {
+  for (const attachment of attachments) {
+    if (attachment.kind === "image") return true;
+  }
+  return false;
 }

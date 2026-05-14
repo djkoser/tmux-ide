@@ -186,16 +186,21 @@ describe("MessagesTimeline revert-from-here", () => {
     expect(btn?.textContent).toContain("Revert 1 turn");
   });
 
-  it("dispatches onRevertFromMessage with the userMessageId", () => {
+  it("dispatches onRevertFromMessage with the userMessageId after confirming", () => {
     const onRevert = vi.fn();
     mounted = mount({
       rows: [messageRow(userMsg("u1", "hi"), { revertTurnCount: 3 })],
       onRevertFromMessage: onRevert,
     });
-    const btn = mounted.container.querySelector<HTMLButtonElement>(
-      "[data-testid='message-revert-from-here']",
-    );
-    btn!.click();
+    // First click opens the inline confirm prompt; the destructive
+    // dispatch lands on the second click (Yes).
+    mounted.container
+      .querySelector<HTMLButtonElement>("[data-testid='message-revert-from-here']")!
+      .click();
+    expect(onRevert).not.toHaveBeenCalled();
+    mounted.container
+      .querySelector<HTMLButtonElement>("[data-testid='message-revert-from-here-yes']")!
+      .click();
     expect(onRevert).toHaveBeenCalledExactlyOnceWith("u1");
   });
 

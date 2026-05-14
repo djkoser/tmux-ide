@@ -12,7 +12,24 @@ export type ContentBlock =
 
 export type ComposerAttachment =
   | { kind: "terminal"; paneId: string; paneTitle: string; sessionName: string }
-  | { kind: "file"; path: string; label: string };
+  | { kind: "file"; path: string; label: string }
+  | {
+      /**
+       * Staged image attachment (e.g. pasted-from-clipboard or
+       * picked from the OS picker). Carries a data URL so the
+       * carousel can render a 56px thumbnail without a fetch; the
+       * sender re-encodes it to a ContentBlock on send. Optional
+       * `sizeBytes` drives the badge shown in the carousel card
+       * footer.
+       */
+      kind: "image";
+      dataUrl: string;
+      label: string;
+      mimeType?: string;
+      sizeBytes?: number;
+      width?: number;
+      height?: number;
+    };
 
 export interface ComposerTerminalPane {
   paneId: string;
@@ -250,6 +267,12 @@ export type MessagesTimelineRow =
        * between the turn's tool work and its prose conclusion.
        */
       showCompletionDivider?: boolean;
+      /**
+       * Optional ISO timestamp that scopes the completion divider's
+       * duration label to this turn ("Completed in 3.2s"). When
+       * unset, the divider falls back to the bare label.
+       */
+      completionTurnStartedAt?: string;
       /**
        * Number of completed turns that would be rolled back if the
        * user clicked "Revert from here" on this user message. Drives

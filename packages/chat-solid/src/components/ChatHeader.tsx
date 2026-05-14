@@ -2,6 +2,7 @@ import { createMemo, createSignal, Show, type Accessor } from "solid-js";
 import type { AgentProvider, ChatThreadUsageSummary, StopReason, ThreadState } from "../types";
 import type { ProviderInfo } from "../api";
 import { ContextWindowMeter } from "./ContextWindowMeter";
+import { OpenInPicker, type EditorId } from "./OpenInPicker";
 import { ProviderModelPicker } from "./ProviderModelPicker";
 
 interface ChatHeaderProps {
@@ -14,6 +15,21 @@ interface ChatHeaderProps {
   availableProviders?: Accessor<ReadonlyArray<ProviderInfo>>;
   /** Fires when the picker selects a different provider. */
   onProviderChange?: (next: AgentProvider) => void;
+  /**
+   * Editors detected on the host machine, used by the
+   * `OpenInPicker` chip. When omitted, the picker is hidden.
+   */
+  availableEditors?: Accessor<ReadonlyArray<EditorId>>;
+  /** Currently-preferred editor; null until the user picks one. */
+  preferredEditor?: Accessor<EditorId | null>;
+  /** Project directory passed to the editor when the user clicks. */
+  openInCwd?: Accessor<string | null>;
+  /** Host wires this to the shell `openInEditor` API. */
+  onOpenInEditor?: (editorId: EditorId, cwd: string) => void;
+  /** Persisted by the host (composer preferences / user settings). */
+  onPreferredEditorChange?: (editorId: EditorId) => void;
+  /** Optional shortcut hint surfaced next to the preferred row. */
+  openInFavoriteShortcutLabel?: Accessor<string | null>;
   onCancel(): void;
   onRename(title: string): Promise<void>;
   onClose?: () => void;
@@ -77,6 +93,28 @@ export function ChatHeader(props: ChatHeaderProps) {
           availableProviders={providerList}
           onChange={(next) => props.onProviderChange?.(next)}
           disabled={props.inflight}
+        />
+      </Show>
+      <Show
+        when={
+          props.availableEditors &&
+          props.preferredEditor &&
+          props.openInCwd &&
+          props.onOpenInEditor &&
+          props.onPreferredEditorChange
+        }
+      >
+        <OpenInPicker
+          availableEditors={props.availableEditors!}
+          preferredEditor={props.preferredEditor!}
+          openInCwd={props.openInCwd!}
+          onOpenInEditor={props.onOpenInEditor!}
+          onPreferredEditorChange={props.onPreferredEditorChange!}
+          favoriteShortcutLabel={
+            props.openInFavoriteShortcutLabel
+              ? () => props.openInFavoriteShortcutLabel!()
+              : undefined
+          }
         />
       </Show>
       <Show when={props.sessionName()}>

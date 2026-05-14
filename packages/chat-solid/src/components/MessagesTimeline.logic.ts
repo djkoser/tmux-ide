@@ -259,6 +259,21 @@ export function deriveMessagesTimelineRows(
     const isAssistant = message.role === "assistant";
     const showCompletionDivider = isAssistant && completionTarget === entry.id;
     const revertTurnCount = isUser ? revertMap?.get(message.id) : undefined;
+    // Find the most recent user message before this row so the
+    // divider can show "Completed in Xs" relative to that turn's
+    // start. Walk back through the source list — cheap since the
+    // chain is bounded by the size of one turn.
+    let completionTurnStartedAt: string | undefined;
+    if (showCompletionDivider) {
+      for (let back = index - 1; back >= 0; back -= 1) {
+        const prev = input.entries[back];
+        if (prev?.kind !== "message") continue;
+        if (prev.message.role === "user") {
+          completionTurnStartedAt = prev.message.createdAt;
+          break;
+        }
+      }
+    }
 
     out.push({
       kind: "message",
@@ -266,6 +281,9 @@ export function deriveMessagesTimelineRows(
       createdAt: entry.createdAt,
       message,
       ...(showCompletionDivider ? { showCompletionDivider: true } : {}),
+      ...(completionTurnStartedAt
+        ? { completionTurnStartedAt }
+        : {}),
       ...(typeof revertTurnCount === "number" && revertTurnCount > 0
         ? { revertTurnCount }
         : {}),
@@ -290,6 +308,93 @@ export function deriveMessagesTimelineRows(
  * via prop if a host wants a denser view.
  */
 export const MAX_VISIBLE_WORK_ENTRIES = 6;
+
+/**
+ * Identify the entry id that should carry the "this turn is
+ * complete" divider when the host doesn't supply one explicitly.
+ *
+ * The rule: a turn is a span starting at a user message and ending
+ * at the LAST non-streaming assistant message before the next user
+ * message (or the end of the list). The divider sits on that final
+ * assistant message so it visually separates a finished turn from
+ * whatever is currently pending below it.
+ *
+ * Returns `null` when no turn is closed (e.g. the assistant is
+ * still streaming the only response, or the thread is empty).
+ *
+ * Stable + pure — call from the host's row derivation so the
+ * divider sticks on the last completed turn even as the user keeps
+ * scrolling and the streaming row moves around below it.
+ */
+export function findActiveCompletionDividerEntryId(
+  entries: ReadonlyArray<TimelineSourceEntry>,
+): string | null {
+  let last: string | null = null;
+  for (const entry of entries) {
+    if (entry.kind !== "message") continue;
+    const message = entry.message;
+    if (message.role !== "assistant") continue;
+    if (message.streaming) continue;
+    last = entry.id;
+  }
+  return last;
+}
+
+/**
+ * Format the elapsed duration between a user message and its
+ * closing assistant message, surfaced inside the completion
+ * divider chrome ("Completed in 3.2s" / "Completed in 12m").
+ *
+ * Both inputs are ISO timestamps. Negative or NaN spans return
+ * `null` so the renderer falls back to the bare "Completed turn"
+ * label.
+ */
+export function formatTurnDuration(startIso: string, endIso: string): string | null {
+  const start = Date.parse(startIso);
+  const end = Date.parse(endIso);
+  if (Number.isNaN(start) || Number.isNaN(end)) return null;
+  const ms = end - start;
+  if (ms < 0) return null;
+  if (ms < 1_000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1_000).toFixed(1)}s`;
+  if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m`;
+  return `${(ms / 3_600_000).toFixed(1)}h`;
+}
+
+/**
+ * Map of user-message id → "this turn would revert N turns" count.
+ * Counts every completed assistant turn AFTER each user message,
+ * so the rightmost user message gets 0 (no reverts available),
+ * and the topmost gets N (every turn below it).
+ *
+ * Pure helper for hosts that want the "Revert N turns" button on
+ * every user message without tracking the counts themselves.
+ */
+export function deriveRevertTurnCounts(
+  entries: ReadonlyArray<TimelineSourceEntry>,
+): ReadonlyMap<string, number> {
+  const out = new Map<string, number>();
+  const userIdsInOrder: string[] = [];
+  for (const entry of entries) {
+    if (entry.kind !== "message") continue;
+    const message = entry.message;
+    if (message.role === "user") {
+      userIdsInOrder.push(message.id);
+    }
+    if (message.role === "assistant" && !message.streaming) {
+      // Roll up: every prior user message gains one revertable turn,
+      // EXCEPT the most recent user message (its own turn is the one
+      // we're crediting — reverting from it would be a self-loop).
+      for (let i = 0; i < userIdsInOrder.length - 1; i += 1) {
+        const userId = userIdsInOrder[i]!;
+        out.set(userId, (out.get(userId) ?? 0) + 1);
+      }
+    }
+  }
+  // We never enter zero entries in the first place — callers can
+  // assume every key has count >= 1.
+  return out;
+}
 
 /**
  * Visible / overflow split for a `work` row's entries. The
