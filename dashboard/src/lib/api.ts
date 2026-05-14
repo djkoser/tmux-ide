@@ -103,6 +103,17 @@ export function unregisterProject(name: string): Effect.Effect<void, ApiError> {
   }).pipe(Effect.map(() => undefined));
 }
 
+export function registerProject(input: {
+  dir: string;
+  name?: string;
+}): Effect.Effect<RegisteredProject, ApiError> {
+  return request<{ project: RegisteredProject }>("/api/projects", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  }).pipe(Effect.map((data) => data.project));
+}
+
 // ---------------------------------------------------------------------
 // Setup wizard
 // ---------------------------------------------------------------------

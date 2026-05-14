@@ -26,6 +26,7 @@ import { Portal } from "solid-js/web";
 import { useNavigate } from "@solidjs/router";
 import { Effect } from "effect";
 import { fetchProjects, fetchSessions, type RegisteredProject } from "@/lib/api";
+import { projectsBusTick, useProjectsBus } from "@/lib/projectsBus";
 
 const MAX_RESULT_ROWS = 60;
 const LAST_USED_KEY = "tmux-ide.v2.last-used-projects.v1";
@@ -122,21 +123,29 @@ export function ProjectQuickSwitcher(): JSX.Element {
   const navigate = useNavigate();
   let inputRef: HTMLInputElement | undefined;
 
-  const [projectsResource, { refetch: refetchProjects }] = createResource(async () => {
-    try {
-      return await Effect.runPromise(fetchProjects());
-    } catch {
-      return [] as readonly RegisteredProject[];
-    }
-  });
+  useProjectsBus();
 
-  const [sessionsResource, { refetch: refetchSessions }] = createResource(async () => {
-    try {
-      return await Effect.runPromise(fetchSessions());
-    } catch {
-      return [] as readonly { name: string; dir: string }[];
-    }
-  });
+  const [projectsResource, { refetch: refetchProjects }] = createResource(
+    projectsBusTick,
+    async () => {
+      try {
+        return await Effect.runPromise(fetchProjects());
+      } catch {
+        return [] as readonly RegisteredProject[];
+      }
+    },
+  );
+
+  const [sessionsResource, { refetch: refetchSessions }] = createResource(
+    projectsBusTick,
+    async () => {
+      try {
+        return await Effect.runPromise(fetchSessions());
+      } catch {
+        return [] as readonly { name: string; dir: string }[];
+      }
+    },
+  );
 
   const projects = (): readonly RegisteredProject[] => projectsResource() ?? [];
   const sessions = (): readonly { name: string; dir: string }[] => sessionsResource() ?? [];

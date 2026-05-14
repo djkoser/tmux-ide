@@ -19,10 +19,13 @@ import { Effect } from "effect";
 import {
   fetchProjects,
   fetchSessions,
+  registerProject,
   unregisterProject,
   type RegisteredProject,
+  ApiError,
 } from "@/lib/api";
 import { recordProjectOpened } from "@/components/projects/ProjectQuickSwitcher";
+import { projectsBusTick, useProjectsBus } from "@/lib/projectsBus";
 
 const LAST_USED_KEY = "tmux-ide.v2.last-used-projects.v1";
 
@@ -56,11 +59,16 @@ function homeCollapsed(dir: string): string {
 
 export function ProjectsHome(): JSX.Element {
   const navigate = useNavigate();
-  const [refreshTick, setRefreshTick] = createSignal(0);
   const [pendingDelete, setPendingDelete] = createSignal<string | null>(null);
+  const [addOpen, setAddOpen] = createSignal(false);
+  const [addDir, setAddDir] = createSignal("");
+  const [addBusy, setAddBusy] = createSignal(false);
+  const [addError, setAddError] = createSignal<string | null>(null);
+
+  useProjectsBus();
 
   const [projectsResource, { refetch: refetchProjects }] = createResource(
-    refreshTick,
+    projectsBusTick,
     async () => {
       try {
         return await Effect.runPromise(fetchProjects());
@@ -71,7 +79,7 @@ export function ProjectsHome(): JSX.Element {
   );
 
   const [sessionsResource, { refetch: refetchSessions }] = createResource(
-    refreshTick,
+    projectsBusTick,
     async () => {
       try {
         return await Effect.runPromise(fetchSessions());
@@ -144,9 +152,32 @@ export function ProjectsHome(): JSX.Element {
       await Effect.runPromise(unregisterProject(name));
     } finally {
       setPendingDelete(null);
-      setRefreshTick((t) => t + 1);
+      // WS `projects.changed` will refetch; fall back to a manual
+      // refetch in case the bus is down.
       void refetchProjects();
       void refetchSessions();
+    }
+  }
+
+  async function addExisting(): Promise<void> {
+    const dir = addDir().trim();
+    if (!dir) {
+      setAddError("Enter an absolute folder path.");
+      return;
+    }
+    setAddBusy(true);
+    setAddError(null);
+    try {
+      await Effect.runPromise(registerProject({ dir }));
+      setAddDir("");
+      setAddOpen(false);
+      void refetchProjects();
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : err instanceof Error ? err.message : String(err);
+      setAddError(message);
+    } finally {
+      setAddBusy(false);
     }
   }
 
@@ -170,6 +201,17 @@ export function ProjectsHome(): JSX.Element {
           >
             Widgets gallery
           </A>
+          <button
+            type="button"
+            data-testid="projects-home-add-existing"
+            onClick={() => {
+              setAddOpen((v) => !v);
+              setAddError(null);
+            }}
+            class="rounded border border-[var(--border)] px-3 py-1 text-[12px] text-[var(--fg)] hover:bg-[var(--surface-hover)]"
+          >
+            Add existing folder
+          </button>
           <A
             href="/v2/setup"
             class="rounded bg-[var(--accent)] px-3 py-1 text-[12px] font-medium text-[var(--accent-fg,var(--bg))] hover:opacity-90"
@@ -179,6 +221,54 @@ export function ProjectsHome(): JSX.Element {
           </A>
         </div>
       </header>
+      <Show when={addOpen()}>
+        <form
+          data-testid="projects-home-add-form"
+          class="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-strong)] px-6 py-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void addExisting();
+          }}
+        >
+          <label class="text-[11px] text-[var(--dim)]" for="projects-home-add-dir">
+            Folder path
+          </label>
+          <input
+            id="projects-home-add-dir"
+            data-testid="projects-home-add-dir"
+            type="text"
+            spellcheck={false}
+            placeholder="/absolute/path/to/project"
+            value={addDir()}
+            onInput={(e) => setAddDir(e.currentTarget.value)}
+            class="min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 font-mono text-[12px] text-[var(--fg)] outline-none"
+          />
+          <button
+            type="submit"
+            data-testid="projects-home-add-submit"
+            disabled={addBusy()}
+            class="rounded bg-[var(--accent)] px-3 py-1 text-[12px] font-medium text-[var(--accent-fg,var(--bg))] disabled:opacity-50"
+          >
+            {addBusy() ? "Adding…" : "Register"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setAddOpen(false);
+              setAddDir("");
+              setAddError(null);
+            }}
+            class="rounded px-2 py-1 text-[11px] text-[var(--dim)] hover:text-[var(--fg)]"
+          >
+            Cancel
+          </button>
+          <Show when={addError()}>
+            <span class="text-[11px] text-[var(--red,#cc6666)]" role="alert">
+              {addError()}
+            </span>
+          </Show>
+        </form>
+      </Show>
 
       <main class="grid flex-1 min-h-0 grid-cols-1 gap-6 overflow-y-auto px-6 py-6 lg:grid-cols-[minmax(260px,360px)_1fr]">
         <section class="flex flex-col gap-3" aria-labelledby="recent-heading">
