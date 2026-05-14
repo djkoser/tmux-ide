@@ -148,7 +148,7 @@ export function ExpandedImageDialog(props: ExpandedImageDialogProps) {
                     >
                       <span>{currentItem().name}</span>
                       <Show when={currentItem().sizeLabel}>
-                        {(size) => (
+                        {(_size) => (
                           <span class="mx-2 text-[var(--dim)]" aria-hidden="true">
                             ·
                           </span>

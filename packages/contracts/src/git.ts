@@ -12,12 +12,7 @@ import { z } from "zod";
 // Types
 // ---------------------------------------------------------------------
 
-export type GitChangeStatus =
-  | "added"
-  | "modified"
-  | "deleted"
-  | "renamed"
-  | "conflicted";
+export type GitChangeStatus = "added" | "modified" | "deleted" | "renamed" | "conflicted";
 
 export interface GitChange {
   path: string;
@@ -76,7 +71,8 @@ export const checkoutRequestSchema = z.object({
     .min(1, "branch is required")
     .max(255, "branch name is too long")
     // git refs disallow these chars + leading dash + double-dot.
-    .refine((s) => !/[\x00-\x1f\x7f \\~^:?*\[]/.test(s), "invalid branch name")
+    // eslint-disable-next-line no-control-regex -- git ref rules really do reject \x00-\x1f
+    .refine((s) => !/[\x00-\x1f\x7f \\~^:?*[]/.test(s), "invalid branch name")
     .refine((s) => !s.startsWith("-"), "branch name cannot start with '-'")
     .refine((s) => !s.includes(".."), "branch name cannot contain '..'"),
   create: z.boolean().optional(),
@@ -133,7 +129,7 @@ export interface GitStatusResponse {
   status: FullGitStatus;
 }
 
-export interface BranchesResponse extends BranchesPayload {}
+export type BranchesResponse = BranchesPayload;
 
 export interface CheckoutResponse {
   ok: true;

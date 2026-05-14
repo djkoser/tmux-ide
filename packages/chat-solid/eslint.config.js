@@ -2,6 +2,7 @@ import js from "@eslint/js";
 import globals from "globals";
 import tsParser from "@typescript-eslint/parser";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
+import solidPlugin from "eslint-plugin-solid";
 
 export default [
   {
@@ -24,6 +25,13 @@ export default [
     },
     plugins: {
       "@typescript-eslint": tsPlugin,
+      // Register `eslint-plugin-solid` so inline disables referencing
+      // `solid/*` rules in this package's Solid components resolve to a
+      // real rule definition. We don't enable the recommended set — that
+      // would surface a noisy backlog. The plugin is loaded only so
+      // existing `// eslint-disable-next-line solid/...` directives are
+      // valid.
+      solid: solidPlugin,
     },
     rules: {
       ...tsPlugin.configs.recommended.rules,

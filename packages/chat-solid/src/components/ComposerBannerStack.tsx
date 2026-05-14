@@ -12,7 +12,7 @@
  * is a callback on the item the host owns.
  */
 
-import { For, Show, type Accessor, type JSX } from "solid-js";
+import { Show, type Accessor, type JSX } from "solid-js";
 
 export type BannerVariant = "error" | "info" | "success" | "warning";
 
@@ -41,8 +41,7 @@ interface ComposerBannerStackProps {
 }
 
 const VARIANT_CLASS: Record<BannerVariant, string> = {
-  error:
-    "border-destructive/40 bg-destructive/10 text-destructive-foreground",
+  error: "border-destructive/40 bg-destructive/10 text-destructive-foreground",
   info: "border-info/40 bg-info/10 text-info-foreground",
   success: "border-success/40 bg-success/10 text-success-foreground",
   warning: "border-warning/40 bg-warning/10 text-warning-foreground",
@@ -99,9 +98,7 @@ function BannerCard(props: { item: ComposerBannerItem }) {
         </Show>
       </header>
       <Show when={props.item.actions}>
-        <footer class="mt-2 flex flex-wrap items-center gap-2">
-          {props.item.actions}
-        </footer>
+        <footer class="mt-2 flex flex-wrap items-center gap-2">{props.item.actions}</footer>
       </Show>
     </article>
   );

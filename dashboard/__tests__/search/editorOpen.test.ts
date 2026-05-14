@@ -15,10 +15,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRoot } from "solid-js";
-import {
-  __resetBufferStoreForTests,
-  bufferState,
-} from "@/lib/editor/buffer-store";
+import { __resetBufferStoreForTests, bufferState } from "@/lib/editor/buffer-store";
 import { modelRegistry } from "@/lib/monaco/model-registry";
 import {
   __resetPendingRevealForTests,
@@ -38,7 +35,10 @@ beforeEach(() => {
   registerBufferSpy = vi
     .spyOn(modelRegistry, "registerBuffer")
     .mockImplementation((_input: unknown) => {
-      // No-op — markReady only cares that this didn't throw.
+      // No-op — markReady only cares that this didn't throw. The
+      // real signature returns the buffer URI; an empty string is
+      // an acceptable stand-in for callers that don't inspect it.
+      return "";
     });
   originalFetch = globalThis.fetch;
 });
@@ -146,10 +146,7 @@ describe("openFileAt", () => {
 
       // Pump the microtask queue until the fetch + markReady fires.
       const deadline = Date.now() + 200;
-      while (
-        bufferState.buffers[bufferUri]?.status === "loading" &&
-        Date.now() < deadline
-      ) {
+      while (bufferState.buffers[bufferUri]?.status === "loading" && Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 5));
       }
       expect(bufferState.buffers[bufferUri]?.status).toBe("ready");
@@ -169,14 +166,10 @@ describe("openFileAt", () => {
       });
       // Wait for first fetch to settle.
       const deadline = Date.now() + 200;
-      while (
-        bufferState.buffers[first.bufferUri]?.status === "loading" &&
-        Date.now() < deadline
-      ) {
+      while (bufferState.buffers[first.bufferUri]?.status === "loading" && Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 5));
       }
-      const fetchCallsAfterFirst = (globalThis.fetch as ReturnType<typeof vi.fn>).mock
-        .calls.length;
+      const fetchCallsAfterFirst = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.length;
 
       const second = openFileAt({
         sessionName: "demo",

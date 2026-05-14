@@ -2,6 +2,7 @@ import js from "@eslint/js";
 import globals from "globals";
 import tsParser from "@typescript-eslint/parser";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
+import solidPlugin from "eslint-plugin-solid";
 
 export default [
   {
@@ -16,6 +17,10 @@ export default [
       "plans/**",
       "templates/**",
       ".github/**",
+      // bin/cli.js is a bundled artefact emitted by scripts/build-cli.mjs.
+      // Linting it surfaces ~80 dead-symbol false positives from the
+      // bundler's variable renamer.
+      "bin/cli.js",
     ],
   },
   js.configs.recommended,
@@ -77,6 +82,14 @@ export default [
   // the JSX ref attribute at runtime.
   {
     files: ["packages/v2-solid-widgets/src/**/*.{ts,tsx}", "packages/chat-solid/src/**/*.{ts,tsx}"],
+    plugins: {
+      // Register `eslint-plugin-solid` so inline `// eslint-disable-next-line
+      // solid/no-innerhtml` directives in Solid widgets resolve. We don't
+      // turn on the recommended ruleset wholesale because that would
+      // surface a noisy backlog; the plugin is loaded only so existing
+      // suppressions remain valid.
+      solid: solidPlugin,
+    },
     rules: {
       "no-unassigned-vars": "off",
     },

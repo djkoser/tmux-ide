@@ -1,4 +1,3 @@
-import { extname } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 import {
@@ -61,16 +60,10 @@ export interface LspClient {
     line: number,
     character: number,
   ): Promise<Location | Location[] | LocationLink[] | null>;
-  references(
-    file: string,
-    line: number,
-    character: number,
-  ): Promise<Location[] | null>;
+  references(file: string, line: number, character: number): Promise<Location[] | null>;
   diagnostics(file: string): Diagnostic[];
   waitForDiagnostics(file: string, timeoutMs: number): Promise<Diagnostic[]>;
-  workspaceSymbols(
-    query: string,
-  ): Promise<Array<SymbolInformation | WorkspaceSymbol> | null>;
+  workspaceSymbols(query: string): Promise<Array<SymbolInformation | WorkspaceSymbol> | null>;
   rename(
     file: string,
     line: number,
@@ -144,9 +137,7 @@ export async function createLspClient(input: {
     connection.sendRequest(InitializeRequest.type, {
       processId: process.pid,
       rootUri: pathToFileURL(input.root).href,
-      workspaceFolders: [
-        { uri: pathToFileURL(input.root).href, name: "workspace" },
-      ],
+      workspaceFolders: [{ uri: pathToFileURL(input.root).href, name: "workspace" }],
       capabilities: {
         textDocument: {
           synchronization: { didOpen: true, didChange: true },
@@ -182,10 +173,7 @@ export async function createLspClient(input: {
       initializationOptions: {},
     } as Parameters<typeof connection.sendRequest>[1]),
     new Promise<never>((_, reject) =>
-      setTimeout(
-        () => reject(new Error("LSP initialize timeout")),
-        INITIALIZE_TIMEOUT_MS,
-      ),
+      setTimeout(() => reject(new Error("LSP initialize timeout")), INITIALIZE_TIMEOUT_MS),
     ),
   ]);
   void initializeResult;
@@ -261,9 +249,7 @@ export async function createLspClient(input: {
       return diagnosticsByFile.get(file) ?? [];
     },
     async workspaceSymbols(query) {
-      return connection
-        .sendRequest(WorkspaceSymbolRequest.type, { query })
-        .catch(() => null);
+      return connection.sendRequest(WorkspaceSymbolRequest.type, { query }).catch(() => null);
     },
     async rename(file, line, character, newName) {
       await ensureOpen(file);

@@ -151,12 +151,7 @@ import { TunnelManager } from "../lib/tunnels/manager.ts";
 import { RemoteRegistry } from "../lib/hq/registry.ts";
 import { RegistrationPayloadSchema } from "../lib/hq/types.ts";
 import { dispatchResearch, loadResearchState } from "../lib/research.ts";
-import {
-  parseSearchQuery,
-  resolveRipgrepPath,
-  runSearch,
-  type SearchFrame,
-} from "./search.ts";
+import { parseSearchQuery, resolveRipgrepPath, runSearch, type SearchFrame } from "./search.ts";
 import { executeReplace, ReplaceRequestZ } from "./search-replace.ts";
 import { serveDashboard } from "./static.ts";
 import { getOrchestratorHealth, getPaneContentHashMetrics } from "../lib/orchestrator.ts";
@@ -353,8 +348,7 @@ function matchLogChannel(channel: string): ((entry: LogEntry) => boolean) | null
     case "daemon":
       return () => true;
     case "hq":
-      return (entry) =>
-        entry.component.startsWith("hq") || entry.component.startsWith("remote");
+      return (entry) => entry.component.startsWith("hq") || entry.component.startsWith("remote");
     case "watchdog":
       return (entry) => entry.component.startsWith("watchdog");
     default:
@@ -1653,25 +1647,18 @@ export function createApp(options: CreateAppOptions = {}): Hono {
 
     // Sandbox the path. No leading `/`, no `..` segments.
     if (!path) return c.json({ error: "Missing ?path=" }, 400);
-    if (
-      path.startsWith("/") ||
-      path.split("/").some((seg) => seg === ".." || seg === ".")
-    ) {
+    if (path.startsWith("/") || path.split("/").some((seg) => seg === ".." || seg === ".")) {
       return c.json({ error: "Path escapes workspace" }, 403);
     }
     // Ref must be a sane shape — alphanumerics, slash, dot, dash, underscore,
     // plus the two pseudo-refs STAGED + WORKING.
-    if (
-      ref !== "STAGED" &&
-      ref !== "WORKING" &&
-      !/^[A-Za-z0-9_./-]+$/.test(ref)
-    ) {
+    if (ref !== "STAGED" && ref !== "WORKING" && !/^[A-Za-z0-9_./-]+$/.test(ref)) {
       return c.json({ error: "Invalid ref" }, 400);
     }
 
     const PER_FILE_MAX_BUFFER = 64 * 1024 * 1024;
 
-    let content = "";
+    let content: string;
     let exists = true;
     try {
       if (ref === "WORKING") {
@@ -1688,10 +1675,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
         } catch {
           return c.json({ path, ref, exists: false, content: "" });
         }
-        if (
-          !resolvedTarget.startsWith(resolvedRoot + "/") &&
-          resolvedTarget !== resolvedRoot
-        ) {
+        if (!resolvedTarget.startsWith(resolvedRoot + "/") && resolvedTarget !== resolvedRoot) {
           return c.json({ error: "Path escapes workspace" }, 403);
         }
         try {
@@ -1715,10 +1699,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
         }
       }
     } catch (err) {
-      return c.json(
-        { error: err instanceof Error ? err.message : String(err) },
-        500,
-      );
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
     }
 
     return c.json({ path, ref, exists, content });
@@ -1743,10 +1724,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     if (!session) return c.json({ error: "Session not found" }, 404);
 
     if (!path) return c.json({ error: "Missing ?path=" }, 400);
-    if (
-      path.startsWith("/") ||
-      path.split("/").some((seg) => seg === ".." || seg === ".")
-    ) {
+    if (path.startsWith("/") || path.split("/").some((seg) => seg === ".." || seg === ".")) {
       return c.json({ error: "Path escapes workspace" }, 403);
     }
 
@@ -1778,10 +1756,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     } catch {
       return c.json({ error: "Parent directory not found" }, 404);
     }
-    if (
-      !resolvedParent.startsWith(resolvedRoot + "/") &&
-      resolvedParent !== resolvedRoot
-    ) {
+    if (!resolvedParent.startsWith(resolvedRoot + "/") && resolvedParent !== resolvedRoot) {
       return c.json({ error: "Path escapes workspace" }, 403);
     }
 
@@ -1790,10 +1765,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     try {
       writeFileSync(target, body.content, "utf-8");
     } catch (err) {
-      return c.json(
-        { error: err instanceof Error ? err.message : String(err) },
-        500,
-      );
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
     }
 
     let bytes = 0;
@@ -2235,33 +2207,28 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     }
   });
 
-  app.put(
-    "/api/project/:name/skill/:skillName",
-    zValidator("json", updateSkillSchema),
-    (c) => {
-      const name = c.req.param("name");
-      const skillName = c.req.param("skillName");
-      const sessions = discoverSessions();
-      const session = sessions.find((s) => s.name === name);
-      if (!session) return c.json({ error: "Session not found" }, 404);
-      const existing = loadSkill(session.dir, skillName);
-      if (!existing) return c.json({ error: "Skill not found" }, 404);
-      const body = c.req.valid("json");
-      try {
-        const skill = writeSkillFromFields(session.dir, {
-          name: skillName,
-          role: body.role ?? existing.role,
-          description: body.description ?? existing.description,
-          specialties:
-            body.specialties ?? [...existing.specialties],
-          body: body.body ?? existing.body,
-        });
-        return c.json({ skill });
-      } catch (err) {
-        return c.json({ error: (err as Error).message }, 400);
-      }
-    },
-  );
+  app.put("/api/project/:name/skill/:skillName", zValidator("json", updateSkillSchema), (c) => {
+    const name = c.req.param("name");
+    const skillName = c.req.param("skillName");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const existing = loadSkill(session.dir, skillName);
+    if (!existing) return c.json({ error: "Skill not found" }, 404);
+    const body = c.req.valid("json");
+    try {
+      const skill = writeSkillFromFields(session.dir, {
+        name: skillName,
+        role: body.role ?? existing.role,
+        description: body.description ?? existing.description,
+        specialties: body.specialties ?? [...existing.specialties],
+        body: body.body ?? existing.body,
+      });
+      return c.json({ skill });
+    } catch (err) {
+      return c.json({ error: (err as Error).message }, 400);
+    }
+  });
 
   app.delete("/api/project/:name/skill/:skillName", (c) => {
     const name = c.req.param("name");
@@ -2336,65 +2303,53 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     },
   );
 
-  app.post(
-    "/api/project/:name/git/commit",
-    zValidator("json", commitRequestSchema),
-    async (c) => {
-      const name = c.req.param("name");
-      const sessions = discoverSessions();
-      const session = sessions.find((s) => s.name === name);
-      if (!session) return c.json({ error: "Session not found" }, 404);
-      const body = c.req.valid("json");
-      return Effect.runPromise(
-        gitCommit(session.dir, body).pipe(
-          Effect.match({
-            onFailure: (err) => c.json({ error: gitErrorToPayload(err) }, 400),
-            onSuccess: (r) => c.json({ ok: true, sha: r.sha }),
-          }),
-        ),
-      );
-    },
-  );
+  app.post("/api/project/:name/git/commit", zValidator("json", commitRequestSchema), async (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const body = c.req.valid("json");
+    return Effect.runPromise(
+      gitCommit(session.dir, body).pipe(
+        Effect.match({
+          onFailure: (err) => c.json({ error: gitErrorToPayload(err) }, 400),
+          onSuccess: (r) => c.json({ ok: true, sha: r.sha }),
+        }),
+      ),
+    );
+  });
 
-  app.post(
-    "/api/project/:name/git/push",
-    zValidator("json", pushRequestSchema),
-    async (c) => {
-      const name = c.req.param("name");
-      const sessions = discoverSessions();
-      const session = sessions.find((s) => s.name === name);
-      if (!session) return c.json({ error: "Session not found" }, 404);
-      const body = c.req.valid("json");
-      return Effect.runPromise(
-        gitPush(session.dir, body).pipe(
-          Effect.match({
-            onFailure: (err) => c.json({ error: gitErrorToPayload(err) }, 400),
-            onSuccess: (r) => c.json({ ok: true, remote: r.remote, branch: r.branch }),
-          }),
-        ),
-      );
-    },
-  );
+  app.post("/api/project/:name/git/push", zValidator("json", pushRequestSchema), async (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const body = c.req.valid("json");
+    return Effect.runPromise(
+      gitPush(session.dir, body).pipe(
+        Effect.match({
+          onFailure: (err) => c.json({ error: gitErrorToPayload(err) }, 400),
+          onSuccess: (r) => c.json({ ok: true, remote: r.remote, branch: r.branch }),
+        }),
+      ),
+    );
+  });
 
-  app.post(
-    "/api/project/:name/git/stage",
-    zValidator("json", stageRequestSchema),
-    async (c) => {
-      const name = c.req.param("name");
-      const sessions = discoverSessions();
-      const session = sessions.find((s) => s.name === name);
-      if (!session) return c.json({ error: "Session not found" }, 404);
-      const body = c.req.valid("json");
-      return Effect.runPromise(
-        gitStage(session.dir, body.paths).pipe(
-          Effect.match({
-            onFailure: (err) => c.json({ error: gitErrorToPayload(err) }, 400),
-            onSuccess: () => c.json({ ok: true }),
-          }),
-        ),
-      );
-    },
-  );
+  app.post("/api/project/:name/git/stage", zValidator("json", stageRequestSchema), async (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const body = c.req.valid("json");
+    return Effect.runPromise(
+      gitStage(session.dir, body.paths).pipe(
+        Effect.match({
+          onFailure: (err) => c.json({ error: gitErrorToPayload(err) }, 400),
+          onSuccess: () => c.json({ ok: true }),
+        }),
+      ),
+    );
+  });
 
   app.post(
     "/api/project/:name/git/unstage",
@@ -2433,35 +2388,28 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   });
 
   app.get("/api/project/:name/git/github-status", async (c) => {
-    const _name = c.req.param("name");
     // GitHub auth is per-host (gh CLI / env token) — not per-project —
     // so we don't gate on session lookup beyond URL shape. Still keep
     // the :name segment so the dashboard can scope future work
     // (per-repo overrides) without changing the path.
-    return Effect.runPromise(
-      ghStatus().pipe(Effect.map((status) => c.json(status))),
-    );
+    return Effect.runPromise(ghStatus().pipe(Effect.map((status) => c.json(status))));
   });
 
-  app.post(
-    "/api/project/:name/git/pr",
-    zValidator("json", createPrRequestSchema),
-    async (c) => {
-      const name = c.req.param("name");
-      const sessions = discoverSessions();
-      const session = sessions.find((s) => s.name === name);
-      if (!session) return c.json({ error: "Session not found" }, 404);
-      const body = c.req.valid("json");
-      return Effect.runPromise(
-        ghCreatePr(session.dir, body).pipe(
-          Effect.match({
-            onFailure: (err) => c.json({ error: githubErrorToPayload(err) }, 400),
-            onSuccess: (pr) => c.json({ ok: true, pr }),
-          }),
-        ),
-      );
-    },
-  );
+  app.post("/api/project/:name/git/pr", zValidator("json", createPrRequestSchema), async (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const body = c.req.valid("json");
+    return Effect.runPromise(
+      ghCreatePr(session.dir, body).pipe(
+        Effect.match({
+          onFailure: (err) => c.json({ error: githubErrorToPayload(err) }, 400),
+          onSuccess: (pr) => c.json({ ok: true, pr }),
+        }),
+      ),
+    );
+  });
 
   // --- Terminals registry (G20-P1) ---------------------------------
   //
@@ -2480,10 +2428,13 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     const records = loadTerminals(session.dir);
     const terminals = records.map((t) => {
       const bridge = defaultPtyBridgeRegistry.peek(t.id) as
-        | (Parameters<typeof defaultPtyBridgeRegistry.peek>[0] extends never
-            ? never
-            : null)
-        | (Record<string, unknown> & { running?: boolean; cols?: number | null; rows?: number | null; getReplayBuffer?: () => Buffer })
+        | (Parameters<typeof defaultPtyBridgeRegistry.peek>[0] extends never ? never : null)
+        | (Record<string, unknown> & {
+            running?: boolean;
+            cols?: number | null;
+            rows?: number | null;
+            getReplayBuffer?: () => Buffer;
+          })
         | null;
       let runtime: TerminalRuntime = { running: false };
       if (bridge) {
@@ -2882,10 +2833,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     if (typeof file !== "string" || !file) {
       return { ok: false, status: 400, error: "Missing `file`" };
     }
-    if (
-      file.startsWith("/") ||
-      file.split("/").some((seg) => seg === ".." || seg === ".")
-    ) {
+    if (file.startsWith("/") || file.split("/").some((seg) => seg === ".." || seg === ".")) {
       return { ok: false, status: 403, error: "Path escapes workspace" };
     }
     const sessions = discoverSessions();
@@ -2914,9 +2862,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
 
   const parseLspPositionBody = (
     raw: unknown,
-  ):
-    | { ok: true; file: string; line: number; column: number }
-    | { ok: false; error: string } => {
+  ): { ok: true; file: string; line: number; column: number } | { ok: false; error: string } => {
     const body = (raw ?? {}) as LspRequestBody;
     const { file, line, column } = body;
     if (typeof file !== "string" || !file) {
@@ -2981,11 +2927,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     if (!client) {
       return c.json({ error: "No LSP server registered for this file type" }, 400);
     }
-    const definition = await client.definition(
-      sandbox.target,
-      parsed.line,
-      parsed.column,
-    );
+    const definition = await client.definition(sandbox.target, parsed.line, parsed.column);
     return c.json({ definition });
   });
 
@@ -3012,11 +2954,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     if (!client) {
       return c.json({ error: "No LSP server registered for this file type" }, 400);
     }
-    const references = await client.references(
-      sandbox.target,
-      parsed.line,
-      parsed.column,
-    );
+    const references = await client.references(sandbox.target, parsed.line, parsed.column);
     return c.json({ references });
   });
 
@@ -3116,12 +3054,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     if (!client) {
       return c.json({ error: "No LSP server registered for this file type" }, 400);
     }
-    const edit = await client.rename(
-      sandbox.target,
-      parsed.line,
-      parsed.column,
-      newName,
-    );
+    const edit = await client.rename(sandbox.target, parsed.line, parsed.column, newName);
     return c.json({ edit });
   });
 
@@ -3143,13 +3076,9 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     if (!parsed.ok) return c.json({ error: parsed.error }, 400);
     const body = raw as { endLine?: unknown; endColumn?: unknown };
     const endLine =
-      typeof body?.endLine === "number" && body.endLine >= 0
-        ? body.endLine
-        : parsed.line;
+      typeof body?.endLine === "number" && body.endLine >= 0 ? body.endLine : parsed.line;
     const endColumn =
-      typeof body?.endColumn === "number" && body.endColumn >= 0
-        ? body.endColumn
-        : parsed.column;
+      typeof body?.endColumn === "number" && body.endColumn >= 0 ? body.endColumn : parsed.column;
     const sandbox = resolveLspTarget(c.req.param("name"), parsed.file);
     if (!sandbox.ok) return c.json({ error: sandbox.error }, sandbox.status);
     const client = await getLspClientForFile(sandbox.root, sandbox.target).catch(
