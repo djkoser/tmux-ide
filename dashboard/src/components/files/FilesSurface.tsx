@@ -71,6 +71,7 @@ import { CodeEditor } from "@/components/editor/CodeEditor";
 import { MergeConflictPanel } from "@/components/editor/MergeConflictPanel";
 import { TabStrip } from "@/components/editor/TabStrip";
 import { startFsWatchClient } from "@/lib/editor/fs-watch-client";
+import { consumePendingFileOpen, pendingFileOpen } from "@/lib/filesBroker";
 import { modelRegistry } from "@/lib/monaco/model-registry";
 import { buildMonacoModelPath, toDiskUri } from "@/lib/monaco/model-path";
 
@@ -302,6 +303,20 @@ export function FilesSurface(props: FilesSurfaceProps): JSX.Element {
   onMount(() => {
     const stop = startFsWatchClient(props.projectName);
     onCleanup(() => stop());
+  });
+
+  // Drain the file-open broker on mount + react to fresh requests
+  // while mounted. Powers the context menu's "Open in editor" item
+  // and any future deep-link or command-palette flows.
+  onMount(() => {
+    const pending = consumePendingFileOpen();
+    if (pending) openFile(pending.filePath);
+  });
+  createEffect(() => {
+    const req = pendingFileOpen();
+    if (!req) return;
+    consumePendingFileOpen();
+    openFile(req.filePath);
   });
 
   // Auto-open a non-Monaco preview path when the buffer store has no
@@ -663,6 +678,10 @@ const OVERSCAN = 10;
 
 function FileRail(props: FileRailProps) {
   const [scrollEl, setScrollEl] = createSignal<HTMLDivElement | null>(null);
+  // Roving tabindex — only the focused row carries tabIndex=0; the
+  // others get -1. When `focusedIndex` changes we scroll the row
+  // into view (so virtualization mounts it) and call `.focus()`.
+  const [focusedIndex, setFocusedIndex] = createSignal(0);
 
   const virtualizer = createVirtualizer({
     get count() {
@@ -673,10 +692,93 @@ function FileRail(props: FileRailProps) {
     overscan: OVERSCAN,
   });
 
+  // Keep focusedIndex in range when the row list shrinks (collapse).
+  createEffect(() => {
+    const len = props.rows.length;
+    if (len === 0) return;
+    if (focusedIndex() >= len) setFocusedIndex(len - 1);
+  });
+
+  function moveFocus(nextIndex: number, opts: { focus?: boolean } = { focus: true }) {
+    const len = props.rows.length;
+    if (len === 0) return;
+    const clamped = Math.max(0, Math.min(len - 1, nextIndex));
+    setFocusedIndex(clamped);
+    virtualizer.scrollToIndex(clamped, { align: "auto" });
+    if (opts.focus !== false) {
+      // Wait a microtask so the virtualizer has time to mount the row.
+      queueMicrotask(() => {
+        const el = scrollEl()?.querySelector<HTMLElement>(
+          `[data-row-index="${clamped}"] [data-rail-row]`,
+        );
+        el?.focus();
+      });
+    }
+  }
+
+  function handleKeyDown(event: KeyboardEvent) {
+    const rows = props.rows;
+    if (rows.length === 0) return;
+    const idx = focusedIndex();
+    const row = rows[idx];
+    if (!row) return;
+    const key = event.key;
+    if (key === "ArrowDown" || key === "j") {
+      event.preventDefault();
+      moveFocus(idx + 1);
+    } else if (key === "ArrowUp" || key === "k") {
+      event.preventDefault();
+      moveFocus(idx - 1);
+    } else if (key === "ArrowRight" || key === "l") {
+      event.preventDefault();
+      if (row.node.isDirectory && !row.expanded) {
+        props.onToggleDir(row.node.path);
+      } else if (row.node.isDirectory && row.expanded) {
+        // Move to first child (next row at greater depth).
+        const next = rows[idx + 1];
+        if (next && next.depth > row.depth) moveFocus(idx + 1);
+      }
+    } else if (key === "ArrowLeft" || key === "h") {
+      event.preventDefault();
+      if (row.node.isDirectory && row.expanded) {
+        props.onToggleDir(row.node.path);
+      } else {
+        // Walk backwards to the row at depth - 1.
+        const targetDepth = row.depth - 1;
+        if (targetDepth < 0) return;
+        for (let i = idx - 1; i >= 0; i--) {
+          if (rows[i]!.depth === targetDepth) {
+            moveFocus(i);
+            break;
+          }
+        }
+      }
+    } else if (key === "Enter") {
+      event.preventDefault();
+      if (row.node.isDirectory) props.onToggleDir(row.node.path);
+      else props.onPick(row.node.path);
+    } else if (key === " ") {
+      // Space toggles directories; for files, falls through to pick
+      // (matches what most file explorers do).
+      event.preventDefault();
+      if (row.node.isDirectory) props.onToggleDir(row.node.path);
+      else props.onPick(row.node.path);
+    } else if (key === "Home") {
+      event.preventDefault();
+      moveFocus(0);
+    } else if (key === "End") {
+      event.preventDefault();
+      moveFocus(rows.length - 1);
+    }
+  }
+
   return (
     <div
       ref={setScrollEl}
       data-testid="v2-files-rail-scroll"
+      role="tree"
+      aria-label="File explorer"
+      onKeyDown={handleKeyDown}
       class="relative min-h-0 flex-1 overflow-y-auto"
       style={{ contain: "strict" }}
     >
@@ -691,6 +793,7 @@ function FileRail(props: FileRailProps) {
         <For each={virtualizer.getVirtualItems()}>
           {(vItem) => {
             const row = () => props.rows[vItem.index]!;
+            const isFocused = () => vItem.index === focusedIndex();
             return (
               <div
                 data-row-index={vItem.index}
@@ -705,10 +808,13 @@ function FileRail(props: FileRailProps) {
               >
                 <FileRailRow
                   row={row()}
+                  index={vItem.index}
+                  focused={isFocused()}
                   activePath={props.activePath}
                   statusMap={props.statusMap}
                   onPick={props.onPick}
                   onToggleDir={props.onToggleDir}
+                  onFocusRow={(i) => setFocusedIndex(i)}
                 />
               </div>
             );
@@ -721,10 +827,13 @@ function FileRail(props: FileRailProps) {
 
 function FileRailRow(props: {
   row: FlatRailRow;
+  index: number;
+  focused: boolean;
   activePath: string | null;
   statusMap: Map<string, GitChangeStatus>;
   onPick: (path: string) => void;
   onToggleDir: (path: string) => void;
+  onFocusRow: (index: number) => void;
 }) {
   const node = () => props.row.node;
   const isActive = () => props.activePath === node().path;
@@ -734,6 +843,8 @@ function FileRailRow(props: {
     return props.statusMap.get(node().path);
   };
   const statusClass = () => gitStatusTextClass(status());
+  const ariaLevel = () => props.row.depth + 1;
+  const tabIndex = () => (props.focused ? 0 : -1);
 
   return (
     <Show
@@ -742,15 +853,26 @@ function FileRailRow(props: {
         <button
           type="button"
           data-testid="v2-files-row"
+          data-rail-row
           data-file-path={node().path}
           data-active={isActive() ? "true" : undefined}
           data-git-status={status() ?? undefined}
-          onClick={() => props.onPick(node().path)}
+          data-focused={props.focused ? "true" : undefined}
+          role="treeitem"
+          aria-level={ariaLevel()}
+          aria-selected={isActive()}
+          tabIndex={tabIndex()}
+          onClick={() => {
+            props.onFocusRow(props.index);
+            props.onPick(node().path);
+          }}
+          onFocus={() => props.onFocusRow(props.index)}
           class={
-            "flex h-6 w-full items-center gap-1 px-1 text-left text-[12px] " +
+            "flex h-6 w-full items-center gap-1 px-1 text-left text-[12px] outline-none " +
             (isActive()
               ? "bg-[var(--surface-active)] text-[var(--accent)]"
-              : "text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--fg)]")
+              : "text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--fg)]") +
+            (props.focused ? " ring-1 ring-inset ring-[var(--accent)]" : "")
           }
           style={{ "padding-left": indent() }}
         >
@@ -765,11 +887,24 @@ function FileRailRow(props: {
       <button
         type="button"
         data-testid="v2-files-row-dir"
+        data-rail-row
         data-dir-path={node().path}
         data-expanded={props.row.expanded ? "true" : undefined}
         data-git-status={status() ?? undefined}
-        onClick={() => props.onToggleDir(node().path)}
-        class="flex h-6 w-full items-center gap-1 px-1 text-left text-[12px] text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--fg)]"
+        data-focused={props.focused ? "true" : undefined}
+        role="treeitem"
+        aria-level={ariaLevel()}
+        aria-expanded={props.row.expanded}
+        tabIndex={tabIndex()}
+        onClick={() => {
+          props.onFocusRow(props.index);
+          props.onToggleDir(node().path);
+        }}
+        onFocus={() => props.onFocusRow(props.index)}
+        class={
+          "flex h-6 w-full items-center gap-1 px-1 text-left text-[12px] outline-none text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--fg)]" +
+          (props.focused ? " ring-1 ring-inset ring-[var(--accent)]" : "")
+        }
         style={{ "padding-left": indent() }}
       >
         <Show when={props.row.expanded} fallback={<ChevronRight class="h-3 w-3 shrink-0" />}>
