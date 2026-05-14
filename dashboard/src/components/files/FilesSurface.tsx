@@ -37,7 +37,8 @@ import {
   type JSX,
 } from "solid-js";
 import { Effect } from "effect";
-import { ChevronDown, ChevronRight, File, Folder, FolderOpen } from "lucide-solid";
+import { ChevronDown, ChevronRight, Folder, FolderOpen } from "lucide-solid";
+import { getFileIcon } from "@/lib/editor/file-icon";
 import { fetchFilePreview, fetchProjectFiles, type ProjectFileNode } from "@/lib/api";
 import { FileRenderer, getFileKind, type ManagedFile, type ManagedFileKind } from "@/lib/editor";
 import {
@@ -571,7 +572,10 @@ function FileTreeRow(props: {
             }
             style={{ "padding-left": indent() }}
           >
-            <File class="h-3 w-3 shrink-0 opacity-60" />
+            {(() => {
+              const Icon = getFileIcon(props.node.name);
+              return <Icon class="h-3 w-3 shrink-0 opacity-60" />;
+            })()}
             <span class="truncate">{props.node.name}</span>
           </button>
         }

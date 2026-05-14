@@ -20,6 +20,7 @@ import {
   setActiveBuffer,
   type OpenBuffer,
 } from "@/lib/editor/buffer-store";
+import { getFileIcon } from "@/lib/editor/file-icon";
 
 interface TabStripProps {
   /**
@@ -94,6 +95,10 @@ export function TabStrip(props: TabStripProps) {
                           class="h-1.5 w-1.5 rounded-full bg-[var(--accent)]"
                         />
                       </Show>
+                      {(() => {
+                        const Icon = getFileIcon(b().filePath);
+                        return <Icon class="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />;
+                      })()}
                       <span class="font-mono">{basename(b().filePath)}</span>
                       <Show when={b().status === "loading"}>
                         <span class="text-[10px] text-[var(--dim)]">loading…</span>

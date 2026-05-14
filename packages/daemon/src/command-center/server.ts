@@ -9,6 +9,9 @@ import {
   statSync,
   renameSync,
   readdirSync,
+  openSync,
+  readSync,
+  closeSync,
 } from "node:fs";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -1850,16 +1853,37 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     if (!stat.isFile()) {
       return c.json({ error: "Not a regular file" }, 400);
     }
-    if (stat.size > 1_000_000) {
-      return c.json({ error: "File too large", size: stat.size }, 413);
-    }
+    // For files larger than the preview budget, return the first
+    // chunk with `truncated: true` so the client can render a
+    // too-large fallback instead of a hard 413.
+    const MAX_PREVIEW_BYTES = 1_000_000;
     let content: string;
+    let truncated = false;
     try {
-      content = readFileSync(resolvedTarget, "utf-8");
+      if (stat.size > MAX_PREVIEW_BYTES) {
+        const fd = openSync(resolvedTarget, "r");
+        try {
+          const buf = Buffer.alloc(MAX_PREVIEW_BYTES);
+          const bytesRead = readSync(fd, buf, 0, MAX_PREVIEW_BYTES, 0);
+          content = buf.subarray(0, bytesRead).toString("utf-8");
+        } finally {
+          closeSync(fd);
+        }
+        truncated = true;
+      } else {
+        content = readFileSync(resolvedTarget, "utf-8");
+      }
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : "read failed" }, 500);
     }
-    return c.json({ file, exists: true, content, size: stat.size, mtimeMs: stat.mtimeMs });
+    return c.json({
+      file,
+      exists: true,
+      content,
+      size: stat.size,
+      mtimeMs: stat.mtimeMs,
+      truncated,
+    });
   });
 
   // --- Milestone endpoints ---
