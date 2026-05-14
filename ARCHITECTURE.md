@@ -12,12 +12,12 @@ We anchor on **`context/opencode`** as the architectural model. Opencode is a wo
 
 ### Reference codebases under `context/` (read-only)
 
-| Reference | Stack | What we take | What we ignore |
-|---|---|---|---|
-| **opencode** ⭐ | Solid + Effect + Vite + Kobalte + Tailwind v4 + sqlite | Core architectural shape, monorepo layout, LSP-as-tool pattern, UI primitives via Kobalte, contracts split, atom/Effect state | Their Slack/SST infra, marketing site |
-| **emdash** | Electron + React + MobX + Drizzle | Monaco pool/lease/registry, git ops, multi-terminal registry, `@parcel/watcher` + `WATCH_IGNORED_NAMES`, three-way merge UI patterns | Electron main/renderer split, IPC, MobX class stores, React hooks |
-| **t3code** | Vite + React 19 + TanStack Router + Effect | Original chat semantics (now self-contained in `chat-solid`) | React, TanStack Router, MobX-style data layer |
-| dmux, pierre, smfs, supermemory, wterm | various | Surgical pattern lookups only | Whole architectures |
+| Reference                              | Stack                                                  | What we take                                                                                                                         | What we ignore                                                    |
+| -------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| **opencode** ⭐                        | Solid + Effect + Vite + Kobalte + Tailwind v4 + sqlite | Core architectural shape, monorepo layout, LSP-as-tool pattern, UI primitives via Kobalte, contracts split, atom/Effect state        | Their Slack/SST infra, marketing site                             |
+| **emdash**                             | Electron + React + MobX + Drizzle                      | Monaco pool/lease/registry, git ops, multi-terminal registry, `@parcel/watcher` + `WATCH_IGNORED_NAMES`, three-way merge UI patterns | Electron main/renderer split, IPC, MobX class stores, React hooks |
+| **t3code**                             | Vite + React 19 + TanStack Router + Effect             | Original chat semantics (now self-contained in `chat-solid`)                                                                         | React, TanStack Router, MobX-style data layer                     |
+| dmux, pierre, smfs, supermemory, wterm | various                                                | Surgical pattern lookups only                                                                                                        | Whole architectures                                               |
 
 **Rule:** when adding a new feature, check opencode first for the structural answer; check emdash for the IDE-specific behavior; only borrow from t3 chat semantics that we already have.
 
@@ -25,30 +25,30 @@ We anchor on **`context/opencode`** as the architectural model. Opencode is a wo
 
 ## §2 — Stack (locked in)
 
-| Layer | Choice | Mirrors |
-|---|---|---|
-| Frontend framework | **Solid.js** + **`@solidjs/router`** + **`@solidjs/meta`** | opencode `packages/app` |
-| UI primitives | **Kobalte** (planned migration; some Base UI today) | opencode `packages/ui` |
-| Build tool | **Vite 6** + `vite-plugin-solid` | opencode + emdash |
-| Styling | **Tailwind v4** (`@tailwindcss/vite`) | opencode + emdash |
-| Async / DI / runtime | **Effect 3.x** | opencode `packages/core` + t3 |
-| State (browser) | **Solid signals + stores**; Effect for async services | opencode (mostly signals; Effect at boundaries) |
-| HTTP server | **Hono** | own choice — small, fast, Effect-friendly |
-| WS server | **`ws`** | own choice |
-| Persistence | **better-sqlite3** + **Drizzle** | emdash (Drizzle); opencode uses `@effect/sql-sqlite-bun` — we may revisit |
-| Validation | **Zod** | own choice (opencode uses Effect Schema in places — possible future migration) |
-| FS watching | **`@parcel/watcher`** + emdash's `WATCH_IGNORED_NAMES` | emdash |
-| Repo search | **`@vscode/ripgrep`** | emdash |
-| LSP client | **`vscode-jsonrpc` + `vscode-languageserver-protocol`** + opencode's launch pattern | opencode |
-| PTY | **`node-pty`** behind a `PtyAdapter` | own design (informed by emdash terminals) |
-| Editor | **Monaco** via pool + lease + model-registry | emdash |
-| Terminal embed | **xterm.js** + `addon-fit` + `addon-webgl` | emdash + opencode |
-| TUI rendering | **OpenTUI / Solid-TUI** | own (no reference uses TUI alongside DOM) |
-| Tests | **Vitest** | opencode (vitest), emdash (vitest), t3 (vitest) |
-| Lint / format | **ESLint flat config** + **Prettier** | own (opencode uses oxlint/oxfmt — possible future migration) |
-| Package manager | **pnpm** + workspaces | own (opencode uses pnpm too) |
-| Runtime | **Node 20+** for daemon and CLI; **Bun** only for OpenTUI widget entrypoints | own (opencode is mostly Bun — we keep Node for npm distribution; G22-P0) |
-| CI | **GitHub Actions** — single `release.yml` + `smoke.yml` | own |
+| Layer                | Choice                                                                              | Mirrors                                                                        |
+| -------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Frontend framework   | **Solid.js** + **`@solidjs/router`** + **`@solidjs/meta`**                          | opencode `packages/app`                                                        |
+| UI primitives        | **Kobalte** (planned migration; some Base UI today)                                 | opencode `packages/ui`                                                         |
+| Build tool           | **Vite 6** + `vite-plugin-solid`                                                    | opencode + emdash                                                              |
+| Styling              | **Tailwind v4** (`@tailwindcss/vite`)                                               | opencode + emdash                                                              |
+| Async / DI / runtime | **Effect 3.x**                                                                      | opencode `packages/core` + t3                                                  |
+| State (browser)      | **Solid signals + stores**; Effect for async services                               | opencode (mostly signals; Effect at boundaries)                                |
+| HTTP server          | **Hono**                                                                            | own choice — small, fast, Effect-friendly                                      |
+| WS server            | **`ws`**                                                                            | own choice                                                                     |
+| Persistence          | **better-sqlite3** + **Drizzle**                                                    | emdash (Drizzle); opencode uses `@effect/sql-sqlite-bun` — we may revisit      |
+| Validation           | **Zod**                                                                             | own choice (opencode uses Effect Schema in places — possible future migration) |
+| FS watching          | **`@parcel/watcher`** + emdash's `WATCH_IGNORED_NAMES`                              | emdash                                                                         |
+| Repo search          | **`@vscode/ripgrep`**                                                               | emdash                                                                         |
+| LSP client           | **`vscode-jsonrpc` + `vscode-languageserver-protocol`** + opencode's launch pattern | opencode                                                                       |
+| PTY                  | **`node-pty`** behind a `PtyAdapter`                                                | own design (informed by emdash terminals)                                      |
+| Editor               | **Monaco** via pool + lease + model-registry                                        | emdash                                                                         |
+| Terminal embed       | **xterm.js** + `addon-fit` + `addon-webgl`                                          | emdash + opencode                                                              |
+| TUI rendering        | **OpenTUI / Solid-TUI**                                                             | own (no reference uses TUI alongside DOM)                                      |
+| Tests                | **Vitest**                                                                          | opencode (vitest), emdash (vitest), t3 (vitest)                                |
+| Lint / format        | **ESLint flat config** + **Prettier**                                               | own (opencode uses oxlint/oxfmt — possible future migration)                   |
+| Package manager      | **pnpm** + workspaces                                                               | own (opencode uses pnpm too)                                                   |
+| Runtime              | **Node 20+** for daemon and CLI; **Bun** only for OpenTUI widget entrypoints        | own (opencode is mostly Bun — we keep Node for npm distribution; G22-P0)       |
+| CI                   | **GitHub Actions** — single `release.yml` + `smoke.yml`                             | own                                                                            |
 
 **Anti-stack** (do not reintroduce):
 
@@ -64,17 +64,17 @@ We anchor on **`context/opencode`** as the architectural model. Opencode is a wo
 
 The repo is a pnpm workspace. The split mirrors opencode's `core` / `ui` / `app` / `contracts`.
 
-| Our package | opencode equivalent | Path | Role |
-|---|---|---|---|
-| **daemon** | `@opencode-ai/core` | `packages/daemon/` | Long-lived process. Hono HTTP + WS + Effect services + sqlite event store + project registry + chat orchestrator + git/search/LSP/PTY services + TUI widget entrypoints. |
-| **contracts** | `@opencode-ai/sdk` (the contract layer) | `packages/contracts/` | Zod schemas for actions, WS frames, domain types. Only package both daemon and browser depend on. |
-| **chat-solid** | `@opencode-ai/ui` (subset) | `packages/chat-solid/` | Reusable Solid chat surface. `mount(node, opts) → handle`. |
-| **v2-solid-widgets** | `@opencode-ai/ui` (subset) | `packages/v2-solid-widgets/` | Reusable Solid dashboard widgets (Activity, Costs, Diffs, Explorer, Inspector, Kanban, MissionControl, Plans, Skills, Tasks, CommandPalette). Same `mount(...)` shape. |
-| **dashboard** | `@opencode-ai/app` | `dashboard/` | Vite + Solid SPA. Owns the route shell, the IDE chrome, and per-feature surfaces (FilesSurface, SearchView, DiffsView, TerminalSurface, …). Hosts chat-solid + v2-solid-widgets. |
-| **tmux-bridge** | (no equivalent) | `packages/tmux-bridge/` | Pure functions over `tmux`. Used by daemon. |
-| **daemon-client** | (no equivalent — opencode is single-binary) | `packages/daemon-client/` | CLI helpers: ensure-running, lock, health probe. |
-| **bin** | `apps/cli` analogue | `bin/cli.ts` → `bin/cli.js` | The CLI entry point. esbuild-compiled. |
-| **src** | (cleanup target) | `src/` | **Top-level CLI tests only**. The empty `src/server/` and `src/ui/web/` are pre-G16 scaffolding to delete (§7). |
+| Our package          | opencode equivalent                         | Path                         | Role                                                                                                                                                                             |
+| -------------------- | ------------------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **daemon**           | `@opencode-ai/core`                         | `packages/daemon/`           | Long-lived process. Hono HTTP + WS + Effect services + sqlite event store + project registry + chat orchestrator + git/search/LSP/PTY services + TUI widget entrypoints.         |
+| **contracts**        | `@opencode-ai/sdk` (the contract layer)     | `packages/contracts/`        | Zod schemas for actions, WS frames, domain types. Only package both daemon and browser depend on.                                                                                |
+| **chat-solid**       | `@opencode-ai/ui` (subset)                  | `packages/chat-solid/`       | Reusable Solid chat surface. `mount(node, opts) → handle`.                                                                                                                       |
+| **v2-solid-widgets** | `@opencode-ai/ui` (subset)                  | `packages/v2-solid-widgets/` | Reusable Solid dashboard widgets (Activity, Costs, Diffs, Explorer, Inspector, Kanban, MissionControl, Plans, Skills, Tasks, CommandPalette). Same `mount(...)` shape.           |
+| **dashboard**        | `@opencode-ai/app`                          | `dashboard/`                 | Vite + Solid SPA. Owns the route shell, the IDE chrome, and per-feature surfaces (FilesSurface, SearchView, DiffsView, TerminalSurface, …). Hosts chat-solid + v2-solid-widgets. |
+| **tmux-bridge**      | (no equivalent)                             | `packages/tmux-bridge/`      | Pure functions over `tmux`. Used by daemon.                                                                                                                                      |
+| **daemon-client**    | (no equivalent — opencode is single-binary) | `packages/daemon-client/`    | CLI helpers: ensure-running, lock, health probe.                                                                                                                                 |
+| **bin**              | `apps/cli` analogue                         | `bin/cli.ts` → `bin/cli.js`  | The CLI entry point. esbuild-compiled.                                                                                                                                           |
+| **src**              | (cleanup target)                            | `src/`                       | **Top-level CLI tests only**. The empty `src/server/` and `src/ui/web/` are pre-G16 scaffolding to delete (§7).                                                                  |
 
 ### Boundary rules
 
@@ -90,13 +90,13 @@ These mirror opencode's `core` ← `sdk` → `ui` → `app` dependency direction
 
 Two widget ecosystems coexist by design:
 
-| | Solid DOM widgets | Daemon TUI widgets |
-|---|---|---|
-| Path | `packages/v2-solid-widgets/src/widgets/` | `packages/daemon/src/widgets/` |
-| Surface | Browser at `localhost:3000` | Tmux pane (OpenTUI) |
-| Mount | `mount(domNode, opts)` | `tmux-ide widget <name>` (spawns Bun) |
-| Examples | `KanbanBoard`, `MissionControlDashboard`, `DiffsViewer` | `mission-control`, `tasks`, `explorer`, `costs`, `config`, `setup`, `preview`, `changes` |
-| Wired from | `dashboard/src/components/*-bridge.tsx`, `dashboard/src/routes/v2/widget/[name].tsx` | `bin/cli.ts` (`tmux-ide config`, `tmux-ide setup`) + `ide.yml` `type:` field |
+|            | Solid DOM widgets                                                                    | Daemon TUI widgets                                                                       |
+| ---------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| Path       | `packages/v2-solid-widgets/src/widgets/`                                             | `packages/daemon/src/widgets/`                                                           |
+| Surface    | Browser at `localhost:3000`                                                          | Tmux pane (OpenTUI)                                                                      |
+| Mount      | `mount(domNode, opts)`                                                               | `tmux-ide widget <name>` (spawns Bun)                                                    |
+| Examples   | `KanbanBoard`, `MissionControlDashboard`, `DiffsViewer`                              | `mission-control`, `tasks`, `explorer`, `costs`, `config`, `setup`, `preview`, `changes` |
+| Wired from | `dashboard/src/components/*-bridge.tsx`, `dashboard/src/routes/v2/widget/[name].tsx` | `bin/cli.ts` (`tmux-ide config`, `tmux-ide setup`) + `ide.yml` `type:` field             |
 
 Don't merge them — same name, different runtime.
 
@@ -122,11 +122,11 @@ There are also a handful of REST-shaped legacy endpoints (`/api/sessions`, `/api
 
 ### 4.2 WS bus
 
-| Endpoint | Purpose |
-|---|---|
-| `/ws/events` | Broadcast bus for everything (`action.complete`, `chat.activity.appended`, `file.changed`, orchestrator events). |
-| `/ws/mirror/:session/:paneId` | Raw ANSI mirror of a tmux pane. |
-| `/ws/pty/:id` | Interactive PTY (xterm bidirectional). |
+| Endpoint                      | Purpose                                                                                                          |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `/ws/events`                  | Broadcast bus for everything (`action.complete`, `chat.activity.appended`, `file.changed`, orchestrator events). |
+| `/ws/mirror/:session/:paneId` | Raw ANSI mirror of a tmux pane.                                                                                  |
+| `/ws/pty/:id`                 | Interactive PTY (xterm bidirectional).                                                                           |
 
 Frame envelope is `{ type: string, ...payload }` — typed under `packages/contracts/src/ws-events.ts`.
 
@@ -140,13 +140,13 @@ Daemon services are Effect-typed (`Service<…>` + `Layer.merge(…)`). Service 
 
 ### 4.5 Reactivity choices
 
-| Where | Primitive | Why |
-|---|---|---|
-| Browser components | Solid `createSignal`, `createStore`, `createMemo`, `createResource` | Fine-grained, no virtual DOM. |
-| Cross-component data | Module-singleton stores (e.g. `bufferState`) | Avoid prop drilling. |
-| Async fetches (browser) | `createResource` (default), `Effect.runPromise` for one-shots | Resources retry+invalidate cleanly. |
-| Daemon state | Effect `Ref` / `SubscriptionRef`; sqlite for durable | All shared state behind Effect services. |
-| Daemon event fanout | Plain emitter + WS broadcast | Each service exposes a typed channel. |
+| Where                   | Primitive                                                           | Why                                      |
+| ----------------------- | ------------------------------------------------------------------- | ---------------------------------------- |
+| Browser components      | Solid `createSignal`, `createStore`, `createMemo`, `createResource` | Fine-grained, no virtual DOM.            |
+| Cross-component data    | Module-singleton stores (e.g. `bufferState`)                        | Avoid prop drilling.                     |
+| Async fetches (browser) | `createResource` (default), `Effect.runPromise` for one-shots       | Resources retry+invalidate cleanly.      |
+| Daemon state            | Effect `Ref` / `SubscriptionRef`; sqlite for durable                | All shared state behind Effect services. |
+| Daemon event fanout     | Plain emitter + WS broadcast                                        | Each service exposes a typed channel.    |
 
 ---
 
@@ -154,19 +154,19 @@ Daemon services are Effect-typed (`Service<…>` + `Layer.merge(…)`). Service 
 
 For each concern: which reference informs us, what we adopt, where we deliberately diverge.
 
-| Concern | Primary ref | What we take | Where we diverge |
-|---|---|---|---|
-| **App shape** (entry, router, theme) | opencode `packages/app` | `entry.tsx` + `app.tsx` + `pages/` layout, theme provider, `@solidjs/router`, `@solidjs/meta` | Our pages live under `dashboard/src/routes/v2/`. We don't (yet) use `@effect/atom` for state — Solid signals only. |
-| **UI primitives** | opencode `packages/ui` | Kobalte for primitives, Tailwind v4, single `styles/index.css` | We're partway through migrating to Kobalte — some Base UI remains. Cleanup item §7. |
-| **FS watching** | emdash | `@parcel/watcher` + `WATCH_IGNORED_NAMES` baseline | We add `.tmux-ide`, `.tasks`, `context` to the ignore list. Single recursive subscription per session. |
-| **Code editor** | emdash | Monaco pool + lease + model-registry + per-filetype renderer dispatch | Lease consumed via Solid signals (no React hooks). |
-| **Diff editor** | emdash | StickyDiffEditor + hunk-by-hunk accept/reject | Hunks call our buffer-store, not emdash's MobX store. |
-| **Git ops** | emdash | git-utils + GitHub auth + branch picker + checks rail | Hosted in the daemon (Hono + Effect), not in an Electron main. |
-| **Multi-terminal** | emdash | terminals registry + xterm runtime + tab strip + Cmd+T/W/1..9 keybinds | Backend is `node-pty` behind `PtyAdapter`, served over WS instead of Electron IPC. |
-| **Repo search** | (emdash uses ripgrep too) | `@vscode/ripgrep` JSON streaming + result grouping | Solid surface; replace flow uses our save endpoint. |
-| **LSP** | opencode | client.ts + per-language launch + JSON-RPC over stdio + tools-as-RPC | Exposed both as HTTP endpoints (dashboard) AND as agent tools (chat). |
-| **Chat semantics** | t3code (historical) | Flat MessagesTimeline, provider switcher, plan/permission semantics, tool-call cards | 100% in `chat-solid` now; t3code is no longer load-bearing. Don't borrow new things from t3 without explicit approval. |
-| **Native macOS app** | own design | — | `app/` is in early dev. `app-electron/` is dead (delete in §7). |
+| Concern                              | Primary ref               | What we take                                                                                  | Where we diverge                                                                                                       |
+| ------------------------------------ | ------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **App shape** (entry, router, theme) | opencode `packages/app`   | `entry.tsx` + `app.tsx` + `pages/` layout, theme provider, `@solidjs/router`, `@solidjs/meta` | Our pages live under `dashboard/src/routes/v2/`. We don't (yet) use `@effect/atom` for state — Solid signals only.     |
+| **UI primitives**                    | opencode `packages/ui`    | Kobalte for primitives, Tailwind v4, single `styles/index.css`                                | We're partway through migrating to Kobalte — some Base UI remains. Cleanup item §7.                                    |
+| **FS watching**                      | emdash                    | `@parcel/watcher` + `WATCH_IGNORED_NAMES` baseline                                            | We add `.tmux-ide`, `.tasks`, `context` to the ignore list. Single recursive subscription per session.                 |
+| **Code editor**                      | emdash                    | Monaco pool + lease + model-registry + per-filetype renderer dispatch                         | Lease consumed via Solid signals (no React hooks).                                                                     |
+| **Diff editor**                      | emdash                    | StickyDiffEditor + hunk-by-hunk accept/reject                                                 | Hunks call our buffer-store, not emdash's MobX store.                                                                  |
+| **Git ops**                          | emdash                    | git-utils + GitHub auth + branch picker + checks rail                                         | Hosted in the daemon (Hono + Effect), not in an Electron main.                                                         |
+| **Multi-terminal**                   | emdash                    | terminals registry + xterm runtime + tab strip + Cmd+T/W/1..9 keybinds                        | Backend is `node-pty` behind `PtyAdapter`, served over WS instead of Electron IPC.                                     |
+| **Repo search**                      | (emdash uses ripgrep too) | `@vscode/ripgrep` JSON streaming + result grouping                                            | Solid surface; replace flow uses our save endpoint.                                                                    |
+| **LSP**                              | opencode                  | client.ts + per-language launch + JSON-RPC over stdio + tools-as-RPC                          | Exposed both as HTTP endpoints (dashboard) AND as agent tools (chat).                                                  |
+| **Chat semantics**                   | t3code (historical)       | Flat MessagesTimeline, provider switcher, plan/permission semantics, tool-call cards          | 100% in `chat-solid` now; t3code is no longer load-bearing. Don't borrow new things from t3 without explicit approval. |
+| **Native macOS app**                 | own design                | —                                                                                             | `app/` is in early dev. `app-electron/` is dead (delete in §7).                                                        |
 
 ---
 
@@ -241,7 +241,7 @@ The general flow for adding a new feature (use `git diff viewer` as the worked e
 ## §9 — Where to ask questions
 
 - **This doc is canonical.** PRs that change the stack (§2) or boundary rules (§3) MUST update it in the same commit.
-- Per-concern audit docs (`docs/goal-NN-<name>.md`) are the source for *why we picked this library* — keep them around as historical context.
+- Per-concern audit docs (`docs/goal-NN-<name>.md`) are the source for _why we picked this library_ — keep them around as historical context.
 - The `ROADMAP.md` is the current state of the world (what's shipped, what's in flight). This doc is the rules; the roadmap is the work.
 - When in doubt about a structural choice: **check opencode first** (`context/opencode/packages/{core,ui,app,sdk}/`).
 - When in doubt about an IDE feature behavior: **check emdash first** (`context/emdash/src/{main,renderer}/`).
