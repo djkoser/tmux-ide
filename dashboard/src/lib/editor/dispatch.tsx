@@ -39,7 +39,7 @@ export interface FileRendererProps {
 
 export function FileRenderer(props: FileRendererProps): JSX.Element {
   return (
-    <Switch fallback={<BinaryRenderer file={props.file} />}>
+    <Switch fallback={<BinaryRenderer file={props.file} sessionName={props.sessionName} />}>
       <Match when={props.file.kind === "image"}>
         <ImageRenderer file={props.file} sessionName={props.sessionName} />
       </Match>
@@ -64,7 +64,7 @@ export function FileRenderer(props: FileRendererProps): JSX.Element {
         <TooLargeRenderer file={props.file} />
       </Match>
       <Match when={props.file.kind === "binary"}>
-        <BinaryRenderer file={props.file} />
+        <BinaryRenderer file={props.file} sessionName={props.sessionName} />
       </Match>
     </Switch>
   );

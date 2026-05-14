@@ -14,11 +14,13 @@
  */
 
 import { Eye, Pencil } from "lucide-solid";
-import { createMemo, createSignal, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, on, Show } from "solid-js";
 import { renderMarkdown } from "@tmux-ide/chat-solid";
 import { modelRegistry } from "@/lib/monaco/model-registry";
 import { useBufferVersion } from "@/lib/monaco/use-model";
 import { buildMonacoModelPath, toDiskUri } from "@/lib/monaco/model-path";
+import { activeShikiTheme, highlightCode } from "@/lib/syntax/shiki";
+import type { BundledLanguage } from "shiki";
 
 interface MarkdownRendererProps {
   filePath: string;
@@ -48,7 +50,18 @@ export function MarkdownRenderer(props: MarkdownRendererProps) {
     );
   });
 
-  const html = createMemo<string>(() => renderMarkdown(source()));
+  const rawHtml = createMemo<string>(() => renderMarkdown(source()));
+  const [html, setHtml] = createSignal<string>("");
+
+  // Post-process the rendered HTML: hand every `<pre><code class=
+  // "language-X">` block to shiki and swap the result in. Re-runs on
+  // content changes and when the active theme flips.
+  createEffect(
+    on([rawHtml, () => activeShikiTheme()], async ([incoming]) => {
+      const enhanced = await highlightFences(incoming);
+      setHtml(enhanced);
+    }),
+  );
 
   return (
     <div
@@ -117,4 +130,40 @@ export function MarkdownRenderer(props: MarkdownRendererProps) {
       </Show>
     </div>
   );
+}
+
+/**
+ * Replace every `<pre><code class="language-X">…</code></pre>` block
+ * in the rendered HTML with shiki's themed output. Blocks without a
+ * recognised language are left alone (DOMPurified `<pre>` stays as
+ * the safe fallback). Runs in the browser; SSR callers get the
+ * original HTML back.
+ */
+async function highlightFences(html: string): Promise<string> {
+  if (typeof DOMParser === "undefined") return html;
+  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
+  const root = doc.body.firstElementChild;
+  if (!root) return html;
+  const blocks = Array.from(root.querySelectorAll("pre > code"));
+  await Promise.all(
+    blocks.map(async (codeEl) => {
+      const langClass = Array.from(codeEl.classList).find((c) => c.startsWith("language-"));
+      if (!langClass) return;
+      const lang = langClass.slice("language-".length) as BundledLanguage;
+      const text = codeEl.textContent ?? "";
+      try {
+        const replacement = await highlightCode(text, lang);
+        // Replace the surrounding <pre> with shiki's <pre>.
+        const pre = codeEl.parentElement;
+        if (!pre) return;
+        const tpl = doc.createElement("template");
+        tpl.innerHTML = replacement;
+        const next = tpl.content.firstElementChild;
+        if (next) pre.replaceWith(next);
+      } catch {
+        // Unknown / unbundled language — leave the block alone.
+      }
+    }),
+  );
+  return root.innerHTML;
 }

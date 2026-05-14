@@ -61,6 +61,8 @@ import {
   markError,
   markReady,
   openBuffer,
+  openBufferAsPreview,
+  pinBuffer,
   restoreRecoverableBuffer,
   save,
   saveAll,
@@ -68,6 +70,7 @@ import {
   type RecoverableSnapshot,
 } from "@/lib/editor/buffer-store";
 import { CodeEditor } from "@/components/editor/CodeEditor";
+import { ShikiViewer } from "@/components/editor/ShikiViewer";
 import { MergeConflictPanel } from "@/components/editor/MergeConflictPanel";
 import { TabStrip } from "@/components/editor/TabStrip";
 import { startFsWatchClient } from "@/lib/editor/fs-watch-client";
@@ -330,18 +333,37 @@ export function FilesSurface(props: FilesSurfaceProps): JSX.Element {
     }
   });
 
-  function openFile(path: string) {
+  function openFile(path: string, opts: { pin?: boolean } = {}) {
     const kind = getFileKind(path);
 
     if (kind === "text") {
-      // Open or focus the editor tab.
-      const { existed } = openBuffer({
-        sessionName: props.projectName,
-        rootPath: rootPath(),
-        filePath: path,
-        language: languageFor(path),
-      });
-      if (existed) return;
+      // Single-click opens as a preview tab (shiki read-only view).
+      // Editing the buffer or `pin: true` (double-click) auto-pins
+      // it and the surface switches to Monaco.
+      const opened = opts.pin
+        ? openBuffer({
+            sessionName: props.projectName,
+            rootPath: rootPath(),
+            filePath: path,
+            language: languageFor(path),
+          })
+        : openBufferAsPreview({
+            sessionName: props.projectName,
+            rootPath: rootPath(),
+            filePath: path,
+            language: languageFor(path),
+          });
+      const { existed } = opened;
+      if (existed) {
+        // Already open — if the caller asked to pin, make sure it
+        // sticks even when the buffer was previously a preview.
+        if (opts.pin) {
+          const bufferUri = buildMonacoModelPath(rootPath(), path);
+          const buf = bufferState.buffers[bufferUri];
+          if (buf?.isPreview) pinBuffer(bufferUri);
+        }
+        return;
+      }
       // Fetch initial content + hydrate.
       const bufferUri = buildMonacoModelPath(rootPath(), path);
       void Effect.runPromise(fetchFilePreview(props.projectName, path))
@@ -422,7 +444,8 @@ export function FilesSurface(props: FilesSurfaceProps): JSX.Element {
                 rows={flatRows()}
                 activePath={railSelectedPath()}
                 statusMap={gitStatus() ?? new Map<string, GitChangeStatus>()}
-                onPick={openFile}
+                onPick={(path) => openFile(path)}
+                onPinPick={(path) => openFile(path, { pin: true })}
                 onToggleDir={toggleDir}
               />
             </Show>
@@ -592,7 +615,15 @@ function PreviewBody(props: {
           <Show
             when={buf().externalContent !== null && buf().dirty}
             fallback={
-              <div class="flex h-full min-h-0 w-full min-w-0 flex-col">
+              <div
+                class="flex h-full min-h-0 w-full min-w-0 flex-col"
+                onDblClick={() => {
+                  // Double-click anywhere in the preview body pins
+                  // the tab — matches the tab-strip double-click
+                  // behaviour from EDITOR-2.
+                  if (buf().isPreview) pinBuffer(buf().bufferUri);
+                }}
+              >
                 <Show when={buf().externalContent !== null}>
                   {/* Clean buffer that picked up an external write
                       somehow — fall back to the simple banner. The
@@ -605,11 +636,18 @@ function PreviewBody(props: {
                     onDismiss={() => dismissExternalChange(buf().bufferUri)}
                   />
                 </Show>
-                <CodeEditor
-                  uri={buf().bufferUri}
-                  readOnly={false}
-                  onContentChange={(value) => markContent(buf().bufferUri, value)}
-                />
+                <Show
+                  when={buf().isPreview}
+                  fallback={
+                    <CodeEditor
+                      uri={buf().bufferUri}
+                      readOnly={false}
+                      onContentChange={(value) => markContent(buf().bufferUri, value)}
+                    />
+                  }
+                >
+                  <ShikiViewer filePath={buf().filePath} content={buf().content} />
+                </Show>
               </div>
             }
           >
@@ -670,6 +708,7 @@ interface FileRailProps {
   activePath: string | null;
   statusMap: Map<string, GitChangeStatus>;
   onPick: (path: string) => void;
+  onPinPick: (path: string) => void;
   onToggleDir: (path: string) => void;
 }
 
@@ -813,6 +852,7 @@ function FileRail(props: FileRailProps) {
                   activePath={props.activePath}
                   statusMap={props.statusMap}
                   onPick={props.onPick}
+                  onPinPick={props.onPinPick}
                   onToggleDir={props.onToggleDir}
                   onFocusRow={(i) => setFocusedIndex(i)}
                 />
@@ -832,6 +872,7 @@ function FileRailRow(props: {
   activePath: string | null;
   statusMap: Map<string, GitChangeStatus>;
   onPick: (path: string) => void;
+  onPinPick: (path: string) => void;
   onToggleDir: (path: string) => void;
   onFocusRow: (index: number) => void;
 }) {
@@ -865,6 +906,12 @@ function FileRailRow(props: {
           onClick={() => {
             props.onFocusRow(props.index);
             props.onPick(node().path);
+          }}
+          onDblClick={() => {
+            // Double-click pins the tab and switches the body from
+            // ShikiViewer to the writable Monaco editor.
+            props.onFocusRow(props.index);
+            props.onPinPick(node().path);
           }}
           onFocus={() => props.onFocusRow(props.index)}
           class={

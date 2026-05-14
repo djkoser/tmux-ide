@@ -24,6 +24,7 @@
     "effect": "^3.20.4",
     "lucide-solid": "^0.577.0",
     "monaco-editor": "^0.55.0",
+    "shiki": "^3.13.0",
     "solid-js": "^1.9.11"
   },
   "devDependencies": {
