@@ -80,6 +80,14 @@ export interface OpenBuffer {
    * content and `content` is the user's edits.
    */
   externalContent: string | null;
+  /**
+   * Preview tab marker. When true, the tab strip renders the name in
+   * italic and the next `openBufferAsPreview` call replaces this tab
+   * in place rather than appending a new one. Cleared by
+   * `pinBuffer`, by editing the buffer (dirty preview tabs auto-pin),
+   * or by a regular `openBuffer` call for the same URI.
+   */
+  isPreview: boolean;
 }
 
 /** Snapshot persisted to localStorage for crash recovery. */
@@ -133,7 +141,13 @@ export function openBuffer(input: {
   const bufferUri = buildMonacoModelPath(input.rootPath, input.filePath);
   const existing = state.buffers[bufferUri];
   if (existing) {
-    setState("activeUri", bufferUri);
+    batch(() => {
+      // Opening explicitly (vs `openBufferAsPreview`) pins the tab.
+      if (existing.isPreview) {
+        setState("buffers", bufferUri, "isPreview", false);
+      }
+      setState("activeUri", bufferUri);
+    });
     return { bufferUri, existed: true };
   }
 
@@ -153,11 +167,128 @@ export function openBuffer(input: {
       saveError: null,
       saving: false,
       externalContent: null,
+      isPreview: false,
     });
     setState("order", (order) => [...order, bufferUri]);
     setState("activeUri", bufferUri);
   });
   return { bufferUri, existed: false };
+}
+
+/**
+ * Open `filePath` as a preview tab. Single-click-from-tree semantics:
+ *
+ *   - If the buffer is already open, just flip `activeUri` (no
+ *     pin/unpin change — re-clicking your current preview stays
+ *     a preview; re-clicking a pinned tab stays pinned).
+ *   - If a clean preview tab exists, replace it in place (the old
+ *     buffer + Monaco model are dropped, the new buffer takes its
+ *     slot in `order`). Avoids the "tab graveyard" from rapid
+ *     browsing.
+ *   - If the existing preview is dirty, pin it (keep the user's
+ *     edits) and append a fresh preview tab.
+ *   - Otherwise append a new preview tab at the end.
+ */
+export function openBufferAsPreview(input: {
+  sessionName: string;
+  rootPath: string;
+  filePath: string;
+  language: string;
+}): { bufferUri: string; existed: boolean } {
+  const bufferUri = buildMonacoModelPath(input.rootPath, input.filePath);
+  const existing = state.buffers[bufferUri];
+  if (existing) {
+    setState("activeUri", bufferUri);
+    return { bufferUri, existed: true };
+  }
+
+  // Look for an in-place replacement target — a clean preview tab.
+  const previewUri = state.order.find((u) => {
+    const b = state.buffers[u];
+    return b?.isPreview === true && !b.dirty;
+  });
+
+  if (previewUri) {
+    const previewIdx = state.order.indexOf(previewUri);
+    // Close the old preview buffer (clean by construction). Its
+    // Monaco model is unregistered via the registry's TTL.
+    closeBuffer(previewUri, { discardDirty: false });
+    batch(() => {
+      setState("buffers", bufferUri, {
+        bufferUri,
+        filePath: input.filePath,
+        sessionName: input.sessionName,
+        rootPath: input.rootPath,
+        language: input.language,
+        status: "loading",
+        content: "",
+        baseContent: "",
+        dirty: false,
+        openedAt: Date.now(),
+        lastSavedAt: null,
+        saveError: null,
+        saving: false,
+        externalContent: null,
+        isPreview: true,
+      });
+      // Insert at the old preview's slot so the strip doesn't jump.
+      setState("order", (order) => {
+        const next = [...order];
+        const insertAt = Math.min(previewIdx, next.length);
+        next.splice(insertAt, 0, bufferUri);
+        return next;
+      });
+      setState("activeUri", bufferUri);
+    });
+    return { bufferUri, existed: false };
+  }
+
+  batch(() => {
+    setState("buffers", bufferUri, {
+      bufferUri,
+      filePath: input.filePath,
+      sessionName: input.sessionName,
+      rootPath: input.rootPath,
+      language: input.language,
+      status: "loading",
+      content: "",
+      baseContent: "",
+      dirty: false,
+      openedAt: Date.now(),
+      lastSavedAt: null,
+      saveError: null,
+      saving: false,
+      externalContent: null,
+      isPreview: true,
+    });
+    setState("order", (order) => [...order, bufferUri]);
+    setState("activeUri", bufferUri);
+  });
+  return { bufferUri, existed: false };
+}
+
+/** Pin a preview tab so it survives the next `openBufferAsPreview`. */
+export function pinBuffer(bufferUri: string): void {
+  const buf = state.buffers[bufferUri];
+  if (!buf || !buf.isPreview) return;
+  setState("buffers", bufferUri, "isPreview", false);
+}
+
+/**
+ * Reorder the open-buffer list. `fromIndex` is removed and
+ * reinserted at `toIndex`. Out-of-range or no-op moves are
+ * silently ignored.
+ */
+export function reorderBuffers(fromIndex: number, toIndex: number): void {
+  const order = state.order;
+  if (fromIndex < 0 || fromIndex >= order.length) return;
+  if (toIndex < 0 || toIndex >= order.length) return;
+  if (fromIndex === toIndex) return;
+  const next = [...order];
+  const [moved] = next.splice(fromIndex, 1);
+  if (moved === undefined) return;
+  next.splice(toIndex, 0, moved);
+  setState("order", next);
 }
 
 /**
@@ -220,11 +351,15 @@ export function markContent(bufferUri: string, nextContent: string): void {
   if (!buf || buf.status !== "ready") return;
   if (buf.content === nextContent) return;
   const dirty = nextContent !== buf.baseContent;
+  // A preview tab that's been edited becomes a real pinned tab —
+  // we don't want a dirty buffer to vanish on the next single-click.
+  const isPreview = dirty ? false : buf.isPreview;
   batch(() => {
     setState("buffers", bufferUri, {
       ...buf,
       content: nextContent,
       dirty,
+      isPreview,
     });
     modelRegistry.setDirty(bufferUri, dirty);
     modelRegistry.bumpBufferVersion(bufferUri);

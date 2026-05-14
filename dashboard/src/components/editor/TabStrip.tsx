@@ -10,13 +10,22 @@
  * `closeBuffer(uri)`; a dirty buffer requires a `discardDirty`
  * confirm — for G17-P5 the host wires `window.confirm` so the
  * tab strip stays presentational.
+ *
+ * Ergonomics:
+ *   - Preview tabs (`buffer.isPreview`) render in italic; double
+ *     -clicking the tab pins it.
+ *   - Drag-to-reorder via native HTML5 DnD calling
+ *     `reorderBuffers(from, to)`.
+ *   - Activating a tab scrolls it into view if the strip overflows.
  */
 
-import { For, Show } from "solid-js";
+import { For, Show, createEffect, createSignal } from "solid-js";
 import { X } from "lucide-solid";
 import {
   bufferState,
   closeBuffer,
+  pinBuffer,
+  reorderBuffers,
   setActiveBuffer,
   type OpenBuffer,
 } from "@/lib/editor/buffer-store";
@@ -35,7 +44,12 @@ function basename(filePath: string): string {
   return idx === -1 ? filePath : filePath.slice(idx + 1);
 }
 
+const DRAG_MIME = "application/x-tmux-ide-tab";
+
 export function TabStrip(props: TabStripProps) {
+  let stripEl: HTMLDivElement | undefined;
+  const [dragOverUri, setDragOverUri] = createSignal<string | null>(null);
+
   function tryClose(uri: string) {
     const buf = bufferState.buffers[uri];
     if (!buf) return;
@@ -54,9 +68,71 @@ export function TabStrip(props: TabStripProps) {
     }
   }
 
+  // Scroll the active tab into view when activation changes. Uses
+  // `inline: "nearest"` so an already-visible tab doesn't trigger a
+  // pointless scroll, and falls back to a manual scrollLeft tweak on
+  // browsers without scrollIntoView options.
+  createEffect(() => {
+    const uri = bufferState.activeUri;
+    if (!uri || !stripEl) return;
+    const el = stripEl.querySelector<HTMLElement>(`[data-buffer-uri="${cssEscape(uri)}"]`);
+    if (!el) return;
+    try {
+      el.scrollIntoView({ inline: "nearest", block: "nearest" });
+    } catch {
+      // Older Safari rejects the options object — fall back to the
+      // boolean form, which is best-effort.
+      try {
+        el.scrollIntoView(false);
+      } catch {
+        /* ignore */
+      }
+    }
+  });
+
+  function onDragStart(ev: DragEvent, uri: string) {
+    if (!ev.dataTransfer) return;
+    ev.dataTransfer.effectAllowed = "move";
+    ev.dataTransfer.setData(DRAG_MIME, uri);
+    // Some browsers need a non-empty text/plain payload to actually
+    // initiate the drag — keep the URI as a fallback type.
+    ev.dataTransfer.setData("text/plain", uri);
+  }
+
+  function onDragOver(ev: DragEvent, uri: string) {
+    if (!ev.dataTransfer) return;
+    const types = ev.dataTransfer.types;
+    if (!types.includes(DRAG_MIME)) return;
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = "move";
+    if (dragOverUri() !== uri) setDragOverUri(uri);
+  }
+
+  function onDragLeave(uri: string) {
+    if (dragOverUri() === uri) setDragOverUri(null);
+  }
+
+  function onDrop(ev: DragEvent, targetUri: string) {
+    if (!ev.dataTransfer) return;
+    const sourceUri = ev.dataTransfer.getData(DRAG_MIME);
+    setDragOverUri(null);
+    if (!sourceUri || sourceUri === targetUri) return;
+    ev.preventDefault();
+    const order = bufferState.order;
+    const from = order.indexOf(sourceUri);
+    const to = order.indexOf(targetUri);
+    if (from === -1 || to === -1) return;
+    reorderBuffers(from, to);
+  }
+
+  function onDragEnd() {
+    setDragOverUri(null);
+  }
+
   return (
     <Show when={bufferState.order.length > 0}>
       <div
+        ref={stripEl}
         data-testid="editor-tab-strip"
         role="tablist"
         class="flex h-7 shrink-0 items-center overflow-x-auto border-b border-[var(--border)] bg-[var(--bg-strong)] text-[12px]"
@@ -65,6 +141,8 @@ export function TabStrip(props: TabStripProps) {
           {(uri) => {
             const buf = () => bufferState.buffers[uri];
             const active = () => bufferState.activeUri === uri;
+            const isPreview = () => buf()?.isPreview === true;
+            const isDropTarget = () => dragOverUri() === uri;
             return (
               <Show when={buf()}>
                 {(b) => (
@@ -73,13 +151,23 @@ export function TabStrip(props: TabStripProps) {
                     data-buffer-uri={uri}
                     data-active={active() ? "true" : undefined}
                     data-dirty={b().dirty ? "true" : undefined}
+                    data-preview={isPreview() ? "true" : undefined}
+                    data-drop-target={isDropTarget() ? "true" : undefined}
                     role="tab"
                     aria-selected={active()}
+                    draggable={true}
+                    onDragStart={(ev) => onDragStart(ev, uri)}
+                    onDragOver={(ev) => onDragOver(ev, uri)}
+                    onDragLeave={() => onDragLeave(uri)}
+                    onDrop={(ev) => onDrop(ev, uri)}
+                    onDragEnd={onDragEnd}
+                    onDblClick={() => pinBuffer(uri)}
                     class={
-                      "group flex h-7 shrink-0 items-center gap-1.5 border-r border-[var(--border)] px-3 text-[12px] " +
+                      "group relative flex h-7 shrink-0 items-center gap-1.5 border-r border-[var(--border)] px-3 text-[12px] " +
                       (active()
                         ? "bg-[var(--bg)] text-[var(--fg)]"
-                        : "text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)]")
+                        : "text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)]") +
+                      (isDropTarget() ? " ring-1 ring-inset ring-[var(--accent)]" : "")
                     }
                   >
                     <button
@@ -99,7 +187,13 @@ export function TabStrip(props: TabStripProps) {
                         const Icon = getFileIcon(b().filePath);
                         return <Icon class="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />;
                       })()}
-                      <span class="font-mono">{basename(b().filePath)}</span>
+                      <span
+                        class={
+                          "font-mono " + (isPreview() ? "italic text-[var(--fg-secondary)]" : "")
+                        }
+                      >
+                        {basename(b().filePath)}
+                      </span>
                       <Show when={b().status === "loading"}>
                         <span class="text-[10px] text-[var(--dim)]">loading…</span>
                       </Show>
@@ -129,4 +223,16 @@ export function TabStrip(props: TabStripProps) {
       </div>
     </Show>
   );
+}
+
+/**
+ * Minimal CSS.escape polyfill — buffer URIs contain `/` and `:` so we
+ * can't dump them into a querySelector verbatim. Falls back to the
+ * native CSS.escape when available.
+ */
+function cssEscape(value: string): string {
+  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+    return CSS.escape(value);
+  }
+  return value.replace(/["\\]/g, "\\$&");
 }
