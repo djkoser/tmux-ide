@@ -27,7 +27,8 @@
  *     section without touching widget internals.
  *   - "Status pill" + dot-prefix convention mirrors t3's StatusBadge.
  */
-import { createMemo, For, Show } from "solid-js";
+import { createMemo, createSignal, For, Show } from "solid-js";
+import { createVirtualizer } from "@tanstack/solid-virtual";
 import type {
   DashboardAgent,
   DashboardEvent,
@@ -110,6 +111,22 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
   const tasks = createMemo<DashboardTask[]>(() => snapshot()?.tasks ?? []);
   const agents = createMemo<DashboardAgent[]>(() => snapshot()?.agents ?? []);
   const events = createMemo<DashboardEvent[]>(() => snapshot()?.events ?? []);
+  // Slice + memoize the visible event window so consumers re-derive
+  // only when the limit or backing list changes.
+  const visibleEvents = createMemo<DashboardEvent[]>(() => events().slice(0, eventLimit()));
+
+  // The event stream sits inside the dashboard's outer scroll. Wrap it
+  // in a bounded-height region with its own virtualizer so a 10k-event
+  // list isn't rendered all at once.
+  const [eventsScrollEl, setEventsScrollEl] = createSignal<HTMLDivElement | null>(null);
+  const eventsVirtualizer = createVirtualizer({
+    get count() {
+      return visibleEvents().length;
+    },
+    getScrollElement: () => eventsScrollEl(),
+    estimateSize: () => 26,
+    overscan: 6,
+  });
 
   const tasksByMilestone = createMemo<Map<string, DashboardTask[]>>(() => {
     const map = new Map<string, DashboardTask[]>();
@@ -649,66 +666,90 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                     </Show>
                   </div>
                   <div
+                    ref={setEventsScrollEl}
+                    data-testid="mission-control-events"
                     style={{
                       "border-radius": "6px",
                       border: "1px solid var(--border)",
                       background: "var(--surface)",
-                      overflow: "hidden",
+                      "max-height": "400px",
+                      "overflow-y": "auto",
+                      position: "relative",
                     }}
                   >
-                    <For each={events().slice(0, eventLimit())}>
-                      {(e) => (
-                        <div
-                          data-mission-event={e.type}
-                          style={{
-                            display: "flex",
-                            "align-items": "baseline",
-                            gap: "8px",
-                            padding: "4px 12px",
-                            "border-bottom": "1px solid var(--border-weak, var(--border))",
-                            "font-size": "11px",
-                          }}
-                        >
-                          <span
-                            style={{
-                              "font-variant-numeric": "tabular-nums",
-                              color: "var(--dim)",
-                              "min-width": "44px",
-                            }}
-                          >
-                            {e.relative ?? ""}
-                          </span>
-                          <span
-                            style={{
-                              padding: "0 6px",
-                              "border-radius": "3px",
-                              background: "color-mix(in srgb, var(--bg) 80%, var(--accent))",
-                              color: "var(--accent)",
-                              "font-size": "10px",
-                              "text-transform": "uppercase",
-                              "letter-spacing": "0.05em",
-                            }}
-                          >
-                            {e.type}
-                          </span>
-                          <Show when={e.agent}>
-                            <span style={{ color: "var(--dim)" }}>@{e.agent}</span>
-                          </Show>
-                          <span
-                            style={{
-                              flex: "1",
-                              "min-width": "0",
-                              color: "var(--fg-secondary)",
-                              overflow: "hidden",
-                              "text-overflow": "ellipsis",
-                              "white-space": "nowrap",
-                            }}
-                          >
-                            {e.message}
-                          </span>
-                        </div>
-                      )}
-                    </For>
+                    <div
+                      data-testid="mission-control-events-spacer"
+                      style={{
+                        height: `${eventsVirtualizer.getTotalSize()}px`,
+                        width: "100%",
+                        position: "relative",
+                      }}
+                    >
+                      <For each={eventsVirtualizer.getVirtualItems()}>
+                        {(vItem) => {
+                          const e = () => visibleEvents()[vItem.index]!;
+                          return (
+                            <div
+                              data-index={vItem.index}
+                              data-mission-event={e().type}
+                              ref={(el) => eventsVirtualizer.measureElement(el)}
+                              style={{
+                                position: "absolute",
+                                top: "0",
+                                left: "0",
+                                width: "100%",
+                                transform: `translateY(${vItem.start}px)`,
+                                display: "flex",
+                                "align-items": "baseline",
+                                gap: "8px",
+                                padding: "4px 12px",
+                                "border-bottom": "1px solid var(--border-weak, var(--border))",
+                                "font-size": "11px",
+                                "box-sizing": "border-box",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  "font-variant-numeric": "tabular-nums",
+                                  color: "var(--dim)",
+                                  "min-width": "44px",
+                                }}
+                              >
+                                {e().relative ?? ""}
+                              </span>
+                              <span
+                                style={{
+                                  padding: "0 6px",
+                                  "border-radius": "3px",
+                                  background: "color-mix(in srgb, var(--bg) 80%, var(--accent))",
+                                  color: "var(--accent)",
+                                  "font-size": "10px",
+                                  "text-transform": "uppercase",
+                                  "letter-spacing": "0.05em",
+                                }}
+                              >
+                                {e().type}
+                              </span>
+                              <Show when={e().agent}>
+                                <span style={{ color: "var(--dim)" }}>@{e().agent}</span>
+                              </Show>
+                              <span
+                                style={{
+                                  flex: "1",
+                                  "min-width": "0",
+                                  color: "var(--fg-secondary)",
+                                  overflow: "hidden",
+                                  "text-overflow": "ellipsis",
+                                  "white-space": "nowrap",
+                                }}
+                              >
+                                {e().message}
+                              </span>
+                            </div>
+                          );
+                        }}
+                      </For>
+                    </div>
                   </div>
                 </section>
               </Show>

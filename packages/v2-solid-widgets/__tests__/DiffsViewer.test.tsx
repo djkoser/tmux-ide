@@ -191,20 +191,28 @@ describe("DiffsViewer (Solid widget)", () => {
     });
     await flush();
 
-    // The truncation banner appears, and only ~2000 line elements render.
+    // The truncation banner appears, and the virtualizer's spacer
+    // reports a content height capped at 2000 lines × ~18px = ~36000px.
     expect(container.textContent).toContain("showing first 2000");
-    const linesBefore = container.querySelectorAll("[data-diff-line-kind]").length;
-    expect(linesBefore).toBeLessThanOrEqual(2000);
-    expect(linesBefore).toBeGreaterThan(1900); // sanity: most of the cap
+    const spacerBefore = container.querySelector<HTMLElement>(
+      "[data-testid='diffs-viewer-spacer']",
+    );
+    expect(spacerBefore).toBeTruthy();
+    const heightBefore = parseInt(spacerBefore!.style.height, 10);
+    expect(heightBefore).toBeLessThanOrEqual(2000 * 18);
+    expect(heightBefore).toBeGreaterThanOrEqual(1900 * 18);
 
-    // Clicking "show all" expands to the full set.
+    // Clicking "show all" expands the virtualized content beyond the cap.
     const showAll = container.querySelector<HTMLElement>("[data-testid='diffs-viewer-show-all']");
     expect(showAll).toBeTruthy();
     showAll!.click();
     await flush();
 
-    const linesAfter = container.querySelectorAll("[data-diff-line-kind]").length;
-    expect(linesAfter).toBeGreaterThan(2400);
+    const spacerAfter = container.querySelector<HTMLElement>(
+      "[data-testid='diffs-viewer-spacer']",
+    );
+    const heightAfter = parseInt(spacerAfter!.style.height, 10);
+    expect(heightAfter).toBeGreaterThanOrEqual(2400 * 18);
     expect(container.querySelector("[data-testid='diffs-viewer-show-all']")).toBeNull();
 
     dispose();

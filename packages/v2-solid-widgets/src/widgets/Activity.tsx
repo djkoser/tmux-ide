@@ -24,7 +24,19 @@
  *   - Compact 22px rows + monospace timestamps match the React view.
  */
 import { createMemo, createSignal, For, Show } from "solid-js";
+import { createVirtualizer } from "@tanstack/solid-virtual";
 import type { ActivityEvent, ActivityMountOptions } from "../types";
+
+type TimelineEntry =
+  | { kind: "day-header"; key: string; label: string; count: number }
+  | { kind: "event"; key: string; event: ActivityEvent; isFirstInGroup: boolean };
+
+function eventKey(event: ActivityEvent, fallbackIndex: number): string {
+  // Events lack a stable id field — compose one from timestamp + type
+  // + agent + taskId so virtualizer reconcile keeps stable identity
+  // across re-renders.
+  return `${event.timestamp}|${event.type}|${event.agent ?? ""}|${event.taskId ?? ""}|${fallbackIndex}`;
+}
 
 interface ActivityViewProps {
   options: () => ActivityMountOptions;
@@ -171,6 +183,44 @@ export function ActivityView(props: ActivityViewProps) {
     }));
   });
 
+  // Flatten the day-grouped event list into a single linear entry
+  // stream the virtualizer can slice against. A 10k-event timeline
+  // becomes a flat array of headers + events instead of nested For
+  // loops rendering every row.
+  const entries = createMemo<TimelineEntry[]>(() => {
+    const out: TimelineEntry[] = [];
+    let idx = 0;
+    for (const group of groups()) {
+      out.push({
+        kind: "day-header",
+        key: `H:${group.key}`,
+        label: group.label,
+        count: group.rows.length,
+      });
+      group.rows.forEach((event, i) => {
+        out.push({
+          kind: "event",
+          key: `E:${group.key}:${eventKey(event, idx)}`,
+          event,
+          isFirstInGroup: i === 0,
+        });
+        idx += 1;
+      });
+    }
+    return out;
+  });
+
+  const [timelineEl, setTimelineEl] = createSignal<HTMLDivElement | null>(null);
+  const virtualizer = createVirtualizer({
+    get count() {
+      return entries().length;
+    },
+    getScrollElement: () => timelineEl(),
+    estimateSize: (i) => (entries()[i]?.kind === "day-header" ? 28 : 52),
+    overscan: 6,
+    getItemKey: (i) => entries()[i]?.key ?? i,
+  });
+
   function toggleType(type: string) {
     setSelectedTypes((cur) => {
       const next = new Set(cur);
@@ -203,10 +253,17 @@ export function ActivityView(props: ActivityViewProps) {
         color: "var(--fg)",
         "font-family": "var(--font-family-mono, var(--font-mono))",
         "font-size": "12px",
-        "overflow-y": "auto",
       }}
     >
-      <div style={{ padding: "16px", display: "flex", "flex-direction": "column", gap: "20px" }}>
+      <div
+        style={{
+          padding: "16px 16px 12px",
+          display: "flex",
+          "flex-direction": "column",
+          gap: "20px",
+          "flex-shrink": "0",
+        }}
+      >
         {/* KPI strip */}
         <section
           data-activity-section="kpis"
@@ -357,198 +414,246 @@ export function ActivityView(props: ActivityViewProps) {
             </button>
           </Show>
         </section>
+      </div>
 
-        {/* Event groups */}
-        <Show
-          when={groups().length > 0}
-          fallback={
+      {/* Virtualized event timeline. The day-grouped entries are
+       *  flattened (`entries()`) so the virtualizer slices a flat
+       *  list of headers + events. Only the rows in the viewport
+       *  (plus overscan) actually live in the DOM. */}
+      <Show
+        when={groups().length > 0}
+        fallback={
+          <div
+            data-testid="activity-empty"
+            style={{
+              padding: "32px",
+              "text-align": "center",
+              color: "var(--dim)",
+            }}
+          >
+            <div style={{ "margin-bottom": "4px", color: "var(--fg-secondary, var(--fg))" }}>
+              No activity yet
+            </div>
+            <div style={{ "font-size": "11px" }}>
+              New dispatches, completions, retries, and errors will appear here.
+            </div>
+          </div>
+        }
+      >
+        <section
+          ref={setTimelineEl}
+          data-activity-section="timeline"
+          style={{
+            flex: "1",
+            "min-height": "0",
+            "overflow-y": "auto",
+            padding: "0 16px 16px",
+            position: "relative",
+          }}
+        >
+          <div
+            data-testid="activity-timeline-spacer"
+            style={{
+              height: `${virtualizer.getTotalSize()}px`,
+              width: "100%",
+              position: "relative",
+            }}
+          >
+            <For each={virtualizer.getVirtualItems()}>
+              {(vItem) => {
+                const entry = createMemo(() => entries()[vItem.index]!, undefined, {
+                  equals: (a, b) => !!a && !!b && a.key === b.key,
+                });
+                return (
+                  <div
+                    data-index={vItem.index}
+                    ref={(el) => virtualizer.measureElement(el)}
+                    style={{
+                      position: "absolute",
+                      top: "0",
+                      left: "0",
+                      width: "100%",
+                      transform: `translateY(${vItem.start}px)`,
+                    }}
+                  >
+                    <TimelineRow entry={entry()} />
+                  </div>
+                );
+              }}
+            </For>
+          </div>
+        </section>
+      </Show>
+    </div>
+  );
+}
+
+interface TimelineRowProps {
+  entry: TimelineEntry;
+}
+
+function TimelineRow(props: TimelineRowProps) {
+  return (
+    <Show when={props.entry} keyed>
+      {(entry) =>
+        entry.kind === "day-header" ? (
+          <div
+            data-activity-day={entry.key}
+            style={{
+              display: "flex",
+              "align-items": "center",
+              "justify-content": "space-between",
+              background: "var(--bg)",
+              padding: "8px 0 4px",
+              "font-size": "10px",
+              "text-transform": "uppercase",
+              "letter-spacing": "0.08em",
+              color: "var(--dim)",
+            }}
+          >
+            <span>{entry.label}</span>
+            <span style={{ "font-variant-numeric": "tabular-nums" }}>{entry.count}</span>
+          </div>
+        ) : (
+          <EventRow event={entry.event} isFirstInGroup={entry.isFirstInGroup} />
+        )
+      }
+    </Show>
+  );
+}
+
+function EventRow(props: { event: ActivityEvent; isFirstInGroup: boolean }) {
+  return (
+    <Show when={props.event} keyed>
+      {(event) => {
+        const meta = metaFor(event.type);
+        const label = meta.label.replaceAll("_", " ");
+        return (
+          <div data-activity-day-row>
             <div
-              data-testid="activity-empty"
+              data-testid="activity-event"
+              data-activity-event-type={event.type}
               style={{
-                padding: "32px",
-                "text-align": "center",
-                color: "var(--dim)",
+                display: "grid",
+                "grid-template-columns": "10px minmax(0, 1fr) auto",
+                "align-items": "center",
+                gap: "12px",
+                padding: "8px 12px",
+                "border-radius": "6px",
+                border: "1px solid var(--border-weak, var(--border))",
+                "border-top": props.isFirstInGroup
+                  ? "1px solid var(--border-weak, var(--border))"
+                  : "none",
+                "border-top-left-radius": props.isFirstInGroup ? "6px" : "0",
+                "border-top-right-radius": props.isFirstInGroup ? "6px" : "0",
+                background: "var(--bg-strong, var(--surface))",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "var(--surface-hover, var(--surface))";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "var(--bg-strong, var(--surface))";
               }}
             >
-              <div style={{ "margin-bottom": "4px", color: "var(--fg-secondary, var(--fg))" }}>
-                No activity yet
-              </div>
-              <div style={{ "font-size": "11px" }}>
-                New dispatches, completions, retries, and errors will appear here.
-              </div>
-            </div>
-          }
-        >
-          <section
-            data-activity-section="timeline"
-            style={{ display: "flex", "flex-direction": "column", gap: "16px" }}
-          >
-            <For each={groups()}>
-              {(group) => (
-                <div data-activity-day={group.key}>
-                  {/* Sticky day header */}
-                  <div
+              <span
+                aria-hidden="true"
+                style={{
+                  height: "8px",
+                  width: "8px",
+                  "border-radius": "9999px",
+                  background: meta.color,
+                }}
+              />
+              <div style={{ "min-width": "0" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    "align-items": "center",
+                    gap: "8px",
+                    "min-width": "0",
+                  }}
+                >
+                  <span
+                    data-activity-pill
                     style={{
-                      display: "flex",
-                      "align-items": "center",
-                      "justify-content": "space-between",
-                      position: "sticky",
-                      top: "0",
-                      "z-index": "1",
-                      background: "var(--bg)",
-                      padding: "4px 0",
+                      "flex-shrink": "0",
+                      padding: "1px 6px",
+                      "border-radius": "9999px",
+                      background: pillTint(meta.color),
+                      color: meta.color,
                       "font-size": "10px",
                       "text-transform": "uppercase",
-                      "letter-spacing": "0.08em",
+                      "letter-spacing": "0.05em",
+                    }}
+                  >
+                    {label}
+                  </span>
+                  <span
+                    style={{
+                      overflow: "hidden",
+                      "text-overflow": "ellipsis",
+                      "white-space": "nowrap",
+                      "font-size": "12px",
+                      color: "var(--fg)",
+                    }}
+                  >
+                    {formatMessage(event)}
+                  </span>
+                </div>
+                <Show when={event.agent || event.taskId}>
+                  <div
+                    style={{
+                      "margin-top": "4px",
+                      display: "flex",
+                      "align-items": "center",
+                      gap: "8px",
+                      "min-width": "0",
+                      "font-size": "10px",
                       color: "var(--dim)",
                     }}
                   >
-                    <span>{group.label}</span>
-                    <span style={{ "font-variant-numeric": "tabular-nums" }}>
-                      {group.rows.length}
-                    </span>
+                    <Show when={event.agent}>
+                      <span
+                        style={{
+                          "border-radius": "4px",
+                          background: "var(--surface)",
+                          padding: "1px 6px",
+                          color: "var(--cyan, var(--accent))",
+                        }}
+                      >
+                        @{event.agent}
+                      </span>
+                    </Show>
+                    <Show when={event.taskId}>
+                      <code
+                        style={{
+                          "font-family": "inherit",
+                          "font-variant-numeric": "tabular-nums",
+                        }}
+                      >
+                        {event.taskId}
+                      </code>
+                    </Show>
                   </div>
-                  <div
-                    style={{
-                      "border-radius": "6px",
-                      border: "1px solid var(--border-weak, var(--border))",
-                      background: "var(--bg-strong, var(--surface))",
-                      overflow: "hidden",
-                    }}
-                  >
-                    <For each={group.rows}>
-                      {(event, index) => {
-                        const meta = metaFor(event.type);
-                        const label = meta.label.replaceAll("_", " ");
-                        return (
-                          <div
-                            data-testid="activity-event"
-                            data-activity-event-type={event.type}
-                            style={{
-                              display: "grid",
-                              "grid-template-columns": "10px minmax(0, 1fr) auto",
-                              "align-items": "center",
-                              gap: "12px",
-                              padding: "8px 12px",
-                              "border-top":
-                                index() > 0
-                                  ? "1px solid var(--border-weak, var(--border))"
-                                  : "none",
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.background =
-                                "var(--surface-hover, var(--surface))";
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = "transparent";
-                            }}
-                          >
-                            <span
-                              aria-hidden="true"
-                              style={{
-                                height: "8px",
-                                width: "8px",
-                                "border-radius": "9999px",
-                                background: meta.color,
-                              }}
-                            />
-                            <div style={{ "min-width": "0" }}>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  "align-items": "center",
-                                  gap: "8px",
-                                  "min-width": "0",
-                                }}
-                              >
-                                <span
-                                  data-activity-pill
-                                  style={{
-                                    "flex-shrink": "0",
-                                    padding: "1px 6px",
-                                    "border-radius": "9999px",
-                                    background: pillTint(meta.color),
-                                    color: meta.color,
-                                    "font-size": "10px",
-                                    "text-transform": "uppercase",
-                                    "letter-spacing": "0.05em",
-                                  }}
-                                >
-                                  {label}
-                                </span>
-                                <span
-                                  style={{
-                                    overflow: "hidden",
-                                    "text-overflow": "ellipsis",
-                                    "white-space": "nowrap",
-                                    "font-size": "12px",
-                                    color: "var(--fg)",
-                                  }}
-                                >
-                                  {formatMessage(event)}
-                                </span>
-                              </div>
-                              <Show when={event.agent || event.taskId}>
-                                <div
-                                  style={{
-                                    "margin-top": "4px",
-                                    display: "flex",
-                                    "align-items": "center",
-                                    gap: "8px",
-                                    "min-width": "0",
-                                    "font-size": "10px",
-                                    color: "var(--dim)",
-                                  }}
-                                >
-                                  <Show when={event.agent}>
-                                    <span
-                                      style={{
-                                        "border-radius": "4px",
-                                        background: "var(--surface)",
-                                        padding: "1px 6px",
-                                        color: "var(--cyan, var(--accent))",
-                                      }}
-                                    >
-                                      @{event.agent}
-                                    </span>
-                                  </Show>
-                                  <Show when={event.taskId}>
-                                    <code
-                                      style={{
-                                        "font-family": "inherit",
-                                        "font-variant-numeric": "tabular-nums",
-                                      }}
-                                    >
-                                      {event.taskId}
-                                    </code>
-                                  </Show>
-                                </div>
-                              </Show>
-                            </div>
-                            <time
-                              dateTime={event.timestamp}
-                              title={fullTimestamp(event)}
-                              style={{
-                                "text-align": "right",
-                                "font-size": "11px",
-                                "font-variant-numeric": "tabular-nums",
-                                color: "var(--dim)",
-                              }}
-                            >
-                              {formatRelative(event)}
-                            </time>
-                          </div>
-                        );
-                      }}
-                    </For>
-                  </div>
-                </div>
-              )}
-            </For>
-          </section>
-        </Show>
-      </div>
-    </div>
+                </Show>
+              </div>
+              <time
+                dateTime={event.timestamp}
+                title={fullTimestamp(event)}
+                style={{
+                  "text-align": "right",
+                  "font-size": "11px",
+                  "font-variant-numeric": "tabular-nums",
+                  color: "var(--dim)",
+                }}
+              >
+                {formatRelative(event)}
+              </time>
+            </div>
+          </div>
+        );
+      }}
+    </Show>
   );
 }
 

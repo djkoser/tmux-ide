@@ -21,6 +21,7 @@
  * the React host into the live Solid signal without remount.
  */
 import { createEffect, createMemo, createSignal, For, Show, onCleanup, onMount } from "solid-js";
+import { createVirtualizer } from "@tanstack/solid-virtual";
 import { fetchProjectDiff, fetchProjectFileDiff, type DiffData, type DiffFileEntry } from "../api";
 import type { DiffsViewerMountOptions } from "../types";
 
@@ -161,6 +162,21 @@ export function DiffsViewerView(props: DiffsViewerViewProps) {
   const lines = createMemo<DiffLine[]>(() =>
     truncated() ? allLines().slice(0, MAX_DIFF_LINES) : allLines(),
   );
+
+  // Virtualized diff line list: every line previously rendered a div
+  // with inline-styled background-color, so a 5k-line refactor diff
+  // produced 5k DOM nodes. Fixed-height rows (`line-height: 1.5` on a
+  // 12px monospace font ≈ 18px) make a flat fixed-estimate virtualizer
+  // a clean fit.
+  const [diffScrollEl, setDiffScrollEl] = createSignal<HTMLDivElement | null>(null);
+  const diffVirtualizer = createVirtualizer({
+    get count() {
+      return lines().length;
+    },
+    getScrollElement: () => diffScrollEl(),
+    estimateSize: () => 18,
+    overscan: 12,
+  });
 
   return (
     <div
@@ -471,34 +487,52 @@ export function DiffsViewerView(props: DiffsViewerViewProps) {
                   }
                 >
                   <div
+                    ref={setDiffScrollEl}
                     style={{
                       flex: "1",
                       "min-height": "0",
                       "min-width": "0",
                       "overflow-y": "auto",
                       "overflow-x": "auto",
-                      padding: "4px 0",
+                      position: "relative",
                     }}
                   >
-                    <For each={lines()}>
-                      {(ln) => {
-                        const c = LINE_COLOR[ln.kind];
-                        return (
-                          <div
-                            data-diff-line-kind={ln.kind}
-                            style={{
-                              padding: "0 12px",
-                              "white-space": "pre",
-                              "line-height": "1.5",
-                              color: c.fg,
-                              "background-color": c.bg,
-                            }}
-                          >
-                            {ln.text || " "}
-                          </div>
-                        );
+                    <div
+                      data-testid="diffs-viewer-spacer"
+                      style={{
+                        height: `${diffVirtualizer.getTotalSize()}px`,
+                        width: "100%",
+                        position: "relative",
                       }}
-                    </For>
+                    >
+                      <For each={diffVirtualizer.getVirtualItems()}>
+                        {(vItem) => {
+                          const ln = () => lines()[vItem.index]!;
+                          return (
+                            <div
+                              data-index={vItem.index}
+                              data-diff-line-kind={ln().kind}
+                              style={{
+                                position: "absolute",
+                                top: "0",
+                                left: "0",
+                                width: "100%",
+                                height: `${vItem.size}px`,
+                                transform: `translateY(${vItem.start}px)`,
+                                padding: "0 12px",
+                                "box-sizing": "border-box",
+                                "white-space": "pre",
+                                "line-height": "1.5",
+                                color: LINE_COLOR[ln().kind].fg,
+                                "background-color": LINE_COLOR[ln().kind].bg,
+                              }}
+                            >
+                              {ln().text || " "}
+                            </div>
+                          );
+                        }}
+                      </For>
+                    </div>
                   </div>
                 </Show>
               </Show>
