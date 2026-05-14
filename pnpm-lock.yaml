@@ -449,6 +449,9 @@ importers:
 
   packages/v2-solid-widgets:
     dependencies:
+      '@tanstack/solid-virtual':
+        specifier: ^3.13.24
+        version: 3.13.24(solid-js@1.9.11)
       '@tmux-ide/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -2479,6 +2482,14 @@ packages:
 
   '@takumi-rs/wasm@0.70.4':
     resolution: {integrity: sha512-gl5JQv1MCgKkndxqZf7H/SBvuezZCg4n74CXBVcjP2eXC+ZGtStM4J6KMQYdP8mCF3Y9cD2Fdfezyx9KfJsOOg==}
+
+  '@tanstack/solid-virtual@3.13.24':
+    resolution: {integrity: sha512-sLGjpsAWLK8oxciqN+FNjs5JLs9N27DKwwoOPN8FMrmFMeXdiPQvRg3CqUAv8pYfXKD9KmcbhBxNwlmcP22a8Q==}
+    peerDependencies:
+      solid-js: ^1.3.0
+
+  '@tanstack/virtual-core@3.14.0':
+    resolution: {integrity: sha512-JLANqGy/D6k4Ujmh8Tr25lGimuOXNiaVyXaCAZS0W+1390sADdGnyUdSWNIfd49gebtIxGMij4IktRVzrdr12Q==}
 
   '@testing-library/dom@10.4.1':
     resolution: {integrity: sha512-o4PXJQidqJl82ckFaXUeoAW+XysPLauYI43Abki5hABd853iMhitooc6znOnczgbTYmEP6U6/y1ZyKAIsvMKGg==}
@@ -8036,6 +8047,13 @@ snapshots:
       '@takumi-rs/wasm': 0.70.4
 
   '@takumi-rs/wasm@0.70.4': {}
+
+  '@tanstack/solid-virtual@3.13.24(solid-js@1.9.11)':
+    dependencies:
+      '@tanstack/virtual-core': 3.14.0
+      solid-js: 1.9.11
+
+  '@tanstack/virtual-core@3.14.0': {}
 
   '@testing-library/dom@10.4.1':
     dependencies:

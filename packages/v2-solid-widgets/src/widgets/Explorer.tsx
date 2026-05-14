@@ -1,4 +1,5 @@
 import { createSignal, createMemo, For, Show, onCleanup, onMount } from "solid-js";
+import { createVirtualizer } from "@tanstack/solid-virtual";
 import { fetchProjectFiles, type ProjectFileNode } from "../api";
 import type { ExplorerMountOptions } from "../types";
 
@@ -12,6 +13,9 @@ interface FlatRow {
   expanded: boolean;
   expandable: boolean;
 }
+
+const ROW_HEIGHT = 20;
+const OVERSCAN = 5;
 
 /**
  * Walk the recursive file tree into a flat row list, honoring the
@@ -45,7 +49,7 @@ export function ExplorerView(props: ExplorerViewProps) {
   const [error, setError] = createSignal<string | null>(null);
   const [loading, setLoading] = createSignal(true);
   const [truncated, setTruncated] = createSignal(false);
-  let listEl: HTMLDivElement | undefined;
+  const [listEl, setListEl] = createSignal<HTMLDivElement | null>(null);
 
   async function refresh() {
     try {
@@ -67,6 +71,15 @@ export function ExplorerView(props: ExplorerViewProps) {
 
   const rows = createMemo<FlatRow[]>(() => flatten(tree(), expanded()));
 
+  const virtualizer = createVirtualizer({
+    get count() {
+      return rows().length;
+    },
+    getScrollElement: () => listEl(),
+    estimateSize: () => ROW_HEIGHT,
+    overscan: OVERSCAN,
+  });
+
   function toggle(path: string) {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -84,11 +97,8 @@ export function ExplorerView(props: ExplorerViewProps) {
     }
   }
 
-  // Keep the selected row scrolled into view.
   function scrollSelectedIntoView() {
-    if (!listEl) return;
-    const node = listEl.querySelector<HTMLElement>(`[data-row-index="${selected()}"]`);
-    node?.scrollIntoView({ block: "nearest" });
+    virtualizer.scrollToIndex(selected(), { align: "auto" });
   }
 
   // Keyboard navigation — j/k or arrow keys move selection,
@@ -113,10 +123,8 @@ export function ExplorerView(props: ExplorerViewProps) {
         const row = list[selected()];
         if (!row) return;
         if (row.node.isDirectory && row.expanded) {
-          // Collapse the current directory.
           toggle(row.node.path);
         } else {
-          // Walk up to the parent row of the same depth - 1.
           const targetDepth = row.depth - 1;
           if (targetDepth < 0) return;
           for (let i = selected() - 1; i >= 0; i--) {
@@ -197,11 +205,13 @@ export function ExplorerView(props: ExplorerViewProps) {
       </Show>
 
       <div
-        ref={listEl}
+        ref={setListEl}
         style={{
           "flex-grow": "1",
           "overflow-y": "auto",
           "min-height": "0",
+          position: "relative",
+          contain: "strict",
         }}
         data-testid="v2-explorer-list"
       >
@@ -225,74 +235,90 @@ export function ExplorerView(props: ExplorerViewProps) {
             … loading
           </div>
         </Show>
-        <For each={rows()}>
-          {(row, i) => {
-            const isSel = () => i() === selected();
-            const indent = () => row.depth * 12;
-            const glyph = () => (row.node.isDirectory ? (row.expanded ? "▾" : "▸") : "·");
-            return (
-              <div
-                data-row-index={i()}
-                data-row-path={row.node.path}
-                data-row-kind={row.node.isDirectory ? "dir" : "file"}
-                style={{
-                  display: "flex",
-                  "align-items": "center",
-                  gap: "6px",
-                  padding: "2px 12px 2px 6px",
-                  "border-left": isSel() ? "2px solid var(--accent)" : "2px solid transparent",
-                  "background-color": isSel() ? "var(--surface-hover)" : "transparent",
-                  cursor: "pointer",
-                  "white-space": "nowrap",
-                  overflow: "hidden",
-                  "text-overflow": "ellipsis",
-                }}
-                onClick={() => {
-                  setSelected(i());
-                  activateRow(row);
-                }}
-              >
-                <span style={{ width: `${indent()}px`, "flex-shrink": "0" }} />
-                <span
-                  aria-hidden="true"
+        <div
+          data-testid="v2-explorer-spacer"
+          style={{
+            height: `${virtualizer.getTotalSize()}px`,
+            width: "100%",
+            position: "relative",
+          }}
+        >
+          <For each={virtualizer.getVirtualItems()}>
+            {(vItem) => {
+              const row = () => rows()[vItem.index]!;
+              const isSel = () => vItem.index === selected();
+              const indent = () => row().depth * 12;
+              const glyph = () =>
+                row().node.isDirectory ? (row().expanded ? "▾" : "▸") : "·";
+              return (
+                <div
+                  data-row-index={vItem.index}
+                  data-row-path={row().node.path}
+                  data-row-kind={row().node.isDirectory ? "dir" : "file"}
                   style={{
-                    color: row.node.isDirectory
-                      ? "var(--theme-focused-foreground-subdued, var(--dim))"
-                      : "var(--theme-focused-foreground-subdued, var(--dim))",
-                    "font-family": "var(--font-mono)",
-                    width: "1ch",
-                    "text-align": "center",
-                    "flex-shrink": "0",
-                  }}
-                >
-                  {glyph()}
-                </span>
-                <span
-                  style={{
+                    position: "absolute",
+                    top: "0",
+                    left: "0",
+                    width: "100%",
+                    height: `${vItem.size}px`,
+                    transform: `translateY(${vItem.start}px)`,
+                    display: "flex",
+                    "align-items": "center",
+                    gap: "6px",
+                    padding: "2px 12px 2px 6px",
+                    "box-sizing": "border-box",
+                    "border-left": isSel()
+                      ? "2px solid var(--accent)"
+                      : "2px solid transparent",
+                    "background-color": isSel() ? "var(--surface-hover)" : "transparent",
+                    cursor: "pointer",
+                    "white-space": "nowrap",
                     overflow: "hidden",
                     "text-overflow": "ellipsis",
-                    color: row.node.isDirectory
-                      ? "var(--theme-text, var(--fg))"
-                      : "var(--theme-text, var(--fg))",
-                    "font-weight": row.node.isDirectory ? "500" : "400",
+                  }}
+                  onClick={() => {
+                    setSelected(vItem.index);
+                    activateRow(row());
                   }}
                 >
-                  {row.node.name}
-                </span>
-                <Show when={row.node.truncated}>
+                  <span style={{ width: `${indent()}px`, "flex-shrink": "0" }} />
                   <span
+                    aria-hidden="true"
                     style={{
-                      "font-size": "10px",
                       color: "var(--theme-focused-foreground-subdued, var(--dim))",
+                      "font-family": "var(--font-mono)",
+                      width: "1ch",
+                      "text-align": "center",
+                      "flex-shrink": "0",
                     }}
                   >
-                    …
+                    {glyph()}
                   </span>
-                </Show>
-              </div>
-            );
-          }}
-        </For>
+                  <span
+                    style={{
+                      overflow: "hidden",
+                      "text-overflow": "ellipsis",
+                      color: "var(--theme-text, var(--fg))",
+                      "font-weight": row().node.isDirectory ? "500" : "400",
+                    }}
+                  >
+                    {row().node.name}
+                  </span>
+                  <Show when={row().node.truncated}>
+                    <span
+                      style={{
+                        "font-size": "10px",
+                        color: "var(--theme-focused-foreground-subdued, var(--dim))",
+                      }}
+                    >
+                      …
+                    </span>
+                  </Show>
+                </div>
+              );
+            }}
+          </For>
+        </div>
       </div>
 
       <footer
