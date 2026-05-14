@@ -1474,52 +1474,43 @@ export function createApp(options: CreateAppOptions = {}): Hono {
       return c.json({ error: "Session not found" }, 404);
     }
 
+    // `?source=working|staged|pr` selects which diff group to return.
+    //   working — HEAD ↔ working tree (staged + unstaged, default).
+    //   staged  — HEAD ↔ index (`git diff --cached`).
+    //   pr      — <base-branch-merge-base> ↔ HEAD. Base branch picked
+    //             via `gh pr view --json baseRefName` first, then a
+    //             local heuristic over main / master / develop.
+    const sourceParam = (c.req.query("source") ?? "working").toLowerCase();
+    const source: "working" | "staged" | "pr" =
+      sourceParam === "staged" || sourceParam === "pr" ? sourceParam : "working";
+
     // Bumped from execFileSync's 1 MB default — real diffs in active repos
     // routinely exceed it (a 3+ MB diff was silently dropping into an empty
     // string before, since the buffer-overflow throw was caught and ignored).
     // 64 MB is more than enough for any sane review session.
     const DIFF_MAX_BUFFER = 64 * 1024 * 1024;
 
-    // Get git diff (staged + unstaged vs HEAD)
-    let diff = "";
-    try {
-      diff = execFileSync("git", ["diff", "HEAD"], {
-        cwd: session.dir,
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"],
-        maxBuffer: DIFF_MAX_BUFFER,
-      });
-    } catch {
-      // No HEAD yet or not a git repo — try unstaged only
-    }
-    if (!diff) {
+    function runGit(args: string[]): string | null {
       try {
-        diff = execFileSync("git", ["diff"], {
-          cwd: session.dir,
+        return execFileSync("git", args, {
+          cwd: session!.dir,
           encoding: "utf-8",
           stdio: ["ignore", "pipe", "ignore"],
           maxBuffer: DIFF_MAX_BUFFER,
         });
       } catch {
-        // Not a git repo
+        return null;
       }
     }
 
-    // Get list of changed files with stats
     interface DiffFile {
       file: string;
       additions: number;
       deletions: number;
     }
-    let files: DiffFile[] = [];
-    try {
-      const numstat = execFileSync("git", ["diff", "--numstat", "HEAD"], {
-        cwd: session.dir,
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"],
-        maxBuffer: DIFF_MAX_BUFFER,
-      });
-      files = numstat
+    function parseNumstat(out: string | null): DiffFile[] {
+      if (!out) return [];
+      return out
         .split("\n")
         .filter(Boolean)
         .map((line) => {
@@ -1530,32 +1521,76 @@ export function createApp(options: CreateAppOptions = {}): Hono {
             deletions: parseInt(removed!, 10) || 0,
           };
         });
-    } catch {
-      // Fall back to unstaged
-      try {
-        const numstat = execFileSync("git", ["diff", "--numstat"], {
-          cwd: session.dir,
-          encoding: "utf-8",
-          stdio: ["ignore", "pipe", "ignore"],
-          maxBuffer: DIFF_MAX_BUFFER,
-        });
-        files = numstat
-          .split("\n")
-          .filter(Boolean)
-          .map((line) => {
-            const [added, removed, file] = line.split("\t");
-            return {
-              file: file!,
-              additions: parseInt(added!, 10) || 0,
-              deletions: parseInt(removed!, 10) || 0,
-            };
-          });
-      } catch {
-        // Not a git repo
-      }
     }
 
-    return c.json({ diff, files });
+    function resolvePrBase(): { baseBranch: string | null; mergeBase: string | null } {
+      // First try `gh pr view --json baseRefName,headRefName` to pick
+      // up the actual PR base for the checked-out branch. Falls back
+      // to a local heuristic that tries main / master / develop.
+      let baseBranch: string | null = null;
+      try {
+        const out = execFileSync("gh", ["pr", "view", "--json", "baseRefName"], {
+          cwd: session!.dir,
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"],
+          maxBuffer: 1024 * 64,
+        });
+        const parsed = JSON.parse(out) as { baseRefName?: string };
+        if (parsed.baseRefName) baseBranch = parsed.baseRefName;
+      } catch {
+        // gh missing, not authed, or no PR for this branch — fall
+        // through to the local heuristic.
+      }
+      if (!baseBranch) {
+        for (const candidate of ["main", "master", "develop"]) {
+          const exists = runGit(["rev-parse", "--verify", candidate]);
+          if (exists !== null) {
+            baseBranch = candidate;
+            break;
+          }
+        }
+      }
+      if (!baseBranch) return { baseBranch: null, mergeBase: null };
+      const mergeBaseOut = runGit(["merge-base", "HEAD", baseBranch]);
+      const mergeBase = mergeBaseOut?.trim() ?? null;
+      return { baseBranch, mergeBase: mergeBase || null };
+    }
+
+    let diff = "";
+    let files: DiffFile[] = [];
+    let originalRef = "HEAD";
+    let modifiedRef: string = "WORKING";
+    let baseBranch: string | null = null;
+
+    if (source === "staged") {
+      diff = runGit(["diff", "--cached", "HEAD"]) ?? runGit(["diff", "--cached"]) ?? "";
+      files = parseNumstat(
+        runGit(["diff", "--cached", "--numstat", "HEAD"]) ??
+          runGit(["diff", "--cached", "--numstat"]),
+      );
+      originalRef = "HEAD";
+      modifiedRef = "STAGED";
+    } else if (source === "pr") {
+      const { baseBranch: base, mergeBase } = resolvePrBase();
+      baseBranch = base;
+      if (mergeBase) {
+        diff = runGit(["diff", `${mergeBase}...HEAD`]) ?? "";
+        files = parseNumstat(runGit(["diff", "--numstat", `${mergeBase}...HEAD`]));
+        originalRef = mergeBase;
+      } else {
+        // Couldn't resolve a base — fall back to working-tree.
+        diff = runGit(["diff", "HEAD"]) ?? "";
+        files = parseNumstat(runGit(["diff", "--numstat", "HEAD"]));
+      }
+      modifiedRef = "HEAD";
+    } else {
+      diff = runGit(["diff", "HEAD"]) ?? runGit(["diff"]) ?? "";
+      files = parseNumstat(runGit(["diff", "--numstat", "HEAD"]) ?? runGit(["diff", "--numstat"]));
+      originalRef = "HEAD";
+      modifiedRef = "WORKING";
+    }
+
+    return c.json({ diff, files, source, originalRef, modifiedRef, baseBranch });
   });
 
   // Per-file diff endpoint

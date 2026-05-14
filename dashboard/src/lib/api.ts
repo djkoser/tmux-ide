@@ -318,15 +318,35 @@ export interface DiffFileEntry {
   deletions: number;
 }
 
+/**
+ * Which diff group the dashboard is rendering. Mirrors emdash's
+ * `'staged' | 'disk' | 'git' | 'pr'` — `'working'` here is the
+ * default "staged + unstaged ↔ HEAD" group.
+ */
+export type DiffSource = "working" | "staged" | "pr";
+
 export interface DiffData {
   diff: string;
   files: DiffFileEntry[];
+  /** Echo of the requested source so the client can confirm. */
+  source?: DiffSource;
+  /** Git ref the diff's "before" side resolves to (HEAD, a SHA, …). */
+  originalRef?: GitRef;
+  /** Git ref the diff's "after" side resolves to (WORKING, STAGED, HEAD). */
+  modifiedRef?: GitRef;
+  /** PR base branch name when `source === 'pr'`. Null when the daemon
+   *  couldn't infer a base (no gh, no main/master/develop). */
+  baseBranch?: string | null;
 }
 
-export function fetchProjectDiff(sessionName: string): Effect.Effect<DiffData, ApiError> {
-  return request<DiffData>(`/api/project/${encodeURIComponent(sessionName)}/diff`).pipe(
-    Effect.map((data) => data ?? { diff: "", files: [] }),
-  );
+export function fetchProjectDiff(
+  sessionName: string,
+  source: DiffSource = "working",
+): Effect.Effect<DiffData, ApiError> {
+  const params = new URLSearchParams({ source });
+  return request<DiffData>(
+    `/api/project/${encodeURIComponent(sessionName)}/diff?${params.toString()}`,
+  ).pipe(Effect.map((data) => data ?? { diff: "", files: [] }));
 }
 
 export function fetchProjectFileDiff(

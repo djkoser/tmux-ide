@@ -19,10 +19,19 @@
  * `?view=changes` while DiffsView holds `?view=diffs`.
  */
 
-import { createMemo, createResource, createSignal, For, Show, onCleanup, type JSX } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createResource,
+  createSignal,
+  For,
+  Show,
+  onCleanup,
+  type JSX,
+} from "solid-js";
 import { Effect } from "effect";
 import { GitCompare } from "lucide-solid";
-import { fetchProjectDiff, type DiffFileEntry } from "@/lib/api";
+import { fetchProjectDiff, type DiffFileEntry, type DiffSource, type GitRef } from "@/lib/api";
 import { modelRegistry } from "@/lib/monaco/model-registry";
 import { buildMonacoModelPath, toDiskUri, toGitUri } from "@/lib/monaco/model-path";
 import {
@@ -98,13 +107,14 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
   const rootPath = () => props.modelRootPath ?? "/";
   const [selectedFile, setSelectedFile] = createSignal<string | null>(null);
   const [diffStyle, setDiffStyle] = createSignal<DiffStyle>("split");
+  const [source, setSource] = createSignal<DiffSource>("working");
   // Files for which the user has explicitly clicked "Load anyway",
   // overriding the LARGE_DIFF_LINE_THRESHOLD guard.
   const [forcedLargeLoads, setForcedLargeLoads] = createSignal<Set<string>>(new Set());
 
   const [data, { refetch }] = createResource(
-    () => props.projectName,
-    async (sessionName) => Effect.runPromise(fetchProjectDiff(sessionName)),
+    () => ({ sessionName: props.projectName, source: source() }),
+    async (key) => Effect.runPromise(fetchProjectDiff(key.sessionName, key.source)),
   );
 
   // Re-poll the summary every 5s; same cadence the widget version uses.
@@ -123,49 +133,68 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
     registeredUris.clear();
   });
 
+  // Refs the daemon resolved for the current diff source. The
+  // dashboard echoes these into the model URIs so the StickyDiffEditor
+  // sees the right git:// / disk:// pair per source.
+  const originalRef = createMemo<GitRef>(() => data()?.originalRef ?? "HEAD");
+  const modifiedRef = createMemo<GitRef>(() => data()?.modifiedRef ?? "WORKING");
+
+  function uriForRef(file: string, ref: GitRef): { uri: string; isWorking: boolean } {
+    const bufferUri = buildMonacoModelPath(rootPath(), file);
+    if (ref === "WORKING") return { uri: toDiskUri(bufferUri), isWorking: true };
+    return { uri: toGitUri(bufferUri, String(ref)), isWorking: false };
+  }
+
+  function registerForFile(file: string) {
+    const language = languageFor(file);
+    const left = uriForRef(file, originalRef());
+    const right = uriForRef(file, modifiedRef());
+    for (const [target, ref] of [
+      [left, originalRef()] as const,
+      [right, modifiedRef()] as const,
+    ]) {
+      if (modelRegistry.modelStatus(target.uri) === "ready") continue;
+      if (target.isWorking) {
+        void Effect.runPromise(
+          modelRegistry.registerDisk({
+            sessionName: props.projectName,
+            rootPath: rootPath(),
+            filePath: file,
+            language,
+          }),
+        )
+          .then(() => registeredUris.add(target.uri))
+          .catch(() => {});
+      } else {
+        void Effect.runPromise(
+          modelRegistry.registerGit({
+            sessionName: props.projectName,
+            rootPath: rootPath(),
+            filePath: file,
+            language,
+            ref,
+          }),
+        )
+          .then(() => registeredUris.add(target.uri))
+          .catch(() => {});
+      }
+    }
+  }
+
   function pickFile(file: string) {
     setSelectedFile(file);
-    const language = languageFor(file);
-    const bufferUri = buildMonacoModelPath(rootPath(), file);
-    const diskUri = toDiskUri(bufferUri);
-    const gitUri = toGitUri(bufferUri, "HEAD");
-
-    if (modelRegistry.modelStatus(diskUri) !== "ready") {
-      void Effect.runPromise(
-        modelRegistry.registerDisk({
-          sessionName: props.projectName,
-          rootPath: rootPath(),
-          filePath: file,
-          language,
-        }),
-      )
-        .then(() => registeredUris.add(diskUri))
-        .catch(() => {});
-    }
-
-    if (modelRegistry.modelStatus(gitUri) !== "ready") {
-      void Effect.runPromise(
-        modelRegistry.registerGit({
-          sessionName: props.projectName,
-          rootPath: rootPath(),
-          filePath: file,
-          language,
-          ref: "HEAD",
-        }),
-      )
-        .then(() => registeredUris.add(gitUri))
-        .catch(() => {});
-    }
+    registerForFile(file);
   }
 
   const selectedUris = createMemo(() => {
     const file = selectedFile();
     if (!file) return null;
-    const bufferUri = buildMonacoModelPath(rootPath(), file);
+    const left = uriForRef(file, originalRef());
+    const right = uriForRef(file, modifiedRef());
     return {
       file,
-      originalUri: toGitUri(bufferUri, "HEAD"),
-      modifiedUri: toDiskUri(bufferUri),
+      originalUri: left.uri,
+      modifiedUri: right.uri,
     };
   });
 
@@ -190,6 +219,23 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
     });
   }
 
+  // Re-register the selected file's models when the diff source
+  // changes — the URIs now point at different refs and StickyDiffEditor
+  // reads them straight from `selectedUris()`.
+  createEffect(() => {
+    void originalRef();
+    void modifiedRef();
+    const file = selectedFile();
+    if (file) registerForFile(file);
+  });
+
+  // When the source toggles, drop the per-file "Load anyway" overrides
+  // — large-file thresholds are evaluated per source.
+  createEffect(() => {
+    void source();
+    setForcedLargeLoads(new Set<string>());
+  });
+
   return (
     <div
       data-testid="v2-monaco-diffs-view"
@@ -207,6 +253,49 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
           <span class="text-[var(--red)]">−{totalDeletions()}</span>
         </Show>
         <span class="flex-1" />
+        <Show when={data()?.baseBranch && source() === "pr"}>
+          <span
+            data-testid="v2-monaco-diffs-pr-base"
+            class="text-[10px] text-[var(--dim)]"
+            title="PR base branch"
+          >
+            vs {data()?.baseBranch}
+          </span>
+        </Show>
+        <div
+          role="group"
+          aria-label="diff source"
+          class="inline-flex overflow-hidden rounded border border-[var(--border)]"
+        >
+          <For each={["working", "staged", "pr"] as DiffSource[]}>
+            {(s) => (
+              <button
+                type="button"
+                data-testid={`v2-monaco-diffs-source-${s}`}
+                onClick={() => {
+                  setSource(s);
+                  setSelectedFile(null);
+                }}
+                aria-pressed={source() === s}
+                title={
+                  s === "working"
+                    ? "Working tree (HEAD ↔ disk)"
+                    : s === "staged"
+                      ? "Staged (HEAD ↔ index)"
+                      : "Pull request (base ↔ HEAD)"
+                }
+                class={
+                  "h-5 px-2 text-[11px] font-mono " +
+                  (source() === s
+                    ? "bg-[var(--surface-active)] text-[var(--fg)]"
+                    : "bg-transparent text-[var(--dim)] hover:text-[var(--fg)]")
+                }
+              >
+                {s}
+              </button>
+            )}
+          </For>
+        </div>
         <div
           role="group"
           aria-label="diff view mode"
@@ -312,7 +401,13 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
                   file={uris().file}
                   additions={selectedEntry()?.additions ?? 0}
                   deletions={selectedEntry()?.deletions ?? 0}
-                  badge="Changed"
+                  badge={
+                    source() === "staged"
+                      ? "Staged"
+                      : source() === "pr"
+                        ? "PR"
+                        : "Changed"
+                  }
                 />
                 <Show
                   when={!selectedIsLarge()}
