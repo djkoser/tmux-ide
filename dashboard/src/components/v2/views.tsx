@@ -46,7 +46,7 @@ import { Terminal } from "@/components/Terminal";
 import { API_BASE } from "@/lib/api";
 import { ProblemsTab } from "./ProblemsTab";
 import { totalDiagnosticsCount } from "@/lib/lsp/diagnostics-store";
-import { WidgetHost } from "./widgetHost";
+import { WidgetHost } from "@tmux-ide/v2-solid-widgets";
 import {
   createMetrics,
   createProjectDetail,

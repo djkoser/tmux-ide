@@ -1,6 +1,8 @@
 import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
 import { ActivityView } from "./widgets/Activity";
+
+export { WidgetHost } from "./lib/WidgetHost";
 import { ChangesView } from "./widgets/Changes";
 import { CostsDashboardView } from "./widgets/CostsDashboard";
 import { DiffsViewerView } from "./widgets/DiffsViewer";
