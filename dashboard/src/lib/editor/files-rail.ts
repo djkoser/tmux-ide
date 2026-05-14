@@ -8,7 +8,7 @@
 
 import { Effect } from "effect";
 import type { FullGitStatus, GitChange, GitChangeStatus } from "@tmux-ide/contracts";
-import type { ProjectFileNode } from "@/lib/api";
+import { API_BASE, type ProjectFileNode } from "@/lib/api";
 
 interface FetchError {
   status: number;
@@ -35,7 +35,7 @@ export async function fetchFolderChildren(
 ): Promise<ProjectFileNode[]> {
   const params = new URLSearchParams({ path: dirPath });
   const data = await getJson<{ tree: ProjectFileNode[]; truncated: boolean }>(
-    `/api/project/${encodeURIComponent(sessionName)}/files?${params.toString()}`,
+    `${API_BASE}/api/project/${encodeURIComponent(sessionName)}/files?${params.toString()}`,
   );
   return data.tree ?? [];
 }
@@ -51,7 +51,7 @@ export function fetchGitStatusForRail(
   return Effect.tryPromise({
     try: () =>
       getJson<{ status: FullGitStatus }>(
-        `/api/project/${encodeURIComponent(sessionName)}/git/status`,
+        `${API_BASE}/api/project/${encodeURIComponent(sessionName)}/git/status`,
       ).then((b) => b.status),
     catch: () => null as never,
   }).pipe(Effect.catchAll(() => Effect.succeed(null as FullGitStatus | null)));
