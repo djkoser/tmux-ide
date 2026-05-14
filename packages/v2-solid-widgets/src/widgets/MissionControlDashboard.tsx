@@ -127,6 +127,47 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
     estimateSize: () => 26,
     overscan: 6,
   });
+  // Inline `.getVirtualItems()` inside `<For each={…}>` does not
+  // subscribe to the virtualizer's signal — wrap in `createMemo` so
+  // the rail re-renders on scroll / re-measure. See commit 9b139e5.
+  const eventsVirtualItems = createMemo(() => eventsVirtualizer.getVirtualItems());
+  const eventsVirtualTotalSize = createMemo(() => eventsVirtualizer.getTotalSize());
+
+  // Milestone ladder virtualizer. Each card is variable-height (the
+  // expanded mTasks list grows with the milestone), so `measureElement`
+  // records the real height once a card paints; the estimate is only
+  // used until then.
+  const [milestonesScrollEl, setMilestonesScrollEl] = createSignal<HTMLDivElement | null>(null);
+  const milestonesVirtualizer = createVirtualizer({
+    get count() {
+      return milestones().length;
+    },
+    getScrollElement: () => milestonesScrollEl(),
+    estimateSize: () => 80,
+    overscan: 3,
+    getItemKey: (i) => milestones()[i]?.id ?? i,
+  });
+  const milestonesVirtualItems = createMemo(() => milestonesVirtualizer.getVirtualItems());
+  const milestonesVirtualTotalSize = createMemo(() => milestonesVirtualizer.getTotalSize());
+
+  // Agent rail virtualizer. The original grid layout doesn't survive
+  // virtualization cleanly (absolute-positioned items can't auto-fill
+  // a grid), so the virtualized agents list collapses to a single
+  // 200px-min vertical column inside a bounded scroll region — the
+  // common case still shows agents in a compact form, large fleets
+  // no longer DOM-bomb.
+  const [agentsScrollEl, setAgentsScrollEl] = createSignal<HTMLDivElement | null>(null);
+  const agentsVirtualizer = createVirtualizer({
+    get count() {
+      return agents().length;
+    },
+    getScrollElement: () => agentsScrollEl(),
+    estimateSize: () => 56,
+    overscan: 4,
+    getItemKey: (i) => agents()[i]?.paneId ?? i,
+  });
+  const agentsVirtualItems = createMemo(() => agentsVirtualizer.getVirtualItems());
+  const agentsVirtualTotalSize = createMemo(() => agentsVirtualizer.getTotalSize());
 
   const tasksByMilestone = createMemo<Map<string, DashboardTask[]>>(() => {
     const map = new Map<string, DashboardTask[]>();
@@ -388,15 +429,45 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
               <Show when={milestones().length > 0}>
                 <section data-mission-section="milestones">
                   <SectionLabel>Milestones</SectionLabel>
-                  <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
-                    <For each={milestones()}>
-                      {(m) => {
-                        const pct = () => percent(m.tasksDone, m.taskCount);
-                        const mTasks = () => tasksByMilestone().get(m.id) ?? [];
+                  <div
+                    ref={setMilestonesScrollEl}
+                    data-testid="mission-control-milestones"
+                    style={{
+                      "max-height": "480px",
+                      "overflow-y": "auto",
+                      position: "relative",
+                    }}
+                  >
+                  <div
+                    data-testid="mission-control-milestones-spacer"
+                    style={{
+                      height: `${milestonesVirtualTotalSize()}px`,
+                      width: "100%",
+                      position: "relative",
+                    }}
+                  >
+                    <For each={milestonesVirtualItems()}>
+                      {(vItem) => {
+                        const m = () => milestones()[vItem.index]!;
+                        const pct = () => percent(m().tasksDone, m().taskCount);
+                        const mTasks = () => tasksByMilestone().get(m().id) ?? [];
                         return (
                           <div
-                            data-mission-milestone={m.id}
-                            data-mission-milestone-status={m.status}
+                            data-index={vItem.index}
+                            ref={(el) => milestonesVirtualizer.measureElement(el)}
+                            style={{
+                              position: "absolute",
+                              top: "0",
+                              left: "0",
+                              width: "100%",
+                              transform: `translateY(${vItem.start}px)`,
+                              "padding-bottom": "8px",
+                              "box-sizing": "border-box",
+                            }}
+                          >
+                          <div
+                            data-mission-milestone={m().id}
+                            data-mission-milestone-status={m().status}
                             style={{
                               "border-radius": "6px",
                               border: "1px solid var(--border)",
@@ -419,14 +490,14 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                                   width: "8px",
                                   height: "8px",
                                   "border-radius": "9999px",
-                                  background: statusColor(m.status),
+                                  background: statusColor(m().status),
                                 }}
                               />
                               <span style={{ "font-weight": "500", color: "var(--fg)" }}>
-                                {m.title}
+                                {m().title}
                               </span>
                               <span style={{ color: "var(--dim)", "font-size": "11px" }}>
-                                {m.status}
+                                {m().status}
                               </span>
                               <span
                                 style={{
@@ -436,7 +507,7 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                                   "font-variant-numeric": "tabular-nums",
                                 }}
                               >
-                                {m.tasksDone}/{m.taskCount} · {pct()}%
+                                {m().tasksDone}/{m().taskCount} · {pct()}%
                               </span>
                             </div>
                             <div
@@ -456,7 +527,7 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                                 style={{
                                   width: `${pct()}%`,
                                   height: "100%",
-                                  background: statusColor(m.status),
+                                  background: statusColor(m().status),
                                   transition: "width 240ms ease",
                                 }}
                               />
@@ -524,31 +595,61 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                               </div>
                             </Show>
                           </div>
+                          </div>
                         );
                       }}
                     </For>
                   </div>
+                  </div>
                 </section>
               </Show>
 
-              {/* AgentActivityRail */}
+              {/* AgentActivityRail — virtualized vertical list inside a
+                  bounded scroll region. The original auto-fill grid was
+                  swapped for a single-column list so the virtualizer's
+                  absolute-positioned rows don't fight the grid placer. */}
               <Show when={agents().length > 0}>
                 <section data-mission-section="agents">
                   <SectionLabel>Agents</SectionLabel>
                   <div
+                    ref={setAgentsScrollEl}
+                    data-testid="mission-control-agents"
                     style={{
-                      display: "grid",
-                      "grid-template-columns": "repeat(auto-fill, minmax(200px, 1fr))",
-                      gap: "8px",
+                      "max-height": "320px",
+                      "overflow-y": "auto",
+                      position: "relative",
                     }}
                   >
-                    <For each={agents()}>
-                      {(a) => (
+                  <div
+                    data-testid="mission-control-agents-spacer"
+                    style={{
+                      height: `${agentsVirtualTotalSize()}px`,
+                      width: "100%",
+                      position: "relative",
+                    }}
+                  >
+                    <For each={agentsVirtualItems()}>
+                      {(vItem) => {
+                        const a = () => agents()[vItem.index]!;
+                        return (
+                        <div
+                          data-index={vItem.index}
+                          ref={(el) => agentsVirtualizer.measureElement(el)}
+                          style={{
+                            position: "absolute",
+                            top: "0",
+                            left: "0",
+                            width: "100%",
+                            transform: `translateY(${vItem.start}px)`,
+                            "padding-bottom": "6px",
+                            "box-sizing": "border-box",
+                          }}
+                        >
                         <button
                           type="button"
-                          data-mission-agent={a.paneId}
-                          data-mission-agent-busy={a.isBusy}
-                          onClick={() => handleAgentClick(a.paneId)}
+                          data-mission-agent={a().paneId}
+                          data-mission-agent-busy={a().isBusy}
+                          onClick={() => handleAgentClick(a().paneId)}
                           style={{
                             display: "flex",
                             "flex-direction": "column",
@@ -562,6 +663,7 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                             "font-family": "inherit",
                             "font-size": "inherit",
                             color: "inherit",
+                            width: "100%",
                           }}
                           onMouseEnter={(e) => {
                             e.currentTarget.style.background = "var(--surface-hover)";
@@ -584,11 +686,11 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                                 width: "6px",
                                 height: "6px",
                                 "border-radius": "9999px",
-                                background: a.isBusy ? "var(--green)" : "var(--dim)",
+                                background: a().isBusy ? "var(--green)" : "var(--dim)",
                               }}
                             />
                             <span style={{ "font-weight": "500", color: "var(--fg)" }}>
-                              {a.paneTitle}
+                              {a().paneTitle}
                             </span>
                             <span
                               style={{
@@ -598,11 +700,11 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                                 "font-variant-numeric": "tabular-nums",
                               }}
                             >
-                              {a.elapsed}
+                              {a().elapsed}
                             </span>
                           </div>
                           <Show
-                            when={a.taskTitle}
+                            when={a().taskTitle}
                             fallback={
                               <span
                                 style={{
@@ -624,12 +726,15 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                                 "white-space": "nowrap",
                               }}
                             >
-                              {a.taskTitle}
+                              {a().taskTitle}
                             </span>
                           </Show>
                         </button>
-                      )}
+                        </div>
+                        );
+                      }}
                     </For>
+                  </div>
                   </div>
                 </section>
               </Show>
@@ -680,12 +785,12 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                     <div
                       data-testid="mission-control-events-spacer"
                       style={{
-                        height: `${eventsVirtualizer.getTotalSize()}px`,
+                        height: `${eventsVirtualTotalSize()}px`,
                         width: "100%",
                         position: "relative",
                       }}
                     >
-                      <For each={eventsVirtualizer.getVirtualItems()}>
+                      <For each={eventsVirtualItems()}>
                         {(vItem) => {
                           const e = () => visibleEvents()[vItem.index]!;
                           return (
