@@ -52,6 +52,37 @@ interface ChatStore {
   messages: ThreadMessage[];
 }
 
+/**
+ * Chunk-streaming session-update kinds that the daemon emits one
+ * frame per token-burst for. The hook coalesces consecutive frames
+ * of the same kind + messageId into a single `AgentUpdate` so the
+ * store grows by O(1) per turn instead of O(N) per chunk.
+ */
+type ContentChunkKind = "agent" | "thought" | "user";
+
+function chunkKindOf(update: SessionUpdate): ContentChunkKind | null {
+  switch (update.sessionUpdate) {
+    case "agent_message_chunk":
+      return "agent";
+    case "agent_thought_chunk":
+      return "thought";
+    case "user_message_chunk":
+      return "user";
+    default:
+      return null;
+  }
+}
+
+function chunkMessageId(update: SessionUpdate): string | null {
+  return (update as { messageId?: string | null }).messageId ?? null;
+}
+
+function chunkText(update: SessionUpdate): string | null {
+  const content = (update as { content?: ContentBlock | null }).content;
+  if (!content || content.type !== "text") return null;
+  return content.text;
+}
+
 export function useChatThread(options: Accessor<ChatMountOptions>) {
   const [thread, setThread] = createSignal<ThreadState | null>(null);
   const [loading, setLoading] = createSignal(true);
@@ -171,11 +202,88 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
     });
   });
 
+  // Streaming-chunk coalescer. The daemon emits one
+  // `chat.thread.update` frame per token-burst — a long assistant
+  // turn produces 100s of frames per second. Pushing each as its
+  // own `AgentUpdate` made `store.messages` grow to 200+ entries
+  // per turn and forced `coalesceMessages` to walk every entry
+  // again on every keystroke (O(N) per token = jerky tail). We
+  // batch frames per animation frame and merge consecutive same-
+  // kind same-messageId chunks into the previous AgentUpdate's
+  // text content in place, so a turn ends up as a single
+  // AgentUpdate whose text grows character-by-character.
+  let pendingUpdateFrames: Array<
+    Extract<ChatBusEvent, { type: "chat.thread.update" }>
+  > = [];
+  let updateFlushScheduled = false;
+
+  function flushUpdateFrames(): void {
+    updateFlushScheduled = false;
+    if (pendingUpdateFrames.length === 0) return;
+    const queue = pendingUpdateFrames;
+    pendingUpdateFrames = [];
+    setStore(
+      produce((draft) => {
+        for (const frame of queue) applyUpdateFrame(frame, draft);
+      }),
+    );
+  }
+
+  function scheduleUpdateFlush(): void {
+    if (updateFlushScheduled) return;
+    updateFlushScheduled = true;
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(flushUpdateFrames);
+    } else {
+      // happy-dom / node test harness has no RAF — fall back to
+      // the next microtask so the test still observes the merged
+      // store within an `await Promise.resolve()` tick.
+      queueMicrotask(flushUpdateFrames);
+    }
+  }
+
+  function applyUpdateFrame(
+    frame: Extract<ChatBusEvent, { type: "chat.thread.update" }>,
+    draft: ChatStore,
+  ): void {
+    const update = frame.update;
+    const kind = chunkKindOf(update);
+    const text = chunkText(update);
+    if (kind !== null && text !== null) {
+      const last = draft.messages[draft.messages.length - 1];
+      if (last && last._tag === "AgentUpdate") {
+        const lastKind = chunkKindOf(last.update);
+        const lastText = chunkText(last.update);
+        if (
+          lastKind === kind &&
+          chunkMessageId(last.update) === chunkMessageId(update) &&
+          lastText !== null
+        ) {
+          // Mutate the existing chunk's text in place. Solid's
+          // `produce` records the fine-grained path so subscribers
+          // observing `messages[i].update.content.text` re-run
+          // without invalidating sibling rows.
+          (last.update as { content: ContentBlock }).content = {
+            type: "text",
+            text: lastText + text,
+          };
+          return;
+        }
+      }
+    }
+    draft.messages.push({
+      _tag: "AgentUpdate",
+      id: `agent-update:${frame.seq}`,
+      createdAt: new Date().toISOString(),
+      update,
+    });
+  }
+
   createEffect(() => {
     const opts = options();
     const socket = new WebSocket(withAuthQuery(opts.wsUrl, opts.bearerToken));
     socket.addEventListener("message", (event) => {
-      let frame: ChatBusEvent | null = null;
+      let frame: ChatBusEvent;
       try {
         frame = JSON.parse(String(event.data)) as ChatBusEvent;
       } catch {
@@ -234,16 +342,13 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
             setPendingPermission(null);
           }
         }
-        setStore(
-          produce((draft) => {
-            draft.messages.push({
-              _tag: "AgentUpdate",
-              id: `agent-update:${frame.seq}`,
-              createdAt: now,
-              update: frame.update,
-            });
-          }),
-        );
+        // Side-channel state above runs synchronously per frame.
+        // The store push lands in the next RAF flush, where the
+        // coalescer merges consecutive same-message chunks into a
+        // single AgentUpdate.
+        void now;
+        pendingUpdateFrames.push(frame);
+        scheduleUpdateFlush();
         return;
       }
       if (frame.type === "chat.thread.stop") {

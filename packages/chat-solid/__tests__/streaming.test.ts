@@ -147,7 +147,12 @@ describe("useChatThread — real-time streaming wire", () => {
     }
   });
 
-  it("appends multiple streamed chunks in arrival order", async () => {
+  it("coalesces consecutive streamed chunks into a single AgentUpdate", async () => {
+    // Post-coalescer (perf/chat): the daemon emits one frame per
+    // token-burst; same-kind same-messageId chunks merge in place
+    // so the store grows by O(1) per turn instead of O(N) per
+    // chunk. The visible text concatenates the way the user reads
+    // it, but `chat.messages()` carries a single entry.
     const { chat, dispose } = mountHook();
     try {
       await waitFor(() => FakeWebSocket.instances.length === 1);
@@ -167,12 +172,10 @@ describe("useChatThread — real-time streaming wire", () => {
         });
       });
 
-      await waitFor(() => chat.messages().length === 3);
-      const seenText = chat.messages().map((m) => {
-        const update = (m as Extract<ThreadMessage, { _tag: "AgentUpdate" }>).update;
-        return (update as { content: { text: string } }).content.text;
-      });
-      expect(seenText).toEqual(chunks);
+      await waitFor(() => chat.messages().length === 1);
+      const only = chat.messages()[0] as Extract<ThreadMessage, { _tag: "AgentUpdate" }>;
+      const text = (only.update as { content: { text: string } }).content.text;
+      expect(text).toBe(chunks.join(""));
     } finally {
       dispose();
     }
