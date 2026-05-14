@@ -1,25 +1,59 @@
 /**
- * Compact provider switcher rendered in the chat header's right-hand
- * slot. Replaces the inline "provider name" badge with a clickable
- * dropdown: the user sees what's currently dispatching, and one click
- * away can switch to any other discovered provider.
+ * Provider + model switcher rendered in the chat header. A trigger
+ * button opens a dropdown that mounts `ModelPickerContent` — a
+ * search-driven content panel with a vertical rail of provider
+ * instances on the left.
  *
  *   ┌─ ChatHeader ──────────────────────────────────────────────┐
- *   │  Thread title  ·  …meters…   [ ⌥ Claude Code  ▾ ]  [Close] │
+ *   │  …meters…   [ ⌁ Claude Code  ▾ ]  [Stop] [Delete] [Close] │
  *   └─────────────────────────────────────────────────────────────┘
  *
- * Provider data flows in via `availableProviders` — the host fetches
- * `/api/chat/providers` (see `ProviderStatusBanner` for the polling
- * variant) and pushes the latest list as a signal. The picker stays
- * dumb: it renders the rows + bubbles `onChange(provider)` upward so
- * the host can issue whatever action it owns (provider switch, thread
- * recreate, etc.). Model selection lands in a follow-up — the wire
- * shape carries `{ kind, name, available }`, not per-provider model
- * arrays yet, so we render providers and stub the model slot.
+ *   On click:
+ *   ┌─────┬───────────────────────────────────────────────────────┐
+ *   │  ★  │ 🔍 Search models…                                     │
+ *   │ [C] │ ★ Claude Opus 4.7                                     │
+ *   │ [G] │   Codex                                                │
+ *   └─────┴───────────────────────────────────────────────────────┘
+ *
+ * Backward-compat: when callers don't supply a `modelsByInstance`
+ * map (the case today — chat-solid has no model API yet), each
+ * provider renders as a single row whose slug equals the driver
+ * kind. The trigger continues to fire `onChange({ kind })` with the
+ * picked provider, so existing consumers see no behavior change.
+ *
+ * Public testid contract preserved for the previous flat picker:
+ *
+ *   - `provider-model-picker`            (root)
+ *   - `provider-model-picker-trigger`    (button)
+ *   - `provider-model-picker-menu`       (dropdown)
+ *   - `provider-model-picker-option`     (each model/provider row)
+ *   - `provider-model-picker-empty`      (zero-state placeholder)
+ *
+ * New testids surfaced by the rich content:
+ *
+ *   - `model-picker-content`             (panel root)
+ *   - `model-picker-sidebar`             (rail)
+ *   - `model-picker-content-search`      (search input)
+ *   - `model-list-row-*`                 (badges, jump labels, …)
  */
-import { createMemo, createSignal, For, Show, onCleanup, type Accessor } from "solid-js";
+
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  on,
+  onCleanup,
+  Show,
+  type Accessor,
+} from "solid-js";
 import type { AgentProvider } from "../types";
 import type { ProviderInfo } from "../api";
+import { ModelPickerContent, type ModelPickerSelection } from "./ModelPickerContent";
+import type {
+  ModelPickerSidebarComingSoon,
+  ProviderInstanceSummary,
+} from "./ModelPickerSidebar";
+import type { ModelListRowModel } from "./ModelListRow";
 
 interface ProviderModelPickerProps {
   /** Current provider; null until the thread loads. */
@@ -30,6 +64,33 @@ interface ProviderModelPickerProps {
   onChange?: (next: AgentProvider) => void;
   /** Optional disabled state (e.g. while a turn is in flight). */
   disabled?: Accessor<boolean>;
+  /**
+   * Optional per-provider model list. When supplied, the content
+   * panel renders each model as its own row and `onPickModel` fires
+   * with the chosen (kind, slug). Keyed by driver kind (e.g.
+   * "claude-code") so callers don't need to know about instance
+   * ids.
+   */
+  modelsByKind?: Accessor<ReadonlyMap<string, ReadonlyArray<ModelListRowModel>>>;
+  /**
+   * Currently selected model slug. Optional — when omitted, no row
+   * renders as active.
+   */
+  activeModel?: Accessor<string | null>;
+  onPickModel?: (kind: string, slug: string) => void;
+  /** Favorites — a list of (kind, slug) tuples. */
+  favorites?: Accessor<ReadonlyArray<{ kind: string; slug: string }>>;
+  onToggleFavorite?: (kind: string, slug: string) => void;
+  /**
+   * Optional coming-soon rail entries (e.g. "Gemini · soon"). Hidden
+   * when the picker is locked.
+   */
+  comingSoonEntries?: Accessor<ReadonlyArray<ModelPickerSidebarComingSoon>>;
+  /**
+   * Locks the picker to a single driver kind — used when editing a
+   * sent message where the served-by driver can't change.
+   */
+  lockedDriverKind?: Accessor<string | null>;
 }
 
 const GLYPH: Record<string, string> = {
@@ -43,7 +104,8 @@ function glyphFor(kind: string | null | undefined): string {
   return GLYPH[kind] ?? "•";
 }
 
-function labelFor(kind: string | null | undefined): string {
+function labelFor(info: ProviderInfo | null | undefined, kind: string | null | undefined): string {
+  if (info?.name) return info.name;
   if (!kind) return "Pick provider";
   switch (kind) {
     case "claude-code":
@@ -57,59 +119,123 @@ function labelFor(kind: string | null | undefined): string {
   }
 }
 
+function asAgentProvider(kind: string): AgentProvider | null {
+  // Discovery only surfaces built-in kinds (claude-code / codex /
+  // gemini). The `custom` variant of AgentProvider requires
+  // command+args which discovery doesn't carry — host code never
+  // mounts a `custom` provider through this picker.
+  if (kind === "claude-code") return { kind: "claude-code" };
+  if (kind === "codex") return { kind: "codex" };
+  if (kind === "gemini") return { kind: "gemini" };
+  return null;
+}
+
+function toInstanceSummary(info: ProviderInfo): ProviderInstanceSummary {
+  return {
+    instanceId: info.kind,
+    driverKind: info.kind,
+    displayName: info.name || info.kind,
+    available: info.available,
+    status: info.available ? "ready" : "error",
+    ...(info.description ? { description: info.description } : {}),
+    ...(info.version ? { version: info.version } : {}),
+    ...(info.error ? { error: info.error } : {}),
+  };
+}
+
 export function ProviderModelPicker(props: ProviderModelPickerProps) {
   const [open, setOpen] = createSignal(false);
   const [trigger, setTrigger] = createSignal<HTMLButtonElement>();
+  const [menu, setMenu] = createSignal<HTMLDivElement>();
 
-  const activeKind = createMemo(() => props.provider()?.kind ?? null);
-  const isDisabled = () => props.disabled?.() ?? false;
+  const activeKind = createMemo<string | null>(() => props.provider()?.kind ?? null);
+  const activeInfo = createMemo<ProviderInfo | null>(() => {
+    const kind = activeKind();
+    if (!kind) return null;
+    return props.availableProviders().find((info) => info.kind === kind) ?? null;
+  });
+  const triggerLabel = createMemo(() => labelFor(activeInfo(), activeKind()));
 
-  function toggle() {
-    if (isDisabled()) return;
-    setOpen((v) => !v);
-  }
+  const instances = createMemo<ReadonlyArray<ProviderInstanceSummary>>(() =>
+    props.availableProviders().map(toInstanceSummary),
+  );
 
-  function close() {
+  const modelsByInstance = createMemo<
+    ReadonlyMap<string, ReadonlyArray<ModelListRowModel>> | undefined
+  >(() => {
+    const provided = props.modelsByKind?.();
+    if (!provided) return undefined;
+    return provided;
+  });
+
+  const activeSelection = createMemo<ModelPickerSelection | null>(() => {
+    const kind = activeKind();
+    if (!kind) return null;
+    const slug = props.activeModel?.() ?? kind;
+    return { instanceId: kind, slug };
+  });
+
+  const favorites = createMemo<ReadonlyArray<ModelPickerSelection> | undefined>(() => {
+    const fav = props.favorites?.();
+    if (!fav) return undefined;
+    return fav.map((f) => ({ instanceId: f.kind, slug: f.slug }));
+  });
+
+  const isDisabled = (): boolean => props.disabled?.() ?? false;
+
+  function close(): void {
     setOpen(false);
   }
 
-  function select(info: ProviderInfo) {
+  function toggle(): void {
     if (isDisabled()) return;
-    close();
-    // Discovery only surfaces built-in kinds (claude-code / codex /
-    // gemini). The `custom` variant of AgentProvider requires
-    // command+args which discovery doesn't carry — host code never
-    // mounts a `custom` provider through this picker.
-    const kind = info.kind;
-    let next: AgentProvider | null = null;
-    if (kind === "claude-code") next = { kind: "claude-code" };
-    else if (kind === "codex") next = { kind: "codex" };
-    else if (kind === "gemini") next = { kind: "gemini" };
-    if (!next) return;
-    props.onChange?.(next);
+    setOpen((value) => !value);
   }
 
-  // Close on outside click + Escape. Listeners are attached only while
-  // open so the picker stays cheap when nobody's interacting with it.
-  function onDocPointer(event: PointerEvent) {
-    const el = trigger();
-    if (!el) return;
-    if (event.target instanceof Node && el.parentElement?.contains(event.target)) return;
+  function handleSelect(selection: ModelPickerSelection): void {
+    if (isDisabled()) return;
+    if (props.onPickModel) {
+      props.onPickModel(selection.instanceId, selection.slug);
+    }
+    // Legacy: when no modelsByKind is supplied OR the slug equals
+    // the kind (the synthetic row), bubble the provider change.
+    const synthetic = !props.modelsByKind || selection.slug === selection.instanceId;
+    if (synthetic) {
+      const next = asAgentProvider(selection.instanceId);
+      if (next) props.onChange?.(next);
+    }
     close();
   }
-  function onDocKey(event: KeyboardEvent) {
+
+  function handleToggleFavorite(selection: ModelPickerSelection): void {
+    props.onToggleFavorite?.(selection.instanceId, selection.slug);
+  }
+
+  function onDocPointer(event: PointerEvent): void {
+    const triggerEl = trigger();
+    const menuEl = menu();
+    if (!triggerEl) return;
+    if (event.target instanceof Node) {
+      if (menuEl?.contains(event.target)) return;
+      if (triggerEl.parentElement?.contains(event.target)) return;
+    }
+    close();
+  }
+  function onDocKey(event: KeyboardEvent): void {
     if (event.key === "Escape") close();
   }
-  // eslint-disable-next-line solid/reactivity
-  createMemo(() => {
-    if (!open()) return;
-    document.addEventListener("pointerdown", onDocPointer);
-    document.addEventListener("keydown", onDocKey);
-    onCleanup(() => {
-      document.removeEventListener("pointerdown", onDocPointer);
-      document.removeEventListener("keydown", onDocKey);
-    });
-  });
+
+  createEffect(
+    on(open, (isOpen) => {
+      if (!isOpen) return;
+      document.addEventListener("pointerdown", onDocPointer);
+      document.addEventListener("keydown", onDocKey);
+      onCleanup(() => {
+        document.removeEventListener("pointerdown", onDocPointer);
+        document.removeEventListener("keydown", onDocKey);
+      });
+    }),
+  );
 
   return (
     <div data-testid="provider-model-picker" class="relative inline-flex">
@@ -127,77 +253,33 @@ export function ProviderModelPicker(props: ProviderModelPickerProps) {
         <span aria-hidden="true" class="text-[var(--accent)]">
           {glyphFor(activeKind())}
         </span>
-        <span class="truncate">{labelFor(activeKind())}</span>
+        <span class="truncate">{triggerLabel()}</span>
         <span aria-hidden="true" class="text-[10px] opacity-60">
           ▾
         </span>
       </button>
       <Show when={open()}>
         <div
+          ref={setMenu}
           data-testid="provider-model-picker-menu"
-          role="listbox"
-          aria-label="Available providers"
-          class="absolute right-0 top-[calc(100%+0.25rem)] z-30 min-w-56 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface-elevated,var(--bg-strong))] shadow-2xl"
+          role="dialog"
+          aria-label="Pick a provider or model"
+          class="absolute right-0 top-[calc(100%+0.25rem)] z-30 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface-elevated,var(--bg-strong))] shadow-2xl"
         >
-          <Show
-            when={props.availableProviders().length > 0}
-            fallback={
-              <div
-                data-testid="provider-model-picker-empty"
-                class="px-3 py-4 text-center text-[12px] text-[var(--dim)]"
-              >
-                No providers discovered
-              </div>
+          <ModelPickerContent
+            instances={instances}
+            modelsByInstance={
+              modelsByInstance() ? (modelsByInstance as Accessor<ReadonlyMap<string, ReadonlyArray<ModelListRowModel>>>) : undefined
             }
-          >
-            <ul class="m-0 list-none p-1">
-              <For each={props.availableProviders()}>
-                {(info) => {
-                  const isActive = () => info.kind === activeKind();
-                  return (
-                    <li>
-                      <button
-                        type="button"
-                        role="option"
-                        data-testid="provider-model-picker-option"
-                        data-kind={info.kind}
-                        data-active={isActive() ? "true" : "false"}
-                        data-available={info.available ? "true" : "false"}
-                        aria-selected={isActive()}
-                        onClick={() => select(info)}
-                        class={
-                          "flex w-full cursor-pointer items-center gap-2 rounded-sm border-0 bg-transparent px-2 py-1.5 text-left text-[12px] text-[var(--fg)] hover:bg-[var(--surface-hover)] " +
-                          (isActive() ? "bg-[var(--surface-active)] " : "")
-                        }
-                      >
-                        <span aria-hidden="true" class="w-4 text-center text-[var(--accent)]">
-                          {glyphFor(info.kind)}
-                        </span>
-                        <span class="min-w-0 flex-1 truncate">
-                          <span class="block truncate">{info.name || labelFor(info.kind)}</span>
-                          <Show when={info.version || info.description}>
-                            <span class="block truncate text-[10px] text-[var(--dim)]">
-                              {info.version ? `v${info.version}` : info.description}
-                            </span>
-                          </Show>
-                        </span>
-                        <span
-                          aria-hidden="true"
-                          class="h-1.5 w-1.5 shrink-0 rounded-full"
-                          style={{
-                            background: info.available ? "var(--green)" : "var(--red)",
-                          }}
-                          title={info.available ? "available" : (info.error ?? "unavailable")}
-                        />
-                      </button>
-                    </li>
-                  );
-                }}
-              </For>
-            </ul>
-          </Show>
+            active={activeSelection}
+            favorites={favorites() ? (favorites as Accessor<ReadonlyArray<ModelPickerSelection>>) : undefined}
+            lockedDriverKind={props.lockedDriverKind}
+            comingSoonEntries={props.comingSoonEntries}
+            onSelect={handleSelect}
+            onToggleFavorite={handleToggleFavorite}
+          />
           <div class="border-t border-[var(--border-weak,var(--border))] px-3 py-1.5 text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]">
-            Provider · ↩ select · Esc close
+            Search · ↩ select · Esc close
           </div>
         </div>
       </Show>
