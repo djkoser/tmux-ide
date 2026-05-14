@@ -39,6 +39,7 @@ import { SearchView } from "@/components/search/SearchView";
 import { ExplorerContextMenu } from "@/components/search/ExplorerContextMenu";
 import { SymbolPicker } from "@/components/v2/SymbolPicker";
 import { recordProjectOpened } from "@/components/projects/ProjectQuickSwitcher";
+import { TopBar } from "@/components/TopBar";
 import {
   BottomPanelView,
   CostsView,
@@ -103,6 +104,7 @@ export default function ProjectV2Route(): JSX.Element {
           works from any view — closes itself on switch. */}
       <ExplorerContextMenu onRequestSearchView={() => setView("search")} />
       <SymbolPicker sessionName={projectName()} rootPath="/" />
+      <TopBar projectName={projectName()} />
       <div class="flex flex-1 min-h-0">
         <V2ActivityBar view={view()} onView={onActivityBarView} />
 

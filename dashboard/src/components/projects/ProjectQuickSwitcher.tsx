@@ -106,8 +106,16 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return false;
 }
 
+// Module-level open signal so non-window-key triggers (e.g. the
+// top-bar click affordance) can drive the same overlay.
+const [open, setOpen] = createSignal(false);
+
+/** Open the global Cmd+P quick-switcher from anywhere. */
+export function openProjectQuickSwitcher(): void {
+  setOpen(true);
+}
+
 export function ProjectQuickSwitcher(): JSX.Element {
-  const [open, setOpen] = createSignal(false);
   const [query, setQuery] = createSignal("");
   const [focusIndex, setFocusIndex] = createSignal(0);
   const [lastUsed, setLastUsed] = createSignal<Record<string, number>>(readLastUsed());
@@ -189,6 +197,18 @@ export function ProjectQuickSwitcher(): JSX.Element {
     setFocusIndex(0);
   });
 
+  // External openers (TopBar click, etc.) toggle the module-level
+  // `open` signal directly; mirror the keybind's open-side bookkeeping
+  // so the overlay is ready to use whether triggered by key or click.
+  createEffect(() => {
+    if (!open()) return;
+    setQuery("");
+    setLastUsed(readLastUsed());
+    void refetchProjects();
+    void refetchSessions();
+    queueMicrotask(() => inputRef?.focus());
+  });
+
   function onWindowKey(event: KeyboardEvent): void {
     const mod = isMac() ? event.metaKey : event.ctrlKey;
     if (
@@ -202,15 +222,7 @@ export function ProjectQuickSwitcher(): JSX.Element {
       // editable target.
       if (!open() && isEditableTarget(event.target)) return;
       event.preventDefault();
-      const next = !open();
-      setOpen(next);
-      if (next) {
-        setQuery("");
-        setLastUsed(readLastUsed());
-        void refetchProjects();
-        void refetchSessions();
-        queueMicrotask(() => inputRef?.focus());
-      }
+      setOpen(!open());
       return;
     }
     if (open() && event.key === "Escape") {

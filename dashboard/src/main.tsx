@@ -4,6 +4,7 @@ import { render } from "solid-js/web";
 import { Router, Route } from "@solidjs/router";
 import { App } from "./App";
 import { WidgetsRoute } from "./routes/v2/widgets";
+import ProjectsHomeRoute from "./routes/index";
 import "./styles.css";
 
 const root = document.getElementById("root");
@@ -22,8 +23,8 @@ const WidgetRoute = lazy(() => import("./routes/v2/widget/[name]"));
 render(
   () => (
     <Router root={App}>
-      <Route path="/" component={WidgetsRoute} />
-      <Route path="/v2" component={WidgetsRoute} />
+      <Route path="/" component={ProjectsHomeRoute} />
+      <Route path="/v2" component={ProjectsHomeRoute} />
       <Route path="/v2/widgets" component={WidgetsRoute} />
       <Route path="/v2/setup" component={SetupRoute} />
       <Route path="/v2/settings" component={SettingsRoute} />

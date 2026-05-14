@@ -97,6 +97,12 @@ export function fetchProjects(): Effect.Effect<readonly RegisteredProject[], Api
   );
 }
 
+export function unregisterProject(name: string): Effect.Effect<void, ApiError> {
+  return request<{ ok: true }>(`/api/projects/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  }).pipe(Effect.map(() => undefined));
+}
+
 // ---------------------------------------------------------------------
 // Setup wizard
 // ---------------------------------------------------------------------
