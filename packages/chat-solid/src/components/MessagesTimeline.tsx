@@ -34,6 +34,7 @@ import type {
   MessagesTimelineRow,
   ThreadMessage,
   ToolCallView,
+  WorkLogEntry,
 } from "../types";
 import { ChangedFilesTree } from "./ChangedFilesTree";
 import { ExpandedImageDialog } from "./ExpandedImageDialog";
@@ -45,6 +46,7 @@ import {
   deriveTerminalAssistantMessageIds,
   resolveAssistantCopyState,
   rowSignature,
+  splitWorkEntries,
   summarizeToolCalls,
 } from "./MessagesTimeline.logic";
 import { PlanCard } from "./PlanCard";
@@ -60,6 +62,12 @@ export function MessagesTimeline(props: {
   /** Fired when a markdown file link inside a message is clicked. */
   onOpenFile?: (meta: MarkdownFileLinkMeta) => void;
   onSendPlanRequest?: (markdown: string) => void;
+  /**
+   * Fired when the user clicks the "Revert from here" button on a
+   * user message annotated with `revertTurnCount`. Host owns the
+   * actual rewind dispatch — chat-solid only surfaces the affordance.
+   */
+  onRevertFromMessage?: (userMessageId: string) => void;
 }) {
   const [container, setContainer] = createSignal<HTMLElement>();
   const [sentinel, setSentinel] = createSignal<HTMLElement>();
@@ -148,6 +156,7 @@ export function MessagesTimeline(props: {
                         cwd={props.cwd}
                         onOpenFile={props.onOpenFile}
                         onSendPlanRequest={props.onSendPlanRequest}
+                        onRevertFromMessage={props.onRevertFromMessage}
                         isTerminalAssistant={(id) => terminalAssistantIds().has(id)}
                       />
                     </div>
@@ -170,6 +179,7 @@ interface TimelineRowProps {
   cwd?: Accessor<string | undefined>;
   onOpenFile?: (meta: MarkdownFileLinkMeta) => void;
   onSendPlanRequest?: (markdown: string) => void;
+  onRevertFromMessage?: (userMessageId: string) => void;
   isTerminalAssistant: (id: string) => boolean;
 }
 
@@ -192,14 +202,94 @@ function TimelineRow(props: TimelineRowProps): JSX.Element {
       </div>
     );
   }
+  if (props.row.kind === "work") {
+    return <WorkGroupRow entries={props.row.entries} />;
+  }
+  const messageRow = props.row;
+  const showDivider = messageRow.message.role === "assistant" && messageRow.showCompletionDivider;
   return (
-    <MessageRow
-      message={props.row.message}
-      providerName={props.providerName}
-      cwd={props.cwd}
-      onOpenFile={props.onOpenFile}
-      isTerminal={props.isTerminalAssistant(props.row.message.id)}
-    />
+    <>
+      <Show when={showDivider}>
+        <div
+          data-testid="message-completion-divider"
+          class="my-2 flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-[var(--fg-muted,var(--dim))]"
+          aria-hidden="true"
+        >
+          <span class="h-px flex-1 bg-[var(--border-weak,var(--border))]" />
+          <span class="shrink-0">Completed turn</span>
+          <span class="h-px flex-1 bg-[var(--border-weak,var(--border))]" />
+        </div>
+      </Show>
+      <MessageRow
+        message={messageRow.message}
+        providerName={props.providerName}
+        cwd={props.cwd}
+        onOpenFile={props.onOpenFile}
+        isTerminal={props.isTerminalAssistant(messageRow.message.id)}
+        revertTurnCount={messageRow.revertTurnCount}
+        onRevertFromMessage={props.onRevertFromMessage}
+      />
+    </>
+  );
+}
+
+const WORK_KIND_GLYPH: Record<NonNullable<WorkLogEntry["kind"]>, string> = {
+  tool: "·",
+  "file-read": "·",
+  "file-write": "·",
+  terminal: "·",
+  thinking: "·",
+};
+
+function WorkGroupRow(props: { entries: ReadonlyArray<WorkLogEntry> }): JSX.Element {
+  const [expanded, setExpanded] = createSignal(false);
+  const split = createMemo(() => splitWorkEntries(props.entries));
+  const visible = () => (expanded() ? props.entries : split().visible);
+  const overflow = () => (expanded() ? 0 : split().overflowCount);
+
+  return (
+    <section
+      data-testid="message-row"
+      data-kind="work"
+      class="group/work mb-3 rounded-md border border-[var(--border-weak,var(--border))] bg-[var(--bg-weak,var(--bg))] px-3 py-2"
+    >
+      <header class="flex items-center gap-2 text-[11px] uppercase tracking-[0.08em] text-[var(--fg-muted,var(--fg-secondary))]">
+        <span aria-hidden="true">▾</span>
+        <span data-testid="work-group-summary">
+          Worked on {props.entries.length} step{props.entries.length === 1 ? "" : "s"}
+        </span>
+      </header>
+      <ul class="mt-1.5 flex flex-col gap-0.5 text-[12px] leading-relaxed text-[var(--fg-secondary)]">
+        <For each={visible()}>
+          {(entry) => (
+            <li
+              data-testid="work-group-entry"
+              data-entry-id={entry.id}
+              data-entry-kind={entry.kind ?? ""}
+              data-entry-status={entry.status ?? "completed"}
+              class="flex items-center gap-2"
+            >
+              <span aria-hidden="true" class="shrink-0 text-[10px]">
+                {entry.kind ? (WORK_KIND_GLYPH[entry.kind] ?? "•") : "•"}
+              </span>
+              <span class="min-w-0 truncate">{entry.label}</span>
+            </li>
+          )}
+        </For>
+        <Show when={overflow() > 0}>
+          <li>
+            <button
+              type="button"
+              data-testid="work-group-expand"
+              class="cursor-pointer rounded-sm text-[11px] text-[var(--accent)] hover:underline"
+              onClick={() => setExpanded(true)}
+            >
+              +{overflow()} more
+            </button>
+          </li>
+        </Show>
+      </ul>
+    </section>
   );
 }
 
@@ -209,11 +299,20 @@ function MessageRow(props: {
   cwd?: Accessor<string | undefined>;
   onOpenFile?: (meta: MarkdownFileLinkMeta) => void;
   isTerminal: boolean;
+  revertTurnCount?: number;
+  onRevertFromMessage?: (userMessageId: string) => void;
 }): JSX.Element {
   const tone = createMemo(() => deriveMessageTone(props.message));
   if (props.message.role === "user") {
     return (
-      <UserRow message={props.message} tone={tone} cwd={props.cwd} onOpenFile={props.onOpenFile} />
+      <UserRow
+        message={props.message}
+        tone={tone}
+        cwd={props.cwd}
+        onOpenFile={props.onOpenFile}
+        revertTurnCount={props.revertTurnCount}
+        onRevertFromMessage={props.onRevertFromMessage}
+      />
     );
   }
   return (
@@ -233,10 +332,16 @@ function UserRow(props: {
   tone: Accessor<"user" | "assistant" | "system" | "tool">;
   cwd?: Accessor<string | undefined>;
   onOpenFile?: (meta: MarkdownFileLinkMeta) => void;
+  revertTurnCount?: number;
+  onRevertFromMessage?: (userMessageId: string) => void;
 }): JSX.Element {
   const plainText = createMemo(() => extractUserPlainText(props.message.content));
   const imageEntries = createMemo(() => collectImageBlocks(props.message.content));
   const onExpand = useImageExpand();
+  const showRevert = (): boolean =>
+    typeof props.revertTurnCount === "number" &&
+    props.revertTurnCount > 0 &&
+    typeof props.onRevertFromMessage === "function";
   return (
     <section
       data-testid="message-row"
@@ -249,7 +354,21 @@ function UserRow(props: {
         name="You"
         timestamp={props.message.createdAt}
         actions={
-          <MessageCopyButton text={plainText()} class="opacity-0 group-hover/user:opacity-100" />
+          <span class="flex items-center gap-1.5">
+            <Show when={showRevert()}>
+              <button
+                type="button"
+                data-testid="message-revert-from-here"
+                data-revert-count={props.revertTurnCount ?? 0}
+                class="cursor-pointer rounded-sm border border-[var(--border-weak,var(--border))] px-1.5 py-0.5 text-[10px] text-[var(--fg-secondary)] opacity-0 transition-opacity hover:border-[var(--accent)] hover:text-[var(--accent)] group-hover/user:opacity-100"
+                onClick={() => props.onRevertFromMessage?.(props.message.id)}
+                title={`Revert ${props.revertTurnCount} turn${props.revertTurnCount === 1 ? "" : "s"} from here`}
+              >
+                Revert {props.revertTurnCount} turn{props.revertTurnCount === 1 ? "" : "s"}
+              </button>
+            </Show>
+            <MessageCopyButton text={plainText()} class="opacity-0 group-hover/user:opacity-100" />
+          </span>
         }
       />
       <div class="min-w-0 text-[13px] leading-relaxed text-[var(--fg)]">

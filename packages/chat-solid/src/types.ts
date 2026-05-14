@@ -229,10 +229,65 @@ export interface ToolCallView {
   rawOutput?: unknown;
 }
 
+/**
+ * One row in the chat transcript. Hosts compute this list and push
+ * it to `MessagesTimeline`; the renderer is a pure function of the
+ * row variants. Additive optional fields (e.g. work-group entries,
+ * completion-divider gate, revert-turn count) keep older callers
+ * source-compatible — leave them undefined and the renderer falls
+ * back to its plain behavior.
+ */
 export type MessagesTimelineRow =
-  | { kind: "message"; id: string; createdAt: string; message: ChatMessage }
+  | {
+      kind: "message";
+      id: string;
+      createdAt: string;
+      message: ChatMessage;
+      /**
+       * When true, render the "Completed turn" divider directly above
+       * this row. Wired by the host (typically tagged onto the first
+       * assistant message that closed a turn) so the divider falls
+       * between the turn's tool work and its prose conclusion.
+       */
+      showCompletionDivider?: boolean;
+      /**
+       * Number of completed turns that would be rolled back if the
+       * user clicked "Revert from here" on this user message. Drives
+       * the revert button's visibility + label ("Revert 3 turns").
+       * Only meaningful on user messages.
+       */
+      revertTurnCount?: number;
+    }
   | { kind: "plan"; id: string; createdAt: string; entries: PlanEntry[] }
-  | { kind: "working"; id: string; createdAt: string };
+  | { kind: "working"; id: string; createdAt: string }
+  | {
+      /**
+       * Adjacent host-supplied work-log entries collapsed into a
+       * single row. The renderer collapses them behind a "Worked on N
+       * step(s)" chip with an expand affordance; expanded, each entry
+       * lays out as a single-line bullet. Avoids a wall of one-shot
+       * rows for repeated read/write/tool steps inside a single
+       * assistant turn.
+       */
+      kind: "work";
+      id: string;
+      createdAt: string;
+      entries: ReadonlyArray<WorkLogEntry>;
+    };
+
+/**
+ * Single work-log entry rendered inside a `work` row. The shape is
+ * intentionally tiny — hosts that don't track sub-kinds can pass
+ * `{ id, label }` and get a clean bullet list; hosts that do can
+ * pass `kind` and the renderer picks an icon glyph.
+ */
+export interface WorkLogEntry {
+  id: string;
+  label: string;
+  kind?: "tool" | "file-read" | "file-write" | "terminal" | "thinking";
+  status?: "completed" | "in_progress" | "failed";
+  createdAt?: string;
+}
 
 export interface ChatMountOptions {
   threadId: string;
