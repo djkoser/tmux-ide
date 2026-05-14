@@ -383,10 +383,7 @@ describe("chat action handlers", () => {
   });
 
   it("editFromTurn truncates at the user message and re-dispatches send", async () => {
-    const thread = await chatThreadCreateHandler(
-      { provider: { kind: "claude-code" } },
-      deps(),
-    );
+    const thread = await chatThreadCreateHandler({ provider: { kind: "claude-code" } }, deps());
     await store.appendMessages(thread.thread.id, [
       {
         _tag: "UserPrompt",
@@ -433,10 +430,7 @@ describe("chat action handlers", () => {
   });
 
   it("editFromTurn rejects an unknown user message id with bad_request", async () => {
-    const thread = await chatThreadCreateHandler(
-      { provider: { kind: "claude-code" } },
-      deps(),
-    );
+    const thread = await chatThreadCreateHandler({ provider: { kind: "claude-code" } }, deps());
     try {
       await chatSessionEditFromTurnHandler(
         {
@@ -471,10 +465,7 @@ describe("chat action handlers", () => {
   });
 
   it("editFromTurn rejects when the id is an assistant message", async () => {
-    const thread = await chatThreadCreateHandler(
-      { provider: { kind: "claude-code" } },
-      deps(),
-    );
+    const thread = await chatThreadCreateHandler({ provider: { kind: "claude-code" } }, deps());
     await store.appendMessages(thread.thread.id, [
       {
         _tag: "UserPrompt",

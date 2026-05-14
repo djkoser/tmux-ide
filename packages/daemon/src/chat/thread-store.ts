@@ -45,10 +45,7 @@ export interface ThreadStore {
    *   - target message is not a UserPrompt → throws `Message <id>
    *     in thread <threadId> is not a user prompt`.
    */
-  truncateFromUserMessage(
-    id: string,
-    userMessageId: string,
-  ): Promise<{ truncatedCount: number }>;
+  truncateFromUserMessage(id: string, userMessageId: string): Promise<{ truncatedCount: number }>;
   recordAcpSessionId(id: string, acpSessionId: string): Promise<void>;
   recordUsage(id: string, usage: ChatThreadUsageSummary): Promise<void>;
   recordStopReason(id: string, reason: StopReason): Promise<void>;
@@ -295,20 +292,15 @@ export function makeThreadStore(opts: MakeThreadStoreOptions): ThreadStore {
             // Distinguish "user message id not present at all" from
             // "id exists but belongs to an agent update" so the
             // action handler can map it to the right error.
-            const exists = nextState.messages.some(
-              (message) =>
-                message._tag === "UserPrompt"
-                  ? message.id === userMessageId
-                  : message.id === userMessageId,
+            const exists = nextState.messages.some((message) =>
+              message._tag === "UserPrompt"
+                ? message.id === userMessageId
+                : message.id === userMessageId,
             );
             if (exists) {
-              throw new Error(
-                `Message ${userMessageId} in thread ${id} is not a user prompt`,
-              );
+              throw new Error(`Message ${userMessageId} in thread ${id} is not a user prompt`);
             }
-            throw new Error(
-              `User message ${userMessageId} not found in thread ${id}`,
-            );
+            throw new Error(`User message ${userMessageId} not found in thread ${id}`);
           }
           const dropped = nextState.messages.length - idx;
           nextState.messages.splice(idx);

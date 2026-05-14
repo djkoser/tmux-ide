@@ -41,22 +41,18 @@ export function attachNotesRoutes(app: Hono, deps: NotesHandlerDeps): void {
     return c.json({ note });
   });
 
-  app.put(
-    "/api/project/:name/notes",
-    zValidator("json", UpdateNoteRequestSchemaZ),
-    (c) => {
-      const name = c.req.param("name");
-      const session = deps.resolveSession(name);
-      if (!session) return c.json({ error: "Session not found" }, 404);
-      const body = c.req.valid("json");
-      const record = writeNote(session.dir, body.content);
-      deps.onChanged?.(name);
-      const note: Note = {
-        sessionName: name,
-        content: record.content,
-        updatedAt: record.updatedAt,
-      };
-      return c.json({ note });
-    },
-  );
+  app.put("/api/project/:name/notes", zValidator("json", UpdateNoteRequestSchemaZ), (c) => {
+    const name = c.req.param("name");
+    const session = deps.resolveSession(name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const body = c.req.valid("json");
+    const record = writeNote(session.dir, body.content);
+    deps.onChanged?.(name);
+    const note: Note = {
+      sessionName: name,
+      content: record.content,
+      updatedAt: record.updatedAt,
+    };
+    return c.json({ note });
+  });
 }

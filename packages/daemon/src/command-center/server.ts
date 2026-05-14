@@ -1556,10 +1556,10 @@ export function createApp(options: CreateAppOptions = {}): Hono {
       return { baseBranch, mergeBase: mergeBase || null };
     }
 
-    let diff = "";
-    let files: DiffFile[] = [];
+    let diff: string;
+    let files: DiffFile[];
     let originalRef = "HEAD";
-    let modifiedRef: string = "WORKING";
+    let modifiedRef: string;
     let baseBranch: string | null = null;
 
     if (source === "staged") {
@@ -1568,7 +1568,6 @@ export function createApp(options: CreateAppOptions = {}): Hono {
         runGit(["diff", "--cached", "--numstat", "HEAD"]) ??
           runGit(["diff", "--cached", "--numstat"]),
       );
-      originalRef = "HEAD";
       modifiedRef = "STAGED";
     } else if (source === "pr") {
       const { baseBranch: base, mergeBase } = resolvePrBase();
@@ -1586,7 +1585,6 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     } else {
       diff = runGit(["diff", "HEAD"]) ?? runGit(["diff"]) ?? "";
       files = parseNumstat(runGit(["diff", "--numstat", "HEAD"]) ?? runGit(["diff", "--numstat"]));
-      originalRef = "HEAD";
       modifiedRef = "WORKING";
     }
 

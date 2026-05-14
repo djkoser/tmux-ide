@@ -17,15 +17,15 @@ For any feature `<feature>` (e.g. `notes`, `pins`, `bookmarks`), you create
 seven files plus a small `attach…Routes` call wired into the daemon's
 `createApp`. The names below are the canonical paths in this repo:
 
-| #   | File                                                                     | Role                                                                      |
-| --- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| 1   | `packages/contracts/src/<feature>-contract.ts`                           | Zod schemas. Wire shape shared by daemon + dashboard.                     |
-| 2   | `packages/daemon/src/<feature>/service.ts`                               | Pure I/O. No HTTP. Trivial to unit-test.                                  |
-| 3   | `packages/daemon/src/<feature>/handlers.ts`                              | Hono routes. Thin translation: validate → service → response.             |
-| 4   | `packages/daemon/src/<feature>/service.test.ts`                          | bun:test, tmpdir-scoped.                                                  |
-| 5   | `packages/v2-solid-widgets/src/widgets/<Feature>.tsx`                    | Prop-driven Solid widget. Owns local UI state; never fetches.             |
-| 6   | `dashboard/src/lib/<feature>.ts`                                         | Effect-wrapped client (`fetch…`, `save…`). Imports contract types only.   |
-| 7   | `dashboard/src/components/<Feature>Bridge.tsx`                           | Host wiring. Owns server state + saving/error; pushes into widget.        |
+| #   | File                                                  | Role                                                                    |
+| --- | ----------------------------------------------------- | ----------------------------------------------------------------------- |
+| 1   | `packages/contracts/src/<feature>-contract.ts`        | Zod schemas. Wire shape shared by daemon + dashboard.                   |
+| 2   | `packages/daemon/src/<feature>/service.ts`            | Pure I/O. No HTTP. Trivial to unit-test.                                |
+| 3   | `packages/daemon/src/<feature>/handlers.ts`           | Hono routes. Thin translation: validate → service → response.           |
+| 4   | `packages/daemon/src/<feature>/service.test.ts`       | bun:test, tmpdir-scoped.                                                |
+| 5   | `packages/v2-solid-widgets/src/widgets/<Feature>.tsx` | Prop-driven Solid widget. Owns local UI state; never fetches.           |
+| 6   | `dashboard/src/lib/<feature>.ts`                      | Effect-wrapped client (`fetch…`, `save…`). Imports contract types only. |
+| 7   | `dashboard/src/components/<Feature>Bridge.tsx`        | Host wiring. Owns server state + saving/error; pushes into widget.      |
 
 Plus two near-zero edits:
 
@@ -180,7 +180,7 @@ Rules:
 - Tag every interactive element with `data-testid="<feature>-…"` so the
   dashboard's `@solidjs/testing-library` suite can target it.
 - If the host pushes a fresher server snapshot while the user is editing,
-  the widget should *keep the user's draft* and surface a divergence
+  the widget should _keep the user's draft_ and surface a divergence
   indicator — never silently clobber.
 
 ### 2.6 Client (`dashboard/src/lib/<feature>.ts`)
@@ -239,7 +239,7 @@ export function <Feature>Bridge(props: { projectName: string }): JSX.Element {
 
 Rules:
 
-- The bridge is the *only* place the dashboard talks to the daemon for
+- The bridge is the _only_ place the dashboard talks to the daemon for
   this feature. Owns: resource fetch, optimistic toggles, save state,
   error surfacing, WS-tick subscription.
 - Pass a stable `createMemo` to `WidgetHost`, not an inline object — the
@@ -283,16 +283,16 @@ the widget → widget reconciles vs. the user's local draft.
 
 ## 4. When to deviate
 
-| Situation                                                         | Where the file lives instead                                                                                                                     |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Chat-adjacent UI** (composer chips, message rendering, picker)  | `packages/chat-solid/src/components/<Feature>.tsx` — chat-solid is a separate silo with its own design tokens, runtime, and event bus. Keep generic widgets in `v2-solid-widgets`. |
-| **Read-only widget with no daemon persistence** (file preview, git status pane) | Skip steps 1–4. Add the dashboard-side client + widget; the "service" is whichever existing daemon endpoint already exposes the data.            |
-| **Feature is dashboard-only** (URL state, layout settings)        | Skip steps 1–4 + 6. Just widget + bridge, with localStorage in the bridge.                                                                       |
-| **Feature has agent-side behavior** (touches orchestrator state)  | Add a step 2b: `packages/daemon/src/<feature>/runtime.ts` for the dispatch/tick loop. Keep it separate from `service.ts`.                        |
-| **TUI surface** (renders in a tmux pane via OpenTUI)              | `src/widgets/<feature>/` at the repo root, not `packages/v2-solid-widgets/`. Different runtime.                                                  |
-| **Cross-project / global feature** (mission templates, presets)   | Use `~/.tmux-ide/<feature>.json` in the service, not `<sessionDir>/.tmux-ide/…`.                                                                 |
+| Situation                                                                       | Where the file lives instead                                                                                                                                                       |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Chat-adjacent UI** (composer chips, message rendering, picker)                | `packages/chat-solid/src/components/<Feature>.tsx` — chat-solid is a separate silo with its own design tokens, runtime, and event bus. Keep generic widgets in `v2-solid-widgets`. |
+| **Read-only widget with no daemon persistence** (file preview, git status pane) | Skip steps 1–4. Add the dashboard-side client + widget; the "service" is whichever existing daemon endpoint already exposes the data.                                              |
+| **Feature is dashboard-only** (URL state, layout settings)                      | Skip steps 1–4 + 6. Just widget + bridge, with localStorage in the bridge.                                                                                                         |
+| **Feature has agent-side behavior** (touches orchestrator state)                | Add a step 2b: `packages/daemon/src/<feature>/runtime.ts` for the dispatch/tick loop. Keep it separate from `service.ts`.                                                          |
+| **TUI surface** (renders in a tmux pane via OpenTUI)                            | `src/widgets/<feature>/` at the repo root, not `packages/v2-solid-widgets/`. Different runtime.                                                                                    |
+| **Cross-project / global feature** (mission templates, presets)                 | Use `~/.tmux-ide/<feature>.json` in the service, not `<sessionDir>/.tmux-ide/…`.                                                                                                   |
 
-If the feature *truly* doesn't fit the 7-file mold — typically because it's
+If the feature _truly_ doesn't fit the 7-file mold — typically because it's
 a refactor of existing infra rather than a new domain — say so in the PR
 description rather than smuggling it through. The framework is a starting
 point, not a straitjacket.
@@ -305,16 +305,16 @@ Some surfaces in this repo carry implicit constraints that bite when ignored.
 Before touching them, scan the call sites and ask "what invariant is the
 current implementation defending?" Don't refactor blind.
 
-| Area                                  | Risk                                                                                                                                  | What to do                                                                                                              |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| **PTY / tmux pane lifecycle**         | Killing or restarting a pane closes its `pane_id` and renumbers siblings, dropping orchestrator state for the renumbered panes.        | Always *split* a new pane, never recycle. See `feedback_tmux_panes` memory; live by the tmux-ide `lib/tmux.ts` helpers.  |
-| **SQLite event log**                  | Schema migrations must be backwards-compatible across daemon restarts. A breaking change to `event-log-sqlite.ts` corrupts old DBs.    | Bump schema version, write a migration in `event-log-sqlite.ts`'s `applyMigrations`, never edit existing migration steps. |
-| **LSP client / server lifecycle**     | The Monaco buffer-store assumes documents are owned by a single LSP session; double-`didOpen` poisons references.                      | Read `dashboard/src/lib/lsp/` before adding new model URIs. Stay out unless you're pane 2 (or have explicit handoff).    |
-| **Daemon watchdog**                   | The watchdog respawns the daemon on crash with exponential backoff. Calling `process.exit(0)` from business code defeats the loop.     | Only `daemon-watchdog.ts` and `daemon.ts` may exit. Surface errors to the watchdog via `process.exit(1)` if you must.    |
-| **`.tasks/` JSON store**              | Sibling agents may stage `.tasks/` files between your `git add` and `git commit`, snapping unrelated state into your commit.            | Per `feedback_multi_agent_git_hygiene`: reset index, add explicit paths, verify `--cached` diff, commit immediately.    |
-| **`chokidar` under `context/`**       | Walking the `context/` reference trees blows out file-descriptor limits on macOS.                                                     | Use `@parcel/watcher` with `WATCH_IGNORED_NAMES` (emdash's pattern). See `feedback_emdash_patterns` memory.              |
-| **`packages/contracts/src/index.ts`** | A single name collision in a re-exported schema breaks every consumer. The dashboard, daemon, and CLI all import via this file.       | Append-only when adding features. Don't rename or move existing exports; bump a major if you must.                      |
-| **`packages/v2-solid-widgets/src/index.tsx`** | A `mount…` export is part of the package API. Removing one breaks the dashboard bridges that call it.                            | Append, never remove. If a widget is retiring, gate the mount behind a deprecation comment for one release.              |
+| Area                                          | Risk                                                                                                                                | What to do                                                                                                                |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **PTY / tmux pane lifecycle**                 | Killing or restarting a pane closes its `pane_id` and renumbers siblings, dropping orchestrator state for the renumbered panes.     | Always _split_ a new pane, never recycle. See `feedback_tmux_panes` memory; live by the tmux-ide `lib/tmux.ts` helpers.   |
+| **SQLite event log**                          | Schema migrations must be backwards-compatible across daemon restarts. A breaking change to `event-log-sqlite.ts` corrupts old DBs. | Bump schema version, write a migration in `event-log-sqlite.ts`'s `applyMigrations`, never edit existing migration steps. |
+| **LSP client / server lifecycle**             | The Monaco buffer-store assumes documents are owned by a single LSP session; double-`didOpen` poisons references.                   | Read `dashboard/src/lib/lsp/` before adding new model URIs. Stay out unless you're pane 2 (or have explicit handoff).     |
+| **Daemon watchdog**                           | The watchdog respawns the daemon on crash with exponential backoff. Calling `process.exit(0)` from business code defeats the loop.  | Only `daemon-watchdog.ts` and `daemon.ts` may exit. Surface errors to the watchdog via `process.exit(1)` if you must.     |
+| **`.tasks/` JSON store**                      | Sibling agents may stage `.tasks/` files between your `git add` and `git commit`, snapping unrelated state into your commit.        | Per `feedback_multi_agent_git_hygiene`: reset index, add explicit paths, verify `--cached` diff, commit immediately.      |
+| **`chokidar` under `context/`**               | Walking the `context/` reference trees blows out file-descriptor limits on macOS.                                                   | Use `@parcel/watcher` with `WATCH_IGNORED_NAMES` (emdash's pattern). See `feedback_emdash_patterns` memory.               |
+| **`packages/contracts/src/index.ts`**         | A single name collision in a re-exported schema breaks every consumer. The dashboard, daemon, and CLI all import via this file.     | Append-only when adding features. Don't rename or move existing exports; bump a major if you must.                        |
+| **`packages/v2-solid-widgets/src/index.tsx`** | A `mount…` export is part of the package API. Removing one breaks the dashboard bridges that call it.                               | Append, never remove. If a widget is retiring, gate the mount behind a deprecation comment for one release.               |
 
 When in doubt: scan recent commits to the file you're about to touch
 (`git log -p -- <file>`) and read the most recent rationale.
@@ -326,15 +326,15 @@ When in doubt: scan recent commits to the file you're about to touch
 Per-project markdown scratchpad stored at `<sessionDir>/.tmux-ide/notes.md`.
 Ships in this commit; copy the seven files for your next feature.
 
-| File                                                       | Lines | Purpose                                              |
-| ---------------------------------------------------------- | ----: | ---------------------------------------------------- |
-| `packages/contracts/src/notes-contract.ts`                 |   ~32 | `NoteSchemaZ`, `UpdateNoteRequestSchemaZ`            |
-| `packages/daemon/src/notes/service.ts`                     |   ~45 | `readNote`, `writeNote` (atomic temp+rename)         |
-| `packages/daemon/src/notes/handlers.ts`                    |   ~55 | `attachNotesRoutes(app, deps)`                       |
-| `packages/daemon/src/notes/service.test.ts`                |   ~45 | bun:test, tmpdir-scoped                              |
-| `packages/v2-solid-widgets/src/widgets/Notes.tsx`          |  ~115 | Prop-driven editor, draft reconciliation, Cmd/Ctrl+S |
-| `dashboard/src/lib/notes.ts`                               |   ~85 | `fetchNote`, `saveNote` (Effect)                     |
-| `dashboard/src/components/NotesBridge.tsx`                 |   ~70 | `createResource` + `WidgetHost`                      |
+| File                                              | Lines | Purpose                                              |
+| ------------------------------------------------- | ----: | ---------------------------------------------------- |
+| `packages/contracts/src/notes-contract.ts`        |   ~32 | `NoteSchemaZ`, `UpdateNoteRequestSchemaZ`            |
+| `packages/daemon/src/notes/service.ts`            |   ~45 | `readNote`, `writeNote` (atomic temp+rename)         |
+| `packages/daemon/src/notes/handlers.ts`           |   ~55 | `attachNotesRoutes(app, deps)`                       |
+| `packages/daemon/src/notes/service.test.ts`       |   ~45 | bun:test, tmpdir-scoped                              |
+| `packages/v2-solid-widgets/src/widgets/Notes.tsx` |  ~115 | Prop-driven editor, draft reconciliation, Cmd/Ctrl+S |
+| `dashboard/src/lib/notes.ts`                      |   ~85 | `fetchNote`, `saveNote` (Effect)                     |
+| `dashboard/src/components/NotesBridge.tsx`        |   ~70 | `createResource` + `WidgetHost`                      |
 
 Plus the two near-zero edits:
 
@@ -374,7 +374,7 @@ curl -s -X PUT http://127.0.0.1:6060/api/project/<name>/notes \
 cat <sessionDir>/.tmux-ide/notes.md
 ```
 
-### What this example deliberately does *not* show
+### What this example deliberately does _not_ show
 
 - **WS broadcast.** `attachNotesRoutes` accepts an optional `onChanged`
   hook; wiring it to the `/ws/events` projector is one bus-side change
