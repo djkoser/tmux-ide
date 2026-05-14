@@ -36,15 +36,38 @@ async function main(): Promise<void> {
   }
 
   let stopping = false;
-  const shutdown = async () => {
+  const exitAfterStop = (code: number): void => {
     if (stopping) return;
     stopping = true;
+    // Defer one tick so any awaiter of handle.stop() observes the resolved
+    // promise before we tear the process down.
+    process.nextTick(() => process.exit(code));
+  };
+  const shutdown = async (): Promise<void> => {
+    if (stopping) return;
     try {
       await handle.stop();
-      process.exit(0);
+      exitAfterStop(0);
     } catch (err) {
       console.error("[daemon] failed to stop:", err);
-      process.exit(1);
+      exitAfterStop(1);
+    }
+  };
+
+  // Wrap handle.stop so non-signal stop paths terminate the process. Without
+  // this, the canonical-daemon takeover action (POST /api/v2/action/daemon.shutdown
+  // from a competing launcher), the tick() that calls stopSelf when the
+  // tmux session disappears, and the remote-access restart backend all
+  // close the HTTP listener but leave the Node event loop spinning on
+  // task-store WAL timers and other handles. The visible symptom is a
+  // ghost daemon: process alive, port 6060 dead, takeover falls back to
+  // its 10s SIGTERM/SIGKILL deadline before the next launch can bind.
+  const origStop = handle.stop.bind(handle);
+  handle.stop = async (opts) => {
+    try {
+      await origStop(opts);
+    } finally {
+      exitAfterStop(0);
     }
   };
 
