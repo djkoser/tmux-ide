@@ -2097,44 +2097,14 @@ describe("feature-flag-cutover", () => {
 });
 
 // ---------------------------------------------------------------------------
-// REST endpoints (T082): /api/threads + /api/chat/providers wiring against
-// the harness stores. These cover the gap T077's V2ChatView introduced where
-// the dashboard called endpoints that didn't yet exist.
+// REST endpoints (T082): the surviving thread-CRUD shim (DELETE) plus
+// /api/chat/providers wiring against the harness stores. List/create/get
+// were superseded by `chat.thread.{list,create,get}` actions and their
+// REST shims removed; DELETE stays until `chatThreadDeleteHandler` grows
+// the cascade-clear behavior asserted below.
 // ---------------------------------------------------------------------------
 
 describe("rest-endpoints", () => {
-  it("(a) POST /api/threads creates a thread that shows up in GET /api/threads", async () => {
-    const { createApp } = await import("../command-center/server.ts");
-    const app = createApp({
-      chatStores: {
-        threadStore: harness.threadStore,
-        sessionStore: harness.sessionStore,
-        checkpointStore: harness.checkpointStore,
-      },
-    });
-
-    const createRes = await app.request("/api/threads", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        provider: { kind: "claude-code" },
-        title: "rest-roundtrip",
-      }),
-    });
-    expect(createRes.status).toBe(201);
-    const createBody = (await createRes.json()) as {
-      thread: { id: string; title: string };
-      state: { id: string; title: string };
-    };
-    expect(createBody.thread.title).toBe("rest-roundtrip");
-    expect(createBody.state.id).toBe(createBody.thread.id);
-
-    const listRes = await app.request("/api/threads");
-    expect(listRes.status).toBe(200);
-    const listBody = (await listRes.json()) as { threads: Array<{ id: string }> };
-    expect(listBody.threads.map((t) => t.id)).toContain(createBody.thread.id);
-  });
-
   it("(b) DELETE /api/threads/:id removes the thread, sessions, and checkpoints", async () => {
     const { createApp } = await import("../command-center/server.ts");
     const app = createApp({

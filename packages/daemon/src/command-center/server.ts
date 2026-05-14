@@ -226,7 +226,7 @@ import {
   TurnAlreadyRunningError,
 } from "../chat/plan-orchestrator.ts";
 import { PlanNotFoundError } from "../chat/plan-store.ts";
-import { PlanApproveBodyZ, PlanRejectBodyZ, ChatThreadCreateInputZ } from "@tmux-ide/contracts";
+import { PlanApproveBodyZ, PlanRejectBodyZ } from "@tmux-ide/contracts";
 import {
   makeProviderStore,
   ProviderStoreError,
@@ -775,39 +775,16 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     }
   });
 
-  // --- /api/threads — top-level thread CRUD over the daemon-side
-  // `threadStore`. Companion to the action-dispatcher path; the v2 chat
-  // UI (dashboard/app/v2/_lib/V2ChatView.tsx + components/chat/NewChatPicker.tsx)
-  // talks directly to these routes.
+  // --- /api/threads/:threadId DELETE — last surviving thread-CRUD REST
+  // shim. List/create/get were superseded by the `chat.thread.list` /
+  // `.create` / `.get` actions; the action-handler counterpart for
+  // delete (`chatThreadDeleteHandler`) does not yet cascade-clear
+  // sessions + checkpoints, so this route stays until that gap is
+  // closed. See docs/cleanup-rest-shims.md.
   const threadStore: ThreadStore = options.chatStores?.threadStore ?? getDefaultThreadStore();
   const sessionStore: SessionStore = options.chatStores?.sessionStore ?? getDefaultSessionStore();
   const checkpointStore: CheckpointStore =
     options.chatStores?.checkpointStore ?? getDefaultCheckpointStore();
-
-  app.get("/api/threads", async (c) => {
-    const threads = await threadStore.list();
-    return c.json({ threads });
-  });
-
-  app.post("/api/threads", zValidator("json", ChatThreadCreateInputZ), async (c) => {
-    const body = c.req.valid("json");
-    const state = await threadStore.create(body);
-    const entry = (await threadStore.list()).find((t) => t.id === state.id);
-    broadcastChatEvent({
-      type: "chat.thread.index",
-      threads: await threadStore.list(),
-    });
-    // Return both the index entry (used by the rail) and the full state.
-    return c.json({ thread: entry ?? null, state }, 201);
-  });
-
-  app.get("/api/threads/:threadId", async (c) => {
-    const threadId = c.req.param("threadId");
-    if (!threadId) return c.json({ error: "threadId is required" }, 400);
-    const state = await threadStore.get(threadId);
-    if (!state) return c.json({ error: `Thread ${threadId} not found` }, 404);
-    return c.json({ thread: state });
-  });
 
   app.delete("/api/threads/:threadId", async (c) => {
     const threadId = c.req.param("threadId");
