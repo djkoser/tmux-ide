@@ -40,6 +40,7 @@ import { ExplorerContextMenu } from "@/components/search/ExplorerContextMenu";
 import { SymbolPicker } from "@/components/v2/SymbolPicker";
 import { recordProjectOpened } from "@/components/projects/ProjectQuickSwitcher";
 import { TopBar } from "@/components/TopBar";
+import { NotesBridge } from "@/components/NotesBridge";
 import {
   BottomPanelView,
   CostsView,
@@ -62,6 +63,7 @@ const ACTIVITY_BAR_VIEWS = new Set<ActivityBarViewId>([
   "plans",
   "tasks",
   "skills",
+  "notes",
   "mission",
   "chat",
   "terminal",
@@ -258,6 +260,9 @@ function MainContent(props: { projectName: string; view: ViewId }) {
       </Show>
       <Show when={props.view === "skills"}>
         <SkillsSurfaceView projectName={props.projectName} />
+      </Show>
+      <Show when={props.view === "notes"}>
+        <NotesBridge projectName={props.projectName} />
       </Show>
       <Show when={props.view === "metrics" || props.view === "costs"}>
         <CostsView projectName={props.projectName} />

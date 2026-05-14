@@ -26,6 +26,7 @@ import {
   Search,
   Settings as SettingsIcon,
   Sliders,
+  StickyNote,
   Target,
   Terminal as TerminalIcon,
   UserCircle,
@@ -41,6 +42,7 @@ export type ActivityBarViewId =
   | "plans"
   | "tasks"
   | "skills"
+  | "notes"
   | "mission"
   | "chat"
   | "terminal"
@@ -124,6 +126,13 @@ export function V2ActivityBar(props: V2ActivityBarProps) {
       Icon: BookOpen,
       label: "Skills",
       onClick: () => props.onView("skills"),
+    },
+    {
+      id: "notes",
+      view: "notes",
+      Icon: StickyNote,
+      label: "Notes",
+      onClick: () => props.onView("notes"),
     },
     {
       id: "mission",

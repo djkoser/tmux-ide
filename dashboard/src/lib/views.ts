@@ -22,6 +22,7 @@ import {
   DollarSign,
   Sparkles,
   Diff,
+  StickyNote,
 } from "lucide-solid";
 
 export const VIEWS = [
@@ -31,6 +32,7 @@ export const VIEWS = [
   { id: "tasks", label: "Tasks", glyph: "≡", Icon: CheckSquare },
   { id: "plans", label: "Plans", glyph: "▦", Icon: ListTodo },
   { id: "skills", label: "Skills", glyph: "✶", Icon: Sparkles },
+  { id: "notes", label: "Notes", glyph: "✎", Icon: StickyNote },
   { id: "chat", label: "Chat", glyph: "❯", Icon: MessagesSquare },
   { id: "terminal", label: "Terminal", glyph: ">_", Icon: TerminalIcon },
   { id: "files", label: "Files", glyph: "▤", Icon: Files },
