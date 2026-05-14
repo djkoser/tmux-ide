@@ -2097,63 +2097,13 @@ describe("feature-flag-cutover", () => {
 });
 
 // ---------------------------------------------------------------------------
-// REST endpoints (T082): the surviving thread-CRUD shim (DELETE) plus
-// /api/chat/providers wiring against the harness stores. List/create/get
-// were superseded by `chat.thread.{list,create,get}` actions and their
-// REST shims removed; DELETE stays until `chatThreadDeleteHandler` grows
-// the cascade-clear behavior asserted below.
+// REST endpoints (T082): /api/providers wiring. The legacy
+// /api/threads CRUD shims (list/create/get/delete) were superseded by
+// `chat.thread.*` actions; cascade-clear coverage for delete now lives
+// on the `chat.thread.delete` handler test.
 // ---------------------------------------------------------------------------
 
 describe("rest-endpoints", () => {
-  it("(b) DELETE /api/threads/:id removes the thread, sessions, and checkpoints", async () => {
-    const { createApp } = await import("../command-center/server.ts");
-    const app = createApp({
-      chatStores: {
-        threadStore: harness.threadStore,
-        sessionStore: harness.sessionStore,
-        checkpointStore: harness.checkpointStore,
-      },
-    });
-
-    const created = await harness.threadStore.create({
-      provider: { kind: "claude-code" },
-      title: "to-be-deleted",
-    });
-    const threadId = created.id;
-
-    // Stash a session + checkpoint on the thread so we can assert cleanup.
-    harness.sessionStore.add({
-      threadId,
-      provider: { kind: "claude-code" },
-      runtimeMode: "default",
-    });
-    harness.checkpointStore.upsert(threadId, {
-      threadId,
-      turnId: "turn-x",
-      status: "ready",
-      ref: "abc123",
-      files: [],
-      createdAt: new Date().toISOString(),
-    });
-    expect(harness.sessionStore.list(threadId)).toHaveLength(1);
-    expect(harness.checkpointStore.list(threadId)).toHaveLength(1);
-
-    const deleteRes = await app.request(`/api/threads/${threadId}`, {
-      method: "DELETE",
-    });
-    expect(deleteRes.status).toBe(200);
-    expect(await deleteRes.json()).toEqual({ deleted: true });
-
-    expect(await harness.threadStore.get(threadId)).toBeNull();
-    expect(harness.sessionStore.list(threadId)).toHaveLength(0);
-    expect(harness.checkpointStore.list(threadId)).toHaveLength(0);
-
-    const followUp = await app.request(`/api/threads/${threadId}`, {
-      method: "DELETE",
-    });
-    expect(followUp.status).toBe(404);
-  });
-
   it("(c) GET /api/providers returns redacted ProviderInstanceSummary — no apiKey leaks", async () => {
     const { createApp } = await import("../command-center/server.ts");
     const { makeProviderStore } = await import("./provider-store.ts");

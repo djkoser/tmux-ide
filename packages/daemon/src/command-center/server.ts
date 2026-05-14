@@ -205,21 +205,14 @@ import {
   initializeDefaultChatRuntime,
   getDefaultPlanOrchestrator,
   getDefaultPlanStore,
-  getDefaultThreadStore,
-  getDefaultSessionStore,
-  getDefaultCheckpointStore,
   getDefaultTurnDiffProjection,
 } from "../chat/defaults.ts";
 import type { TurnDiffProjection } from "../persistence/projections/turn-diff-projection.ts";
-import type { ThreadStore } from "../chat/thread-store.ts";
-import type { SessionStore } from "../chat/session-store.ts";
-import type { CheckpointStore } from "../chat/checkpoint-store.ts";
 import {
   discoverProviders,
   type ProviderInfo as ChatProviderInfo,
   type ProviderDiscoveryOptions,
 } from "../chat/provider-discovery.ts";
-import { broadcastChatEvent } from "./ws-events.ts";
 import {
   PlanAlreadyImplementedError,
   PlanAlreadyRejectedError,
@@ -250,16 +243,6 @@ export interface CreateAppOptions {
    * tmpdir; production code uses the default file location.
    */
   providerStore?: ProviderStore;
-  /**
-   * Chat stores backing `/api/threads` and `/api/chat/providers`. Override
-   * in tests to hermetic in-memory stores. Production defaults to the
-   * singletons in `chat/defaults.ts`.
-   */
-  chatStores?: {
-    threadStore?: ThreadStore;
-    sessionStore?: SessionStore;
-    checkpointStore?: CheckpointStore;
-  };
   /**
    * TurnDiff projection backing the `/api/project/:name/turn-diffs/*`
    * endpoints (T101a). Tests inject an in-memory projection populated
@@ -773,34 +756,6 @@ export function createApp(options: CreateAppOptions = {}): Hono {
       }
       throw err;
     }
-  });
-
-  // --- /api/threads/:threadId DELETE — last surviving thread-CRUD REST
-  // shim. List/create/get were superseded by the `chat.thread.list` /
-  // `.create` / `.get` actions; the action-handler counterpart for
-  // delete (`chatThreadDeleteHandler`) does not yet cascade-clear
-  // sessions + checkpoints, so this route stays until that gap is
-  // closed. See docs/cleanup-rest-shims.md.
-  const threadStore: ThreadStore = options.chatStores?.threadStore ?? getDefaultThreadStore();
-  const sessionStore: SessionStore = options.chatStores?.sessionStore ?? getDefaultSessionStore();
-  const checkpointStore: CheckpointStore =
-    options.chatStores?.checkpointStore ?? getDefaultCheckpointStore();
-
-  app.delete("/api/threads/:threadId", async (c) => {
-    const threadId = c.req.param("threadId");
-    if (!threadId) return c.json({ error: "threadId is required" }, 400);
-    const state = await threadStore.get(threadId);
-    if (!state) return c.json({ error: `Thread ${threadId} not found` }, 404);
-    // Mirror chat-integration-harness.deleteThread: clear sessions and
-    // checkpoints before removing the thread so nothing leaks.
-    sessionStore.clear(threadId);
-    checkpointStore.clear(threadId);
-    await threadStore.delete(threadId);
-    broadcastChatEvent({
-      type: "chat.thread.index",
-      threads: await threadStore.list(),
-    });
-    return c.json({ deleted: true });
   });
 
   // GET /api/chat/providers — discovery (claude-code / codex binaries on

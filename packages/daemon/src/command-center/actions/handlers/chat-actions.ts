@@ -1,5 +1,10 @@
 import { isAbsolute } from "node:path";
-import { getDefaultThreadManager, getDefaultThreadStore } from "../../../chat/defaults.ts";
+import {
+  getDefaultCheckpointStore,
+  getDefaultSessionStore,
+  getDefaultThreadManager,
+  getDefaultThreadStore,
+} from "../../../chat/defaults.ts";
 import {
   discoverProviders,
   type ProviderDiscoveryOptions,
@@ -12,6 +17,8 @@ import {
   type ThreadManager,
 } from "../../../chat/thread-manager.ts";
 import type { ThreadStore } from "../../../chat/thread-store.ts";
+import type { SessionStore } from "../../../chat/session-store.ts";
+import type { CheckpointStore } from "../../../chat/checkpoint-store.ts";
 import type {
   ChatEvent,
   ContentBlock,
@@ -24,6 +31,8 @@ import { ActionError } from "../errors.ts";
 
 export interface ChatActionDeps {
   store?: ThreadStore;
+  sessionStore?: SessionStore;
+  checkpointStore?: CheckpointStore;
   manager?: ThreadManager;
   busEmit?: (event: ChatEvent) => void;
   discover?: ProviderDiscoveryOptions;
@@ -45,6 +54,14 @@ export function resetChatProvidersListCache(): void {
 
 function storeFrom(deps: ChatActionDeps): ThreadStore {
   return deps.store ?? getDefaultThreadStore();
+}
+
+function sessionStoreFrom(deps: ChatActionDeps): SessionStore {
+  return deps.sessionStore ?? getDefaultSessionStore();
+}
+
+function checkpointStoreFrom(deps: ChatActionDeps): CheckpointStore {
+  return deps.checkpointStore ?? getDefaultCheckpointStore();
 }
 
 function managerFrom(deps: ChatActionDeps): ThreadManager {
@@ -158,6 +175,11 @@ export async function chatThreadDeleteHandler(
 ): Promise<ActionResult<"chat.thread.delete">> {
   const store = storeFrom(deps);
   await requireThread(store, input.id);
+  // Cascade-clear sessions + checkpoints before deleting the thread so
+  // nothing leaks into the next thread reusing this id. Ports the
+  // behavior of the legacy DELETE /api/threads/:id REST shim.
+  sessionStoreFrom(deps).clear(input.id);
+  checkpointStoreFrom(deps).clear(input.id);
   await store.delete(input.id);
   await emitIndex(store, busFrom(deps));
   return { deleted: true };

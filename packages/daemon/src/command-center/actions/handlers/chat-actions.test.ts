@@ -3,6 +3,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeThreadStore, type ThreadStore } from "../../../chat/thread-store.ts";
+import { makeSessionStore, type SessionStore } from "../../../chat/session-store.ts";
+import { makeCheckpointStore, type CheckpointStore } from "../../../chat/checkpoint-store.ts";
 import type { ChatEvent, ContentBlock } from "../../../chat/types.ts";
 import {
   InvalidPermissionOptionError,
@@ -30,6 +32,8 @@ import { wrapInternalError } from "../errors.ts";
 
 let rootDir = "";
 let store: ThreadStore;
+let sessionStore: SessionStore;
+let checkpointStore: CheckpointStore;
 let events: ChatEvent[];
 let sent: Array<{ threadId: string; content: ContentBlock[] }>;
 let cancelled: string[];
@@ -64,6 +68,8 @@ beforeEach(() => {
       };
     })(),
   });
+  sessionStore = makeSessionStore();
+  checkpointStore = makeCheckpointStore();
   events = [];
   sent = [];
   cancelled = [];
@@ -78,6 +84,8 @@ afterEach(() => {
 function deps() {
   return {
     store,
+    sessionStore,
+    checkpointStore,
     manager,
     busEmit: (event: ChatEvent) => events.push(event),
   };
@@ -167,24 +175,44 @@ describe("chat action handlers", () => {
     ).toBe(false);
   });
 
-  it("gets, renames, and deletes existing threads", async () => {
+  it("gets, renames, and deletes existing threads — cascade-clears sessions + checkpoints", async () => {
     const created = await chatThreadCreateHandler(
       { provider: { kind: "claude-code" }, title: "Original" },
       deps(),
     );
+    const threadId = created.thread.id;
 
-    const got = await chatThreadGetHandler({ id: created.thread.id }, deps());
+    const got = await chatThreadGetHandler({ id: threadId }, deps());
     expect(got.thread.title).toBe("Original");
 
-    const renamed = await chatThreadRenameHandler(
-      { id: created.thread.id, title: "Renamed" },
-      deps(),
-    );
+    const renamed = await chatThreadRenameHandler({ id: threadId, title: "Renamed" }, deps());
     expect(renamed.thread.title).toBe("Renamed");
 
-    const deleted = await chatThreadDeleteHandler({ id: created.thread.id }, deps());
+    // Stash a session + checkpoint on the thread so we can assert
+    // chat.thread.delete cascades the clear (port of the legacy
+    // T082(b) wiring test against the deleted DELETE /api/threads/:id
+    // shim).
+    sessionStore.add({
+      threadId,
+      provider: { kind: "claude-code" },
+      runtimeMode: "default",
+    });
+    checkpointStore.upsert(threadId, {
+      threadId,
+      turnId: "turn-x",
+      status: "ready",
+      ref: "abc123",
+      files: [],
+      createdAt: new Date().toISOString(),
+    });
+    expect(sessionStore.list(threadId)).toHaveLength(1);
+    expect(checkpointStore.list(threadId)).toHaveLength(1);
+
+    const deleted = await chatThreadDeleteHandler({ id: threadId }, deps());
     expect(deleted).toEqual({ deleted: true });
     expect(await chatThreadListHandler({}, deps())).toEqual({ threads: [] });
+    expect(sessionStore.list(threadId)).toHaveLength(0);
+    expect(checkpointStore.list(threadId)).toHaveLength(0);
     expect(events.filter((event) => event.type === "chat.thread.index")).toHaveLength(3);
   });
 
