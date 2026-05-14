@@ -19,6 +19,18 @@ import type {
 import { AttachmentChip } from "./AttachmentChip";
 import { AttachmentPicker } from "./AttachmentPicker";
 import { ComposerBannerStack, type ComposerBannerItem } from "./ComposerBannerStack";
+import {
+  ComposerPrimaryActions,
+  type PendingActionState,
+} from "./ComposerPrimaryActions";
+import {
+  ComposerPendingApprovalPanel,
+  type PendingApproval,
+} from "./ComposerPendingApprovalPanel";
+import {
+  ComposerPendingApprovalActions,
+  type ProviderApprovalDecision,
+} from "./ComposerPendingApprovalActions";
 
 export function ChatComposer(props: {
   disabled: Accessor<boolean>;
@@ -54,6 +66,53 @@ export function ChatComposer(props: {
    * When omitted (or empty), no banner row renders.
    */
   bannerItems?: Accessor<ReadonlyArray<ComposerBannerItem>>;
+  /**
+   * Optional pending tool-call approval. When set, the composer
+   * renders `ComposerPendingApprovalPanel` (summary headline) and
+   * `ComposerPendingApprovalActions` (cancel / decline / always
+   * allow this session / approve once) between the banner stack
+   * and the textarea. Null / undefined keeps both surfaces hidden.
+   *
+   * Host owns sourcing — typically derived from the daemon's
+   * `chat.permission.request` event mapped to a coarse
+   * `requestKind` (command / file-read / file-change).
+   */
+  pendingApproval?: Accessor<PendingApproval | null>;
+  /**
+   * Optional badge value rendered as "1/N" alongside the approval
+   * headline when multiple approvals are queued. Defaults to 1.
+   */
+  pendingApprovalCount?: Accessor<number>;
+  /**
+   * Verdict callback wired to the four-button row. Receives the
+   * request id and the chosen decision. Required when
+   * `pendingApproval` is set — without it the buttons would be
+   * inert.
+   */
+  onRespondToApproval?: (
+    requestId: string,
+    decision: ProviderApprovalDecision,
+  ) => Promise<void> | void;
+  /**
+   * Drives the in-flight gate on the verdict row. When true, all
+   * four approval buttons render disabled. Optional — defaults to
+   * `disabled()` so a sending composer also locks the verdict row.
+   */
+  isRespondingToApproval?: Accessor<boolean>;
+  /**
+   * Optional richer state for `ComposerPrimaryActions`. When
+   * omitted, the primary actions surface defaults to a plain
+   * send/stop button mapped to `disabled()`.
+   */
+  pendingAction?: Accessor<PendingActionState | null>;
+  showPlanFollowUpPrompt?: Accessor<boolean>;
+  isSendBusy?: Accessor<boolean>;
+  isConnecting?: Accessor<boolean>;
+  isEnvironmentUnavailable?: Accessor<boolean>;
+  isPreparingWorktree?: Accessor<boolean>;
+  compactPrimaryActions?: Accessor<boolean>;
+  onPreviousPendingQuestion?: () => void;
+  onImplementPlanInNewThread?: () => void;
 }) {
   const [textarea, setTextarea] = createSignal<HTMLTextAreaElement>();
   const [value, setValue] = createSignal("");
@@ -306,6 +365,25 @@ export function ChatComposer(props: {
       }}
     >
       <ComposerBannerStack items={bannerItemsAccessor} />
+      <Show when={props.pendingApproval?.() ?? null}>
+        {(approval) => (
+          <div data-testid="composer-pending-approval-surface" class="mb-2">
+            <ComposerPendingApprovalPanel
+              approval={approval()}
+              pendingCount={props.pendingApprovalCount?.() ?? 1}
+            />
+            <Show when={props.onRespondToApproval}>
+              {(onRespond) => (
+                <ComposerPendingApprovalActions
+                  requestId={() => approval().requestId}
+                  isResponding={() => props.isRespondingToApproval?.() ?? props.disabled()}
+                  onRespondToApproval={onRespond()}
+                />
+              )}
+            </Show>
+          </div>
+        )}
+      </Show>
       <Show when={props.attachments().length > 0}>
         <div class="mb-2 flex flex-wrap gap-1.5">
           <For each={props.attachments()}>
@@ -373,22 +451,21 @@ export function ChatComposer(props: {
             onAdd={props.onAddAttachment}
             onClose={() => setPickerOpen(false)}
           />
-          <Show when={props.disabled()}>
-            <button
-              class="h-7 cursor-pointer rounded-md border border-border bg-surface px-2 text-[12px] text-fg-secondary hover:border-accent hover:text-accent"
-              type="button"
-              onClick={() => void props.onCancel()}
-            >
-              Stop
-            </button>
-          </Show>
-          <button
-            class="h-7 cursor-pointer rounded-md border border-border bg-surface px-3 text-[12px] text-fg-secondary hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-45"
-            type="submit"
-            disabled={!canSend()}
-          >
-            Send
-          </button>
+          <ComposerPrimaryActions
+            compact={() => props.compactPrimaryActions?.() ?? false}
+            pendingAction={() => props.pendingAction?.() ?? null}
+            isRunning={() => props.disabled()}
+            showPlanFollowUpPrompt={() => props.showPlanFollowUpPrompt?.() ?? false}
+            promptHasText={() => value().trim().length > 0}
+            isSendBusy={() => props.isSendBusy?.() ?? false}
+            isConnecting={() => props.isConnecting?.() ?? false}
+            isEnvironmentUnavailable={() => props.isEnvironmentUnavailable?.() ?? false}
+            isPreparingWorktree={() => props.isPreparingWorktree?.() ?? false}
+            hasSendableContent={() => canSend()}
+            onPreviousPendingQuestion={() => props.onPreviousPendingQuestion?.()}
+            onInterrupt={() => void props.onCancel()}
+            onImplementPlanInNewThread={() => props.onImplementPlanInNewThread?.()}
+          />
         </div>
       </div>
     </form>
