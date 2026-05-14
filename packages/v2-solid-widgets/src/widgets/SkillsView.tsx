@@ -24,6 +24,7 @@
  */
 
 import { createMemo, createSignal, For, Show } from "solid-js";
+import { createVirtualizer } from "@tanstack/solid-virtual";
 import { marked } from "marked";
 import type { SkillFormValues, SkillsViewMountOptions, SkillSummary } from "../types";
 
@@ -172,6 +173,23 @@ export function SkillsViewView(props: SkillsViewProps) {
     });
   });
 
+  // Skill rail virtualizer: a project with thousands of skills no
+  // longer renders thousands of buttons. Inline calls to
+  // `getVirtualItems` / `getTotalSize` inside JSX do not subscribe
+  // to the virtualizer's signal — wrap in `createMemo` per 9b139e5.
+  const [railEl, setRailEl] = createSignal<HTMLDivElement | null>(null);
+  const skillsVirtualizer = createVirtualizer({
+    get count() {
+      return filtered().length;
+    },
+    getScrollElement: () => railEl(),
+    estimateSize: () => 28,
+    overscan: 6,
+    getItemKey: (i) => filtered()[i]?.name ?? i,
+  });
+  const skillsVirtualItems = createMemo(() => skillsVirtualizer.getVirtualItems());
+  const skillsVirtualTotalSize = createMemo(() => skillsVirtualizer.getTotalSize());
+
   // Resolve the selected skill summary against the live list.
   const activeSkill = createMemo<SkillSummary | null>(() => {
     const id = selected();
@@ -299,11 +317,13 @@ export function SkillsViewView(props: SkillsViewProps) {
           />
         </div>
         <div
+          ref={setRailEl}
           style={{
             flex: "1 1 0%",
             "min-height": "0",
             "overflow-y": "auto",
             padding: "0 4px 6px",
+            position: "relative",
           }}
         >
           <Show
@@ -324,70 +344,92 @@ export function SkillsViewView(props: SkillsViewProps) {
               </div>
             }
           >
-            <For each={filtered()}>
-              {(skill) => {
-                const isActive = () => visibleSelection()?.name === skill.name;
-                return (
-                  <button
-                    type="button"
-                    data-testid={`skill-row-${skill.name}`}
-                    data-skill-name={skill.name}
-                    data-selected={isActive() ? "true" : "false"}
-                    onClick={() => handleRowClick(skill.name)}
-                    style={{
-                      display: "flex",
-                      "align-items": "center",
-                      gap: "6px",
-                      width: "100%",
-                      padding: "6px 8px",
-                      "border-radius": "4px",
-                      border: "none",
-                      "background-color": isActive()
-                        ? "color-mix(in oklab, var(--accent) 14%, transparent)"
-                        : "transparent",
-                      color: isActive() ? "var(--accent)" : "var(--fg)",
-                      "font-family": "inherit",
-                      "font-size": "12px",
-                      "text-align": "left",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <span
-                      aria-hidden="true"
+            <div
+              data-testid="skills-rail-spacer"
+              style={{
+                height: `${skillsVirtualTotalSize()}px`,
+                width: "100%",
+                position: "relative",
+              }}
+            >
+              <For each={skillsVirtualItems()}>
+                {(vItem) => {
+                  const skill = () => filtered()[vItem.index]!;
+                  const isActive = () => visibleSelection()?.name === skill().name;
+                  return (
+                    <div
+                      data-index={vItem.index}
+                      ref={(el) => skillsVirtualizer.measureElement(el)}
                       style={{
-                        display: "inline-block",
-                        width: "7px",
-                        height: "7px",
-                        "border-radius": "50%",
-                        "background-color": isActive() ? "var(--accent)" : "var(--dim)",
+                        position: "absolute",
+                        top: "0",
+                        left: "0",
+                        width: "100%",
+                        transform: `translateY(${vItem.start}px)`,
                       }}
-                    />
-                    <span
-                      style={{
-                        flex: "1 1 0%",
-                        "min-width": "0",
-                        overflow: "hidden",
-                        "text-overflow": "ellipsis",
-                        "white-space": "nowrap",
-                      }}
-                      title={skill.description ?? skill.name}
                     >
-                      {skill.name}
-                    </span>
-                    <Show when={skill.specialties && skill.specialties.length > 0}>
-                      <span
+                      <button
+                        type="button"
+                        data-testid={`skill-row-${skill().name}`}
+                        data-skill-name={skill().name}
+                        data-selected={isActive() ? "true" : "false"}
+                        onClick={() => handleRowClick(skill().name)}
                         style={{
-                          color: "var(--fg-muted, var(--fg-soft))",
-                          "font-size": "10px",
+                          display: "flex",
+                          "align-items": "center",
+                          gap: "6px",
+                          width: "100%",
+                          padding: "6px 8px",
+                          "border-radius": "4px",
+                          border: "none",
+                          "background-color": isActive()
+                            ? "color-mix(in oklab, var(--accent) 14%, transparent)"
+                            : "transparent",
+                          color: isActive() ? "var(--accent)" : "var(--fg)",
+                          "font-family": "inherit",
+                          "font-size": "12px",
+                          "text-align": "left",
+                          cursor: "pointer",
                         }}
                       >
-                        {skill.specialties![0]}
-                      </span>
-                    </Show>
-                  </button>
-                );
-              }}
-            </For>
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            display: "inline-block",
+                            width: "7px",
+                            height: "7px",
+                            "border-radius": "50%",
+                            "background-color": isActive() ? "var(--accent)" : "var(--dim)",
+                          }}
+                        />
+                        <span
+                          style={{
+                            flex: "1 1 0%",
+                            "min-width": "0",
+                            overflow: "hidden",
+                            "text-overflow": "ellipsis",
+                            "white-space": "nowrap",
+                          }}
+                          title={skill().description ?? skill().name}
+                        >
+                          {skill().name}
+                        </span>
+                        <Show when={skill().specialties && skill().specialties!.length > 0}>
+                          <span
+                            style={{
+                              color: "var(--fg-muted, var(--fg-soft))",
+                              "font-size": "10px",
+                            }}
+                          >
+                            {skill().specialties![0]}
+                          </span>
+                        </Show>
+                      </button>
+                    </div>
+                  );
+                }}
+              </For>
+            </div>
           </Show>
         </div>
       </aside>

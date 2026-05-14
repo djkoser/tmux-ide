@@ -14,7 +14,8 @@
  * is out of scope. If the host ever sources plan content from external
  * input, sanitize at the boundary.
  */
-import { createMemo, For, Show } from "solid-js";
+import { createMemo, createSignal, For, Show } from "solid-js";
+import { createVirtualizer } from "@tanstack/solid-virtual";
 import { marked } from "marked";
 import type { PlansPanelMountOptions, PlansPanelAuthorshipSection } from "../types";
 
@@ -115,6 +116,23 @@ export function PlansPanelView(props: PlansPanelViewProps) {
     const opts = props.options();
     return !opts.planData || !opts.planData.content;
   });
+
+  // Sections render markdown via innerHTML — each section can be very
+  // tall and a long plan can have hundreds. Virtualize with
+  // `measureElement` so the rendered heights flow back into the
+  // virtualizer's cache. createMemo wrappers per 9b139e5 keep
+  // For/spacer subscribed to the virtualizer's signal.
+  const [bodyEl, setBodyEl] = createSignal<HTMLDivElement | null>(null);
+  const sectionsVirtualizer = createVirtualizer({
+    get count() {
+      return sections().length;
+    },
+    getScrollElement: () => bodyEl(),
+    estimateSize: () => 120,
+    overscan: 3,
+  });
+  const sectionsVirtualItems = createMemo(() => sectionsVirtualizer.getVirtualItems());
+  const sectionsVirtualTotalSize = createMemo(() => sectionsVirtualizer.getTotalSize());
 
   return (
     <div
@@ -243,6 +261,7 @@ export function PlansPanelView(props: PlansPanelViewProps) {
       </Show>
 
       <div
+        ref={setBodyEl}
         data-testid="plans-panel-body"
         style={{
           flex: "1",
@@ -250,6 +269,7 @@ export function PlansPanelView(props: PlansPanelViewProps) {
           "overflow-y": "auto",
           padding: "12px 16px",
           "max-width": "768px",
+          position: "relative",
         }}
       >
         <Show
@@ -270,70 +290,98 @@ export function PlansPanelView(props: PlansPanelViewProps) {
             </div>
           }
         >
-          <For each={sections()}>
-            {(section, i) => {
-              const ai = isAiAuthor(section.author);
-              const borderColor = section.author
-                ? ai
-                  ? "var(--ai-color)"
-                  : "var(--human-color)"
-                : "transparent";
-              const bgColor = section.author
-                ? ai
-                  ? "var(--ai-bg)"
-                  : "var(--human-bg)"
-                : "transparent";
-              return (
-                <div
-                  data-testid="plans-panel-section"
-                  data-section-author={section.author ?? ""}
-                  data-section-index={i()}
-                  class="plans-panel-content"
-                  style={{
-                    "border-left": `2px solid ${borderColor}`,
-                    "padding-left": "12px",
-                    "margin-bottom": "4px",
-                    background: bgColor,
-                    "border-radius": "2px",
-                  }}
-                >
-                  <Show when={section.author && section.heading}>
+          <div
+            data-testid="plans-panel-spacer"
+            style={{
+              height: `${sectionsVirtualTotalSize()}px`,
+              width: "100%",
+              position: "relative",
+            }}
+          >
+            <For each={sectionsVirtualItems()}>
+              {(vItem) => {
+                const section = () => sections()[vItem.index]!;
+                const ai = () => isAiAuthor(section().author);
+                const borderColor = () =>
+                  section().author
+                    ? ai()
+                      ? "var(--ai-color)"
+                      : "var(--human-color)"
+                    : "transparent";
+                const bgColor = () =>
+                  section().author
+                    ? ai()
+                      ? "var(--ai-bg)"
+                      : "var(--human-bg)"
+                    : "transparent";
+                return (
+                  <div
+                    data-index={vItem.index}
+                    ref={(el) => sectionsVirtualizer.measureElement(el)}
+                    style={{
+                      position: "absolute",
+                      top: "0",
+                      left: "0",
+                      width: "100%",
+                      transform: `translateY(${vItem.start}px)`,
+                    }}
+                  >
                     <div
+                      data-testid="plans-panel-section"
+                      data-section-author={section().author ?? ""}
+                      data-section-index={vItem.index}
+                      class="plans-panel-content"
                       style={{
-                        display: "flex",
-                        "align-items": "center",
-                        gap: "8px",
+                        "border-left": `2px solid ${borderColor()}`,
+                        "padding-left": "12px",
                         "margin-bottom": "4px",
+                        background: bgColor(),
+                        "border-radius": "2px",
                       }}
                     >
-                      <span
-                        data-testid="plans-panel-author-badge"
-                        style={{
-                          "font-size": "9px",
-                          padding: "1px 4px",
-                          "border-radius": "2px",
-                          color: ai ? "var(--ai-color)" : "var(--human-color)",
-                          background: ai ? "var(--ai-badge)" : "var(--human-badge)",
-                        }}
-                      >
-                        {section.author}
-                      </span>
-                      <Show when={section.authorAt && formatAuthorTime(section.authorAt)}>
-                        {(t) => (
-                          <span style={{ "font-size": "9px", color: "var(--dimmer)" }}>{t()}</span>
-                        )}
+                      <Show when={section().author && section().heading}>
+                        <div
+                          style={{
+                            display: "flex",
+                            "align-items": "center",
+                            gap: "8px",
+                            "margin-bottom": "4px",
+                          }}
+                        >
+                          <span
+                            data-testid="plans-panel-author-badge"
+                            style={{
+                              "font-size": "9px",
+                              padding: "1px 4px",
+                              "border-radius": "2px",
+                              color: ai() ? "var(--ai-color)" : "var(--human-color)",
+                              background: ai() ? "var(--ai-badge)" : "var(--human-badge)",
+                            }}
+                          >
+                            {section().author}
+                          </span>
+                          <Show
+                            when={section().authorAt && formatAuthorTime(section().authorAt)}
+                          >
+                            {(t) => (
+                              <span style={{ "font-size": "9px", color: "var(--dimmer)" }}>
+                                {t()}
+                              </span>
+                            )}
+                          </Show>
+                        </div>
                       </Show>
+                      <div
+                        data-testid="plans-panel-markdown"
+                        // eslint-disable-next-line solid/no-innerhtml
+                        innerHTML={section().html}
+                      />
                     </div>
-                  </Show>
-                  <div
-                    data-testid="plans-panel-markdown"
-                    // eslint-disable-next-line solid/no-innerhtml
-                    innerHTML={section.html}
-                  />
-                </div>
-              );
-            }}
-          </For>
+                  </div>
+                );
+              }}
+            </For>
+          </div>
         </Show>
       </div>
     </div>
