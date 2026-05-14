@@ -1,4 +1,5 @@
 import { createSignal, createMemo, createEffect, For, Show, onCleanup, onMount } from "solid-js";
+import { createVirtualizer } from "@tanstack/solid-virtual";
 import { fetchProjectDiff, fetchProjectFileDiff, type DiffData, type DiffFileEntry } from "../api";
 import type { BaseMountOptions } from "../types";
 
@@ -54,7 +55,7 @@ export function ChangesView(props: ChangesViewProps) {
   const [selected, setSelected] = createSignal(0);
   const [filePatch, setFilePatch] = createSignal<string>("");
   const [diffStyle, setDiffStyle] = createSignal<DiffStyle>("unified");
-  let diffEl: HTMLDivElement | undefined;
+  const [diffEl, setDiffEl] = createSignal<HTMLDivElement | null>(null);
   let listEl: HTMLDivElement | undefined;
 
   async function refresh() {
@@ -141,7 +142,8 @@ export function ChangesView(props: ChangesViewProps) {
   createEffect(() => {
     void selected();
     void diffStyle();
-    if (diffEl) diffEl.scrollTop = 0;
+    const el = diffEl();
+    if (el) el.scrollTop = 0;
   });
 
   return (
@@ -332,12 +334,13 @@ export function ChangesView(props: ChangesViewProps) {
 
         {/* Right pane: patch viewer */}
         <div
-          ref={diffEl}
+          ref={setDiffEl}
           data-testid="v2-changes-patch"
           style={{
             "flex-grow": "1",
             overflow: "auto",
             "min-width": "0",
+            position: "relative",
           }}
         >
           <Show
@@ -355,8 +358,11 @@ export function ChangesView(props: ChangesViewProps) {
               </div>
             }
           >
-            <Show when={diffStyle() === "unified"} fallback={<SplitDiff lines={lines()} />}>
-              <UnifiedDiff lines={lines()} />
+            <Show
+              when={diffStyle() === "unified"}
+              fallback={<SplitDiff lines={lines()} scrollEl={diffEl} />}
+            >
+              <UnifiedDiff lines={lines()} scrollEl={diffEl} />
             </Show>
           </Show>
         </div>
@@ -377,15 +383,54 @@ export function ChangesView(props: ChangesViewProps) {
   );
 }
 
-function UnifiedDiff(props: { lines: DiffLine[] }) {
+interface DiffViewProps {
+  lines: DiffLine[];
+  scrollEl: () => HTMLDivElement | null;
+}
+
+const DIFF_LINE_HEIGHT = 17; // font-size 11px × line-height 1.5 ≈ 16.5px
+
+function UnifiedDiff(props: DiffViewProps) {
+  const virtualizer = createVirtualizer({
+    get count() {
+      return props.lines.length;
+    },
+    getScrollElement: () => props.scrollEl(),
+    estimateSize: () => DIFF_LINE_HEIGHT,
+    overscan: 16,
+  });
   return (
-    <div style={{ "font-size": "11px", "line-height": "1.5" }}>
-      <For each={props.lines}>
-        {(line) => {
-          const c = colorFor(line.kind);
+    <div
+      data-testid="v2-changes-unified-spacer"
+      style={{
+        "font-size": "11px",
+        "line-height": "1.5",
+        height: `${virtualizer.getTotalSize()}px`,
+        width: "100%",
+        position: "relative",
+      }}
+    >
+      <For each={virtualizer.getVirtualItems()}>
+        {(vItem) => {
+          const line = () => props.lines[vItem.index]!;
+          const c = () => colorFor(line().kind);
           return (
-            <div style={{ "background-color": c.bg, color: c.fg, "white-space": "pre" }}>
-              {line.text || " "}
+            <div
+              data-index={vItem.index}
+              style={{
+                position: "absolute",
+                top: "0",
+                left: "0",
+                width: "100%",
+                height: `${vItem.size}px`,
+                transform: `translateY(${vItem.start}px)`,
+                "background-color": c().bg,
+                color: c().fg,
+                "white-space": "pre",
+                "box-sizing": "border-box",
+              }}
+            >
+              {line().text || " "}
             </div>
           );
         }}
@@ -397,50 +442,72 @@ function UnifiedDiff(props: { lines: DiffLine[] }) {
 /**
  * Split view: emits each line into either the left column (`-` / context),
  * the right column (`+` / context), or both (context / hunk / meta). Hunk
- * markers and meta span both columns.
+ * markers and meta span both columns. Each virtualized row is a grid
+ * with two columns so the layout matches the original.
  */
-function SplitDiff(props: { lines: DiffLine[] }) {
+function SplitDiff(props: DiffViewProps) {
+  const virtualizer = createVirtualizer({
+    get count() {
+      return props.lines.length;
+    },
+    getScrollElement: () => props.scrollEl(),
+    estimateSize: () => DIFF_LINE_HEIGHT,
+    overscan: 16,
+  });
   return (
     <div
+      data-testid="v2-changes-split-spacer"
       style={{
-        display: "grid",
-        "grid-template-columns": "1fr 1fr",
-        gap: "0",
         "font-size": "11px",
         "line-height": "1.5",
+        height: `${virtualizer.getTotalSize()}px`,
+        width: "100%",
+        position: "relative",
       }}
     >
-      <For each={props.lines}>
-        {(line) => {
-          const c = colorFor(line.kind);
-          if (line.kind === "hunk" || line.kind === "meta") {
+      <For each={virtualizer.getVirtualItems()}>
+        {(vItem) => {
+          const line = () => props.lines[vItem.index]!;
+          const c = () => colorFor(line().kind);
+          const rowStyle = {
+            position: "absolute" as const,
+            top: "0",
+            left: "0",
+            width: "100%",
+            height: `${vItem.size}px`,
+            transform: `translateY(${vItem.start}px)`,
+            display: "grid",
+            "grid-template-columns": "1fr 1fr",
+            "box-sizing": "border-box" as const,
+          };
+          if (line().kind === "hunk" || line().kind === "meta") {
             return (
-              <>
+              <div data-index={vItem.index} style={rowStyle}>
                 <div
                   style={{
-                    "background-color": c.bg,
-                    color: c.fg,
+                    "background-color": c().bg,
+                    color: c().fg,
                     "white-space": "pre",
                     "grid-column": "1 / -1",
                   }}
                 >
-                  {line.text || " "}
+                  {line().text || " "}
                 </div>
-              </>
+              </div>
             );
           }
-          if (line.kind === "del") {
+          if (line().kind === "del") {
             return (
-              <>
+              <div data-index={vItem.index} style={rowStyle}>
                 <div
                   style={{
-                    "background-color": c.bg,
-                    color: c.fg,
+                    "background-color": c().bg,
+                    color: c().fg,
                     "white-space": "pre",
                     "border-right": "1px solid var(--theme-border-subdued, var(--border-weak))",
                   }}
                 >
-                  {line.text || " "}
+                  {line().text || " "}
                 </div>
                 <div
                   style={{
@@ -448,38 +515,38 @@ function SplitDiff(props: { lines: DiffLine[] }) {
                     "border-right": "1px solid var(--theme-border-subdued, var(--border-weak))",
                   }}
                 />
-              </>
+              </div>
             );
           }
-          if (line.kind === "add") {
+          if (line().kind === "add") {
             return (
-              <>
+              <div data-index={vItem.index} style={rowStyle}>
                 <div
                   style={{
                     "white-space": "pre",
                     "border-right": "1px solid var(--theme-border-subdued, var(--border-weak))",
                   }}
                 />
-                <div style={{ "background-color": c.bg, color: c.fg, "white-space": "pre" }}>
-                  {line.text || " "}
+                <div style={{ "background-color": c().bg, color: c().fg, "white-space": "pre" }}>
+                  {line().text || " "}
                 </div>
-              </>
+              </div>
             );
           }
           // context — both columns
           return (
-            <>
+            <div data-index={vItem.index} style={rowStyle}>
               <div
                 style={{
-                  color: c.fg,
+                  color: c().fg,
                   "white-space": "pre",
                   "border-right": "1px solid var(--theme-border-subdued, var(--border-weak))",
                 }}
               >
-                {line.text || " "}
+                {line().text || " "}
               </div>
-              <div style={{ color: c.fg, "white-space": "pre" }}>{line.text || " "}</div>
-            </>
+              <div style={{ color: c().fg, "white-space": "pre" }}>{line().text || " "}</div>
+            </div>
           );
         }}
       </For>

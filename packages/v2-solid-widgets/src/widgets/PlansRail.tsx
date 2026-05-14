@@ -13,8 +13,13 @@
  * picks up theme switches without any extra wiring.
  */
 import { createMemo, createSignal, For, Show, onCleanup, onMount } from "solid-js";
+import { createVirtualizer } from "@tanstack/solid-virtual";
 import { fetchProjectPlans, type PlanStatus, type PlanSummary } from "../api";
 import type { PlansRailMountOptions } from "../types";
+
+type PlansRailEntry =
+  | { kind: "group-header"; key: string; status: PlanStatus; count: number }
+  | { kind: "plan"; key: string; plan: PlanSummary };
 
 interface PlansRailViewProps {
   options: () => PlansRailMountOptions;
@@ -140,6 +145,38 @@ export function PlansRailView(props: PlansRailViewProps) {
     })),
   );
 
+  // Flatten the grouped plan list to feed the virtualizer with a
+  // single linear stream of (group-header | plan) entries. Collapsed
+  // groups contribute only their header.
+  const railEntries = createMemo<PlansRailEntry[]>(() => {
+    const out: PlansRailEntry[] = [];
+    for (const group of planGroups()) {
+      out.push({
+        kind: "group-header",
+        key: `H:${group.status}`,
+        status: group.status,
+        count: group.plans.length,
+      });
+      if (collapsed()[group.status]) continue;
+      for (const plan of group.plans) {
+        out.push({ kind: "plan", key: `P:${planFilename(plan)}`, plan });
+      }
+    }
+    return out;
+  });
+
+  const [railEl, setRailEl] = createSignal<HTMLDivElement | null>(null);
+  const railVirtualizer = createVirtualizer({
+    get count() {
+      return railEntries().length;
+    },
+    getScrollElement: () => railEl(),
+    // Group headers ≈ 32px, plan rows ≈ 60px (title + meta line).
+    estimateSize: (i) => (railEntries()[i]?.kind === "group-header" ? 32 : 60),
+    overscan: 6,
+    getItemKey: (i) => railEntries()[i]?.key ?? i,
+  });
+
   function toggleGroup(status: PlanStatus) {
     setCollapsed((cur) => ({ ...cur, [status]: !cur[status] }));
   }
@@ -261,207 +298,221 @@ export function PlansRailView(props: PlansRailViewProps) {
         </div>
       </Show>
       <div
+        ref={setRailEl}
         data-testid="plans-rail-list"
         style={{
           "min-height": "0",
           flex: "1",
           "overflow-y": "auto",
           display: error() && plans().length === 0 ? "none" : "block",
+          position: "relative",
         }}
       >
-        <For each={planGroups()}>
-          {(group) => {
-            const isCollapsed = () => Boolean(collapsed()[group.status]);
-            return (
-              <section
-                style={{
-                  "border-bottom": "1px solid var(--border-weak)",
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => toggleGroup(group.status)}
-                  aria-expanded={!isCollapsed()}
+        <div
+          data-testid="plans-rail-spacer"
+          style={{
+            height: `${railVirtualizer.getTotalSize()}px`,
+            width: "100%",
+            position: "relative",
+          }}
+        >
+          <For each={railVirtualizer.getVirtualItems()}>
+            {(vItem) => {
+              const entry = () => railEntries()[vItem.index];
+              return (
+                <Show when={entry()}>
+                <div
+                  data-index={vItem.index}
+                  ref={(el) => railVirtualizer.measureElement(el)}
                   style={{
-                    display: "flex",
-                    "align-items": "center",
-                    gap: "8px",
-                    height: "32px",
+                    position: "absolute",
+                    top: "0",
+                    left: "0",
                     width: "100%",
-                    padding: "0 12px",
-                    "text-align": "left",
-                    "font-size": "10px",
-                    "text-transform": "uppercase",
-                    "letter-spacing": "0.08em",
-                    color: "var(--dim)",
-                    background: "transparent",
-                    border: "none",
-                    cursor: "pointer",
+                    transform: `translateY(${vItem.start}px)`,
                   }}
                 >
-                  <span style={{ width: "12px", color: "var(--dimmer)" }}>
-                    {isCollapsed() ? "+" : "-"}
-                  </span>
-                  <span>{statusLabel(group.status)}</span>
-                  <span
-                    style={{
-                      "margin-left": "auto",
-                      "font-variant-numeric": "tabular-nums",
-                    }}
-                  >
-                    {group.plans.length}
-                  </span>
-                </button>
-                <Show when={!isCollapsed()}>
-                  <div>
-                    <For each={group.plans}>
-                      {(plan) => {
-                        const file = planFilename(plan);
-                        const isSelected = () => file === props.options().selectedFile;
-                        return (
-                          <button
-                            type="button"
-                            data-testid="plans-rail-item"
-                            data-plan-file={file}
-                            data-plan-status={plan.status}
-                            onClick={() => handleSelect(file)}
+                  <Show when={entry()!.kind === "group-header"}>
+                    {(() => {
+                      const e = entry()! as Extract<PlansRailEntry, { kind: "group-header" }>;
+                      const isCollapsed = () => Boolean(collapsed()[e.status]);
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => toggleGroup(e.status)}
+                          aria-expanded={!isCollapsed()}
+                          style={{
+                            display: "flex",
+                            "align-items": "center",
+                            gap: "8px",
+                            height: "32px",
+                            width: "100%",
+                            padding: "0 12px",
+                            "text-align": "left",
+                            "font-size": "10px",
+                            "text-transform": "uppercase",
+                            "letter-spacing": "0.08em",
+                            color: "var(--dim)",
+                            background: "transparent",
+                            border: "none",
+                            "border-bottom": "1px solid var(--border-weak)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <span style={{ width: "12px", color: "var(--dimmer)" }}>
+                            {isCollapsed() ? "+" : "-"}
+                          </span>
+                          <span>{statusLabel(e.status)}</span>
+                          <span
                             style={{
-                              display: "block",
-                              width: "100%",
-                              padding: "8px 12px",
-                              "text-align": "left",
-                              border: "none",
-                              background: isSelected() ? "var(--surface-active)" : "transparent",
-                              cursor: "pointer",
-                              transition: "background-color 80ms ease",
-                              "font-family": "inherit",
-                              "font-size": "inherit",
-                              color: "inherit",
-                            }}
-                            onMouseEnter={(e) => {
-                              if (!isSelected()) {
-                                e.currentTarget.style.background = "var(--surface-hover)";
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              if (!isSelected()) {
-                                e.currentTarget.style.background = "transparent";
-                              }
+                              "margin-left": "auto",
+                              "font-variant-numeric": "tabular-nums",
                             }}
                           >
-                            <div
+                            {e.count}
+                          </span>
+                        </button>
+                      );
+                    })()}
+                  </Show>
+                  <Show when={entry()!.kind === "plan"}>
+                    {(() => {
+                      const plan = (entry()! as Extract<PlansRailEntry, { kind: "plan" }>).plan;
+                      const file = planFilename(plan);
+                      const isSelected = () => file === props.options().selectedFile;
+                      return (
+                        <button
+                          type="button"
+                          data-testid="plans-rail-item"
+                          data-plan-file={file}
+                          data-plan-status={plan.status}
+                          onClick={() => handleSelect(file)}
+                          style={{
+                            display: "block",
+                            width: "100%",
+                            padding: "8px 12px",
+                            "text-align": "left",
+                            border: "none",
+                            background: isSelected() ? "var(--surface-active)" : "transparent",
+                            cursor: "pointer",
+                            transition: "background-color 80ms ease",
+                            "font-family": "inherit",
+                            "font-size": "inherit",
+                            color: "inherit",
+                          }}
+                          onMouseEnter={(ev) => {
+                            if (!isSelected()) {
+                              ev.currentTarget.style.background = "var(--surface-hover)";
+                            }
+                          }}
+                          onMouseLeave={(ev) => {
+                            if (!isSelected()) {
+                              ev.currentTarget.style.background = "transparent";
+                            }
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              "align-items": "center",
+                              gap: "8px",
+                            }}
+                          >
+                            <span
+                              aria-hidden="true"
                               style={{
-                                display: "flex",
-                                "align-items": "center",
-                                gap: "8px",
+                                height: "6px",
+                                width: "6px",
+                                "flex-shrink": "0",
+                                "border-radius": "9999px",
+                                background: STATUS_DOT[plan.status],
                               }}
-                            >
-                              <span
-                                aria-hidden="true"
-                                style={{
-                                  height: "6px",
-                                  width: "6px",
-                                  "flex-shrink": "0",
-                                  "border-radius": "9999px",
-                                  background: STATUS_DOT[plan.status],
-                                }}
-                              />
-                              <span
-                                style={{
-                                  "min-width": "0",
-                                  flex: "1",
-                                  overflow: "hidden",
-                                  "text-overflow": "ellipsis",
-                                  "white-space": "nowrap",
-                                  "font-size": "12px",
-                                  color: "var(--fg)",
-                                }}
-                              >
-                                {plan.title || plan.name}
-                              </span>
-                              <span
-                                style={{
-                                  "flex-shrink": "0",
-                                  "border-radius": "9999px",
-                                  padding: "1px 6px",
-                                  "font-size": "10px",
-                                  background: STATUS_PILL_BG[plan.status],
-                                  color: STATUS_PILL_FG[plan.status],
-                                }}
-                              >
-                                {statusLabel(plan.status)}
-                              </span>
-                            </div>
-                            <div
+                            />
+                            <span
                               style={{
-                                "margin-top": "4px",
-                                display: "flex",
                                 "min-width": "0",
-                                "align-items": "center",
-                                gap: "6px",
-                                "font-size": "10px",
-                                color: "var(--dimmer)",
+                                flex: "1",
+                                overflow: "hidden",
+                                "text-overflow": "ellipsis",
+                                "white-space": "nowrap",
+                                "font-size": "12px",
+                                color: "var(--fg)",
                               }}
                             >
-                              <span
-                                style={{
-                                  overflow: "hidden",
-                                  "text-overflow": "ellipsis",
-                                  "white-space": "nowrap",
-                                }}
-                              >
-                                @{planOwner(plan)}
-                              </span>
-                              <span>·</span>
-                              <span
-                                style={{
-                                  "flex-shrink": "0",
-                                  "font-variant-numeric": "tabular-nums",
-                                }}
-                              >
-                                {formatRelativeTime(plan.updated ?? plan.completed)}
-                              </span>
-                              <For each={(plan.tags ?? []).slice(0, 2)}>
-                                {(tag) => (
-                                  <span
-                                    style={{
-                                      "min-width": "0",
-                                      "max-width": "80px",
-                                      overflow: "hidden",
-                                      "text-overflow": "ellipsis",
-                                      "white-space": "nowrap",
-                                      "border-radius": "4px",
-                                      background: "var(--surface)",
-                                      padding: "0 4px",
-                                      color: "var(--fg-secondary)",
-                                    }}
-                                  >
-                                    #{tag}
-                                  </span>
-                                )}
-                              </For>
-                            </div>
-                          </button>
-                        );
-                      }}
-                    </For>
-                    <Show when={group.plans.length === 0}>
-                      <div
-                        style={{
-                          padding: "0 12px 12px",
-                          "font-size": "10px",
-                          color: "var(--dimmer)",
-                        }}
-                      >
-                        none
-                      </div>
-                    </Show>
-                  </div>
+                              {plan.title || plan.name}
+                            </span>
+                            <span
+                              style={{
+                                "flex-shrink": "0",
+                                "border-radius": "9999px",
+                                padding: "1px 6px",
+                                "font-size": "10px",
+                                background: STATUS_PILL_BG[plan.status],
+                                color: STATUS_PILL_FG[plan.status],
+                              }}
+                            >
+                              {statusLabel(plan.status)}
+                            </span>
+                          </div>
+                          <div
+                            style={{
+                              "margin-top": "4px",
+                              display: "flex",
+                              "min-width": "0",
+                              "align-items": "center",
+                              gap: "6px",
+                              "font-size": "10px",
+                              color: "var(--dimmer)",
+                            }}
+                          >
+                            <span
+                              style={{
+                                overflow: "hidden",
+                                "text-overflow": "ellipsis",
+                                "white-space": "nowrap",
+                              }}
+                            >
+                              @{planOwner(plan)}
+                            </span>
+                            <span>·</span>
+                            <span
+                              style={{
+                                "flex-shrink": "0",
+                                "font-variant-numeric": "tabular-nums",
+                              }}
+                            >
+                              {formatRelativeTime(plan.updated ?? plan.completed)}
+                            </span>
+                            <For each={(plan.tags ?? []).slice(0, 2)}>
+                              {(tag) => (
+                                <span
+                                  style={{
+                                    "min-width": "0",
+                                    "max-width": "80px",
+                                    overflow: "hidden",
+                                    "text-overflow": "ellipsis",
+                                    "white-space": "nowrap",
+                                    "border-radius": "4px",
+                                    background: "var(--surface)",
+                                    padding: "0 4px",
+                                    color: "var(--fg-secondary)",
+                                  }}
+                                >
+                                  #{tag}
+                                </span>
+                              )}
+                            </For>
+                          </div>
+                        </button>
+                      );
+                    })()}
+                  </Show>
+                </div>
                 </Show>
-              </section>
-            );
-          }}
-        </For>
+              );
+            }}
+          </For>
+        </div>
       </div>
 
       {/* Footer — New plan */}

@@ -23,7 +23,8 @@
  *     data-costs-kpi, data-costs-milestone, data-costs-agent,
  *     data-costs-timeline-row.
  */
-import { createMemo, For, Show } from "solid-js";
+import { createMemo, createSignal, For, Show } from "solid-js";
+import { createVirtualizer } from "@tanstack/solid-virtual";
 import type {
   CostsAgentEntry,
   CostsDashboardMountOptions,
@@ -89,6 +90,19 @@ export function CostsDashboardView(props: CostsDashboardViewProps) {
     const list = agents();
     if (list.length === 0) return 0;
     return list.reduce((s, a) => s + a.utilization, 0) / list.length;
+  });
+
+  // Timeline section virtualizer: the section is bounded to 192px
+  // tall, but a high `timelineLimit` can pack thousands of snapshot
+  // rows into that scroll region.
+  const [timelineEl, setTimelineEl] = createSignal<HTMLDivElement | null>(null);
+  const timelineVirtualizer = createVirtualizer({
+    get count() {
+      return timeline().length;
+    },
+    getScrollElement: () => timelineEl(),
+    estimateSize: () => 20,
+    overscan: 6,
   });
 
   return (
@@ -466,51 +480,76 @@ export function CostsDashboardView(props: CostsDashboardViewProps) {
               <section data-costs-section="timeline">
                 <SectionLabel>Timeline</SectionLabel>
                 <div
+                  ref={setTimelineEl}
                   data-testid="costs-dashboard-timeline"
                   style={{
                     "max-height": "192px",
                     "overflow-y": "auto",
+                    position: "relative",
                   }}
                 >
-                  <div style={{ display: "flex", "flex-direction": "column", gap: "1px" }}>
-                    <For each={timeline()}>
-                      {(entry) => (
-                        <div
-                          data-costs-timeline-row
-                          style={{
-                            display: "flex",
-                            "align-items": "center",
-                            gap: "12px",
-                            "border-radius": "4px",
-                            background: "var(--surface)",
-                            padding: "2px 8px",
-                            "font-size": "11px",
-                            "font-variant-numeric": "tabular-nums",
-                            color: "var(--dim)",
-                            width: "max-content",
-                            "min-width": "100%",
-                          }}
-                        >
-                          <span style={{ width: "80px", "flex-shrink": "0" }}>
-                            {fmtTime(entry.timestamp)}
-                          </span>
-                          <span>
-                            done:
-                            <span style={{ color: "var(--green)" }}>{entry.completedTasks}</span>
-                          </span>
-                          <span>
-                            active:
-                            <span style={{ color: "var(--yellow)" }}>{entry.activeTasks}</span>
-                          </span>
-                          <span>
-                            busy:
-                            <span style={{ color: "var(--accent)" }}>{entry.busyAgents}</span>
-                          </span>
-                          <span>
-                            idle:<span style={{ color: "var(--fg)" }}>{entry.idleAgents}</span>
-                          </span>
-                        </div>
-                      )}
+                  <div
+                    data-testid="costs-dashboard-timeline-spacer"
+                    style={{
+                      height: `${timelineVirtualizer.getTotalSize()}px`,
+                      width: "100%",
+                      position: "relative",
+                    }}
+                  >
+                    <For each={timelineVirtualizer.getVirtualItems()}>
+                      {(vItem) => {
+                        const entry = () => timeline()[vItem.index]!;
+                        return (
+                          <div
+                            data-index={vItem.index}
+                            data-costs-timeline-row
+                            ref={(el) => timelineVirtualizer.measureElement(el)}
+                            style={{
+                              position: "absolute",
+                              top: "0",
+                              left: "0",
+                              width: "100%",
+                              transform: `translateY(${vItem.start}px)`,
+                              display: "flex",
+                              "align-items": "center",
+                              gap: "12px",
+                              "border-radius": "4px",
+                              background: "var(--surface)",
+                              padding: "2px 8px",
+                              "font-size": "11px",
+                              "font-variant-numeric": "tabular-nums",
+                              color: "var(--dim)",
+                              "box-sizing": "border-box",
+                            }}
+                          >
+                            <span style={{ width: "80px", "flex-shrink": "0" }}>
+                              {fmtTime(entry().timestamp)}
+                            </span>
+                            <span>
+                              done:
+                              <span style={{ color: "var(--green)" }}>
+                                {entry().completedTasks}
+                              </span>
+                            </span>
+                            <span>
+                              active:
+                              <span style={{ color: "var(--yellow)" }}>
+                                {entry().activeTasks}
+                              </span>
+                            </span>
+                            <span>
+                              busy:
+                              <span style={{ color: "var(--accent)" }}>
+                                {entry().busyAgents}
+                              </span>
+                            </span>
+                            <span>
+                              idle:
+                              <span style={{ color: "var(--fg)" }}>{entry().idleAgents}</span>
+                            </span>
+                          </div>
+                        );
+                      }}
                     </For>
                   </div>
                 </div>
