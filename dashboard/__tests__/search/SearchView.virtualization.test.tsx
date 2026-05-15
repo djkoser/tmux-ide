@@ -14,7 +14,13 @@ import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
 import { createStore } from "solid-js/store";
 import { Router, Route } from "@solidjs/router";
-import type { FileMatch, MatchRow, SearchService, SearchState } from "@/lib/search";
+import type {
+  FileMatch,
+  MatchRow,
+  SearchOptions,
+  SearchService,
+  SearchState,
+} from "@/lib/search";
 
 // Make `makeSearchService` return a stub backed by a seeded store so
 // the SearchView renders against deterministic data without hitting
@@ -65,8 +71,8 @@ function makeServiceStub(initial: Partial<SearchState> = {}): SearchService {
   });
   const [query, setQuery] = createSignal("needle");
   const [replaceWith, setReplaceWith] = createSignal("");
-  const [options, setOptions] = createSignal({
-    case: "smart" as const,
+  const [options, setOptions] = createSignal<SearchOptions>({
+    case: "smart",
     regex: false,
     include: "",
     exclude: "",
@@ -134,9 +140,7 @@ describe("SearchView virtualization", () => {
     // Far below 5200 — only the viewport + overscan slice.
     expect(renderedRows.length).toBeLessThan(200);
 
-    const spacer = container.querySelector<HTMLElement>(
-      "[data-testid='search-results-spacer']",
-    );
+    const spacer = container.querySelector<HTMLElement>("[data-testid='search-results-spacer']");
     expect(spacer).toBeTruthy();
     const spacerHeight = parseInt(spacer!.style.height, 10);
     // At least 5200 entries × ~22px average = 100k+ pixels.
@@ -152,9 +156,7 @@ describe("SearchView virtualization", () => {
 
     const { container, dispose } = mount(service);
 
-    const toggle = container.querySelector<HTMLButtonElement>(
-      "[data-testid='search-file-toggle']",
-    );
+    const toggle = container.querySelector<HTMLButtonElement>("[data-testid='search-file-toggle']");
     expect(toggle).toBeTruthy();
     // Initially expanded → one match row visible.
     expect(container.querySelectorAll("[data-testid='search-match-row']").length).toBe(1);

@@ -7,6 +7,7 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render } from "@solidjs/testing-library";
+import type { GitChange } from "@tmux-ide/contracts";
 import { CommitDialog } from "@/components/CommitDialog";
 
 afterEach(() => {
@@ -15,7 +16,7 @@ afterEach(() => {
 
 describe("CommitDialog virtualization", () => {
   it("renders only a viewport-sized window of rows for 1000 changed files", () => {
-    const unstaged = Array.from({ length: 1000 }, (_, i) => ({
+    const unstaged: GitChange[] = Array.from({ length: 1000 }, (_, i) => ({
       path: `src/file-${i.toString().padStart(4, "0")}.ts`,
       status: "modified",
       additions: 0,

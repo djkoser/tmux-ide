@@ -14,7 +14,7 @@ import type { LspDiagnostic } from "@/lib/lsp/api";
 function diag(i: number): LspDiagnostic {
   return {
     message: `problem ${i}`,
-    severity: (i % 4) + 1,
+    severity: ((i % 4) + 1) as 1 | 2 | 3 | 4,
     range: {
       start: { line: i, character: 0 },
       end: { line: i, character: 1 },
@@ -32,6 +32,7 @@ beforeEach(() => {
       filePath: "test.ts",
       language: "typescript",
       diagnostics: [],
+      fetchedAt: Date.now(),
     });
   }
 });
@@ -49,6 +50,7 @@ describe("ProblemsTab virtualization", () => {
       filePath: "src/big.ts",
       language: "typescript",
       diagnostics: Array.from({ length: 1000 }, (_, i) => diag(i)),
+      fetchedAt: Date.now(),
     });
 
     const { container } = render(() => <ProblemsTab />);
@@ -60,9 +62,7 @@ describe("ProblemsTab virtualization", () => {
     const rendered = container.querySelectorAll<HTMLElement>("[data-index]");
     expect(rendered.length).toBeLessThan(200);
 
-    const spacer = container.querySelector<HTMLElement>(
-      "[data-testid='v2-problems-spacer']",
-    );
+    const spacer = container.querySelector<HTMLElement>("[data-testid='v2-problems-spacer']");
     expect(spacer).toBeTruthy();
     const h = parseInt(spacer!.style.height, 10);
     // 1000 × at least 44px = 44000px.
