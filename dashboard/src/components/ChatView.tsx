@@ -129,7 +129,7 @@ export function ChatView(props: ChatViewProps) {
         threadId: id,
         sessionName: props.projectName,
         apiBaseUrl: API_BASE,
-        wsUrl: withWsBase("/ws"),
+        wsUrl: withWsBase("/ws/events"),
         bearerToken: resolveAuthToken(),
       });
       setReady(true);
