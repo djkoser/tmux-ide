@@ -11,6 +11,7 @@
  */
 
 import { createMemo, createSignal, For, Show } from "solid-js";
+import { createVirtualizer } from "@tanstack/solid-virtual";
 import { GitBranch, GitPullRequest, GitCommit } from "lucide-solid";
 import { useGitStatus } from "@/lib/git";
 import { CommitDialog } from "@/components/CommitDialog";
@@ -48,6 +49,25 @@ export function DiffsView(props: DiffsViewProps) {
   });
 
   const hasChanges = createMemo(() => rows().length > 0);
+
+  // A huge working-tree changeset (rename sweeps, generated-file
+  // churn) can list thousands of paths. createMemo wrappers per
+  // 9b139e5 keep the spacer + For subscribed to the virtualizer.
+  const [scrollEl, setScrollEl] = createSignal<HTMLDivElement | null>(null);
+  const virtualizer = createVirtualizer({
+    get count() {
+      return rows().length;
+    },
+    getScrollElement: () => scrollEl(),
+    estimateSize: () => 26,
+    overscan: 8,
+    getItemKey: (i) => {
+      const r = rows()[i];
+      return r ? `${r.group}:${r.path}` : i;
+    },
+  });
+  const virtualItems = createMemo(() => virtualizer.getVirtualItems());
+  const virtualTotalSize = createMemo(() => virtualizer.getTotalSize());
 
   return (
     <div
@@ -94,7 +114,7 @@ export function DiffsView(props: DiffsViewProps) {
         </span>
       </header>
 
-      <div class="min-h-0 flex-1 overflow-y-auto">
+      <div ref={setScrollEl} class="relative min-h-0 flex-1 overflow-y-auto">
         <Show
           when={hasChanges()}
           fallback={
@@ -105,23 +125,43 @@ export function DiffsView(props: DiffsViewProps) {
             </div>
           }
         >
-          <For each={rows()}>
-            {(row) => (
-              <div
-                data-testid={`diffs-row-${row.path}`}
-                data-group={row.group}
-                class="flex items-center gap-3 border-b border-[var(--border-weak,var(--border))] px-3 py-1 hover:bg-[var(--surface-hover,rgba(127,127,127,0.04))]"
-              >
-                <span class="w-14 text-[10px] uppercase text-[var(--dim)]">{row.status}</span>
-                <span class="flex-1 truncate font-mono" title={row.path}>
-                  {row.path}
-                </span>
-                <span class="text-[9px] uppercase tracking-wider text-[var(--dim)]">
-                  {row.group}
-                </span>
-              </div>
-            )}
-          </For>
+          <div
+            data-testid="diffs-view-spacer"
+            style={{
+              height: `${virtualTotalSize()}px`,
+              width: "100%",
+              position: "relative",
+            }}
+          >
+            <For each={virtualItems()}>
+              {(vItem) => {
+                const row = () => rows()[vItem.index]!;
+                return (
+                  <div
+                    data-index={vItem.index}
+                    data-testid={`diffs-row-${row().path}`}
+                    data-group={row().group}
+                    style={{
+                      position: "absolute",
+                      top: "0",
+                      left: "0",
+                      width: "100%",
+                      transform: `translateY(${vItem.start}px)`,
+                    }}
+                    class="flex items-center gap-3 border-b border-[var(--border-weak,var(--border))] px-3 py-1 hover:bg-[var(--surface-hover,rgba(127,127,127,0.04))]"
+                  >
+                    <span class="w-14 text-[10px] uppercase text-[var(--dim)]">{row().status}</span>
+                    <span class="flex-1 truncate font-mono" title={row().path}>
+                      {row().path}
+                    </span>
+                    <span class="text-[9px] uppercase tracking-wider text-[var(--dim)]">
+                      {row().group}
+                    </span>
+                  </div>
+                );
+              }}
+            </For>
+          </div>
         </Show>
       </div>
 

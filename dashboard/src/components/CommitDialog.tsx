@@ -16,6 +16,7 @@
  */
 
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
+import { createVirtualizer } from "@tanstack/solid-virtual";
 import { Effect, Exit, Cause } from "effect";
 import type { GitChange, GitErrorPayload } from "@tmux-ide/contracts";
 import { commitChanges, GitApiError, stagePaths } from "@/lib/git";
@@ -73,6 +74,22 @@ export function CommitDialog(props: CommitDialogProps) {
     }
     return merged;
   });
+
+  // Large changesets (rename sweeps, generated churn) can list
+  // thousands of files in the checkbox picker. createMemo wrappers
+  // per 9b139e5 keep the spacer + For subscribed to the virtualizer.
+  const [filesEl, setFilesEl] = createSignal<HTMLDivElement | null>(null);
+  const virtualizer = createVirtualizer({
+    get count() {
+      return rows().length;
+    },
+    getScrollElement: () => filesEl(),
+    estimateSize: () => 28,
+    overscan: 8,
+    getItemKey: (i) => rows()[i]?.path ?? i,
+  });
+  const virtualItems = createMemo(() => virtualizer.getVirtualItems());
+  const virtualTotalSize = createMemo(() => virtualizer.getTotalSize());
 
   // Default selection: every staged path + nothing from unstaged. Re-
   // computed when the dialog opens so prior selections don't leak
@@ -186,8 +203,9 @@ export function CommitDialog(props: CommitDialogProps) {
             <div class="flex min-h-0 flex-1 flex-col gap-1">
               <span class="text-[10px] uppercase tracking-wider text-[var(--dim)]">Files</span>
               <div
+                ref={setFilesEl}
                 data-testid="commit-dialog-files"
-                class="min-h-0 flex-1 overflow-y-auto rounded border border-[var(--border-weak,var(--border))]"
+                class="relative min-h-0 flex-1 overflow-y-auto rounded border border-[var(--border-weak,var(--border))]"
               >
                 <Show
                   when={rows().length > 0}
@@ -197,34 +215,54 @@ export function CommitDialog(props: CommitDialogProps) {
                     </div>
                   }
                 >
-                  <For each={rows()}>
-                    {(row) => (
-                      <label
-                        data-testid={`commit-dialog-row-${row.path}`}
-                        data-staged={row.staged ? "true" : "false"}
-                        class="flex items-center gap-2 border-b border-[var(--border-weak,var(--border))] px-2 py-1 last:border-b-0 hover:bg-[var(--surface-hover,rgba(127,127,127,0.06))]"
-                      >
-                        <input
-                          type="checkbox"
-                          data-testid={`commit-dialog-check-${row.path}`}
-                          checked={selected().has(row.path)}
-                          disabled={busy()}
-                          onChange={() => toggle(row.path)}
-                        />
-                        <span class="w-12 text-[10px] uppercase text-[var(--dim)]">
-                          {row.status}
-                        </span>
-                        <span class="flex-1 truncate font-mono" title={row.path}>
-                          {row.path}
-                        </span>
-                        <Show when={row.staged}>
-                          <span class="text-[9px] uppercase tracking-wider text-[var(--accent)]">
-                            staged
-                          </span>
-                        </Show>
-                      </label>
-                    )}
-                  </For>
+                  <div
+                    data-testid="commit-dialog-files-spacer"
+                    style={{
+                      height: `${virtualTotalSize()}px`,
+                      width: "100%",
+                      position: "relative",
+                    }}
+                  >
+                    <For each={virtualItems()}>
+                      {(vItem) => {
+                        const row = () => rows()[vItem.index]!;
+                        return (
+                          <label
+                            data-index={vItem.index}
+                            data-testid={`commit-dialog-row-${row().path}`}
+                            data-staged={row().staged ? "true" : "false"}
+                            style={{
+                              position: "absolute",
+                              top: "0",
+                              left: "0",
+                              width: "100%",
+                              transform: `translateY(${vItem.start}px)`,
+                            }}
+                            class="flex items-center gap-2 border-b border-[var(--border-weak,var(--border))] px-2 py-1 hover:bg-[var(--surface-hover,rgba(127,127,127,0.06))]"
+                          >
+                            <input
+                              type="checkbox"
+                              data-testid={`commit-dialog-check-${row().path}`}
+                              checked={selected().has(row().path)}
+                              disabled={busy()}
+                              onChange={() => toggle(row().path)}
+                            />
+                            <span class="w-12 text-[10px] uppercase text-[var(--dim)]">
+                              {row().status}
+                            </span>
+                            <span class="flex-1 truncate font-mono" title={row().path}>
+                              {row().path}
+                            </span>
+                            <Show when={row().staged}>
+                              <span class="text-[9px] uppercase tracking-wider text-[var(--accent)]">
+                                staged
+                              </span>
+                            </Show>
+                          </label>
+                        );
+                      }}
+                    </For>
+                  </div>
                 </Show>
               </div>
             </div>

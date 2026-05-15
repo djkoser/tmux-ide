@@ -25,10 +25,16 @@
  * delegation pattern in FileTree.tsx (avoids per-row listeners).
  */
 import { createMemo, createSignal, For, Show } from "solid-js";
+import { createVirtualizer } from "@tanstack/solid-virtual";
 import type { ExplorerDashboardMountOptions, ExplorerNode } from "../types";
 
 interface ExplorerDashboardViewProps {
   options: () => ExplorerDashboardMountOptions;
+}
+
+interface FlatRow {
+  node: ExplorerNode;
+  depth: number;
 }
 
 function filterEntries(
@@ -37,6 +43,28 @@ function filterEntries(
 ): ExplorerNode[] {
   if (!gitignoreFilter) return [...entries];
   return entries.filter((e) => !e.ignored);
+}
+
+/**
+ * Walk the recursive tree into a flat row list honoring the
+ * expansion predicate so collapsed subtrees are pruned. This makes
+ * the (previously recursive) tree a single linear list the
+ * virtualizer can window.
+ */
+function flattenTree(
+  entries: ReadonlyArray<ExplorerNode>,
+  gitignoreFilter: boolean,
+  isExpanded: (path: string) => boolean,
+  depth = 0,
+  out: FlatRow[] = [],
+): FlatRow[] {
+  for (const node of filterEntries(entries, gitignoreFilter)) {
+    out.push({ node, depth });
+    if (node.isDir && isExpanded(node.path) && node.children && node.children.length > 0) {
+      flattenTree(node.children, gitignoreFilter, isExpanded, depth + 1, out);
+    }
+  }
+  return out;
 }
 
 export function ExplorerDashboardView(props: ExplorerDashboardViewProps) {
@@ -106,8 +134,32 @@ export function ExplorerDashboardView(props: ExplorerDashboardViewProps) {
     props.options().onSelect?.(path, isDir);
   }
 
+  // Flatten the recursive tree to a single linear row list so the
+  // virtualizer can window it. Recomputes when the tree, gitignore
+  // filter, or any expand/collapse state changes.
+  const flatRows = createMemo<FlatRow[]>(() =>
+    flattenTree(visibleRoots(), gitignoreFilter(), isExpanded),
+  );
+
+  const [scrollEl, setScrollEl] = createSignal<HTMLDivElement | null>(null);
+  const virtualizer = createVirtualizer({
+    get count() {
+      return flatRows().length;
+    },
+    getScrollElement: () => scrollEl(),
+    estimateSize: () => 22,
+    overscan: 8,
+    getItemKey: (i) => flatRows()[i]?.node.path ?? i,
+  });
+  // Inline `.getVirtualItems()` / `.getTotalSize()` inside JSX does
+  // not subscribe to the virtualizer's signal — wrap in createMemo
+  // per commit 9b139e5 so the spacer + For re-render on scroll.
+  const virtualItems = createMemo(() => virtualizer.getVirtualItems());
+  const virtualTotalSize = createMemo(() => virtualizer.getTotalSize());
+
   return (
     <div
+      ref={setScrollEl}
       data-testid="explorer-dashboard-solid"
       data-explorer-tree
       role="tree"
@@ -121,10 +173,11 @@ export function ExplorerDashboardView(props: ExplorerDashboardViewProps) {
         "font-size": "12px",
         color: "var(--fg)",
         "background-color": "var(--bg-weak, var(--bg))",
+        position: "relative",
       }}
     >
       <Show
-        when={visibleRoots().length > 0}
+        when={flatRows().length > 0}
         fallback={
           <div
             data-testid="explorer-dashboard-empty"
@@ -138,17 +191,40 @@ export function ExplorerDashboardView(props: ExplorerDashboardViewProps) {
           </div>
         }
       >
-        <For each={visibleRoots()}>
-          {(entry) => (
-            <ExplorerRow
-              entry={entry}
-              depth={0}
-              gitignoreFilter={gitignoreFilter}
-              selectedPath={selectedPath}
-              isExpanded={isExpanded}
-            />
-          )}
-        </For>
+        <div
+          data-testid="explorer-dashboard-spacer"
+          style={{
+            height: `${virtualTotalSize()}px`,
+            width: "100%",
+            position: "relative",
+          }}
+        >
+          <For each={virtualItems()}>
+            {(vItem) => {
+              const row = () => flatRows()[vItem.index]!;
+              return (
+                <div
+                  data-index={vItem.index}
+                  style={{
+                    position: "absolute",
+                    top: "0",
+                    left: "0",
+                    width: "100%",
+                    transform: `translateY(${vItem.start}px)`,
+                  }}
+                >
+                  <ExplorerRow
+                    entry={row().node}
+                    depth={row().depth}
+                    gitignoreFilter={gitignoreFilter}
+                    selectedPath={selectedPath}
+                    isExpanded={isExpanded}
+                  />
+                </div>
+              );
+            }}
+          </For>
+        </div>
       </Show>
     </div>
   );
@@ -174,90 +250,75 @@ function ExplorerRow(props: ExplorerRowProps) {
   const indentPx = () => `${props.depth * 14 + 6}px`;
 
   return (
-    <div>
-      <div
-        role="treeitem"
-        aria-selected={isSelected()}
-        aria-expanded={props.entry.isDir ? open() : undefined}
-        data-explorer-row={props.entry.path}
-        data-explorer-is-dir={props.entry.isDir ? "true" : "false"}
-        data-explorer-selected={isSelected() ? "true" : "false"}
-        data-explorer-ignored={isIgnored() ? "true" : "false"}
-        data-explorer-depth={props.depth}
+    <div
+      role="treeitem"
+      aria-selected={isSelected()}
+      aria-expanded={props.entry.isDir ? open() : undefined}
+      data-explorer-row={props.entry.path}
+      data-explorer-is-dir={props.entry.isDir ? "true" : "false"}
+      data-explorer-selected={isSelected() ? "true" : "false"}
+      data-explorer-ignored={isIgnored() ? "true" : "false"}
+      data-explorer-depth={props.depth}
+      style={{
+        display: "flex",
+        "align-items": "center",
+        gap: "4px",
+        height: "22px",
+        "padding-left": indentPx(),
+        "padding-right": "8px",
+        cursor: "pointer",
+        background: isSelected() ? "var(--surface-active, var(--surface))" : "transparent",
+        color: isSelected() ? "var(--accent)" : isIgnored() ? "var(--dim)" : "var(--fg)",
+        "user-select": "none",
+        opacity: isIgnored() && !props.gitignoreFilter() ? "0.6" : "1",
+      }}
+      onMouseEnter={(e) => {
+        if (!isSelected()) {
+          e.currentTarget.style.background = "var(--surface-hover, var(--surface))";
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!isSelected()) {
+          e.currentTarget.style.background = "transparent";
+        }
+      }}
+    >
+      <span
+        aria-hidden="true"
         style={{
-          display: "flex",
-          "align-items": "center",
-          gap: "4px",
-          height: "22px",
-          "padding-left": indentPx(),
-          "padding-right": "8px",
-          cursor: "pointer",
-          background: isSelected() ? "var(--surface-active, var(--surface))" : "transparent",
-          color: isSelected() ? "var(--accent)" : isIgnored() ? "var(--dim)" : "var(--fg)",
-          "user-select": "none",
-          opacity: isIgnored() && !props.gitignoreFilter() ? "0.6" : "1",
-        }}
-        onMouseEnter={(e) => {
-          if (!isSelected()) {
-            e.currentTarget.style.background = "var(--surface-hover, var(--surface))";
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!isSelected()) {
-            e.currentTarget.style.background = "transparent";
-          }
+          width: "10px",
+          "flex-shrink": "0",
+          color: "var(--fg-muted, var(--dim))",
+          "text-align": "center",
+          "font-size": "10px",
         }}
       >
-        <span
-          aria-hidden="true"
-          style={{
-            width: "10px",
-            "flex-shrink": "0",
-            color: "var(--fg-muted, var(--dim))",
-            "text-align": "center",
-            "font-size": "10px",
-          }}
-        >
-          <Show when={props.entry.isDir} fallback={"·"}>
-            {open() ? "▾" : "▸"}
-          </Show>
-        </span>
-        <span
-          style={{
-            "min-width": "0",
-            flex: "1",
-            overflow: "hidden",
-            "text-overflow": "ellipsis",
-            "white-space": "nowrap",
-          }}
-        >
-          {props.entry.name}
-        </span>
-        <Show when={props.entry.isDir && visibleChildren().length > 0}>
-          <span
-            style={{
-              "flex-shrink": "0",
-              "font-size": "10px",
-              color: "var(--dim)",
-              "font-variant-numeric": "tabular-nums",
-            }}
-          >
-            {visibleChildren().length}
-          </span>
+        <Show when={props.entry.isDir} fallback={"·"}>
+          {open() ? "▾" : "▸"}
         </Show>
-      </div>
-      <Show when={props.entry.isDir && open()}>
-        <For each={visibleChildren()}>
-          {(child) => (
-            <ExplorerRow
-              entry={child}
-              depth={props.depth + 1}
-              gitignoreFilter={props.gitignoreFilter}
-              selectedPath={props.selectedPath}
-              isExpanded={props.isExpanded}
-            />
-          )}
-        </For>
+      </span>
+      <span
+        style={{
+          "min-width": "0",
+          flex: "1",
+          overflow: "hidden",
+          "text-overflow": "ellipsis",
+          "white-space": "nowrap",
+        }}
+      >
+        {props.entry.name}
+      </span>
+      <Show when={props.entry.isDir && visibleChildren().length > 0}>
+        <span
+          style={{
+            "flex-shrink": "0",
+            "font-size": "10px",
+            color: "var(--dim)",
+            "font-variant-numeric": "tabular-nums",
+          }}
+        >
+          {visibleChildren().length}
+        </span>
       </Show>
     </div>
   );
