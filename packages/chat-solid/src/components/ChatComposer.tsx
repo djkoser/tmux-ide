@@ -10,6 +10,12 @@ import {
 } from "solid-js";
 import { ComposerCommandMenu } from "./ComposerCommandMenu";
 import { ComposerMentionMenu } from "./ComposerMentionMenu";
+import {
+  buildImageAttachments,
+  dragHasFiles,
+  imageFilesFromClipboard,
+  imageFilesFromDataTransfer,
+} from "../lib/composerImageAttach";
 import { searchSlashCommands } from "../lib/slashCommandSearch";
 import { detectSlashContext } from "../lib/slashCursor";
 import { detectMentionContext } from "../lib/mentionCursor";
@@ -81,6 +87,13 @@ export function ChatComposer(props: {
   onPrefillPromptConsumed?: () => void;
   onAddAttachment(attachment: ComposerAttachment): void;
   onRemoveAttachment(index: number): void;
+  /**
+   * Fired when a paste / drop image attachment is rejected (wrong
+   * type, over the per-file size cap, or past the per-message
+   * count). The composer also shows the message inline above the
+   * textarea, but hosts can surface a toast too. Optional.
+   */
+  onAttachmentError?(message: string): void;
   /**
    * Optional reorder callback wired to the `AttachmentCarousel`
    * arrow buttons. Receives the source + destination indices; the
@@ -207,6 +220,95 @@ export function ChatComposer(props: {
   const [commandHighlight, setCommandHighlight] = createSignal(0);
   const [mentionHighlight, setMentionHighlight] = createSignal(0);
   const [pickerOpen, setPickerOpen] = createSignal(false);
+  // Paste / drop image-attachment state. `dragDepth` mirrors the
+  // upstream ref trick — dragenter/leave fire per descendant, so a
+  // plain boolean flickers; counting depth keeps the overlay stable
+  // until the cursor truly leaves the composer surface.
+  const [dragOver, setDragOver] = createSignal(false);
+  const [attachError, setAttachError] = createSignal<string | null>(null);
+  let dragDepth = 0;
+  let attachErrorTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function raiseAttachError(message: string | null): void {
+    if (attachErrorTimer) {
+      clearTimeout(attachErrorTimer);
+      attachErrorTimer = null;
+    }
+    setAttachError(message);
+    if (message) {
+      props.onAttachmentError?.(message);
+      // Auto-dismiss the inline line so it doesn't linger forever.
+      attachErrorTimer = setTimeout(() => {
+        attachErrorTimer = null;
+        setAttachError(null);
+      }, 6000);
+    }
+  }
+
+  async function ingestImageFiles(files: ReadonlyArray<File>): Promise<void> {
+    if (files.length === 0) return;
+    const { attachments, error } = await buildImageAttachments(files, props.attachments().length);
+    for (const attachment of attachments) {
+      props.onAddAttachment(attachment);
+    }
+    raiseAttachError(error);
+  }
+
+  function handleComposerPaste(event: ClipboardEvent): void {
+    if (props.disabled()) return;
+    const images = imageFilesFromClipboard(event.clipboardData);
+    if (images.length === 0) return;
+    event.preventDefault();
+    void ingestImageFiles(images);
+  }
+
+  function handleComposerDragEnter(event: DragEvent): void {
+    if (props.disabled() || !dragHasFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    dragDepth += 1;
+    setDragOver(true);
+  }
+
+  function handleComposerDragOver(event: DragEvent): void {
+    if (props.disabled() || !dragHasFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    setDragOver(true);
+  }
+
+  function handleComposerDragLeave(event: DragEvent): void {
+    if (!dragHasFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    const next = event.relatedTarget;
+    if (
+      next instanceof Node &&
+      event.currentTarget instanceof Node &&
+      event.currentTarget.contains(next)
+    ) {
+      return;
+    }
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) setDragOver(false);
+  }
+
+  function handleComposerDrop(event: DragEvent): void {
+    if (!dragHasFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    dragDepth = 0;
+    setDragOver(false);
+    if (props.disabled()) return;
+    const images = imageFilesFromDataTransfer(event.dataTransfer);
+    if (images.length === 0) {
+      raiseAttachError("Only image files can be dropped here.");
+      return;
+    }
+    void ingestImageFiles(images);
+    textarea()?.focus();
+  }
+
+  onCleanup(() => {
+    if (attachErrorTimer) clearTimeout(attachErrorTimer);
+  });
   const slashContext = createMemo(() => detectSlashContext(value(), caret()));
   const commandQuery = createMemo(() => {
     const context = slashContext();
@@ -585,7 +687,36 @@ export function ChatComposer(props: {
           />
         </Show>
       </Show>
-      <div class="relative flex min-h-[88px] gap-2 rounded-md border border-border bg-surface p-2 focus-within:border-accent">
+      <Show when={attachError()}>
+        {(message) => (
+          <div
+            data-testid="composer-attach-error"
+            role="status"
+            class="mb-2 rounded-md border border-red/40 bg-red/10 px-2.5 py-1.5 text-[12px] text-red"
+          >
+            {message()}
+          </div>
+        )}
+      </Show>
+      <div
+        data-testid="composer-surface"
+        data-drag-over={dragOver() ? "true" : "false"}
+        class={`relative flex min-h-[88px] gap-2 rounded-md border bg-surface p-2 focus-within:border-accent ${
+          dragOver() ? "border-accent bg-accent/5" : "border-border"
+        }`}
+        onDragEnter={handleComposerDragEnter}
+        onDragOver={handleComposerDragOver}
+        onDragLeave={handleComposerDragLeave}
+        onDrop={handleComposerDrop}
+      >
+        <Show when={dragOver()}>
+          <div
+            data-testid="composer-drop-overlay"
+            class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-md border-2 border-dashed border-accent bg-bg/80 text-[12px] font-medium text-accent"
+          >
+            Drop images to attach
+          </div>
+        </Show>
         <ComposerCommandMenu
           open={showCommands}
           results={searchResults}
@@ -618,6 +749,7 @@ export function ChatComposer(props: {
           onKeyUp={(event) => syncCaret(event.currentTarget)}
           onClick={(event) => syncCaret(event.currentTarget)}
           onSelect={(event) => syncCaret(event.currentTarget)}
+          onPaste={handleComposerPaste}
         />
         <div class="relative flex flex-shrink-0 flex-col justify-end gap-2">
           <button
@@ -674,10 +806,7 @@ export function ChatComposer(props: {
         </div>
       </div>
       <Show when={showInlineFooter()}>
-        <div
-          data-testid="composer-footer-row"
-          class="mt-2 flex flex-wrap items-center gap-1"
-        >
+        <div data-testid="composer-footer-row" class="mt-2 flex flex-wrap items-center gap-1">
           <ComposerFooterStrip
             activePlan={() => props.activePlan?.() ?? false}
             interactionMode={() => props.interactionMode?.() ?? "default"}
