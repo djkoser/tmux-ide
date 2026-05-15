@@ -41,19 +41,12 @@ function mount(opts: { isResponding?: boolean; requestId?: string } = {}) {
   return { container, dispose, onRespond, setIsResponding };
 }
 
-const decisions: ProviderApprovalDecision[] = [
-  "cancel",
-  "decline",
-  "acceptForSession",
-  "accept",
-];
+const decisions: ProviderApprovalDecision[] = ["cancel", "decline", "acceptForSession", "accept"];
 
 describe("ComposerPendingApprovalActions", () => {
   it.each(decisions)("dispatches %s with the active requestId", (decision) => {
     const { container, dispose, onRespond } = mount({ requestId: "req-XYZ" });
-    const btn = container.querySelector<HTMLButtonElement>(
-      `button[data-decision='${decision}']`,
-    );
+    const btn = container.querySelector<HTMLButtonElement>(`button[data-decision='${decision}']`);
     expect(btn).toBeTruthy();
     btn!.click();
     expect(onRespond).toHaveBeenCalledExactlyOnceWith("req-XYZ", decision);
@@ -64,9 +57,7 @@ describe("ComposerPendingApprovalActions", () => {
     const { container, dispose, setIsResponding } = mount();
     setIsResponding(true);
     for (const decision of decisions) {
-      const btn = container.querySelector<HTMLButtonElement>(
-        `button[data-decision='${decision}']`,
-      );
+      const btn = container.querySelector<HTMLButtonElement>(`button[data-decision='${decision}']`);
       expect(btn?.disabled).toBe(true);
     }
     dispose();

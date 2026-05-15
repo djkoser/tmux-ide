@@ -309,11 +309,7 @@ export function PlansPanelView(props: PlansPanelViewProps) {
                       : "var(--human-color)"
                     : "transparent";
                 const bgColor = () =>
-                  section().author
-                    ? ai()
-                      ? "var(--ai-bg)"
-                      : "var(--human-bg)"
-                    : "transparent";
+                  section().author ? (ai() ? "var(--ai-bg)" : "var(--human-bg)") : "transparent";
                 return (
                   <div
                     data-index={vItem.index}
@@ -360,9 +356,7 @@ export function PlansPanelView(props: PlansPanelViewProps) {
                           >
                             {section().author}
                           </span>
-                          <Show
-                            when={section().authorAt && formatAuthorTime(section().authorAt)}
-                          >
+                          <Show when={section().authorAt && formatAuthorTime(section().authorAt)}>
                             {(t) => (
                               <span style={{ "font-size": "9px", color: "var(--dimmer)" }}>
                                 {t()}

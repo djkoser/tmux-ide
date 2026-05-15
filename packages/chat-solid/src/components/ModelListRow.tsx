@@ -119,7 +119,15 @@ export function ModelListRow(props: ModelListRowProps): JSX.Element {
               onToggle()();
             }}
           >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill={props.isFavorite() ? "currentColor" : "none"} stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill={props.isFavorite() ? "currentColor" : "none"}
+              stroke="currentColor"
+              stroke-width="1.4"
+              aria-hidden="true"
+            >
               <path d={STAR_PATH} stroke-linejoin="round" />
             </svg>
           </span>

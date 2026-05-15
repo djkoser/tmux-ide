@@ -45,9 +45,7 @@ describe("ExplorerDashboard virtualization", () => {
 
   it("flattens an expanded subtree into the virtualized row stream", () => {
     const children = Array.from({ length: 50 }, (_, i) => file(i));
-    const rootEntries: ExplorerNode[] = [
-      { name: "src", path: "src", isDir: true, children },
-    ];
+    const rootEntries: ExplorerNode[] = [{ name: "src", path: "src", isDir: true, children }];
     const container = document.createElement("div");
     document.body.appendChild(container);
     const [opts] = createSignal<ExplorerDashboardMountOptions>({

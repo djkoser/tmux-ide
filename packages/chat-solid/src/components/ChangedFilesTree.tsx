@@ -138,10 +138,7 @@ export function ChangedFilesTree(props: ChangedFilesTreeProps) {
                             const file = () =>
                               (entry()! as Extract<TreeEntry, { kind: "file" }>).file;
                             return (
-                              <div
-                                data-testid="changed-files-tree-file"
-                                data-path={file().path}
-                              >
+                              <div data-testid="changed-files-tree-file" data-path={file().path}>
                                 <div class="group/file flex w-full items-stretch">
                                   <button
                                     type="button"
@@ -151,18 +148,13 @@ export function ChangedFilesTree(props: ChangedFilesTreeProps) {
                                     }`}
                                     onClick={() => {
                                       if (props.onOpenDiff && file().kind === "write") {
-                                        props.onOpenDiff(
-                                          props.turnId?.() ?? null,
-                                          file().path,
-                                        );
+                                        props.onOpenDiff(props.turnId?.() ?? null, file().path);
                                         return;
                                       }
                                       togglePath(file().path);
                                     }}
                                   >
-                                    <span class="min-w-0 truncate">
-                                      {basename(file().path)}
-                                    </span>
+                                    <span class="min-w-0 truncate">{basename(file().path)}</span>
                                     <span class="ml-2 flex-shrink-0 text-[11px]">
                                       <Show
                                         when={file().kind === "write"}
@@ -173,9 +165,7 @@ export function ChangedFilesTree(props: ChangedFilesTreeProps) {
                                             additions: file().totalAdditions,
                                             deletions: file().totalDeletions,
                                           })}
-                                          fallback={
-                                            <span class="text-dim">changed</span>
-                                          }
+                                          fallback={<span class="text-dim">changed</span>}
                                         >
                                           <DiffStatLabel
                                             additions={file().totalAdditions}
@@ -189,9 +179,7 @@ export function ChangedFilesTree(props: ChangedFilesTreeProps) {
                                     <button
                                       type="button"
                                       data-testid="changed-files-tree-expand"
-                                      aria-label={`Toggle inline diff for ${basename(
-                                        file().path,
-                                      )}`}
+                                      aria-label={`Toggle inline diff for ${basename(file().path)}`}
                                       class="flex shrink-0 items-center justify-center px-1.5 text-[10px] text-dim opacity-0 transition-opacity hover:text-accent group-hover/file:opacity-100"
                                       onClick={(event) => {
                                         event.stopPropagation();
@@ -221,9 +209,7 @@ export function ChangedFilesTree(props: ChangedFilesTreeProps) {
                                             <pre class="m-0 overflow-auto whitespace-pre-wrap px-2 pb-2 text-[11px] leading-relaxed text-fg-secondary">
                                               {formatDiff(edit.oldText, edit.newText)}
                                             </pre>
-                                            <Show
-                                              when={index() < file().edits.length - 1}
-                                            >
+                                            <Show when={index() < file().edits.length - 1}>
                                               <div class="mx-2 border-t border-border-weak" />
                                             </Show>
                                           </div>

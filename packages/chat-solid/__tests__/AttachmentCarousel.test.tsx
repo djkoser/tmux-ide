@@ -15,10 +15,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
-import {
-  AttachmentCarousel,
-  formatAttachmentSize,
-} from "../src/components/AttachmentCarousel";
+import { AttachmentCarousel, formatAttachmentSize } from "../src/components/AttachmentCarousel";
 import type { ComposerAttachment } from "../src/types";
 
 afterEach(() => {
@@ -118,9 +115,9 @@ describe("AttachmentCarousel", () => {
 
   it("renders the size badge for image attachments with sizeBytes", () => {
     const { container, dispose } = mount({ attachments: [imageAttachment("hero.png", 5 * 1024)] });
-    expect(
-      container.querySelector("[data-testid='attachment-carousel-size']")?.textContent,
-    ).toBe("5 KB");
+    expect(container.querySelector("[data-testid='attachment-carousel-size']")?.textContent).toBe(
+      "5 KB",
+    );
     dispose();
   });
 
@@ -138,9 +135,7 @@ describe("AttachmentCarousel", () => {
 
   it("hides the reorder affordance when no onReorder is supplied", () => {
     const { container, dispose } = mount();
-    expect(
-      container.querySelector("[data-testid='attachment-carousel-reorder']"),
-    ).toBeNull();
+    expect(container.querySelector("[data-testid='attachment-carousel-reorder']")).toBeNull();
     dispose();
   });
 

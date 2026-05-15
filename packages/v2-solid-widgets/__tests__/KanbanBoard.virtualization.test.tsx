@@ -36,9 +36,7 @@ afterEach(() => {
 describe("KanbanBoard virtualization", () => {
   it("renders only a viewport-sized window of cards per column for 1000 tasks", () => {
     const statuses: KanbanTaskStatus[] = ["todo", "in-progress", "review", "done"];
-    const tasks = Array.from({ length: 1000 }, (_, i) =>
-      task(i, statuses[i % statuses.length]!),
-    );
+    const tasks = Array.from({ length: 1000 }, (_, i) => task(i, statuses[i % statuses.length]!));
     const { container, dispose } = mount({ tasks });
 
     // Each column body has its own virtualized spacer.

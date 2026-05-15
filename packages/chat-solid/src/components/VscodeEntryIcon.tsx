@@ -56,7 +56,10 @@ export function VscodeEntryIcon(props: VscodeEntryIconProps): JSX.Element {
       <Show
         when={!shouldShowFallback()}
         fallback={
-          <span class="text-[14px] leading-none text-[var(--fg-muted,var(--fg-secondary))]" aria-hidden="true">
+          <span
+            class="text-[14px] leading-none text-[var(--fg-muted,var(--fg-secondary))]"
+            aria-hidden="true"
+          >
             {props.kind === "directory" ? FOLDER_GLYPH : FILE_GLYPH}
           </span>
         }

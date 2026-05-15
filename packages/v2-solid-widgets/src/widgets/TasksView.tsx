@@ -417,99 +417,99 @@ export function TasksViewView(props: TasksViewProps) {
                   {(vItem) => {
                     const task = () => filtered()[vItem.index]!;
                     return (
-                    <tr
-                      data-testid="task-row"
-                      data-index={vItem.index}
-                      data-task-id={task().id}
-                      data-task-status={task().status}
-                      data-task-priority={`P${task().priority}`}
-                      data-task-selected={selectedId() === task().id ? "true" : "false"}
-                      onClick={() => handleRowClick(task().id)}
-                      style={{
-                        cursor: "pointer",
-                        "background-color":
-                          selectedId() === task().id
-                            ? "color-mix(in oklab, var(--accent) 8%, transparent)"
-                            : "transparent",
-                        "border-bottom": "1px solid var(--border-weak, var(--border))",
-                      }}
-                    >
-                      <td
+                      <tr
+                        data-testid="task-row"
+                        data-index={vItem.index}
+                        data-task-id={task().id}
+                        data-task-status={task().status}
+                        data-task-priority={`P${task().priority}`}
+                        data-task-selected={selectedId() === task().id ? "true" : "false"}
+                        onClick={() => handleRowClick(task().id)}
                         style={{
-                          padding: `${rowPadY()} 8px`,
-                          color: STATUS_COLOR[task().status] ?? "var(--dim)",
-                          "text-align": "center",
+                          cursor: "pointer",
+                          "background-color":
+                            selectedId() === task().id
+                              ? "color-mix(in oklab, var(--accent) 8%, transparent)"
+                              : "transparent",
+                          "border-bottom": "1px solid var(--border-weak, var(--border))",
                         }}
                       >
-                        {STATUS_GLYPH[task().status] ?? "·"}
-                      </td>
-                      <td style={{ padding: `${rowPadY()} 0` }}>
-                        <span
-                          aria-label={`P${task().priority}`}
-                          title={`Priority ${task().priority}`}
+                        <td
                           style={{
-                            display: "inline-block",
-                            width: "8px",
-                            height: "8px",
-                            "border-radius": "50%",
-                            "background-color": PRIORITY_COLOR[task().priority] ?? "var(--dim)",
+                            padding: `${rowPadY()} 8px`,
+                            color: STATUS_COLOR[task().status] ?? "var(--dim)",
+                            "text-align": "center",
                           }}
-                        />
-                      </td>
-                      <td
-                        style={{
-                          padding: `${rowPadY()} 6px`,
-                          color: "var(--fg-soft)",
-                          "font-variant-numeric": "tabular-nums",
-                        }}
-                      >
-                        {task().id}
-                      </td>
-                      <td
-                        style={{
-                          padding: `${rowPadY()} 6px`,
-                          color: "var(--fg)",
-                          "white-space": "nowrap",
-                          overflow: "hidden",
-                          "text-overflow": "ellipsis",
-                        }}
-                        title={task().title}
-                      >
-                        {task().title}
-                      </td>
-                      <td
-                        style={{
-                          padding: `${rowPadY()} 6px`,
-                          color: STATUS_COLOR[task().status] ?? "var(--fg-soft)",
-                        }}
-                      >
-                        {task().status}
-                      </td>
-                      <td
-                        style={{
-                          padding: `${rowPadY()} 6px`,
-                          color: "var(--fg-soft)",
-                          "white-space": "nowrap",
-                          overflow: "hidden",
-                          "text-overflow": "ellipsis",
-                        }}
-                      >
-                        {task().assignee ?? "—"}
-                      </td>
-                      <td style={{ padding: `${rowPadY()} 6px`, color: "var(--fg-soft)" }}>
-                        {task().goal ?? "—"}
-                      </td>
-                      <td style={{ padding: `${rowPadY()} 6px`, color: "var(--fg-soft)" }}>
-                        <Show
-                          when={task().depends_on && task().depends_on!.length > 0}
-                          fallback={<span style={{ color: "var(--dim)" }}>—</span>}
                         >
-                          <span title={(task().depends_on ?? []).join(", ")}>
-                            ⛓ {task().depends_on!.length}
-                          </span>
-                        </Show>
-                      </td>
-                    </tr>
+                          {STATUS_GLYPH[task().status] ?? "·"}
+                        </td>
+                        <td style={{ padding: `${rowPadY()} 0` }}>
+                          <span
+                            aria-label={`P${task().priority}`}
+                            title={`Priority ${task().priority}`}
+                            style={{
+                              display: "inline-block",
+                              width: "8px",
+                              height: "8px",
+                              "border-radius": "50%",
+                              "background-color": PRIORITY_COLOR[task().priority] ?? "var(--dim)",
+                            }}
+                          />
+                        </td>
+                        <td
+                          style={{
+                            padding: `${rowPadY()} 6px`,
+                            color: "var(--fg-soft)",
+                            "font-variant-numeric": "tabular-nums",
+                          }}
+                        >
+                          {task().id}
+                        </td>
+                        <td
+                          style={{
+                            padding: `${rowPadY()} 6px`,
+                            color: "var(--fg)",
+                            "white-space": "nowrap",
+                            overflow: "hidden",
+                            "text-overflow": "ellipsis",
+                          }}
+                          title={task().title}
+                        >
+                          {task().title}
+                        </td>
+                        <td
+                          style={{
+                            padding: `${rowPadY()} 6px`,
+                            color: STATUS_COLOR[task().status] ?? "var(--fg-soft)",
+                          }}
+                        >
+                          {task().status}
+                        </td>
+                        <td
+                          style={{
+                            padding: `${rowPadY()} 6px`,
+                            color: "var(--fg-soft)",
+                            "white-space": "nowrap",
+                            overflow: "hidden",
+                            "text-overflow": "ellipsis",
+                          }}
+                        >
+                          {task().assignee ?? "—"}
+                        </td>
+                        <td style={{ padding: `${rowPadY()} 6px`, color: "var(--fg-soft)" }}>
+                          {task().goal ?? "—"}
+                        </td>
+                        <td style={{ padding: `${rowPadY()} 6px`, color: "var(--fg-soft)" }}>
+                          <Show
+                            when={task().depends_on && task().depends_on!.length > 0}
+                            fallback={<span style={{ color: "var(--dim)" }}>—</span>}
+                          >
+                            <span title={(task().depends_on ?? []).join(", ")}>
+                              ⛓ {task().depends_on!.length}
+                            </span>
+                          </Show>
+                        </td>
+                      </tr>
                     );
                   }}
                 </For>
@@ -518,8 +518,7 @@ export function TasksViewView(props: TasksViewProps) {
                     const items = tableVirtualizer.getVirtualItems();
                     const last = items[items.length - 1];
                     if (!last) return null;
-                    const remaining =
-                      tableVirtualizer.getTotalSize() - (last.start + last.size);
+                    const remaining = tableVirtualizer.getTotalSize() - (last.start + last.size);
                     return remaining > 0 ? remaining : null;
                   })()}
                 >

@@ -16,10 +16,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
-import {
-  TraitsPicker,
-  type TraitDescriptor,
-} from "../src/components/TraitsPicker";
+import { TraitsPicker, type TraitDescriptor } from "../src/components/TraitsPicker";
 
 afterEach(() => {
   document.body.innerHTML = "";
@@ -124,13 +121,13 @@ describe("TraitsPicker", () => {
   it("opens the menu and shows a section per descriptor", () => {
     const { container, dispose } = mount();
     clickTrigger(container);
-    const sections = container.querySelectorAll(
-      "[data-testid='traits-picker-section']",
-    );
+    const sections = container.querySelectorAll("[data-testid='traits-picker-section']");
     expect(sections.length).toBe(3);
-    expect(
-      Array.from(sections).map((s) => s.getAttribute("data-descriptor-id")),
-    ).toEqual(["effort", "contextWindow", "thinking"]);
+    expect(Array.from(sections).map((s) => s.getAttribute("data-descriptor-id"))).toEqual([
+      "effort",
+      "contextWindow",
+      "thinking",
+    ]);
     dispose();
   });
 

@@ -141,9 +141,7 @@ export function ChatHeader(props: ChatHeaderProps) {
   // across reloads. Hosts can override any piece via the matching
   // prop.
   const projectDir = createMemo<string | null>(() => props.thread()?.projectDir ?? null);
-  const openInCwd = createMemo<string | null>(
-    () => props.openInCwd?.() ?? projectDir(),
-  );
+  const openInCwd = createMemo<string | null>(() => props.openInCwd?.() ?? projectDir());
   const availableEditors = createMemo<ReadonlyArray<EditorId>>(
     () => props.availableEditors?.() ?? DEFAULT_AVAILABLE_EDITORS,
   );

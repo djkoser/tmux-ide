@@ -96,9 +96,7 @@ describe("ModelListRow", () => {
     const { container, dispose, onSelect, onToggleFavorite } = mount({
       withFavoriteHandler: true,
     });
-    const fav = container.querySelector<HTMLElement>(
-      "[data-testid='model-list-row-favorite']",
-    );
+    const fav = container.querySelector<HTMLElement>("[data-testid='model-list-row-favorite']");
     expect(fav).toBeTruthy();
     fav!.click();
     expect(onToggleFavorite).toHaveBeenCalledTimes(1);

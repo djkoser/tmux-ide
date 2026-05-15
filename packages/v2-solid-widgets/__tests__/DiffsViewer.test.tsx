@@ -208,9 +208,7 @@ describe("DiffsViewer (Solid widget)", () => {
     showAll!.click();
     await flush();
 
-    const spacerAfter = container.querySelector<HTMLElement>(
-      "[data-testid='diffs-viewer-spacer']",
-    );
+    const spacerAfter = container.querySelector<HTMLElement>("[data-testid='diffs-viewer-spacer']");
     const heightAfter = parseInt(spacerAfter!.style.height, 10);
     expect(heightAfter).toBeGreaterThanOrEqual(2400 * 18);
     expect(container.querySelector("[data-testid='diffs-viewer-show-all']")).toBeNull();

@@ -21,9 +21,7 @@ import {
   ModelPickerContent,
   type ModelPickerSelection,
 } from "../src/components/ModelPickerContent";
-import type {
-  ProviderInstanceSummary,
-} from "../src/components/ModelPickerSidebar";
+import type { ProviderInstanceSummary } from "../src/components/ModelPickerSidebar";
 import type { ModelListRowModel } from "../src/components/ModelListRow";
 
 afterEach(() => {

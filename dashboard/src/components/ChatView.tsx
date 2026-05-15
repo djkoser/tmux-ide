@@ -58,10 +58,9 @@ async function resolveProjectDir(projectName: string): Promise<string | null> {
     // fallthrough to projects registry
   }
   try {
-    const res = await fetch(
-      `${API_BASE}/api/projects/${encodeURIComponent(projectName)}`,
-      { cache: "no-store" },
-    );
+    const res = await fetch(`${API_BASE}/api/projects/${encodeURIComponent(projectName)}`, {
+      cache: "no-store",
+    });
     const body = (await res.json()) as { project?: { dir?: string } };
     if (body.project?.dir) return body.project.dir;
   } catch {

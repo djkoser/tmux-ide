@@ -15,7 +15,10 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-function mount(approval: { requestId: string; requestKind: "command" | "file-read" | "file-change" }, pendingCount = 1) {
+function mount(
+  approval: { requestId: string; requestKind: "command" | "file-read" | "file-change" },
+  pendingCount = 1,
+) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const dispose = render(

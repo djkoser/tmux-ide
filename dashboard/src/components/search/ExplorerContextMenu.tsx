@@ -147,9 +147,7 @@ export function ExplorerContextMenu(props: ExplorerContextMenuProps) {
     const current = state();
     if (!current) return;
     requestSearch({
-      include: current.isDirectory
-        ? folderIncludeGlob(current.path)
-        : current.path,
+      include: current.isDirectory ? folderIncludeGlob(current.path) : current.path,
       focusInput: true,
       source: "explorer-context-menu",
     });
@@ -178,9 +176,7 @@ export function ExplorerContextMenu(props: ExplorerContextMenuProps) {
     // user can paste it into an attached tmux pane. A native pane-
     // dispatch wire-up would be cleaner; this matches what we can
     // do without a new daemon API.
-    const target = current.isDirectory
-      ? current.path
-      : current.path.replace(/\/[^/]*$/, "") || ".";
+    const target = current.isDirectory ? current.path : current.path.replace(/\/[^/]*$/, "") || ".";
     void copyToClipboard(`cd ${target}`);
     close();
   }

@@ -38,11 +38,7 @@ function singlePrompt(overrides: Partial<PendingUserInput> = {}): PendingUserInp
         id: "q1",
         header: "Which framework?",
         question: "Pick the framework you want to use",
-        options: [
-          { label: "React" },
-          { label: "Solid" },
-          { label: "Vue" },
-        ],
+        options: [{ label: "React" }, { label: "Solid" }, { label: "Vue" }],
       },
     ],
     ...overrides,
@@ -98,9 +94,7 @@ function mount(opts: MountOpts = {}) {
 describe("ComposerPendingUserInputPanel", () => {
   it("renders nothing when the queue is empty", () => {
     const { container, dispose } = mount();
-    expect(
-      container.querySelector("[data-testid='composer-pending-user-input-panel']"),
-    ).toBeNull();
+    expect(container.querySelector("[data-testid='composer-pending-user-input-panel']")).toBeNull();
     dispose();
   });
 

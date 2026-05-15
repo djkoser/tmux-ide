@@ -200,10 +200,8 @@ export function ComposerPendingUserInputPanel(
             <div class="mt-3 flex flex-col gap-1">
               <For each={question().options}>
                 {(option, index) => {
-                  const isSelected = (): boolean =>
-                    selectedLabels().includes(option.label);
-                  const shortcutKey = (): number | null =>
-                    index() < 9 ? index() + 1 : null;
+                  const isSelected = (): boolean => selectedLabels().includes(option.label);
+                  const shortcutKey = (): number | null => (index() < 9 ? index() + 1 : null);
                   return (
                     <button
                       type="button"
@@ -228,9 +226,7 @@ export function ComposerPendingUserInputPanel(
                             data-testid="composer-pending-user-input-shortcut"
                             class={
                               "flex size-5 shrink-0 items-center justify-center rounded text-[11px] font-medium tabular-nums " +
-                              (isSelected()
-                                ? "bg-accent/20 text-accent"
-                                : "bg-surface text-dim")
+                              (isSelected() ? "bg-accent/20 text-accent" : "bg-surface text-dim")
                             }
                           >
                             {key()}

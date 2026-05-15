@@ -48,8 +48,7 @@ export function statusBadgeMeta(status: ToolCallStatus | null | undefined): Stat
 const BADGE_CLASS: Record<StatusBadgeMeta["variant"], string> = {
   running:
     "inline-flex items-center gap-1 rounded border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--accent)]",
-  done:
-    "inline-flex items-center gap-1 rounded border border-[var(--green,#0a0)]/40 bg-[var(--green,#0a0)]/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--green,#0a0)]",
+  done: "inline-flex items-center gap-1 rounded border border-[var(--green,#0a0)]/40 bg-[var(--green,#0a0)]/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--green,#0a0)]",
   error:
     "inline-flex items-center gap-1 rounded border border-[var(--red,#c33)]/40 bg-[var(--red,#c33)]/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--red,#c33)]",
   queued:
@@ -239,9 +238,7 @@ export function ContentBlockView(props: {
       const text = props.block.text;
       const showFull = (): boolean => props.showFullOutput?.() ?? true;
       const result = createMemo<TruncatedTextResult>(() =>
-        showFull()
-          ? { visible: text, hiddenLines: 0, truncated: false }
-          : truncateToolText(text),
+        showFull() ? { visible: text, hiddenLines: 0, truncated: false } : truncateToolText(text),
       );
       return (
         <div>

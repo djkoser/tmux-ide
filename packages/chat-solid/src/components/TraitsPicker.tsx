@@ -172,10 +172,7 @@ export function TraitsPicker(props: TraitsPickerProps): JSX.Element {
 
   return (
     <Show when={descriptors().length > 0}>
-      <div
-        data-testid="traits-picker"
-        class={`relative inline-flex ${props.class ?? ""}`}
-      >
+      <div data-testid="traits-picker" class={`relative inline-flex ${props.class ?? ""}`}>
         <button
           ref={setTrigger}
           type="button"
@@ -193,12 +190,7 @@ export function TraitsPicker(props: TraitsPickerProps): JSX.Element {
           </span>
         </button>
         <Show when={open()}>
-          <div
-            ref={setPopup}
-            data-testid="traits-picker-menu"
-            role="menu"
-            class={POPUP_CLASS}
-          >
+          <div ref={setPopup} data-testid="traits-picker-menu" role="menu" class={POPUP_CLASS}>
             <For each={selectDescriptors()}>
               {(descriptor, index) => (
                 <div>

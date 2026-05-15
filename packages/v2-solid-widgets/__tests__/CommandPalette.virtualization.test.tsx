@@ -10,11 +10,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
 import { CommandPaletteView } from "../src/widgets/CommandPalette";
-import type {
-  CommandPaletteMountOptions,
-  PaletteCategoryDef,
-  PaletteItem,
-} from "../src/types";
+import type { CommandPaletteMountOptions, PaletteCategoryDef, PaletteItem } from "../src/types";
 
 function item(i: number): PaletteItem {
   return { id: `cmd-${i}`, label: `command ${i}`, description: `desc ${i}` };
@@ -50,9 +46,7 @@ describe("CommandPalette virtualization", () => {
     expect(rendered.length).toBeGreaterThan(0);
     expect(rendered.length).toBeLessThan(150);
 
-    const spacer = container.querySelector<HTMLElement>(
-      "[data-testid='palette-results-spacer']",
-    );
+    const spacer = container.querySelector<HTMLElement>("[data-testid='palette-results-spacer']");
     expect(spacer).toBeTruthy();
     const h = parseInt(spacer!.style.height, 10);
     // 1000 entries × at least 36px = 36000px of virtual content.

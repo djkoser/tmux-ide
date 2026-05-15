@@ -78,8 +78,7 @@ const MENU_POPUP_CLASS =
 const MENU_ITEM_CLASS =
   "flex w-full cursor-pointer items-center gap-2 rounded-sm border-0 bg-transparent px-3 py-1.5 text-left text-[12px] text-[var(--fg)] hover:bg-[var(--surface-hover,var(--surface))] disabled:cursor-not-allowed disabled:opacity-50";
 
-const DIALOG_OVERLAY_CLASS =
-  "fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4";
+const DIALOG_OVERLAY_CLASS = "fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4";
 
 const DIALOG_PANEL_CLASS =
   "w-full max-w-md rounded-md border border-[var(--border)] bg-[var(--surface-elevated,var(--bg))] p-4 shadow-2xl";
@@ -109,9 +108,7 @@ export function ProposedPlanCard(props: ProposedPlanCardProps): JSX.Element {
   const [saving, setSaving] = createSignal(false);
   const [saveError, setSaveError] = createSignal<string | null>(null);
 
-  const title = createMemo(
-    () => proposedPlanTitle(props.planMarkdown()) ?? "Proposed plan",
-  );
+  const title = createMemo(() => proposedPlanTitle(props.planMarkdown()) ?? "Proposed plan");
   const canCollapse = createMemo(() => isProposedPlanCollapsible(props.planMarkdown()));
   const displayedMarkdown = createMemo(() => stripDisplayedPlanMarkdown(props.planMarkdown()));
   const collapsedPreview = createMemo(() =>
@@ -125,9 +122,7 @@ export function ProposedPlanCard(props: ProposedPlanCardProps): JSX.Element {
   const bodyMarkdown = createMemo(() =>
     canCollapse() && !expanded() ? (collapsedPreview() ?? "") : displayedMarkdown(),
   );
-  const bodyHtml = createMemo(() =>
-    renderMarkdown(bodyMarkdown(), { cwd: props.cwd?.() }),
-  );
+  const bodyHtml = createMemo(() => renderMarkdown(bodyMarkdown(), { cwd: props.cwd?.() }));
 
   function closeMenu(): void {
     setMenuOpen(false);
@@ -291,9 +286,7 @@ export function ProposedPlanCard(props: ProposedPlanCardProps): JSX.Element {
                 disabled={!canSave()}
                 onClick={openSaveDialog}
                 title={
-                  canSave()
-                    ? "Save to workspace"
-                    : "Host has not wired a workspace save handler"
+                  canSave() ? "Save to workspace" : "Host has not wired a workspace save handler"
                 }
               >
                 Save to workspace
@@ -307,11 +300,7 @@ export function ProposedPlanCard(props: ProposedPlanCardProps): JSX.Element {
         <div
           data-testid="proposed-plan-card-body"
           data-collapsed={canCollapse() && !expanded() ? "true" : "false"}
-          class={
-            canCollapse() && !expanded()
-              ? "relative max-h-72 overflow-hidden"
-              : "relative"
-          }
+          class={canCollapse() && !expanded() ? "relative max-h-72 overflow-hidden" : "relative"}
         >
           <div
             class="chat-solid-markdown chat-markdown text-[13px] leading-relaxed text-[var(--fg)]"

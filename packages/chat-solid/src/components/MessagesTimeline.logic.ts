@@ -8,12 +8,7 @@
  * exercised headlessly.
  */
 
-import type {
-  ChatMessage,
-  MessagesTimelineRow,
-  ToolCallView,
-  WorkLogEntry,
-} from "../types";
+import type { ChatMessage, MessagesTimelineRow, ToolCallView, WorkLogEntry } from "../types";
 
 export const TIMESTAMP_FMT: Intl.DateTimeFormatOptions = {
   hour: "numeric",
@@ -281,12 +276,8 @@ export function deriveMessagesTimelineRows(
       createdAt: entry.createdAt,
       message,
       ...(showCompletionDivider ? { showCompletionDivider: true } : {}),
-      ...(completionTurnStartedAt
-        ? { completionTurnStartedAt }
-        : {}),
-      ...(typeof revertTurnCount === "number" && revertTurnCount > 0
-        ? { revertTurnCount }
-        : {}),
+      ...(completionTurnStartedAt ? { completionTurnStartedAt } : {}),
+      ...(typeof revertTurnCount === "number" && revertTurnCount > 0 ? { revertTurnCount } : {}),
     });
   }
 

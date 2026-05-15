@@ -20,17 +20,8 @@
  * `traits` with whatever descriptor list they need.
  */
 
-import {
-  createContext,
-  createMemo,
-  useContext,
-  type Accessor,
-  type JSX,
-} from "solid-js";
-import type {
-  ProviderInteractionMode,
-  RuntimeMode,
-} from "./CompactComposerControlsMenu";
+import { createContext, createMemo, useContext, type Accessor, type JSX } from "solid-js";
+import type { ProviderInteractionMode, RuntimeMode } from "./CompactComposerControlsMenu";
 import type { TraitDescriptor } from "./TraitsPicker";
 
 export type ComposerProviderKind = "claude-code" | "codex" | "gemini" | (string & {});
@@ -84,9 +75,7 @@ export interface ComposerProviderStateSnapshot {
   applyUltrathinkChrome: boolean;
 }
 
-function firstSelectTraitValue(
-  traits: ReadonlyArray<TraitDescriptor>,
-): string | null {
+function firstSelectTraitValue(traits: ReadonlyArray<TraitDescriptor>): string | null {
   for (const descriptor of traits) {
     if (descriptor.type === "select") {
       return descriptor.currentValue;
@@ -102,9 +91,7 @@ function compactSelectedTraits(
     (descriptor) =>
       [
         descriptor.id,
-        descriptor.type === "select"
-          ? (descriptor.currentValue ?? "")
-          : descriptor.currentValue,
+        descriptor.type === "select" ? (descriptor.currentValue ?? "") : descriptor.currentValue,
       ] as const,
   );
 }
@@ -144,9 +131,9 @@ export function deriveComposerProviderState(input: {
   };
 }
 
-const ComposerProviderStateContext = createContext<
-  Accessor<ComposerProviderStateSnapshot> | null
->(null);
+const ComposerProviderStateContext = createContext<Accessor<ComposerProviderStateSnapshot> | null>(
+  null,
+);
 
 export function ComposerProviderStateProvider(props: {
   state: ComposerProviderStateInput;

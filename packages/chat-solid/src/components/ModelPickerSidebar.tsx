@@ -16,10 +16,7 @@
 
 import type { Accessor, JSX } from "solid-js";
 import { For, Show } from "solid-js";
-import {
-  ProviderInstanceIcon,
-  type ProviderInstanceStatus,
-} from "./ProviderInstanceIcon";
+import { ProviderInstanceIcon, type ProviderInstanceStatus } from "./ProviderInstanceIcon";
 
 export interface ProviderInstanceSummary {
   instanceId: string;
@@ -55,8 +52,7 @@ const STAR_PATH =
 const RAIL_BUTTON =
   "relative isolate flex aspect-square w-full cursor-pointer items-center justify-center rounded-md border border-transparent text-fg-secondary transition-colors hover:bg-[var(--surface-hover,var(--surface))]";
 
-const RAIL_BUTTON_SELECTED =
-  "bg-[var(--surface-active,var(--surface))] text-fg shadow-sm";
+const RAIL_BUTTON_SELECTED = "bg-[var(--surface-active,var(--surface))] text-fg shadow-sm";
 
 const RAIL_BUTTON_DISABLED = "cursor-not-allowed opacity-50 hover:bg-transparent";
 

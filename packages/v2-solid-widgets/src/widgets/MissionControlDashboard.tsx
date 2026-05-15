@@ -438,168 +438,171 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                       position: "relative",
                     }}
                   >
-                  <div
-                    data-testid="mission-control-milestones-spacer"
-                    style={{
-                      height: `${milestonesVirtualTotalSize()}px`,
-                      width: "100%",
-                      position: "relative",
-                    }}
-                  >
-                    <For each={milestonesVirtualItems()}>
-                      {(vItem) => {
-                        const m = () => milestones()[vItem.index]!;
-                        const pct = () => percent(m().tasksDone, m().taskCount);
-                        const mTasks = () => tasksByMilestone().get(m().id) ?? [];
-                        return (
-                          <div
-                            data-index={vItem.index}
-                            ref={(el) => milestonesVirtualizer.measureElement(el)}
-                            style={{
-                              position: "absolute",
-                              top: "0",
-                              left: "0",
-                              width: "100%",
-                              transform: `translateY(${vItem.start}px)`,
-                              "padding-bottom": "8px",
-                              "box-sizing": "border-box",
-                            }}
-                          >
-                          <div
-                            data-mission-milestone={m().id}
-                            data-mission-milestone-status={m().status}
-                            style={{
-                              "border-radius": "6px",
-                              border: "1px solid var(--border)",
-                              background: "var(--surface)",
-                              padding: "10px 12px",
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: "flex",
-                                "align-items": "center",
-                                gap: "8px",
-                                "margin-bottom": "6px",
-                              }}
-                            >
-                              <span
-                                aria-hidden="true"
-                                style={{
-                                  display: "inline-block",
-                                  width: "8px",
-                                  height: "8px",
-                                  "border-radius": "9999px",
-                                  background: statusColor(m().status),
-                                }}
-                              />
-                              <span style={{ "font-weight": "500", color: "var(--fg)" }}>
-                                {m().title}
-                              </span>
-                              <span style={{ color: "var(--dim)", "font-size": "11px" }}>
-                                {m().status}
-                              </span>
-                              <span
-                                style={{
-                                  "margin-left": "auto",
-                                  color: "var(--dim)",
-                                  "font-size": "11px",
-                                  "font-variant-numeric": "tabular-nums",
-                                }}
-                              >
-                                {m().tasksDone}/{m().taskCount} · {pct()}%
-                              </span>
-                            </div>
-                            <div
-                              role="progressbar"
-                              aria-valuenow={pct()}
-                              aria-valuemin={0}
-                              aria-valuemax={100}
-                              style={{
-                                width: "100%",
-                                height: "4px",
-                                "border-radius": "2px",
-                                background: "var(--border)",
-                                overflow: "hidden",
-                              }}
-                            >
-                              <div
-                                style={{
-                                  width: `${pct()}%`,
-                                  height: "100%",
-                                  background: statusColor(m().status),
-                                  transition: "width 240ms ease",
-                                }}
-                              />
-                            </div>
-                            <Show when={mTasks().length > 0}>
-                              <div
-                                style={{
-                                  "margin-top": "8px",
-                                  display: "flex",
-                                  "flex-direction": "column",
-                                  gap: "2px",
-                                }}
-                              >
-                                <For each={mTasks()}>
-                                  {(t) => (
-                                    <button
-                                      type="button"
-                                      data-mission-task={t.id}
-                                      data-mission-task-status={t.status}
-                                      onClick={() => handleTaskClick(t.id)}
-                                      style={{
-                                        display: "flex",
-                                        "align-items": "center",
-                                        gap: "6px",
-                                        padding: "2px 6px",
-                                        background: "transparent",
-                                        border: "none",
-                                        color: "var(--fg-secondary)",
-                                        "font-family": "inherit",
-                                        "font-size": "11px",
-                                        cursor: "pointer",
-                                        "text-align": "left",
-                                        "border-radius": "3px",
-                                      }}
-                                      onMouseEnter={(e) => {
-                                        e.currentTarget.style.background = "var(--surface-hover)";
-                                      }}
-                                      onMouseLeave={(e) => {
-                                        e.currentTarget.style.background = "transparent";
-                                      }}
-                                    >
-                                      <span
-                                        aria-hidden="true"
-                                        style={{ color: statusColor(t.status), width: "10px" }}
-                                      >
-                                        {TASK_STATUS_GLYPH[t.status] ?? "·"}
-                                      </span>
-                                      <span
-                                        style={{
-                                          flex: "1",
-                                          "min-width": "0",
-                                          overflow: "hidden",
-                                          "text-overflow": "ellipsis",
-                                          "white-space": "nowrap",
-                                        }}
-                                      >
-                                        {t.title}
-                                      </span>
-                                      <Show when={t.assignee}>
-                                        <span style={{ color: "var(--dim)" }}>@{t.assignee}</span>
-                                      </Show>
-                                    </button>
-                                  )}
-                                </For>
-                              </div>
-                            </Show>
-                          </div>
-                          </div>
-                        );
+                    <div
+                      data-testid="mission-control-milestones-spacer"
+                      style={{
+                        height: `${milestonesVirtualTotalSize()}px`,
+                        width: "100%",
+                        position: "relative",
                       }}
-                    </For>
-                  </div>
+                    >
+                      <For each={milestonesVirtualItems()}>
+                        {(vItem) => {
+                          const m = () => milestones()[vItem.index]!;
+                          const pct = () => percent(m().tasksDone, m().taskCount);
+                          const mTasks = () => tasksByMilestone().get(m().id) ?? [];
+                          return (
+                            <div
+                              data-index={vItem.index}
+                              ref={(el) => milestonesVirtualizer.measureElement(el)}
+                              style={{
+                                position: "absolute",
+                                top: "0",
+                                left: "0",
+                                width: "100%",
+                                transform: `translateY(${vItem.start}px)`,
+                                "padding-bottom": "8px",
+                                "box-sizing": "border-box",
+                              }}
+                            >
+                              <div
+                                data-mission-milestone={m().id}
+                                data-mission-milestone-status={m().status}
+                                style={{
+                                  "border-radius": "6px",
+                                  border: "1px solid var(--border)",
+                                  background: "var(--surface)",
+                                  padding: "10px 12px",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    "align-items": "center",
+                                    gap: "8px",
+                                    "margin-bottom": "6px",
+                                  }}
+                                >
+                                  <span
+                                    aria-hidden="true"
+                                    style={{
+                                      display: "inline-block",
+                                      width: "8px",
+                                      height: "8px",
+                                      "border-radius": "9999px",
+                                      background: statusColor(m().status),
+                                    }}
+                                  />
+                                  <span style={{ "font-weight": "500", color: "var(--fg)" }}>
+                                    {m().title}
+                                  </span>
+                                  <span style={{ color: "var(--dim)", "font-size": "11px" }}>
+                                    {m().status}
+                                  </span>
+                                  <span
+                                    style={{
+                                      "margin-left": "auto",
+                                      color: "var(--dim)",
+                                      "font-size": "11px",
+                                      "font-variant-numeric": "tabular-nums",
+                                    }}
+                                  >
+                                    {m().tasksDone}/{m().taskCount} · {pct()}%
+                                  </span>
+                                </div>
+                                <div
+                                  role="progressbar"
+                                  aria-valuenow={pct()}
+                                  aria-valuemin={0}
+                                  aria-valuemax={100}
+                                  style={{
+                                    width: "100%",
+                                    height: "4px",
+                                    "border-radius": "2px",
+                                    background: "var(--border)",
+                                    overflow: "hidden",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      width: `${pct()}%`,
+                                      height: "100%",
+                                      background: statusColor(m().status),
+                                      transition: "width 240ms ease",
+                                    }}
+                                  />
+                                </div>
+                                <Show when={mTasks().length > 0}>
+                                  <div
+                                    style={{
+                                      "margin-top": "8px",
+                                      display: "flex",
+                                      "flex-direction": "column",
+                                      gap: "2px",
+                                    }}
+                                  >
+                                    <For each={mTasks()}>
+                                      {(t) => (
+                                        <button
+                                          type="button"
+                                          data-mission-task={t.id}
+                                          data-mission-task-status={t.status}
+                                          onClick={() => handleTaskClick(t.id)}
+                                          style={{
+                                            display: "flex",
+                                            "align-items": "center",
+                                            gap: "6px",
+                                            padding: "2px 6px",
+                                            background: "transparent",
+                                            border: "none",
+                                            color: "var(--fg-secondary)",
+                                            "font-family": "inherit",
+                                            "font-size": "11px",
+                                            cursor: "pointer",
+                                            "text-align": "left",
+                                            "border-radius": "3px",
+                                          }}
+                                          onMouseEnter={(e) => {
+                                            e.currentTarget.style.background =
+                                              "var(--surface-hover)";
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            e.currentTarget.style.background = "transparent";
+                                          }}
+                                        >
+                                          <span
+                                            aria-hidden="true"
+                                            style={{ color: statusColor(t.status), width: "10px" }}
+                                          >
+                                            {TASK_STATUS_GLYPH[t.status] ?? "·"}
+                                          </span>
+                                          <span
+                                            style={{
+                                              flex: "1",
+                                              "min-width": "0",
+                                              overflow: "hidden",
+                                              "text-overflow": "ellipsis",
+                                              "white-space": "nowrap",
+                                            }}
+                                          >
+                                            {t.title}
+                                          </span>
+                                          <Show when={t.assignee}>
+                                            <span style={{ color: "var(--dim)" }}>
+                                              @{t.assignee}
+                                            </span>
+                                          </Show>
+                                        </button>
+                                      )}
+                                    </For>
+                                  </div>
+                                </Show>
+                              </div>
+                            </div>
+                          );
+                        }}
+                      </For>
+                    </div>
                   </div>
                 </section>
               </Show>
@@ -620,121 +623,121 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                       position: "relative",
                     }}
                   >
-                  <div
-                    data-testid="mission-control-agents-spacer"
-                    style={{
-                      height: `${agentsVirtualTotalSize()}px`,
-                      width: "100%",
-                      position: "relative",
-                    }}
-                  >
-                    <For each={agentsVirtualItems()}>
-                      {(vItem) => {
-                        const a = () => agents()[vItem.index]!;
-                        return (
-                        <div
-                          data-index={vItem.index}
-                          ref={(el) => agentsVirtualizer.measureElement(el)}
-                          style={{
-                            position: "absolute",
-                            top: "0",
-                            left: "0",
-                            width: "100%",
-                            transform: `translateY(${vItem.start}px)`,
-                            "padding-bottom": "6px",
-                            "box-sizing": "border-box",
-                          }}
-                        >
-                        <button
-                          type="button"
-                          data-mission-agent={a().paneId}
-                          data-mission-agent-busy={a().isBusy}
-                          onClick={() => handleAgentClick(a().paneId)}
-                          style={{
-                            display: "flex",
-                            "flex-direction": "column",
-                            gap: "4px",
-                            padding: "10px 12px",
-                            "border-radius": "6px",
-                            border: "1px solid var(--border)",
-                            background: "var(--surface)",
-                            cursor: "pointer",
-                            "text-align": "left",
-                            "font-family": "inherit",
-                            "font-size": "inherit",
-                            color: "inherit",
-                            width: "100%",
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = "var(--surface-hover)";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = "var(--surface)";
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              "align-items": "center",
-                              gap: "6px",
-                            }}
-                          >
-                            <span
-                              aria-hidden="true"
+                    <div
+                      data-testid="mission-control-agents-spacer"
+                      style={{
+                        height: `${agentsVirtualTotalSize()}px`,
+                        width: "100%",
+                        position: "relative",
+                      }}
+                    >
+                      <For each={agentsVirtualItems()}>
+                        {(vItem) => {
+                          const a = () => agents()[vItem.index]!;
+                          return (
+                            <div
+                              data-index={vItem.index}
+                              ref={(el) => agentsVirtualizer.measureElement(el)}
                               style={{
-                                display: "inline-block",
-                                width: "6px",
-                                height: "6px",
-                                "border-radius": "9999px",
-                                background: a().isBusy ? "var(--green)" : "var(--dim)",
-                              }}
-                            />
-                            <span style={{ "font-weight": "500", color: "var(--fg)" }}>
-                              {a().paneTitle}
-                            </span>
-                            <span
-                              style={{
-                                "margin-left": "auto",
-                                "font-size": "10px",
-                                color: "var(--dim)",
-                                "font-variant-numeric": "tabular-nums",
+                                position: "absolute",
+                                top: "0",
+                                left: "0",
+                                width: "100%",
+                                transform: `translateY(${vItem.start}px)`,
+                                "padding-bottom": "6px",
+                                "box-sizing": "border-box",
                               }}
                             >
-                              {a().elapsed}
-                            </span>
-                          </div>
-                          <Show
-                            when={a().taskTitle}
-                            fallback={
-                              <span
+                              <button
+                                type="button"
+                                data-mission-agent={a().paneId}
+                                data-mission-agent-busy={a().isBusy}
+                                onClick={() => handleAgentClick(a().paneId)}
                                 style={{
-                                  "font-size": "11px",
-                                  color: "var(--dim)",
-                                  "font-style": "italic",
+                                  display: "flex",
+                                  "flex-direction": "column",
+                                  gap: "4px",
+                                  padding: "10px 12px",
+                                  "border-radius": "6px",
+                                  border: "1px solid var(--border)",
+                                  background: "var(--surface)",
+                                  cursor: "pointer",
+                                  "text-align": "left",
+                                  "font-family": "inherit",
+                                  "font-size": "inherit",
+                                  color: "inherit",
+                                  width: "100%",
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = "var(--surface-hover)";
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = "var(--surface)";
                                 }}
                               >
-                                idle
-                              </span>
-                            }
-                          >
-                            <span
-                              style={{
-                                "font-size": "11px",
-                                color: "var(--fg-secondary)",
-                                overflow: "hidden",
-                                "text-overflow": "ellipsis",
-                                "white-space": "nowrap",
-                              }}
-                            >
-                              {a().taskTitle}
-                            </span>
-                          </Show>
-                        </button>
-                        </div>
-                        );
-                      }}
-                    </For>
-                  </div>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    "align-items": "center",
+                                    gap: "6px",
+                                  }}
+                                >
+                                  <span
+                                    aria-hidden="true"
+                                    style={{
+                                      display: "inline-block",
+                                      width: "6px",
+                                      height: "6px",
+                                      "border-radius": "9999px",
+                                      background: a().isBusy ? "var(--green)" : "var(--dim)",
+                                    }}
+                                  />
+                                  <span style={{ "font-weight": "500", color: "var(--fg)" }}>
+                                    {a().paneTitle}
+                                  </span>
+                                  <span
+                                    style={{
+                                      "margin-left": "auto",
+                                      "font-size": "10px",
+                                      color: "var(--dim)",
+                                      "font-variant-numeric": "tabular-nums",
+                                    }}
+                                  >
+                                    {a().elapsed}
+                                  </span>
+                                </div>
+                                <Show
+                                  when={a().taskTitle}
+                                  fallback={
+                                    <span
+                                      style={{
+                                        "font-size": "11px",
+                                        color: "var(--dim)",
+                                        "font-style": "italic",
+                                      }}
+                                    >
+                                      idle
+                                    </span>
+                                  }
+                                >
+                                  <span
+                                    style={{
+                                      "font-size": "11px",
+                                      color: "var(--fg-secondary)",
+                                      overflow: "hidden",
+                                      "text-overflow": "ellipsis",
+                                      "white-space": "nowrap",
+                                    }}
+                                  >
+                                    {a().taskTitle}
+                                  </span>
+                                </Show>
+                              </button>
+                            </div>
+                          );
+                        }}
+                      </For>
+                    </div>
                   </div>
                 </section>
               </Show>

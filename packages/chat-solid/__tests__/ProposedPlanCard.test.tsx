@@ -63,18 +63,18 @@ function openMenu(container: HTMLElement): void {
 describe("ProposedPlanCard — header", () => {
   it("renders the title and the Plan badge", () => {
     const { container, dispose } = mount();
-    expect(
-      container.querySelector("[data-testid='proposed-plan-card-title']")?.textContent,
-    ).toBe("Implement OAuth");
+    expect(container.querySelector("[data-testid='proposed-plan-card-title']")?.textContent).toBe(
+      "Implement OAuth",
+    );
     expect(container.textContent).toContain("Plan");
     dispose();
   });
 
   it("falls back to 'Proposed plan' when no title is recoverable", () => {
     const { container, dispose } = mount({ planMarkdown: "" });
-    expect(
-      container.querySelector("[data-testid='proposed-plan-card-title']")?.textContent,
-    ).toBe("Proposed plan");
+    expect(container.querySelector("[data-testid='proposed-plan-card-title']")?.textContent).toBe(
+      "Proposed plan",
+    );
     dispose();
   });
 });
@@ -96,13 +96,17 @@ describe("ProposedPlanCard — collapse / expand", () => {
     expect(toggle?.textContent).toBe("Expand plan");
     expect(container.querySelector("[data-testid='proposed-plan-card-fade']")).toBeTruthy();
     expect(
-      container.querySelector("[data-testid='proposed-plan-card-body']")?.getAttribute("data-collapsed"),
+      container
+        .querySelector("[data-testid='proposed-plan-card-body']")
+        ?.getAttribute("data-collapsed"),
     ).toBe("true");
     toggle!.click();
     expect(toggle?.textContent).toBe("Collapse plan");
     expect(container.querySelector("[data-testid='proposed-plan-card-fade']")).toBeNull();
     expect(
-      container.querySelector("[data-testid='proposed-plan-card-body']")?.getAttribute("data-collapsed"),
+      container
+        .querySelector("[data-testid='proposed-plan-card-body']")
+        ?.getAttribute("data-collapsed"),
     ).toBe("false");
     dispose();
   });

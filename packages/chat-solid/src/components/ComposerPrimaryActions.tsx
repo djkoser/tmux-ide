@@ -220,7 +220,13 @@ export function ComposerPrimaryActions(props: ComposerPrimaryActionsProps): JSX.
                         onClick={() => void props.onImplementPlanInNewThread()}
                         title="Implement in a new thread"
                       >
-                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 14 14"
+                          fill="none"
+                          aria-hidden="true"
+                        >
                           <path
                             d="M3.5 5.5L7 9L10.5 5.5"
                             stroke="currentColor"
@@ -256,7 +262,13 @@ export function ComposerPrimaryActions(props: ComposerPrimaryActionsProps): JSX.
               onClick={() => props.onInterrupt()}
               aria-label="Stop generation"
             >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 12 12"
+                fill="currentColor"
+                aria-hidden="true"
+              >
                 <rect x="2" y="2" width="8" height="8" rx="1.5" />
               </svg>
             </button>

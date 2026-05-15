@@ -533,15 +533,11 @@ export function CostsDashboardView(props: CostsDashboardViewProps) {
                             </span>
                             <span>
                               active:
-                              <span style={{ color: "var(--yellow)" }}>
-                                {entry().activeTasks}
-                              </span>
+                              <span style={{ color: "var(--yellow)" }}>{entry().activeTasks}</span>
                             </span>
                             <span>
                               busy:
-                              <span style={{ color: "var(--accent)" }}>
-                                {entry().busyAgents}
-                              </span>
+                              <span style={{ color: "var(--accent)" }}>{entry().busyAgents}</span>
                             </span>
                             <span>
                               idle:

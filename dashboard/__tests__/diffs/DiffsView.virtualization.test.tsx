@@ -51,9 +51,7 @@ describe("DiffsView virtualization", () => {
     const rendered = container.querySelectorAll<HTMLElement>("[data-index]");
     expect(rendered.length).toBeLessThan(200);
 
-    const spacer = container.querySelector<HTMLElement>(
-      "[data-testid='diffs-view-spacer']",
-    );
+    const spacer = container.querySelector<HTMLElement>("[data-testid='diffs-view-spacer']");
     expect(spacer).toBeTruthy();
     const h = parseInt(spacer!.style.height, 10);
     // 1000 × at least 26px = 26000px.

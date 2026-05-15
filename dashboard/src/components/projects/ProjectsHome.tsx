@@ -6,14 +6,7 @@
  * pushes the existing /v2/setup wizard.
  */
 
-import {
-  createMemo,
-  createResource,
-  createSignal,
-  For,
-  Show,
-  type JSX,
-} from "solid-js";
+import { createMemo, createResource, createSignal, For, Show, type JSX } from "solid-js";
 import { A, useNavigate } from "@solidjs/router";
 import { Effect } from "effect";
 import {
@@ -190,7 +183,11 @@ export function ProjectsHome(): JSX.Element {
         <div class="flex items-baseline gap-3">
           <h1 class="text-[15px] font-medium">tmux-ide</h1>
           <span class="text-[11px] text-[var(--dim)]">
-            Press <kbd class="rounded border border-[var(--border)] px-1 py-0.5 font-mono text-[10px]">⌘P</kbd> to switch projects
+            Press{" "}
+            <kbd class="rounded border border-[var(--border)] px-1 py-0.5 font-mono text-[10px]">
+              ⌘P
+            </kbd>{" "}
+            to switch projects
           </span>
         </div>
         <div class="flex items-center gap-2">

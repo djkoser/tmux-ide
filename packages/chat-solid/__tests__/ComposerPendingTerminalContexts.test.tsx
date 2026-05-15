@@ -61,7 +61,10 @@ describe("ComposerPendingTerminalContexts", () => {
   });
 
   it("renders one chip per context with the formatted label", () => {
-    const { container, dispose } = mountStrip([draft(), draft({ id: "ctx-2", lineStart: 5, lineEnd: 5 })]);
+    const { container, dispose } = mountStrip([
+      draft(),
+      draft({ id: "ctx-2", lineStart: 5, lineEnd: 5 }),
+    ]);
     const chips = container.querySelectorAll("[data-testid='terminal-context-inline-chip']");
     expect(chips.length).toBe(2);
     expect(chips[0]?.textContent).toContain("Dev Server lines 12-30");
@@ -102,13 +105,7 @@ describe("TerminalContextInlineChip (standalone)", () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const dispose = render(
-      () => (
-        <TerminalContextInlineChip
-          label="dev line 12-30"
-          tooltipText="(expired)"
-          expired
-        />
-      ),
+      () => <TerminalContextInlineChip label="dev line 12-30" tooltipText="(expired)" expired />,
       container,
     );
     const chip = container.querySelector("[data-testid='terminal-context-inline-chip']");
@@ -152,13 +149,10 @@ describe("userMessageTerminalContexts helpers", () => {
 
   it("returns true when every label appears in order", () => {
     expect(
-      textContainsInlineTerminalContextLabels(
-        "first @dev-server:12-30 then @my-shell:7 ok",
-        [
-          { header: "Dev Server lines 12-30" },
-          { header: "My Shell line 7" },
-        ],
-      ),
+      textContainsInlineTerminalContextLabels("first @dev-server:12-30 then @my-shell:7 ok", [
+        { header: "Dev Server lines 12-30" },
+        { header: "My Shell line 7" },
+      ]),
     ).toBe(true);
   });
 });

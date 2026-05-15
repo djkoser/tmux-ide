@@ -23,10 +23,7 @@ interface ShikiViewerProps {
 const MAX_HIGHLIGHT_BYTES = 200_000;
 
 function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 export function ShikiViewer(props: ShikiViewerProps): JSX.Element {
@@ -36,8 +33,8 @@ export function ShikiViewer(props: ShikiViewerProps): JSX.Element {
   createEffect(
     on([() => props.filePath, () => props.content, () => activeShikiTheme()], async () => {
       setError(null);
-      const lang = (props.language as ReturnType<typeof languageForFile>) ??
-        languageForFile(props.filePath);
+      const lang =
+        (props.language as ReturnType<typeof languageForFile>) ?? languageForFile(props.filePath);
       if (!lang) {
         setHtml(`<pre class="shiki"><code>${escapeHtml(props.content)}</code></pre>`);
         return;

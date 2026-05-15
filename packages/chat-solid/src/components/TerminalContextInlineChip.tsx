@@ -26,9 +26,7 @@ export interface TerminalContextInlineChipProps {
 const TERMINAL_ICON_PATH =
   "M2.5 3.5h11a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1Zm1.7 2.4l2.1 2.1-2.1 2.1m3.2.7h3.5";
 
-export function TerminalContextInlineChip(
-  props: TerminalContextInlineChipProps,
-): JSX.Element {
+export function TerminalContextInlineChip(props: TerminalContextInlineChipProps): JSX.Element {
   const variantClass = (): string =>
     props.expired
       ? "border-red/40 bg-red/10 text-red"

@@ -149,10 +149,7 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
     const language = languageFor(file);
     const left = uriForRef(file, originalRef());
     const right = uriForRef(file, modifiedRef());
-    for (const [target, ref] of [
-      [left, originalRef()] as const,
-      [right, modifiedRef()] as const,
-    ]) {
+    for (const [target, ref] of [[left, originalRef()] as const, [right, modifiedRef()] as const]) {
       if (modelRegistry.modelStatus(target.uri) === "ready") continue;
       if (target.isWorking) {
         void Effect.runPromise(
@@ -401,13 +398,7 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
                   file={uris().file}
                   additions={selectedEntry()?.additions ?? 0}
                   deletions={selectedEntry()?.deletions ?? 0}
-                  badge={
-                    source() === "staged"
-                      ? "Staged"
-                      : source() === "pr"
-                        ? "PR"
-                        : "Changed"
-                  }
+                  badge={source() === "staged" ? "Staged" : source() === "pr" ? "PR" : "Changed"}
                 />
                 <Show
                   when={!selectedIsLarge()}

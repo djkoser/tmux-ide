@@ -29,10 +29,7 @@ import {
   type ModelPickerSidebarComingSoon,
   type ProviderInstanceSummary,
 } from "./ModelPickerSidebar";
-import {
-  buildModelPickerSearchText,
-  scoreModelPickerSearch,
-} from "../lib/modelPickerSearch";
+import { buildModelPickerSearchText, scoreModelPickerSearch } from "../lib/modelPickerSearch";
 import {
   isModelPickerNewModel,
   isModelPickerRecommendedModel,
@@ -320,10 +317,7 @@ export function ModelPickerContent(props: ModelPickerContentProps): JSX.Element 
                 data-testid="provider-model-picker-empty"
                 class="px-3 py-6 text-center text-[12px] text-dim"
               >
-                <Show
-                  when={props.instances().length === 0}
-                  fallback={<span>No models match</span>}
-                >
+                <Show when={props.instances().length === 0} fallback={<span>No models match</span>}>
                   No providers discovered
                 </Show>
               </div>

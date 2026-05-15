@@ -90,8 +90,7 @@ export function LargeDiffGuard(props: LargeDiffGuardProps): JSX.Element {
       <div class="text-center">
         <div class="font-mono">{props.file}</div>
         <div class="mt-1 text-[var(--dim)]">
-          Large diff —{" "}
-          <span class="text-[var(--green)]">+{props.additions}</span>
+          Large diff — <span class="text-[var(--green)]">+{props.additions}</span>
           <span class="opacity-50"> / </span>
           <span class="text-[var(--red)]">−{props.deletions}</span> (threshold{" "}
           {LARGE_DIFF_LINE_THRESHOLD}). Skipped to keep the page snappy.

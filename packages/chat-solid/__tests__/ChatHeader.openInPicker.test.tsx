@@ -105,9 +105,7 @@ describe("ChatHeader — OpenInPicker mount", () => {
     expect(chip?.textContent).toContain("my-project");
     // Open the menu via the chevron — internal default registry has
     // vscode / cursor / vscode-insiders / vscodium / zed / file-manager.
-    container
-      .querySelector<HTMLButtonElement>("[data-testid='open-in-picker-chevron']")!
-      .click();
+    container.querySelector<HTMLButtonElement>("[data-testid='open-in-picker-chevron']")!.click();
     const options = container.querySelectorAll("[data-testid='open-in-picker-option']");
     expect(options.length).toBeGreaterThanOrEqual(5);
     dispose();
@@ -119,7 +117,9 @@ describe("ChatHeader — OpenInPicker mount", () => {
       threadOverrides: { projectDir: "/tmp/my-project" },
     });
     expect(
-      container.querySelector("[data-testid='open-in-picker-primary']")?.getAttribute("data-editor-id"),
+      container
+        .querySelector("[data-testid='open-in-picker-primary']")
+        ?.getAttribute("data-editor-id"),
     ).toBe("zed");
     dispose();
   });
@@ -128,9 +128,7 @@ describe("ChatHeader — OpenInPicker mount", () => {
     const { container, dispose } = mount({
       threadOverrides: { projectDir: "/tmp/my-project" },
     });
-    container
-      .querySelector<HTMLButtonElement>("[data-testid='open-in-picker-chevron']")!
-      .click();
+    container.querySelector<HTMLButtonElement>("[data-testid='open-in-picker-chevron']")!.click();
     container
       .querySelector<HTMLButtonElement>(
         "[data-testid='open-in-picker-option'][data-editor-id='cursor']",
@@ -144,16 +142,14 @@ describe("ChatHeader — OpenInPicker mount", () => {
     const opened: string[] = [];
     const originalOpen = window.open;
     window.open = vi.fn(((url) => {
-      opened.push(typeof url === "string" ? url : url?.toString() ?? "");
+      opened.push(typeof url === "string" ? url : (url?.toString() ?? ""));
       return null;
     }) as typeof window.open);
     try {
       const { container, dispose } = mount({
         threadOverrides: { projectDir: "/tmp/my-project" },
       });
-      container
-        .querySelector<HTMLButtonElement>("[data-testid='open-in-picker-primary']")!
-        .click();
+      container.querySelector<HTMLButtonElement>("[data-testid='open-in-picker-primary']")!.click();
       expect(opened).toEqual(["vscode://file/tmp/my-project"]);
       dispose();
     } finally {
@@ -167,11 +163,11 @@ describe("ChatHeader — OpenInPicker mount", () => {
       threadOverrides: { projectDir: "/tmp/ignored-by-host-prop" },
     });
     expect(
-      container.querySelector("[data-testid='open-in-picker-primary']")?.getAttribute("data-editor-id"),
+      container
+        .querySelector("[data-testid='open-in-picker-primary']")
+        ?.getAttribute("data-editor-id"),
     ).toBe("vscode");
-    container
-      .querySelector<HTMLButtonElement>("[data-testid='open-in-picker-primary']")!
-      .click();
+    container.querySelector<HTMLButtonElement>("[data-testid='open-in-picker-primary']")!.click();
     // The host-supplied openInCwd ("/tmp/project") wins over the
     // thread's projectDir, and the host-supplied handler runs
     // instead of the localStorage default.

@@ -561,8 +561,7 @@ function KanbanColumnBody(props: KanbanColumnBodyProps): JSX.Element {
                           width: "7px",
                           height: "7px",
                           "border-radius": "50%",
-                          "background-color":
-                            PRIORITY_COLOR[task().priority] ?? "var(--dim)",
+                          "background-color": PRIORITY_COLOR[task().priority] ?? "var(--dim)",
                         }}
                       />
                     </header>
@@ -580,9 +579,7 @@ function KanbanColumnBody(props: KanbanColumnBodyProps): JSX.Element {
                       {task().title}
                     </div>
                     <Show
-                      when={
-                        task().assignee || (task().depends_on && task().depends_on!.length > 0)
-                      }
+                      when={task().assignee || (task().depends_on && task().depends_on!.length > 0)}
                     >
                       <footer
                         style={{

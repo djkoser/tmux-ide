@@ -256,8 +256,7 @@ export function ExplorerView(props: ExplorerViewProps) {
               const row = () => rows()[vItem.index]!;
               const isSel = () => vItem.index === selected();
               const indent = () => row().depth * 12;
-              const glyph = () =>
-                row().node.isDirectory ? (row().expanded ? "▾" : "▸") : "·";
+              const glyph = () => (row().node.isDirectory ? (row().expanded ? "▾" : "▸") : "·");
               return (
                 <div
                   data-row-index={vItem.index}
@@ -275,9 +274,7 @@ export function ExplorerView(props: ExplorerViewProps) {
                     gap: "6px",
                     padding: "2px 12px 2px 6px",
                     "box-sizing": "border-box",
-                    "border-left": isSel()
-                      ? "2px solid var(--accent)"
-                      : "2px solid transparent",
+                    "border-left": isSel() ? "2px solid var(--accent)" : "2px solid transparent",
                     "background-color": isSel() ? "var(--surface-hover)" : "transparent",
                     cursor: "pointer",
                     "white-space": "nowrap",

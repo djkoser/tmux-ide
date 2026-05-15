@@ -91,9 +91,7 @@ function mount(opts: MountOpts = {}) {
 describe("ChatComposer — pending user-input wiring", () => {
   it("does not mount the panel when the queue is empty", () => {
     const { container, dispose } = mount();
-    expect(
-      container.querySelector("[data-testid='composer-pending-user-input-panel']"),
-    ).toBeNull();
+    expect(container.querySelector("[data-testid='composer-pending-user-input-panel']")).toBeNull();
     dispose();
   });
 
@@ -146,9 +144,9 @@ describe("ChatComposer — terminal-context chip wiring", () => {
     });
     const strip = container.querySelector("[data-testid='composer-pending-terminal-contexts']");
     expect(strip).toBeTruthy();
-    expect(
-      container.querySelectorAll("[data-testid='terminal-context-inline-chip']").length,
-    ).toBe(1);
+    expect(container.querySelectorAll("[data-testid='terminal-context-inline-chip']").length).toBe(
+      1,
+    );
     dispose();
   });
 
@@ -170,9 +168,7 @@ describe("ChatComposer — terminal-context chip wiring", () => {
       onRemoveTerminalContext: onRemove,
     });
     container
-      .querySelector<HTMLButtonElement>(
-        "[data-testid='terminal-context-inline-chip-remove']",
-      )!
+      .querySelector<HTMLButtonElement>("[data-testid='terminal-context-inline-chip-remove']")!
       .click();
     expect(onRemove).toHaveBeenCalledExactlyOnceWith("ctx-99");
     dispose();
@@ -182,9 +178,7 @@ describe("ChatComposer — terminal-context chip wiring", () => {
 describe("ChatComposer — compact-controls wiring", () => {
   it("does not render the trigger when showCompactControls is false", () => {
     const { container, dispose } = mount({ showCompactControls: false });
-    expect(
-      container.querySelector("[data-testid='compact-composer-controls']"),
-    ).toBeNull();
+    expect(container.querySelector("[data-testid='compact-composer-controls']")).toBeNull();
     dispose();
   });
 

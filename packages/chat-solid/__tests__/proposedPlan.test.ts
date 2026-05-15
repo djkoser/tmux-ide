@@ -71,9 +71,7 @@ describe("buildProposedPlanMarkdownFilename", () => {
   });
 
   it("strips non-alphanumerics", () => {
-    expect(buildProposedPlanMarkdownFilename("# Refactor: auth (v2)!")).toBe(
-      "refactor-auth-v2.md",
-    );
+    expect(buildProposedPlanMarkdownFilename("# Refactor: auth (v2)!")).toBe("refactor-auth-v2.md");
   });
 
   it("falls back to the default when no title is recoverable", () => {

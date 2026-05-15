@@ -44,13 +44,7 @@ function mount(opts: MountOpts = {}) {
   const [files] = createSignal<ChangedFile[]>(opts.files ?? [file()]);
   const [turnId] = createSignal<string | null>(opts.turnId ?? null);
   const dispose = render(
-    () => (
-      <ChangedFilesTree
-        files={files}
-        turnId={() => turnId()}
-        onOpenDiff={opts.onOpenDiff}
-      />
-    ),
+    () => <ChangedFilesTree files={files} turnId={() => turnId()} onOpenDiff={opts.onOpenDiff} />,
     container,
   );
   return { container, dispose };

@@ -230,10 +230,7 @@ export function OpenInPicker(props: OpenInPickerProps): JSX.Element {
                   </span>
                   <span class="flex-1">{entry.label}</span>
                   <Show
-                    when={
-                      entry.id === props.preferredEditor() &&
-                      props.favoriteShortcutLabel?.()
-                    }
+                    when={entry.id === props.preferredEditor() && props.favoriteShortcutLabel?.()}
                   >
                     {(label) => (
                       <kbd

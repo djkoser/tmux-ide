@@ -5,21 +5,14 @@
  * both surfaces share the same mapping.
  */
 
-import {
-  File,
-  FileCode,
-  FileCode2,
-  FileJson,
-  FileText,
-  FileImage,
-  FileType,
-} from "lucide-solid";
+import { File, FileCode, FileCode2, FileJson, FileText, FileImage, FileType } from "lucide-solid";
 import type { Component, JSX } from "solid-js";
 
 export type FileIconComponent = Component<{
   class?: string;
   "aria-hidden"?: boolean | "true" | "false";
-}> & ((props: { class?: string }) => JSX.Element);
+}> &
+  ((props: { class?: string }) => JSX.Element);
 
 const EXTENSION_MAP: Record<string, FileIconComponent> = {
   ts: FileCode,

@@ -488,10 +488,7 @@ export function mountCommandPalette(
  * re-broadcast. See docs/feature-framework.md for the worked 7-file
  * pattern this exemplifies.
  */
-export function mountNotes(
-  container: HTMLElement,
-  opts: NotesMountOptions,
-): NotesMountHandle {
+export function mountNotes(container: HTMLElement, opts: NotesMountOptions): NotesMountHandle {
   const [options, setOpts] = createSignal(opts);
   container.classList.add("v2-solid-widget");
   const dispose = render(() => <NotesView options={options} />, container);

@@ -39,11 +39,7 @@ function clipboardEventWith(files: File[]): ClipboardEvent {
   return event;
 }
 
-function dragEventOf(
-  type: string,
-  files: File[],
-  types: string[] = ["Files"],
-): DragEvent {
+function dragEventOf(type: string, files: File[], types: string[] = ["Files"]): DragEvent {
   const event = new Event(type, { bubbles: true, cancelable: true }) as DragEvent;
   Object.defineProperty(event, "dataTransfer", {
     value: { files: files as unknown as FileList, types, dropEffect: "none" },
@@ -125,9 +121,7 @@ describe("ChatComposer — paste image", () => {
   it("surfaces the inline error + onAttachmentError for an oversized image", async () => {
     const { container, dispose, onError } = mount();
     const ta = container.querySelector<HTMLTextAreaElement>("textarea")!;
-    ta.dispatchEvent(
-      clipboardEventWith([fakeFile("huge.png", "image/png", MAX_IMAGE_BYTES + 1)]),
-    );
+    ta.dispatchEvent(clipboardEventWith([fakeFile("huge.png", "image/png", MAX_IMAGE_BYTES + 1)]));
     await flushReaders();
     const line = container.querySelector("[data-testid='composer-attach-error']");
     expect(line?.textContent).toContain("attachment limit");
@@ -139,9 +133,7 @@ describe("ChatComposer — paste image", () => {
 describe("ChatComposer — drag/drop image", () => {
   it("toggles the drop overlay on dragenter and clears it on drop", async () => {
     const { container, dispose, onAdd } = mount();
-    const surface = container.querySelector<HTMLElement>(
-      "[data-testid='composer-surface']",
-    )!;
+    const surface = container.querySelector<HTMLElement>("[data-testid='composer-surface']")!;
 
     surface.dispatchEvent(dragEventOf("dragenter", [fakeFile("d.png", "image/png", 64)]));
     expect(surface.getAttribute("data-drag-over")).toBe("true");
@@ -157,23 +149,19 @@ describe("ChatComposer — drag/drop image", () => {
 
   it("errors when the drop carries no image files", async () => {
     const { container, dispose, onError } = mount();
-    const surface = container.querySelector<HTMLElement>(
-      "[data-testid='composer-surface']",
-    )!;
+    const surface = container.querySelector<HTMLElement>("[data-testid='composer-surface']")!;
     surface.dispatchEvent(dragEventOf("drop", [fakeFile("a.pdf", "application/pdf", 64)]));
     await flushReaders();
-    expect(
-      container.querySelector("[data-testid='composer-attach-error']")?.textContent,
-    ).toContain("Only image files");
+    expect(container.querySelector("[data-testid='composer-attach-error']")?.textContent).toContain(
+      "Only image files",
+    );
     expect(onError).toHaveBeenCalledTimes(1);
     dispose();
   });
 
   it("ignores drag payloads that don't advertise Files", () => {
     const { container, dispose } = mount();
-    const surface = container.querySelector<HTMLElement>(
-      "[data-testid='composer-surface']",
-    )!;
+    const surface = container.querySelector<HTMLElement>("[data-testid='composer-surface']")!;
     surface.dispatchEvent(dragEventOf("dragenter", [], ["text/plain"]));
     expect(surface.getAttribute("data-drag-over")).toBe("false");
     dispose();

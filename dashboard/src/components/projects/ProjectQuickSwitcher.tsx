@@ -220,12 +220,7 @@ export function ProjectQuickSwitcher(): JSX.Element {
 
   function onWindowKey(event: KeyboardEvent): void {
     const mod = isMac() ? event.metaKey : event.ctrlKey;
-    if (
-      mod &&
-      !event.shiftKey &&
-      !event.altKey &&
-      (event.key === "p" || event.key === "P")
-    ) {
+    if (mod && !event.shiftKey && !event.altKey && (event.key === "p" || event.key === "P")) {
       // Skip when the user is typing in an input that owns Cmd+P (e.g.
       // Monaco's command palette). The overlay opens from any non-
       // editable target.
@@ -324,17 +319,13 @@ export function ProjectQuickSwitcher(): JSX.Element {
                             aria-hidden="true"
                             class={
                               "h-1.5 w-1.5 shrink-0 rounded-full " +
-                              (row.running
-                                ? "bg-[var(--green,#7cb342)]"
-                                : "bg-transparent")
+                              (row.running ? "bg-[var(--green,#7cb342)]" : "bg-transparent")
                             }
                             title={row.running ? "Running" : undefined}
                           />
                           <span class="truncate font-mono">{row.name}</span>
                           <Show when={row.branch}>
-                            <span class="truncate text-[10px] text-[var(--dim)]">
-                              {row.branch}
-                            </span>
+                            <span class="truncate text-[10px] text-[var(--dim)]">{row.branch}</span>
                           </Show>
                           <span class="ml-auto truncate text-[10px] text-[var(--dim)]">
                             {homeCollapsed(row.dir)}

@@ -120,9 +120,7 @@ describe("ChatComposer — responsive footer", () => {
     const { container, dispose } = mount();
     expect(container.querySelector("[data-testid='composer-footer-row']")).toBeNull();
     expect(container.querySelector("[data-testid='composer-footer-strip']")).toBeNull();
-    expect(
-      container.querySelector("[data-testid='compact-composer-controls']"),
-    ).toBeNull();
+    expect(container.querySelector("[data-testid='compact-composer-controls']")).toBeNull();
     dispose();
   });
 
@@ -131,22 +129,16 @@ describe("ChatComposer — responsive footer", () => {
     expect(container.querySelector("[data-testid='composer-footer-row']")).toBeTruthy();
     expect(container.querySelector("[data-testid='composer-footer-strip']")).toBeTruthy();
     // Compact menu stays hidden.
-    expect(
-      container.querySelector("[data-testid='compact-composer-controls']"),
-    ).toBeNull();
+    expect(container.querySelector("[data-testid='compact-composer-controls']")).toBeNull();
     dispose();
   });
 
   it("falls back to the compact menu on a narrow form", () => {
     const { container, dispose } = mount({ useResponsiveFooter: true, formWidth: 420 });
     expect(container.querySelector("[data-testid='composer-footer-strip']")).toBeNull();
+    expect(container.querySelector("[data-testid='compact-composer-controls']")).toBeTruthy();
     expect(
-      container.querySelector("[data-testid='compact-composer-controls']"),
-    ).toBeTruthy();
-    expect(
-      container
-        .querySelector<HTMLFormElement>("form")
-        ?.getAttribute("data-footer-compact"),
+      container.querySelector<HTMLFormElement>("form")?.getAttribute("data-footer-compact"),
     ).toBe("true");
     dispose();
   });
@@ -158,9 +150,7 @@ describe("ChatComposer — responsive footer", () => {
       showCompactControls: true,
     });
     expect(container.querySelector("[data-testid='composer-footer-strip']")).toBeNull();
-    expect(
-      container.querySelector("[data-testid='compact-composer-controls']"),
-    ).toBeTruthy();
+    expect(container.querySelector("[data-testid='compact-composer-controls']")).toBeTruthy();
     dispose();
   });
 });

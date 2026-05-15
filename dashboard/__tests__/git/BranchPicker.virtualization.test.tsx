@@ -54,9 +54,7 @@ describe("BranchPicker virtualization", () => {
     const rendered = container.querySelectorAll<HTMLElement>("[data-index]");
     expect(rendered.length).toBeLessThan(200);
 
-    const spacer = container.querySelector<HTMLElement>(
-      "[data-testid='branch-picker-spacer']",
-    );
+    const spacer = container.querySelector<HTMLElement>("[data-testid='branch-picker-spacer']");
     expect(spacer).toBeTruthy();
     const h = parseInt(spacer!.style.height, 10);
     expect(h).toBeGreaterThan(25_000);

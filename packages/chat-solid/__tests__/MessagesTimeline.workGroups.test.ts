@@ -27,11 +27,7 @@ function userMessage(id: string, text: string, ts = "2026-05-14T10:00:00.000Z"):
   };
 }
 
-function assistantMessage(
-  id: string,
-  text: string,
-  ts = "2026-05-14T10:00:05.000Z",
-): ChatMessage {
+function assistantMessage(id: string, text: string, ts = "2026-05-14T10:00:05.000Z"): ChatMessage {
   return {
     id,
     role: "assistant",
@@ -49,7 +45,12 @@ function workEntry(id: string, label = `entry ${id}`): WorkLogEntry {
 describe("deriveMessagesTimelineRows", () => {
   it("passes message entries through unchanged when no overlays are set", () => {
     const entries: TimelineSourceEntry[] = [
-      { kind: "message", id: "m1", createdAt: "2026-05-14T10:00:00.000Z", message: userMessage("u1", "hi") },
+      {
+        kind: "message",
+        id: "m1",
+        createdAt: "2026-05-14T10:00:00.000Z",
+        message: userMessage("u1", "hi"),
+      },
       {
         kind: "message",
         id: "m2",

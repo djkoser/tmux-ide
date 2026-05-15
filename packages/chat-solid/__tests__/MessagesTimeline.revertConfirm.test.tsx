@@ -15,11 +15,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
 import { MessagesTimeline } from "../src/components/MessagesTimeline";
-import type {
-  ChatMessage,
-  MessagesTimelineRow,
-  ThreadMessage,
-} from "../src/types";
+import type { ChatMessage, MessagesTimelineRow, ThreadMessage } from "../src/types";
 
 function userMessage(id: string): ChatMessage {
   return {
@@ -168,13 +164,9 @@ describe("MessagesTimeline — completion divider duration", () => {
         },
       ],
     });
-    const divider = mounted.container.querySelector(
-      "[data-testid='message-completion-divider']",
-    );
+    const divider = mounted.container.querySelector("[data-testid='message-completion-divider']");
     expect(divider?.textContent).toContain("Completed in 5.0s");
-    expect(divider?.getAttribute("data-turn-started-at")).toBe(
-      "2026-05-14T10:00:00.000Z",
-    );
+    expect(divider?.getAttribute("data-turn-started-at")).toBe("2026-05-14T10:00:00.000Z");
   });
 
   it("falls back to bare label when no start timestamp is set", () => {
@@ -189,9 +181,7 @@ describe("MessagesTimeline — completion divider duration", () => {
         },
       ],
     });
-    const divider = mounted.container.querySelector(
-      "[data-testid='message-completion-divider']",
-    );
+    const divider = mounted.container.querySelector("[data-testid='message-completion-divider']");
     expect(divider?.textContent?.trim()).toBe("Completed turn");
   });
 });

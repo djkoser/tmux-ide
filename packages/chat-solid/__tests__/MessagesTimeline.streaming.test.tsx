@@ -22,11 +22,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
 import { MessagesTimeline } from "../src/components/MessagesTimeline";
-import type {
-  ChatMessage,
-  MessagesTimelineRow,
-  ThreadMessage,
-} from "../src/types";
+import type { ChatMessage, MessagesTimelineRow, ThreadMessage } from "../src/types";
 
 afterEach(() => {
   document.body.innerHTML = "";
@@ -41,11 +37,7 @@ function userMsg(id: string, text: string): ChatMessage {
   };
 }
 
-function assistantMsg(
-  id: string,
-  text: string,
-  streaming: boolean,
-): ChatMessage {
+function assistantMsg(id: string, text: string, streaming: boolean): ChatMessage {
   return {
     id,
     role: "assistant",
@@ -81,13 +73,7 @@ function mount(initialRows: MessagesTimelineRow[]): MountReturn {
   const [rows, setRows] = createSignal<MessagesTimelineRow[]>(initialRows);
   const [messages] = createSignal<ThreadMessage[]>([]);
   const dispose = render(
-    () => (
-      <MessagesTimeline
-        rows={rows}
-        messages={messages}
-        providerName={() => "Claude"}
-      />
-    ),
+    () => <MessagesTimeline rows={rows} messages={messages} providerName={() => "Claude"} />,
     container,
   );
   return { container, dispose, setRows };
@@ -108,10 +94,7 @@ describe("MessagesTimeline — streaming token reactivity (post-virtualization)"
     const assistantRow = findStreamingRow(container, "a1");
     expect(assistantRow?.textContent).toContain("Hi");
 
-    setRows([
-      messageRow(userMsg("u1", "hello")),
-      messageRow(assistantMsg("a1", "Hi th", true)),
-    ]);
+    setRows([messageRow(userMsg("u1", "hello")), messageRow(assistantMsg("a1", "Hi th", true))]);
     expect(findStreamingRow(container, "a1")?.textContent).toContain("Hi th");
 
     setRows([
@@ -132,10 +115,7 @@ describe("MessagesTimeline — streaming token reactivity (post-virtualization)"
     const userBefore = findStreamingRow(container, "u1");
     expect(userBefore).toBeTruthy();
 
-    setRows([
-      messageRow(userMsg("u1", "hello")),
-      messageRow(assistantMsg("a1", "Hi there", true)),
-    ]);
+    setRows([messageRow(userMsg("u1", "hello")), messageRow(assistantMsg("a1", "Hi there", true))]);
     setRows([
       messageRow(userMsg("u1", "hello")),
       messageRow(assistantMsg("a1", "Hi there, friend.", true)),

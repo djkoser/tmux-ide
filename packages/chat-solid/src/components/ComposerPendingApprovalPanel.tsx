@@ -48,7 +48,9 @@ export function ComposerPendingApprovalPanel(
         <span class="text-[11px] uppercase tracking-[0.2em] text-fg-secondary">
           PENDING APPROVAL
         </span>
-        <span class="text-[13px] font-medium text-fg">{summaryFor(props.approval.requestKind)}</span>
+        <span class="text-[13px] font-medium text-fg">
+          {summaryFor(props.approval.requestKind)}
+        </span>
         <Show when={props.pendingCount > 1}>
           <span class="text-[11px] text-dim">1/{props.pendingCount}</span>
         </Show>

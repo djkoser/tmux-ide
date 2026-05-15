@@ -38,9 +38,7 @@ describe("SkillsViewView virtualization", () => {
     expect(rendered.length).toBeGreaterThan(0);
     expect(rendered.length).toBeLessThan(200);
 
-    const spacer = container.querySelector<HTMLElement>(
-      "[data-testid='skills-rail-spacer']",
-    );
+    const spacer = container.querySelector<HTMLElement>("[data-testid='skills-rail-spacer']");
     expect(spacer).toBeTruthy();
     const h = parseInt(spacer!.style.height, 10);
     // 1000 × at least 28px estimate = 28000px.

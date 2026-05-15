@@ -105,9 +105,7 @@ async function waitFor(assertion: () => boolean): Promise<void> {
 }
 
 function pushMessage(socket: FakeWebSocket, payload: unknown): void {
-  socket.dispatchEvent(
-    new MessageEvent("message", { data: JSON.stringify(payload) }),
-  );
+  socket.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(payload) }));
 }
 
 function textChunkFrame(seq: number, text: string, messageId = "msg-1") {

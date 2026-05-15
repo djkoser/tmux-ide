@@ -112,9 +112,7 @@ describe("ToolCallCard rendering", () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     render(() => <ToolCallCard toolCall={toolCall()} />, container);
-    const details = container.querySelector<HTMLDetailsElement>(
-      "[data-testid='tool-call-card']",
-    );
+    const details = container.querySelector<HTMLDetailsElement>("[data-testid='tool-call-card']");
     details!.open = true;
     details!.dispatchEvent(new Event("toggle"));
     expect(container.querySelector("[data-testid='tool-call-card-copy']")).toBeTruthy();
@@ -134,9 +132,7 @@ describe("ToolCallCard rendering", () => {
       ),
       container,
     );
-    const details = container.querySelector<HTMLDetailsElement>(
-      "[data-testid='tool-call-card']",
-    );
+    const details = container.querySelector<HTMLDetailsElement>("[data-testid='tool-call-card']");
     details!.open = true;
     details!.dispatchEvent(new Event("toggle"));
 

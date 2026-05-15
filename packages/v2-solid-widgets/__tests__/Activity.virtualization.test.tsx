@@ -41,9 +41,7 @@ describe("Activity virtualization", () => {
     expect(rendered.length).toBeGreaterThan(0);
     expect(rendered.length).toBeLessThan(200);
 
-    const spacer = container.querySelector<HTMLElement>(
-      "[data-testid='activity-timeline-spacer']",
-    );
+    const spacer = container.querySelector<HTMLElement>("[data-testid='activity-timeline-spacer']");
     expect(spacer).toBeTruthy();
     const spacerHeight = parseInt(spacer!.style.height, 10);
     // 10k events + at least 1 day-header row × ~52px per event,

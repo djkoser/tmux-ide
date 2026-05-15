@@ -82,9 +82,7 @@ function attachmentKindGlyph(attachment: ComposerAttachment): string {
 
 function attachmentSize(attachment: ComposerAttachment): string {
   if (attachment.kind !== "image") return "";
-  return attachment.sizeBytes !== undefined
-    ? formatAttachmentSize(attachment.sizeBytes)
-    : "";
+  return attachment.sizeBytes !== undefined ? formatAttachmentSize(attachment.sizeBytes) : "";
 }
 
 export function AttachmentCarousel(props: AttachmentCarouselProps): JSX.Element {
@@ -139,10 +137,7 @@ export function AttachmentCarousel(props: AttachmentCarouselProps): JSX.Element 
                 </span>
                 <Show when={attachmentSize(attachment)}>
                   {(size) => (
-                    <span
-                      data-testid="attachment-carousel-size"
-                      class="shrink-0 text-[var(--dim)]"
-                    >
+                    <span data-testid="attachment-carousel-size" class="shrink-0 text-[var(--dim)]">
                       {size()}
                     </span>
                   )}

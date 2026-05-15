@@ -163,9 +163,7 @@ describe("composerDraftStore — cross-tab subscribe", () => {
     flushDrafts();
 
     const events: Array<string | null> = [];
-    const unsubscribe = subscribeDraft("thread-A", (entry) =>
-      events.push(entry?.prompt ?? null),
-    );
+    const unsubscribe = subscribeDraft("thread-A", (entry) => events.push(entry?.prompt ?? null));
 
     const next = {
       "thread-A": { prompt: "alpha", updatedAt: Date.now() - 1_000 },
@@ -188,9 +186,7 @@ describe("composerDraftStore — cross-tab subscribe", () => {
     flushDrafts();
 
     const events: Array<string | null> = [];
-    const unsubscribe = subscribeDraft("thread-A", (entry) =>
-      events.push(entry?.prompt ?? null),
-    );
+    const unsubscribe = subscribeDraft("thread-A", (entry) => events.push(entry?.prompt ?? null));
 
     localStorage.setItem(__STORAGE_KEY_FOR_TESTS, JSON.stringify({}));
     window.dispatchEvent(

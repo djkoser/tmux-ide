@@ -41,7 +41,8 @@ function mountChat(opts: MountOpts = {}) {
   const [pendingApproval] = createSignal<PendingApproval | null>(opts.pendingApproval ?? null);
   const [count] = createSignal(opts.pendingApprovalCount ?? 1);
   const onRespond =
-    opts.onRespondToApproval ?? vi.fn(async (_id: string, _decision: ProviderApprovalDecision) => undefined);
+    opts.onRespondToApproval ??
+    vi.fn(async (_id: string, _decision: ProviderApprovalDecision) => undefined);
   const onSend = vi.fn(async (_content: ContentBlock[]) => undefined);
   const onCancel = vi.fn();
 
@@ -83,7 +84,9 @@ describe("ChatComposer wiring — approval surface + primary actions", () => {
       pendingApproval: { requestId: "req-1", requestKind: "command" },
     });
     expect(container.querySelector("[data-testid='composer-pending-approval-panel']")).toBeTruthy();
-    expect(container.querySelector("[data-testid='composer-pending-approval-actions']")).toBeTruthy();
+    expect(
+      container.querySelector("[data-testid='composer-pending-approval-actions']"),
+    ).toBeTruthy();
     expect(container.textContent).toContain("Command approval requested");
     dispose();
   });
@@ -96,9 +99,7 @@ describe("ChatComposer wiring — approval surface + primary actions", () => {
     });
 
     for (const decision of ["cancel", "decline", "acceptForSession", "accept"] as const) {
-      const btn = container.querySelector<HTMLButtonElement>(
-        `button[data-decision='${decision}']`,
-      );
+      const btn = container.querySelector<HTMLButtonElement>(`button[data-decision='${decision}']`);
       expect(btn).toBeTruthy();
       btn!.click();
     }

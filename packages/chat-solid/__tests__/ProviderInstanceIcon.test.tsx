@@ -38,7 +38,10 @@ describe("ProviderInstanceIcon", () => {
   it("renders the driver-kind glyph for built-in kinds", () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
-    render(() => <ProviderInstanceIcon driverKind="claude-code" displayName="Claude Code" />, container);
+    render(
+      () => <ProviderInstanceIcon driverKind="claude-code" displayName="Claude Code" />,
+      container,
+    );
     const icon = container.querySelector("[data-testid='provider-instance-icon']");
     expect(icon?.getAttribute("data-driver-kind")).toBe("claude-code");
     expect(icon?.textContent).toContain("⌁");
@@ -59,14 +62,10 @@ describe("ProviderInstanceIcon", () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     render(
-      () => (
-        <ProviderInstanceIcon driverKind="codex" displayName="Codex" status="warning" />
-      ),
+      () => <ProviderInstanceIcon driverKind="codex" displayName="Codex" status="warning" />,
       container,
     );
-    expect(
-      container.querySelector("[data-testid='provider-instance-status-dot']"),
-    ).toBeTruthy();
+    expect(container.querySelector("[data-testid='provider-instance-status-dot']")).toBeTruthy();
   });
 
   it("omits the status dot when no status is supplied", () => {

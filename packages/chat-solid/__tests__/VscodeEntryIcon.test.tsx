@@ -69,9 +69,7 @@ describe("VscodeEntryIcon", () => {
     expect(container.querySelector("img")).toBeNull();
     expect(container.textContent).toContain("📄");
     expect(
-      container
-        .querySelector("[data-testid='vscode-entry-icon']")
-        ?.getAttribute("data-failed"),
+      container.querySelector("[data-testid='vscode-entry-icon']")?.getAttribute("data-failed"),
     ).toBe("true");
     dispose();
   });

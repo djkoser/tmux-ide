@@ -19,15 +19,7 @@
  * tone if any failed, accent tone if any in-flight, otherwise quiet.
  */
 
-import {
-  createMemo,
-  createSignal,
-  For,
-  Index,
-  Show,
-  type Accessor,
-  type JSX,
-} from "solid-js";
+import { createMemo, createSignal, For, Index, Show, type Accessor, type JSX } from "solid-js";
 import { useAutoScroll } from "../hooks/useAutoScroll";
 import { deriveChangedFiles } from "../lib/changedFiles";
 import { collectImageBlocks, previewAt } from "../lib/imageBlocks";
@@ -133,13 +125,9 @@ export function MessagesTimeline(props: {
                 // current row's signature is unchanged, the memo
                 // returns the previous row reference and TimelineRow
                 // skips work.
-                const row = createMemo<MessagesTimelineRow>(
-                  () => rowAccessor(),
-                  rowAccessor(),
-                  {
-                    equals: (a, b) => rowSignature(a) === rowSignature(b),
-                  },
-                );
+                const row = createMemo<MessagesTimelineRow>(() => rowAccessor(), rowAccessor(), {
+                  equals: (a, b) => rowSignature(a) === rowSignature(b),
+                });
                 return (
                   <div data-index={index}>
                     <div class="mx-auto flex w-full max-w-3xl flex-col px-4">
@@ -213,9 +201,7 @@ function TimelineRow(props: TimelineRowProps): JSX.Element {
     const start = messageRow().completionTurnStartedAt;
     const m = message();
     const end =
-      m.role === "assistant"
-        ? (m.completedAt ?? messageRow().createdAt)
-        : messageRow().createdAt;
+      m.role === "assistant" ? (m.completedAt ?? messageRow().createdAt) : messageRow().createdAt;
     if (!start) return "Completed turn";
     const duration = formatTurnDuration(start, end);
     return duration ? `Completed in ${duration}` : "Completed turn";

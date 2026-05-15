@@ -38,10 +38,9 @@ function failed(res: Response): Effect.Effect<never, NotesApiError> {
 export function fetchNote(sessionName: string): Effect.Effect<Note, NotesApiError> {
   return Effect.tryPromise({
     try: async () => {
-      const res = await fetch(
-        `${API_BASE}/api/project/${encodeURIComponent(sessionName)}/notes`,
-        { cache: "no-store" },
-      );
+      const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(sessionName)}/notes`, {
+        cache: "no-store",
+      });
       if (!res.ok) throw new NotesApiError({ status: res.status, message: `HTTP ${res.status}` });
       const body = (await res.json()) as { note: Note };
       return body.note;
@@ -49,24 +48,21 @@ export function fetchNote(sessionName: string): Effect.Effect<Note, NotesApiErro
     catch: (cause) =>
       cause instanceof NotesApiError
         ? cause
-        : new NotesApiError({ status: 0, message: cause instanceof Error ? cause.message : String(cause) }),
+        : new NotesApiError({
+            status: 0,
+            message: cause instanceof Error ? cause.message : String(cause),
+          }),
   });
 }
 
-export function saveNote(
-  sessionName: string,
-  content: string,
-): Effect.Effect<Note, NotesApiError> {
+export function saveNote(sessionName: string, content: string): Effect.Effect<Note, NotesApiError> {
   return Effect.tryPromise({
     try: async () => {
-      const res = await fetch(
-        `${API_BASE}/api/project/${encodeURIComponent(sessionName)}/notes`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content }),
-        },
-      );
+      const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(sessionName)}/notes`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      });
       if (!res.ok) {
         let message = `HTTP ${res.status}`;
         try {
@@ -83,6 +79,9 @@ export function saveNote(
     catch: (cause) =>
       cause instanceof NotesApiError
         ? cause
-        : new NotesApiError({ status: 0, message: cause instanceof Error ? cause.message : String(cause) }),
+        : new NotesApiError({
+            status: 0,
+            message: cause instanceof Error ? cause.message : String(cause),
+          }),
   });
 }

@@ -15,12 +15,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
 import { MessagesTimeline } from "../src/components/MessagesTimeline";
-import type {
-  ChatMessage,
-  MessagesTimelineRow,
-  ThreadMessage,
-  WorkLogEntry,
-} from "../src/types";
+import type { ChatMessage, MessagesTimelineRow, ThreadMessage, WorkLogEntry } from "../src/types";
 
 function userMsg(id: string, text = "hi"): ChatMessage {
   return {
@@ -42,7 +37,10 @@ function assistantMsg(id: string, text = "done"): ChatMessage {
   };
 }
 
-function messageRow(message: ChatMessage, extra: Record<string, unknown> = {}): MessagesTimelineRow {
+function messageRow(
+  message: ChatMessage,
+  extra: Record<string, unknown> = {},
+): MessagesTimelineRow {
   return {
     kind: "message",
     id: message.id,
@@ -102,9 +100,7 @@ describe("MessagesTimeline work-group row", () => {
     expect(
       mounted.container.querySelector("[data-testid='work-group-summary']")?.textContent,
     ).toContain("Worked on 2 steps");
-    const bullets = mounted.container.querySelectorAll(
-      "[data-testid='work-group-entry']",
-    );
+    const bullets = mounted.container.querySelectorAll("[data-testid='work-group-entry']");
     expect(bullets.length).toBe(2);
   });
 
@@ -121,20 +117,14 @@ describe("MessagesTimeline work-group row", () => {
       label: `step ${i}`,
     }));
     mounted = mount({ rows: [workRow("w1", entries)] });
-    expect(
-      mounted.container.querySelectorAll("[data-testid='work-group-entry']").length,
-    ).toBe(6);
+    expect(mounted.container.querySelectorAll("[data-testid='work-group-entry']").length).toBe(6);
     const expand = mounted.container.querySelector<HTMLButtonElement>(
       "[data-testid='work-group-expand']",
     );
     expect(expand?.textContent).toContain("+3 more");
     expand!.click();
-    expect(
-      mounted.container.querySelectorAll("[data-testid='work-group-entry']").length,
-    ).toBe(9);
-    expect(
-      mounted.container.querySelector("[data-testid='work-group-expand']"),
-    ).toBeNull();
+    expect(mounted.container.querySelectorAll("[data-testid='work-group-entry']").length).toBe(9);
+    expect(mounted.container.querySelector("[data-testid='work-group-expand']")).toBeNull();
   });
 });
 
@@ -167,9 +157,7 @@ describe("MessagesTimeline revert-from-here", () => {
       rows: [messageRow(userMsg("u1", "hi"), { revertTurnCount: 2 })],
       onRevertFromMessage: vi.fn(),
     });
-    const btn = mounted.container.querySelector(
-      "[data-testid='message-revert-from-here']",
-    );
+    const btn = mounted.container.querySelector("[data-testid='message-revert-from-here']");
     expect(btn).toBeTruthy();
     expect(btn?.getAttribute("data-revert-count")).toBe("2");
     expect(btn?.textContent).toContain("Revert 2 turns");
@@ -180,9 +168,7 @@ describe("MessagesTimeline revert-from-here", () => {
       rows: [messageRow(userMsg("u1", "hi"), { revertTurnCount: 1 })],
       onRevertFromMessage: vi.fn(),
     });
-    const btn = mounted.container.querySelector(
-      "[data-testid='message-revert-from-here']",
-    );
+    const btn = mounted.container.querySelector("[data-testid='message-revert-from-here']");
     expect(btn?.textContent).toContain("Revert 1 turn");
   });
 
@@ -209,9 +195,7 @@ describe("MessagesTimeline revert-from-here", () => {
       rows: [messageRow(userMsg("u1", "hi"))],
       onRevertFromMessage: vi.fn(),
     });
-    expect(
-      mounted.container.querySelector("[data-testid='message-revert-from-here']"),
-    ).toBeNull();
+    expect(mounted.container.querySelector("[data-testid='message-revert-from-here']")).toBeNull();
   });
 
   it("omits the revert button when no handler is supplied even if count is set", () => {
@@ -219,8 +203,6 @@ describe("MessagesTimeline revert-from-here", () => {
       rows: [messageRow(userMsg("u1", "hi"), { revertTurnCount: 2 })],
       // onRevertFromMessage intentionally omitted
     });
-    expect(
-      mounted.container.querySelector("[data-testid='message-revert-from-here']"),
-    ).toBeNull();
+    expect(mounted.container.querySelector("[data-testid='message-revert-from-here']")).toBeNull();
   });
 });

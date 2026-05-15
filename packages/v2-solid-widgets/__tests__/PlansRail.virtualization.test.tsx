@@ -67,9 +67,7 @@ describe("PlansRail virtualization", () => {
     expect(rendered.length).toBeGreaterThan(0);
     expect(rendered.length).toBeLessThan(200);
 
-    const spacer = container.querySelector<HTMLElement>(
-      "[data-testid='plans-rail-spacer']",
-    );
+    const spacer = container.querySelector<HTMLElement>("[data-testid='plans-rail-spacer']");
     expect(spacer).toBeTruthy();
     const h = parseInt(spacer!.style.height, 10);
     // 4 group headers (32px) + 1000 plan rows (60px) ≈ 60128px.

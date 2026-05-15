@@ -49,10 +49,7 @@ import {
 import type { AgentProvider } from "../types";
 import type { ProviderInfo } from "../api";
 import { ModelPickerContent, type ModelPickerSelection } from "./ModelPickerContent";
-import type {
-  ModelPickerSidebarComingSoon,
-  ProviderInstanceSummary,
-} from "./ModelPickerSidebar";
+import type { ModelPickerSidebarComingSoon, ProviderInstanceSummary } from "./ModelPickerSidebar";
 import type { ModelListRowModel } from "./ModelListRow";
 
 interface ProviderModelPickerProps {
@@ -269,10 +266,16 @@ export function ProviderModelPicker(props: ProviderModelPickerProps) {
           <ModelPickerContent
             instances={instances}
             modelsByInstance={
-              modelsByInstance() ? (modelsByInstance as Accessor<ReadonlyMap<string, ReadonlyArray<ModelListRowModel>>>) : undefined
+              modelsByInstance()
+                ? (modelsByInstance as Accessor<
+                    ReadonlyMap<string, ReadonlyArray<ModelListRowModel>>
+                  >)
+                : undefined
             }
             active={activeSelection}
-            favorites={favorites() ? (favorites as Accessor<ReadonlyArray<ModelPickerSelection>>) : undefined}
+            favorites={
+              favorites() ? (favorites as Accessor<ReadonlyArray<ModelPickerSelection>>) : undefined
+            }
             lockedDriverKind={props.lockedDriverKind}
             comingSoonEntries={props.comingSoonEntries}
             onSelect={handleSelect}

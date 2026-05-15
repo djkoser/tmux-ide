@@ -85,9 +85,7 @@ function mount(
 describe("ModelPickerSidebar", () => {
   it("renders one rail button per instance", () => {
     const { container, dispose } = mount();
-    const items = container.querySelectorAll(
-      "[data-testid='model-picker-sidebar-instance']",
-    );
+    const items = container.querySelectorAll("[data-testid='model-picker-sidebar-instance']");
     expect(items.length).toBe(3);
     dispose();
   });
@@ -125,9 +123,7 @@ describe("ModelPickerSidebar", () => {
 
   it("renders the favorites rail when showFavorites=true", () => {
     const { container, dispose } = mount({ showFavorites: true });
-    expect(
-      container.querySelector("[data-testid='model-picker-sidebar-favorites']"),
-    ).toBeTruthy();
+    expect(container.querySelector("[data-testid='model-picker-sidebar-favorites']")).toBeTruthy();
     dispose();
   });
 
@@ -154,9 +150,7 @@ describe("ModelPickerSidebar", () => {
       "[data-testid='model-picker-sidebar-instance'][data-instance-id='codex']",
     );
     expect(codexRail?.getAttribute("data-new")).toBe("true");
-    expect(
-      container.querySelector("[data-testid='model-picker-sidebar-new-badge']"),
-    ).toBeTruthy();
+    expect(container.querySelector("[data-testid='model-picker-sidebar-new-badge']")).toBeTruthy();
     dispose();
   });
 });

@@ -52,9 +52,7 @@ describe("PlansPanel virtualization", () => {
     expect(rendered.length).toBeGreaterThan(0);
     expect(rendered.length).toBeLessThan(200);
 
-    const spacer = container.querySelector<HTMLElement>(
-      "[data-testid='plans-panel-spacer']",
-    );
+    const spacer = container.querySelector<HTMLElement>("[data-testid='plans-panel-spacer']");
     expect(spacer).toBeTruthy();
     const h = parseInt(spacer!.style.height, 10);
     // 500 sections × at least 120px estimate = 60000px.

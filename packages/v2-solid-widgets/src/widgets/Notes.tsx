@@ -81,10 +81,7 @@ export function NotesView(props: NotesViewProps) {
       <div class="flex items-center justify-between border-b border-[var(--border)] px-3 py-2">
         <div class="flex items-center gap-3">
           <span class="text-[12px] font-medium">Notes</span>
-          <span
-            data-testid="notes-status"
-            class="text-[11px] text-[var(--dim)]"
-          >
+          <span data-testid="notes-status" class="text-[11px] text-[var(--dim)]">
             <Show
               when={dirty()}
               fallback={<>Last saved {formatRelative(props.options().updatedAt)}</>}
