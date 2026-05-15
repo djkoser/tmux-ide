@@ -29,6 +29,7 @@ import { Effect } from "effect";
 import { saveFile } from "@/lib/api";
 import { modelRegistry } from "@/lib/monaco/model-registry";
 import { codeEditorPool } from "@/lib/monaco/code-pool";
+import { getMonacoFromGlobal } from "@/lib/monaco/pool";
 import { buildMonacoModelPath } from "@/lib/monaco/model-path";
 
 // G17-P6 — autosave + crash recovery + external-change reseed.
@@ -301,7 +302,16 @@ export async function markReady(bufferUri: string, initialContent: string): Prom
   const buf = state.buffers[bufferUri];
   if (!buf) return;
   try {
-    await codeEditorPool.init();
+    // Warm the editor pool only when Monaco isn't already on the
+    // global. Once warm (or stubbed — tests set globalThis.__monaco),
+    // `registerBuffer` is the sole hard dependency and runs
+    // synchronously, so we skip the redundant pool round-trip. This
+    // keeps `markReady` synchronous in that path, which both matches
+    // the buffer-store test contract and avoids re-initing the pool
+    // per opened buffer in production.
+    if (!getMonacoFromGlobal()) {
+      await codeEditorPool.init();
+    }
     modelRegistry.registerBuffer({
       sessionName: buf.sessionName,
       rootPath: buf.rootPath,

@@ -26,6 +26,23 @@ vi.mock("@/components/Terminal", () => ({
   Terminal: (props: { id: string }) => <div data-testid="v2-terminal-host" data-pty={props.id} />,
 }));
 
+// The Files view mounts FilesSurface, which starts the FS-watch
+// WebSocket client + warms the Monaco editor pool. happy-dom can't
+// run either (no browser WebSocket, no @monaco-editor/loader), so
+// stub both — the route-shell tests only assert which surface
+// mounts, not its live data wiring.
+vi.mock("@/lib/editor/fs-watch-client", () => ({
+  startFsWatchClient: () => () => {},
+}));
+
+vi.mock("@/lib/monaco/code-pool", () => ({
+  codeEditorPool: {
+    init: vi.fn(async () => undefined),
+    acquire: vi.fn(),
+    release: vi.fn(),
+  },
+}));
+
 import ProjectV2Route from "@/routes/v2/project/[name]";
 import { __resetChromeForTests, toggleLeftSidebar } from "@/lib/chrome";
 
@@ -82,11 +99,17 @@ describe("/v2/project/:name shell", () => {
     expect(getByTestId("v2-view-root").getAttribute("data-view")).toBe("files");
   });
 
-  it("non-wired view ids render the G16-P3 placeholder", async () => {
-    const { getByTestId, findByTestId } = renderRoute();
+  it("activity-bar Plans button switches to the wired Plans surface", async () => {
+    // The G16-P3 "Coming soon" placeholder was retired once every
+    // view ID got a live Solid surface in the v2.5 sweep. Plans is
+    // now wired (rail + panel), so the route must NOT fall back to
+    // a placeholder — it switches `data-view` and mounts the
+    // surface's widget host instead.
+    const { getByTestId, findByTestId, queryByTestId } = renderRoute();
     fireEvent.click(getByTestId("v2-activity-plans"));
-    expect(await findByTestId("v2-view-placeholder")).toBeInTheDocument();
+    await findByTestId("v2-view-root");
     expect(getByTestId("v2-view-root").getAttribute("data-view")).toBe("plans");
+    expect(queryByTestId("v2-view-placeholder")).toBeNull();
   });
 
   it("status-bar left-sidebar toggle collapses the primary sidebar", async () => {

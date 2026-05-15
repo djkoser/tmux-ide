@@ -215,7 +215,7 @@ describe("crash recovery persistence", () => {
     expect(listRecoverableBuffers()).toHaveLength(2);
   });
 
-  it("restoreRecoverableBuffer rehydrates content + dirty state", () => {
+  it("restoreRecoverableBuffer rehydrates content + dirty state", async () => {
     const uri = openReady("src/x.ts", "v0\n");
     markContent(uri, "edited\n");
     const snap = listRecoverableBuffers("smoke")[0]!;
@@ -226,7 +226,9 @@ describe("crash recovery persistence", () => {
       "tmux-ide.editor.recovery.v1",
       JSON.stringify({ [snap.bufferUri]: snap }),
     );
-    restoreRecoverableBuffer(snap);
+    // restoreRecoverableBuffer awaits markReady before reapplying the
+    // dirty edits, so the caller must await it too.
+    await restoreRecoverableBuffer(snap);
     const buf = bufferState.buffers[snap.bufferUri]!;
     expect(buf.status).toBe("ready");
     expect(buf.content).toBe("edited\n");

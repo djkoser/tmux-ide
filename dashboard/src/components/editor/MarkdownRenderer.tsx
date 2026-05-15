@@ -55,7 +55,15 @@ export function MarkdownRenderer(props: MarkdownRendererProps) {
   });
 
   const rawHtml = createMemo<string>(() => renderMarkdown(source()));
-  const [html, setHtml] = createSignal<string>("");
+  const [enhancedHtml, setEnhancedHtml] = createSignal<string>("");
+  // Display the synchronously-rendered markdown immediately and
+  // upgrade to the shiki-enhanced HTML once the async highlight
+  // pass resolves. shiki only rewrites fenced code blocks, so the
+  // raw HTML is a correct, flicker-free baseline (identical to the
+  // enhanced output for fence-less docs) — and it keeps the body
+  // populated for synchronous render tests instead of waiting on a
+  // microtask that never runs before the assertion.
+  const html = createMemo<string>(() => enhancedHtml() || rawHtml());
 
   // Post-process the rendered HTML: hand every `<pre><code class=
   // "language-X">` block to shiki and swap the result in. Re-runs on
@@ -63,7 +71,7 @@ export function MarkdownRenderer(props: MarkdownRendererProps) {
   createEffect(
     on([rawHtml, () => activeShikiTheme()], async ([incoming]) => {
       const enhanced = await highlightFences(incoming);
-      setHtml(enhanced);
+      setEnhancedHtml(enhanced);
     }),
   );
 

@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRoot } from "solid-js";
 import { __resetBufferStoreForTests, bufferState } from "@/lib/editor/buffer-store";
 import { modelRegistry } from "@/lib/monaco/model-registry";
+import { codeEditorPool } from "@/lib/monaco/code-pool";
 import {
   __resetPendingRevealForTests,
   bufferUriFor,
@@ -28,6 +29,7 @@ import {
 
 let originalFetch: typeof globalThis.fetch | undefined;
 let registerBufferSpy: ReturnType<typeof vi.spyOn>;
+let poolInitSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   __resetBufferStoreForTests();
@@ -40,6 +42,11 @@ beforeEach(() => {
       // an acceptable stand-in for callers that don't inspect it.
       return "";
     });
+  // markReady warms the editor pool when Monaco isn't already on the
+  // global; the real `@monaco-editor/loader` can't run under
+  // happy-dom, so resolve it to a no-op (same intent as the
+  // registerBuffer stub above).
+  poolInitSpy = vi.spyOn(codeEditorPool, "init").mockResolvedValue(undefined);
   originalFetch = globalThis.fetch;
 });
 
@@ -47,6 +54,7 @@ afterEach(() => {
   __resetBufferStoreForTests();
   __resetPendingRevealForTests();
   registerBufferSpy.mockRestore();
+  poolInitSpy.mockRestore();
   if (originalFetch !== undefined) globalThis.fetch = originalFetch;
 });
 
