@@ -30,8 +30,16 @@ import {
   type JSX,
 } from "solid-js";
 import { Effect } from "effect";
-import { GitCompare } from "lucide-solid";
+import { GitCompare, History } from "lucide-solid";
 import { fetchProjectDiff, type DiffFileEntry, type DiffSource, type GitRef } from "@/lib/api";
+import {
+  fetchCommits,
+  fetchCommitDiff,
+  fetchRangeDiff,
+  relativeDate,
+  EMPTY_TREE_SHA,
+  type CommitEntry,
+} from "@/components/diffs/git-history";
 import { modelRegistry } from "@/lib/monaco/model-registry";
 import { buildMonacoModelPath, toDiskUri, toGitUri } from "@/lib/monaco/model-path";
 import {
@@ -103,23 +111,109 @@ function fileDirname(file: string): string {
 
 const POLL_INTERVAL_MS = 5_000;
 
+/**
+ * Top-level surface mode. `changes` keeps the original working/staged/pr
+ * behavior; `history` browses commits; `branch` shows the full
+ * base...HEAD range a PR would contain. All three feed the SAME rail +
+ * StickyDiffEditor — only the resolved git refs differ.
+ */
+type DiffMode = "changes" | "history" | "branch";
+
+/** Normalized shape every mode resolves to so the rail + editor stay
+ *  mode-agnostic. Mirrors the working-tree `DiffData` fields the
+ *  component already consumed. */
+interface NormalizedDiff {
+  files: DiffFileEntry[];
+  originalRef: GitRef;
+  modifiedRef: GitRef;
+  baseBranch: string | null;
+}
+
+const BRANCH_BASE = "main";
+
 export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
   const rootPath = () => props.modelRootPath ?? "/";
   const [selectedFile, setSelectedFile] = createSignal<string | null>(null);
   const [diffStyle, setDiffStyle] = createSignal<DiffStyle>("split");
   const [source, setSource] = createSignal<DiffSource>("working");
+  const [mode, setMode] = createSignal<DiffMode>("changes");
+  const [selectedCommit, setSelectedCommit] = createSignal<string | null>(null);
   // Files for which the user has explicitly clicked "Load anyway",
   // overriding the LARGE_DIFF_LINE_THRESHOLD guard.
   const [forcedLargeLoads, setForcedLargeLoads] = createSignal<Set<string>>(new Set());
 
   const [data, { refetch }] = createResource(
-    () => ({ sessionName: props.projectName, source: source() }),
-    async (key) => Effect.runPromise(fetchProjectDiff(key.sessionName, key.source)),
+    () => ({
+      sessionName: props.projectName,
+      source: source(),
+      mode: mode(),
+      commit: selectedCommit(),
+    }),
+    async (key): Promise<NormalizedDiff> => {
+      if (key.mode === "branch") {
+        const r = await Effect.runPromise(fetchRangeDiff(key.sessionName, BRANCH_BASE));
+        return {
+          files: r.files,
+          originalRef: r.baseSha ?? BRANCH_BASE,
+          modifiedRef: "HEAD",
+          baseBranch: r.base,
+        };
+      }
+      if (key.mode === "history") {
+        if (!key.commit) {
+          return { files: [], originalRef: "HEAD", modifiedRef: "WORKING", baseBranch: null };
+        }
+        const r = await Effect.runPromise(fetchCommitDiff(key.sessionName, key.commit));
+        return {
+          files: r.files,
+          originalRef: r.parent ?? EMPTY_TREE_SHA,
+          modifiedRef: r.sha,
+          baseBranch: null,
+        };
+      }
+      const d = await Effect.runPromise(fetchProjectDiff(key.sessionName, key.source));
+      return {
+        files: d.files ?? [],
+        originalRef: d.originalRef ?? "HEAD",
+        modifiedRef: d.modifiedRef ?? "WORKING",
+        baseBranch: d.baseBranch ?? null,
+      };
+    },
   );
 
+  // Commit list — only loaded in history mode (and refreshed when the
+  // surface is mounted there). `?base=main` tags ahead-of-base commits.
+  const [commitsRes] = createResource(
+    () => (mode() === "history" ? props.projectName : null),
+    async (sessionName) =>
+      Effect.runPromise(fetchCommits(sessionName, BRANCH_BASE, 200)).catch(() => ({
+        commits: [] as CommitEntry[],
+        base: null,
+        baseSha: null,
+        headSha: "",
+        aheadCount: 0,
+      })),
+  );
+  const commitList = createMemo<CommitEntry[]>(() => commitsRes()?.commits ?? []);
+
   // Re-poll the summary every 5s; same cadence the widget version uses.
-  const interval = setInterval(() => void refetch(), POLL_INTERVAL_MS);
+  // Commit + branch views are immutable snapshots, so only the live
+  // working/staged/pr changes view needs the poll.
+  const interval = setInterval(() => {
+    if (mode() === "changes") void refetch();
+  }, POLL_INTERVAL_MS);
   onCleanup(() => clearInterval(interval));
+
+  function switchMode(next: DiffMode) {
+    setMode(next);
+    setSelectedFile(null);
+    if (next !== "history") setSelectedCommit(null);
+  }
+
+  function pickCommit(sha: string) {
+    setSelectedCommit(sha);
+    setSelectedFile(null);
+  }
 
   const files = createMemo<DiffFileEntry[]>(() => data()?.files ?? []);
   const totalAdditions = createMemo(() => files().reduce((s, f) => s + f.additions, 0));
@@ -226,10 +320,12 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
     if (file) registerForFile(file);
   });
 
-  // When the source toggles, drop the per-file "Load anyway" overrides
-  // — large-file thresholds are evaluated per source.
+  // When the source/mode/commit changes, drop the per-file "Load
+  // anyway" overrides — large-file thresholds are evaluated per diff.
   createEffect(() => {
     void source();
+    void mode();
+    void selectedCommit();
     setForcedLargeLoads(new Set<string>());
   });
 
@@ -249,50 +345,99 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
           <span class="text-[var(--dim)] opacity-30">/</span>
           <span class="text-[var(--red)]">−{totalDeletions()}</span>
         </Show>
-        <span class="flex-1" />
-        <Show when={data()?.baseBranch && source() === "pr"}>
-          <span
-            data-testid="v2-monaco-diffs-pr-base"
-            class="text-[10px] text-[var(--dim)]"
-            title="PR base branch"
-          >
-            vs {data()?.baseBranch}
+        <Show when={mode() === "history" && selectedCommit()}>
+          <span class="text-[var(--dim)] opacity-30">│</span>
+          <span data-testid="v2-monaco-diffs-commit-label" class="font-mono text-[var(--accent)]">
+            {selectedCommit()?.slice(0, 7)}
           </span>
+        </Show>
+        <span class="flex-1" />
+        <Show
+          when={
+            (mode() === "branch" && (data()?.baseBranch ?? BRANCH_BASE)) ||
+            (mode() === "changes" && data()?.baseBranch && source() === "pr"
+              ? data()?.baseBranch
+              : null)
+          }
+        >
+          {(base) => (
+            <span
+              data-testid="v2-monaco-diffs-pr-base"
+              class="text-[10px] text-[var(--dim)]"
+              title="Diff base branch"
+            >
+              vs {base()}
+            </span>
+          )}
         </Show>
         <div
           role="group"
-          aria-label="diff source"
+          aria-label="diff mode"
           class="inline-flex overflow-hidden rounded border border-[var(--border)]"
         >
-          <For each={["working", "staged", "pr"] as DiffSource[]}>
-            {(s) => (
+          <For
+            each={
+              [
+                ["changes", "Changes"],
+                ["history", "History"],
+                ["branch", `Branch vs ${BRANCH_BASE}`],
+              ] as [DiffMode, string][]
+            }
+          >
+            {([m, lbl]) => (
               <button
                 type="button"
-                data-testid={`v2-monaco-diffs-source-${s}`}
-                onClick={() => {
-                  setSource(s);
-                  setSelectedFile(null);
-                }}
-                aria-pressed={source() === s}
-                title={
-                  s === "working"
-                    ? "Working tree (HEAD ↔ disk)"
-                    : s === "staged"
-                      ? "Staged (HEAD ↔ index)"
-                      : "Pull request (base ↔ HEAD)"
-                }
+                data-testid={`v2-monaco-diffs-mode-${m}`}
+                onClick={() => switchMode(m)}
+                aria-pressed={mode() === m}
                 class={
                   "h-5 px-2 text-[11px] font-mono " +
-                  (source() === s
+                  (mode() === m
                     ? "bg-[var(--surface-active)] text-[var(--fg)]"
                     : "bg-transparent text-[var(--dim)] hover:text-[var(--fg)]")
                 }
               >
-                {s}
+                {lbl}
               </button>
             )}
           </For>
         </div>
+        <Show when={mode() === "changes"}>
+          <div
+            role="group"
+            aria-label="diff source"
+            class="inline-flex overflow-hidden rounded border border-[var(--border)]"
+          >
+            <For each={["working", "staged", "pr"] as DiffSource[]}>
+              {(s) => (
+                <button
+                  type="button"
+                  data-testid={`v2-monaco-diffs-source-${s}`}
+                  onClick={() => {
+                    setSource(s);
+                    setSelectedFile(null);
+                  }}
+                  aria-pressed={source() === s}
+                  title={
+                    s === "working"
+                      ? "Working tree (HEAD ↔ disk)"
+                      : s === "staged"
+                        ? "Staged (HEAD ↔ index)"
+                        : "Pull request (base ↔ HEAD)"
+                  }
+                  class={
+                    "h-5 px-2 text-[11px] font-mono " +
+                    (source() === s
+                      ? "bg-[var(--surface-active)] text-[var(--fg)]"
+                      : "bg-transparent text-[var(--dim)] hover:text-[var(--fg)]")
+                  }
+                >
+                  {s}
+                </button>
+              )}
+            </For>
+          </div>
+        </Show>
         <div
           role="group"
           aria-label="diff view mode"
@@ -320,6 +465,77 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
       </header>
 
       <div class="flex flex-1 min-h-0">
+        <Show when={mode() === "history"}>
+          <aside
+            data-testid="v2-monaco-diffs-commit-list"
+            class="flex w-72 shrink-0 flex-col overflow-y-auto border-r border-[var(--border)] bg-[var(--bg-weak)]"
+          >
+            <Show
+              when={!commitsRes.loading}
+              fallback={<div class="px-3 py-2 text-[11px] text-[var(--dim)]">loading commits…</div>}
+            >
+              <Show
+                when={commitList().length > 0}
+                fallback={
+                  <div
+                    data-testid="v2-monaco-diffs-commits-empty"
+                    class="px-3 py-2 text-[11px] text-[var(--dim)]"
+                  >
+                    No commits
+                  </div>
+                }
+              >
+                <For each={commitList()}>
+                  {(commit) => {
+                    const isActive = () => selectedCommit() === commit.sha;
+                    return (
+                      <button
+                        type="button"
+                        data-testid="v2-monaco-diffs-commit"
+                        data-commit-sha={commit.sha}
+                        data-ahead={commit.ahead ? "true" : "false"}
+                        onClick={() => pickCommit(commit.sha)}
+                        aria-pressed={isActive()}
+                        class={
+                          "flex flex-col gap-0.5 border-b border-[var(--border)] px-2 py-1.5 text-left text-[12px] " +
+                          (isActive()
+                            ? "bg-[var(--surface-active)]"
+                            : "hover:bg-[var(--surface-hover)]")
+                        }
+                      >
+                        <span class="flex items-center gap-1.5">
+                          <Show when={commit.ahead}>
+                            <span
+                              class="shrink-0 rounded-sm bg-[var(--accent)] px-1 text-[9px] uppercase text-[var(--bg)]"
+                              title={`Ahead of ${BRANCH_BASE} — included in a PR`}
+                            >
+                              ahead
+                            </span>
+                          </Show>
+                          <span
+                            class={
+                              "min-w-0 flex-1 truncate " +
+                              (isActive() ? "text-[var(--accent)]" : "text-[var(--fg)]")
+                            }
+                          >
+                            {commit.subject}
+                          </span>
+                        </span>
+                        <span class="flex items-center gap-1.5 text-[10px] text-[var(--dim)]">
+                          <span class="font-mono">{commit.shortSha}</span>
+                          <span class="opacity-40">·</span>
+                          <span class="min-w-0 truncate">{commit.author}</span>
+                          <span class="opacity-40">·</span>
+                          <span class="shrink-0">{relativeDate(commit.date)}</span>
+                        </span>
+                      </button>
+                    );
+                  }}
+                </For>
+              </Show>
+            </Show>
+          </aside>
+        </Show>
         <aside
           data-testid="v2-monaco-diffs-file-list"
           class="flex w-64 shrink-0 flex-col overflow-y-auto border-r border-[var(--border)] bg-[var(--bg-weak)]"
@@ -333,9 +549,34 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
               fallback={
                 <div
                   data-testid="v2-monaco-diffs-empty"
-                  class="px-3 py-2 text-[11px] text-[var(--dim)]"
+                  class="flex flex-col gap-2 px-3 py-2 text-[11px] text-[var(--dim)]"
                 >
-                  No uncommitted changes
+                  <Show
+                    when={mode() === "history"}
+                    fallback={
+                      <Show
+                        when={mode() === "branch"}
+                        fallback={
+                          <>
+                            <span>No working-tree changes</span>
+                            <button
+                              type="button"
+                              data-testid="v2-monaco-diffs-browse-history"
+                              onClick={() => switchMode("history")}
+                              class="inline-flex items-center gap-1 self-start rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[11px] text-[var(--fg)] hover:bg-[var(--surface-hover)]"
+                            >
+                              <History class="h-3 w-3" aria-hidden="true" />
+                              Browse commit history
+                            </button>
+                          </>
+                        }
+                      >
+                        <span>No diff vs {data()?.baseBranch ?? BRANCH_BASE}</span>
+                      </Show>
+                    }
+                  >
+                    <span>{selectedCommit() ? "No file changes" : "Select a commit"}</span>
+                  </Show>
                 </div>
               }
             >
@@ -398,7 +639,17 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
                   file={uris().file}
                   additions={selectedEntry()?.additions ?? 0}
                   deletions={selectedEntry()?.deletions ?? 0}
-                  badge={source() === "staged" ? "Staged" : source() === "pr" ? "PR" : "Changed"}
+                  badge={
+                    mode() === "history"
+                      ? "Commit"
+                      : mode() === "branch"
+                        ? "Branch"
+                        : source() === "staged"
+                          ? "Staged"
+                          : source() === "pr"
+                            ? "PR"
+                            : "Changed"
+                  }
                 />
                 <Show
                   when={!selectedIsLarge()}

@@ -113,7 +113,10 @@ import {
   branches as gitBranches,
   checkout as gitCheckout,
   commit as gitCommit,
+  commits as gitCommits,
+  commitDiff as gitCommitDiff,
   push as gitPush,
+  rangeDiff as gitRangeDiff,
   stage as gitStage,
   status as gitStatus,
   unstage as gitUnstage,
@@ -2367,6 +2370,65 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     if (!session) return c.json({ error: "Session not found" }, 404);
     return Effect.runPromise(
       gitBranches(session.dir).pipe(
+        Effect.match({
+          onFailure: (err) => c.json({ error: gitErrorToPayload(err) }, 400),
+          onSuccess: (payload) => c.json(payload),
+        }),
+      ),
+    );
+  });
+
+  // Commit history for HEAD. `?base=main` adds the ahead-of-base
+  // range (per-commit `ahead` flag + `aheadCount`) so the dashboard
+  // can mark which commits a PR against `base` would contain.
+  app.get("/api/project/:name/git/commits", async (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const base = c.req.query("base")?.trim() || undefined;
+    const limitRaw = c.req.query("limit");
+    const limit = limitRaw ? Number.parseInt(limitRaw, 10) : undefined;
+    return Effect.runPromise(
+      gitCommits(session.dir, {
+        ...(base ? { base } : {}),
+        ...(limit && Number.isFinite(limit) ? { limit } : {}),
+      }).pipe(
+        Effect.match({
+          onFailure: (err) => c.json({ error: gitErrorToPayload(err) }, 400),
+          onSuccess: (payload) => c.json(payload),
+        }),
+      ),
+    );
+  });
+
+  // Unified diff + per-file numstat for one commit (vs its first
+  // parent, or the empty tree for the root commit).
+  app.get("/api/project/:name/git/commit/:sha/diff", async (c) => {
+    const name = c.req.param("name");
+    const sha = c.req.param("sha");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    return Effect.runPromise(
+      gitCommitDiff(session.dir, sha).pipe(
+        Effect.match({
+          onFailure: (err) => c.json({ error: gitErrorToPayload(err) }, 400),
+          onSuccess: (payload) => c.json(payload),
+        }),
+      ),
+    );
+  });
+
+  // The full `base...HEAD` diff — what a PR against `base` contains.
+  app.get("/api/project/:name/git/range-diff", async (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const base = c.req.query("base")?.trim() || "main";
+    return Effect.runPromise(
+      gitRangeDiff(session.dir, base).pipe(
         Effect.match({
           onFailure: (err) => c.json({ error: gitErrorToPayload(err) }, 400),
           onSuccess: (payload) => c.json(payload),
