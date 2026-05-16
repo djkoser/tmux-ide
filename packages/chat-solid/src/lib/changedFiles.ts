@@ -1,4 +1,4 @@
-import type { ThreadMessage, ToolCallContent } from "../types";
+import type { ThreadMessage, ToolCallContent, ToolCallView } from "../types";
 
 export interface ChangedFileEdit {
   oldText: string;
@@ -28,39 +28,86 @@ export function deriveChangedFiles(messages: ThreadMessage[]): ChangedFile[] {
     if (update.sessionUpdate !== "tool_call" && update.sessionUpdate !== "tool_call_update") {
       continue;
     }
-
-    const title = "title" in update && typeof update.title === "string" ? update.title : "";
-    const toolCallId =
-      "toolCallId" in update && typeof update.toolCallId === "string"
-        ? update.toolCallId
-        : message.id;
-
-    const contents = "content" in update && Array.isArray(update.content) ? update.content : [];
-    for (const content of contents) {
-      if (content.type !== "diff") continue;
-      addEdit(files, content, toolCallId, message.createdAt);
-    }
-
-    const rawInput = "rawInput" in update ? update.rawInput : undefined;
-    const rawPath = firstPath(rawInput);
-    if (rawPath && title.toLowerCase().includes("read")) {
-      ensureFile(files, rawPath, "read", message.createdAt);
-    }
-
-    if (rawPath && isWriteLike(title, "kind" in update ? update.kind : undefined)) {
-      const oldText = textField(rawInput, ["oldText", "old_text", "previous", "before"]) ?? "";
-      const newText = textField(rawInput, ["newText", "new_text", "content", "after"]) ?? "";
-      if (oldText || newText) {
-        addEdit(
-          files,
-          { type: "diff", path: rawPath, oldText, newText },
-          toolCallId,
-          message.createdAt,
-        );
-      }
-    }
+    applyToolCall(
+      files,
+      {
+        title: "title" in update && typeof update.title === "string" ? update.title : "",
+        toolCallId:
+          "toolCallId" in update && typeof update.toolCallId === "string"
+            ? update.toolCallId
+            : message.id,
+        kind: "kind" in update ? update.kind : undefined,
+        content: "content" in update && Array.isArray(update.content) ? update.content : [],
+        rawInput: "rawInput" in update ? update.rawInput : undefined,
+      },
+      message.createdAt,
+    );
   }
 
+  return finalize(files);
+}
+
+/**
+ * Per-turn variant: derive the changed-file set from a single
+ * assistant message's own tool calls (`ChatMessage.toolCalls`).
+ * Reuses the same diff/path extraction as the thread-wide pass so
+ * the per-turn "Changed files" section under an assistant row stays
+ * consistent with the global tree.
+ */
+export function deriveChangedFilesFromToolCalls(
+  toolCalls: ReadonlyArray<ToolCallView>,
+  createdAt: string,
+): ChangedFile[] {
+  const files = new Map<string, MutableChangedFile>();
+  for (const call of toolCalls) {
+    applyToolCall(
+      files,
+      {
+        title: call.title,
+        toolCallId: call.toolCallId,
+        kind: call.kind,
+        content: call.content,
+        rawInput: call.rawInput,
+      },
+      createdAt,
+    );
+  }
+  return finalize(files);
+}
+
+interface ToolCallLike {
+  title: string;
+  toolCallId: string;
+  kind: unknown;
+  content: ToolCallContent[];
+  rawInput: unknown;
+}
+
+function applyToolCall(
+  files: Map<string, MutableChangedFile>,
+  call: ToolCallLike,
+  createdAt: string,
+): void {
+  for (const content of call.content) {
+    if (content.type !== "diff") continue;
+    addEdit(files, content, call.toolCallId, createdAt);
+  }
+
+  const rawPath = firstPath(call.rawInput);
+  if (rawPath && call.title.toLowerCase().includes("read")) {
+    ensureFile(files, rawPath, "read", createdAt);
+  }
+
+  if (rawPath && isWriteLike(call.title, call.kind)) {
+    const oldText = textField(call.rawInput, ["oldText", "old_text", "previous", "before"]) ?? "";
+    const newText = textField(call.rawInput, ["newText", "new_text", "content", "after"]) ?? "";
+    if (oldText || newText) {
+      addEdit(files, { type: "diff", path: rawPath, oldText, newText }, call.toolCallId, createdAt);
+    }
+  }
+}
+
+function finalize(files: Map<string, MutableChangedFile>): ChangedFile[] {
   return [...files.values()]
     .sort((a, b) => {
       if (a.kind !== b.kind) return a.kind === "write" ? -1 : 1;

@@ -151,7 +151,7 @@ describe("MessagesTimeline — revert confirm", () => {
 });
 
 describe("MessagesTimeline — completion divider duration", () => {
-  it("renders 'Completed in <duration>' when completionTurnStartedAt is set", () => {
+  it("renders 'Response • <duration>' when completionTurnStartedAt is set", () => {
     mounted = mount({
       rows: [
         {
@@ -165,7 +165,8 @@ describe("MessagesTimeline — completion divider duration", () => {
       ],
     });
     const divider = mounted.container.querySelector("[data-testid='message-completion-divider']");
-    expect(divider?.textContent).toContain("Completed in 5.0s");
+    expect(divider?.textContent).toContain("Response");
+    expect(divider?.textContent).toContain("5.0s");
     expect(divider?.getAttribute("data-turn-started-at")).toBe("2026-05-14T10:00:00.000Z");
   });
 
@@ -182,6 +183,6 @@ describe("MessagesTimeline — completion divider duration", () => {
       ],
     });
     const divider = mounted.container.querySelector("[data-testid='message-completion-divider']");
-    expect(divider?.textContent?.trim()).toBe("Completed turn");
+    expect(divider?.textContent?.trim()).toBe("Response");
   });
 });

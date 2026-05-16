@@ -19,9 +19,21 @@
  * tone if any failed, accent tone if any in-flight, otherwise quiet.
  */
 
-import { createMemo, createSignal, For, Index, Show, type Accessor, type JSX } from "solid-js";
+import {
+  createContext,
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Index,
+  on,
+  Show,
+  useContext,
+  type Accessor,
+  type JSX,
+} from "solid-js";
 import { useAutoScroll } from "../hooks/useAutoScroll";
-import { deriveChangedFiles } from "../lib/changedFiles";
+import { deriveChangedFilesFromToolCalls } from "../lib/changedFiles";
 import { collectImageBlocks, previewAt } from "../lib/imageBlocks";
 import { ImageExpandContext, useImageExpand, type ImageExpandHandler } from "../lib/imageExpand";
 import { renderMarkdown } from "../lib/markdown";
@@ -36,6 +48,7 @@ import type {
   WorkLogEntry,
 } from "../types";
 import { ChangedFilesTree } from "./ChangedFilesTree";
+import { DiffStatLabel, hasNonZeroStat } from "./DiffStatLabel";
 import { ExpandedImageDialog } from "./ExpandedImageDialog";
 import { InlineImagePreview, type ExpandedImagePreview } from "./ExpandedImagePreview";
 import { MessageCopyButton } from "./MessageCopyButton";
@@ -53,6 +66,58 @@ import { PlanCard } from "./PlanCard";
 import { ContentBlockView, ToolCallCard } from "./ToolCallCard";
 import { WorkingIndicator } from "./WorkingIndicator";
 
+/** Host-injected async HTML upgrader (syntax highlighting). */
+const HighlightContext = createContext<Accessor<((html: string) => Promise<string>) | undefined>>(
+  () => undefined,
+);
+
+/**
+ * Renders sanitized markdown HTML, then — if the host injected a
+ * highlighter — swaps in the syntax-highlighted upgrade once the
+ * async pass resolves. The synchronous HTML is shown first so there
+ * is no flash of empty content and tests that assert on render don't
+ * have to await a microtask. The effect re-runs on `html` change so
+ * streaming chunks re-highlight.
+ */
+function MarkdownBody(props: {
+  html: string;
+  class: string;
+  onClick?: (event: MouseEvent) => void;
+}): JSX.Element {
+  const highlighter = useContext(HighlightContext);
+  const [enhanced, setEnhanced] = createSignal<string | null>(null);
+  createEffect(
+    on(
+      () => props.html,
+      (html) => {
+        const fn = highlighter();
+        if (!fn) {
+          setEnhanced(null);
+          return;
+        }
+        let stale = false;
+        void fn(html)
+          .then((next) => {
+            if (!stale) setEnhanced(next);
+          })
+          .catch(() => {
+            if (!stale) setEnhanced(null);
+          });
+        return () => {
+          stale = true;
+        };
+      },
+    ),
+  );
+  return (
+    <div
+      class={props.class}
+      innerHTML={enhanced() ?? props.html}
+      onClick={(event) => props.onClick?.(event)}
+    />
+  );
+}
+
 export function MessagesTimeline(props: {
   rows: Accessor<MessagesTimelineRow[]>;
   messages: Accessor<ThreadMessage[]>;
@@ -63,6 +128,12 @@ export function MessagesTimeline(props: {
   onOpenFile?: (meta: MarkdownFileLinkMeta) => void;
   onSendPlanRequest?: (markdown: string) => void;
   /**
+   * Optional async upgrade for rendered message HTML (syntax
+   * highlighting). Injected by the host; threaded to every markdown
+   * body via context so we don't prop-drill through five layers.
+   */
+  highlightMarkdown?: (html: string) => Promise<string>;
+  /**
    * Fired when the user clicks the "Revert from here" button on a
    * user message annotated with `revertTurnCount`. Host owns the
    * actual rewind dispatch — chat-solid only surfaces the affordance.
@@ -72,7 +143,6 @@ export function MessagesTimeline(props: {
   const [container, setContainer] = createSignal<HTMLElement>();
   const [sentinel, setSentinel] = createSignal<HTMLElement>();
   const [expandedPreview, setExpandedPreview] = createSignal<ExpandedImagePreview | null>(null);
-  const changedFiles = createMemo(() => deriveChangedFiles(props.messages()));
   const followSignal = createMemo(() => props.rows().map(rowSignature).join("|"));
   const terminalAssistantIds = createMemo(() => deriveTerminalAssistantMessageIds(props.rows()));
   useAutoScroll(container, sentinel, followSignal);
@@ -91,66 +161,63 @@ export function MessagesTimeline(props: {
   const onExpand: ImageExpandHandler = (preview) => setExpandedPreview(preview);
 
   return (
-    <ImageExpandContext.Provider value={onExpand}>
-      <Show
-        when={props.rows().length > 0}
-        fallback={
-          <div
-            data-testid="messages-timeline-empty"
-            class="flex min-h-0 flex-1 items-center justify-center text-[13px] text-[var(--fg-muted,var(--dim))]"
-          >
-            Send a message to start this chat.
-          </div>
-        }
-      >
-        <div
-          ref={setContainer}
-          data-testid="messages-timeline"
-          class="min-h-0 flex-1 overflow-auto bg-[var(--bg)]"
-          style={{ position: "relative" }}
-        >
-          <Show when={changedFiles().length > 0}>
-            <div class="mx-auto w-full max-w-3xl px-4 pt-5">
-              <ChangedFilesTree files={changedFiles} />
+    <HighlightContext.Provider value={() => props.highlightMarkdown}>
+      <ImageExpandContext.Provider value={onExpand}>
+        <Show
+          when={props.rows().length > 0}
+          fallback={
+            <div
+              data-testid="messages-timeline-empty"
+              class="flex min-h-0 flex-1 items-center justify-center text-[13px] text-[var(--fg-muted,var(--dim))]"
+            >
+              Send a message to start this chat.
             </div>
-          </Show>
-          <div data-testid="messages-timeline-spacer">
-            <Index each={props.rows()}>
-              {(rowAccessor, index) => {
-                // `Index` keys by position so the outer <div> stays
-                // mounted across rows() updates — token streams
-                // replace the underlying array but the slot's DOM
-                // node is preserved. The inner per-row memo dampens
-                // re-derivation: when a sibling row streams and the
-                // current row's signature is unchanged, the memo
-                // returns the previous row reference and TimelineRow
-                // skips work.
-                const row = createMemo<MessagesTimelineRow>(() => rowAccessor(), rowAccessor(), {
-                  equals: (a, b) => rowSignature(a) === rowSignature(b),
-                });
-                return (
-                  <div data-index={index}>
-                    <div class="mx-auto flex w-full max-w-3xl flex-col px-4">
-                      <TimelineRow
-                        row={row()}
-                        providerName={props.providerName}
-                        cwd={props.cwd}
-                        onOpenFile={props.onOpenFile}
-                        onSendPlanRequest={props.onSendPlanRequest}
-                        onRevertFromMessage={props.onRevertFromMessage}
-                        isTerminalAssistant={(id) => terminalAssistantIds().has(id)}
-                      />
+          }
+        >
+          <div
+            ref={setContainer}
+            data-testid="messages-timeline"
+            class="min-h-0 flex-1 overflow-auto bg-[var(--bg)]"
+            style={{ position: "relative" }}
+          >
+            <div data-testid="messages-timeline-spacer">
+              <Index each={props.rows()}>
+                {(rowAccessor, index) => {
+                  // `Index` keys by position so the outer <div> stays
+                  // mounted across rows() updates — token streams
+                  // replace the underlying array but the slot's DOM
+                  // node is preserved. The inner per-row memo dampens
+                  // re-derivation: when a sibling row streams and the
+                  // current row's signature is unchanged, the memo
+                  // returns the previous row reference and TimelineRow
+                  // skips work.
+                  const row = createMemo<MessagesTimelineRow>(() => rowAccessor(), rowAccessor(), {
+                    equals: (a, b) => rowSignature(a) === rowSignature(b),
+                  });
+                  return (
+                    <div data-index={index}>
+                      <div class="mx-auto flex w-full max-w-3xl flex-col px-4">
+                        <TimelineRow
+                          row={row()}
+                          providerName={props.providerName}
+                          cwd={props.cwd}
+                          onOpenFile={props.onOpenFile}
+                          onSendPlanRequest={props.onSendPlanRequest}
+                          onRevertFromMessage={props.onRevertFromMessage}
+                          isTerminalAssistant={(id) => terminalAssistantIds().has(id)}
+                        />
+                      </div>
                     </div>
-                  </div>
-                );
-              }}
-            </Index>
+                  );
+                }}
+              </Index>
+            </div>
+            <div ref={setSentinel} />
           </div>
-          <div ref={setSentinel} />
-        </div>
-      </Show>
-      <ExpandedImageDialog preview={expandedPreview} onClose={() => setExpandedPreview(null)} />
-    </ImageExpandContext.Provider>
+        </Show>
+        <ExpandedImageDialog preview={expandedPreview} onClose={() => setExpandedPreview(null)} />
+      </ImageExpandContext.Provider>
+    </HighlightContext.Provider>
   );
 }
 
@@ -196,15 +263,27 @@ function TimelineRow(props: TimelineRowProps): JSX.Element {
   const message = createMemo(() => messageRow().message);
   const showDivider = (): boolean =>
     message().role === "assistant" && Boolean(messageRow().showCompletionDivider);
-  const dividerLabel = (): string => {
-    if (!showDivider()) return "Completed turn";
-    const start = messageRow().completionTurnStartedAt;
+  // Summary fragments shown after "Response •" in the divider pill:
+  // turn duration, tool-call count, and a non-"end_turn" stop reason.
+  // Mirrors upstream's "Response • {summary}" anchor between phases.
+  const dividerSummary = (): string => {
     const m = message();
-    const end =
-      m.role === "assistant" ? (m.completedAt ?? messageRow().createdAt) : messageRow().createdAt;
-    if (!start) return "Completed turn";
-    const duration = formatTurnDuration(start, end);
-    return duration ? `Completed in ${duration}` : "Completed turn";
+    if (m.role !== "assistant") return "";
+    const parts: string[] = [];
+    const start = messageRow().completionTurnStartedAt;
+    const end = m.completedAt ?? messageRow().createdAt;
+    const duration = start ? formatTurnDuration(start, end) : null;
+    if (duration) parts.push(duration);
+    const toolCount = m.toolCalls.length;
+    if (toolCount > 0) parts.push(`${toolCount} tool call${toolCount === 1 ? "" : "s"}`);
+    if (m.stopReason && m.stopReason !== "end_turn") {
+      parts.push(m.stopReason.replace(/_/g, " "));
+    }
+    return parts.join(" · ");
+  };
+  const dividerLabel = (): string => {
+    const summary = dividerSummary();
+    return summary ? `Response • ${summary}` : "Response";
   };
   return (
     <>
@@ -212,11 +291,13 @@ function TimelineRow(props: TimelineRowProps): JSX.Element {
         <div
           data-testid="message-completion-divider"
           data-turn-started-at={messageRow().completionTurnStartedAt ?? ""}
-          class="my-2 flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-[var(--fg-muted,var(--dim))]"
+          class="my-3 flex items-center gap-3"
           aria-label={dividerLabel()}
         >
           <span aria-hidden="true" class="h-px flex-1 bg-[var(--border-weak,var(--border))]" />
-          <span class="shrink-0">{dividerLabel()}</span>
+          <span class="shrink-0 rounded-full border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-[var(--fg-muted,var(--dim))]">
+            {dividerLabel()}
+          </span>
           <span aria-hidden="true" class="h-px flex-1 bg-[var(--border-weak,var(--border))]" />
         </div>
       </Show>
@@ -233,12 +314,34 @@ function TimelineRow(props: TimelineRowProps): JSX.Element {
   );
 }
 
+// Per-kind glyph for a work entry. Mirrors upstream's icon intent
+// (terminal vs file-read vs file-change vs thinking vs generic tool)
+// without pulling an icon dependency into chat-solid — the transcript
+// stays text-quiet, a single mono glyph is enough signal.
 const WORK_KIND_GLYPH: Record<NonNullable<WorkLogEntry["kind"]>, string> = {
-  tool: "·",
-  "file-read": "·",
-  "file-write": "·",
-  terminal: "·",
-  thinking: "·",
+  tool: "⚒",
+  "file-read": "👁",
+  "file-write": "✎",
+  terminal: "❯",
+  thinking: "✻",
+};
+
+// Per-status badge. `completed` is the quiet default and renders no
+// badge so finished work doesn't add noise; only in-flight / failed
+// entries surface a chip.
+const WORK_STATUS_BADGE: Record<
+  NonNullable<WorkLogEntry["status"]>,
+  { label: string; class: string } | null
+> = {
+  completed: null,
+  in_progress: {
+    label: "running",
+    class: "bg-[color-mix(in_oklab,var(--accent)_18%,transparent)] text-[var(--accent)]",
+  },
+  failed: {
+    label: "failed",
+    class: "bg-[color-mix(in_oklab,var(--red)_18%,transparent)] text-[var(--red)]",
+  },
 };
 
 function WorkGroupRow(props: { entries: ReadonlyArray<WorkLogEntry> }): JSX.Element {
@@ -246,6 +349,10 @@ function WorkGroupRow(props: { entries: ReadonlyArray<WorkLogEntry> }): JSX.Elem
   const split = createMemo(() => splitWorkEntries(props.entries));
   const visible = () => (expanded() ? props.entries : split().visible);
   const overflow = () => (expanded() ? 0 : split().overflowCount);
+  const failureCount = createMemo(() => props.entries.filter((e) => e.status === "failed").length);
+  const runningCount = createMemo(
+    () => props.entries.filter((e) => e.status === "in_progress").length,
+  );
 
   return (
     <section
@@ -258,23 +365,59 @@ function WorkGroupRow(props: { entries: ReadonlyArray<WorkLogEntry> }): JSX.Elem
         <span data-testid="work-group-summary">
           Worked on {props.entries.length} step{props.entries.length === 1 ? "" : "s"}
         </span>
+        <Show when={runningCount() > 0}>
+          <span
+            data-testid="work-group-running-badge"
+            class="ml-1 inline-flex items-center rounded-full bg-[color-mix(in_oklab,var(--accent)_18%,transparent)] px-1.5 py-0.5 text-[9px] tracking-[0.08em] text-[var(--accent)]"
+          >
+            {runningCount()} running
+          </span>
+        </Show>
+        <Show when={failureCount() > 0}>
+          <span
+            data-testid="work-group-failure-badge"
+            class="ml-1 inline-flex items-center rounded-full bg-[color-mix(in_oklab,var(--red)_18%,transparent)] px-1.5 py-0.5 text-[9px] tracking-[0.08em] text-[var(--red)]"
+          >
+            {failureCount()} failed
+          </span>
+        </Show>
       </header>
       <ul class="mt-1.5 flex flex-col gap-0.5 text-[12px] leading-relaxed text-[var(--fg-secondary)]">
         <For each={visible()}>
-          {(entry) => (
-            <li
-              data-testid="work-group-entry"
-              data-entry-id={entry.id}
-              data-entry-kind={entry.kind ?? ""}
-              data-entry-status={entry.status ?? "completed"}
-              class="flex items-center gap-2"
-            >
-              <span aria-hidden="true" class="shrink-0 text-[10px]">
-                {entry.kind ? (WORK_KIND_GLYPH[entry.kind] ?? "•") : "•"}
-              </span>
-              <span class="min-w-0 truncate">{entry.label}</span>
-            </li>
-          )}
+          {(entry) => {
+            const badge = () => (entry.status ? WORK_STATUS_BADGE[entry.status] : null);
+            return (
+              <li
+                data-testid="work-group-entry"
+                data-entry-id={entry.id}
+                data-entry-kind={entry.kind ?? ""}
+                data-entry-status={entry.status ?? "completed"}
+                class="flex items-center gap-2"
+                classList={{ "text-[var(--red)]": entry.status === "failed" }}
+              >
+                <span
+                  aria-hidden="true"
+                  class="w-3.5 shrink-0 text-center text-[10px]"
+                  classList={{
+                    "text-[var(--accent)]": entry.status === "in_progress",
+                  }}
+                >
+                  {entry.kind ? (WORK_KIND_GLYPH[entry.kind] ?? "•") : "•"}
+                </span>
+                <span class="min-w-0 truncate">{entry.label}</span>
+                <Show when={badge()}>
+                  {(b) => (
+                    <span
+                      data-testid="work-group-entry-status"
+                      class={`ml-auto inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] ${b().class}`}
+                    >
+                      {b().label}
+                    </span>
+                  )}
+                </Show>
+              </li>
+            );
+          }}
         </For>
         <Show when={overflow() > 0}>
           <li>
@@ -444,6 +587,26 @@ function AssistantRow(props: {
     Boolean(props.message.thoughtText && props.message.thoughtText.length > 0);
   const toolCalls = () => props.message.toolCalls;
   const hasTools = () => toolCalls().length > 0;
+  // Per-turn changed files, scoped to THIS assistant message's own
+  // tool calls (gap 11). Only surfaced on the terminal message of a
+  // turn so a multi-chunk turn shows the section once, at the end.
+  const turnChangedFiles = createMemo(() =>
+    props.isTerminal
+      ? deriveChangedFilesFromToolCalls(
+          props.message.toolCalls,
+          props.message.completedAt ?? props.message.createdAt,
+        )
+      : [],
+  );
+  const turnDiffStat = createMemo(() => {
+    let additions = 0;
+    let deletions = 0;
+    for (const f of turnChangedFiles()) {
+      additions += f.totalAdditions;
+      deletions += f.totalDeletions;
+    }
+    return { additions, deletions };
+  });
   const copyState = createMemo(() =>
     resolveAssistantCopyState({
       text: props.message.text,
@@ -479,9 +642,9 @@ function AssistantRow(props: {
 
       <Show when={hasText()}>
         <div class="min-w-0">
-          <div
+          <MarkdownBody
             class="chat-solid-markdown chat-markdown text-[13px] leading-relaxed text-[var(--fg)]"
-            innerHTML={renderedText()}
+            html={renderedText()}
             onClick={(event) => handleFileLinkClick(event, props.cwd?.(), props.onOpenFile)}
           />
           <Show when={props.message.streaming}>
@@ -511,6 +674,25 @@ function AssistantRow(props: {
 
       <Show when={hasTools()}>
         <ToolCallsCluster toolCalls={toolCalls} />
+      </Show>
+
+      <Show when={turnChangedFiles().length > 0}>
+        <section
+          data-testid="assistant-changed-files"
+          class="mt-2 rounded-md border border-[var(--border-weak,var(--border))] bg-[var(--bg-weak,var(--bg))] p-2.5"
+        >
+          <header class="mb-1.5 flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-[var(--fg-muted,var(--fg-secondary))]">
+            <span>Changed files ({turnChangedFiles().length})</span>
+            <Show when={hasNonZeroStat(turnDiffStat())}>
+              <span aria-hidden="true">·</span>
+              <DiffStatLabel
+                additions={turnDiffStat().additions}
+                deletions={turnDiffStat().deletions}
+              />
+            </Show>
+          </header>
+          <ChangedFilesTree files={turnChangedFiles} />
+        </section>
       </Show>
 
       <Show when={!hasText() && !hasThought() && !hasTools() && !props.message.streaming}>
@@ -638,9 +820,9 @@ function UserContentBlockView(props: {
   const block = props.block;
   const renderedText = createMemo(() => renderMarkdown(block.text, { cwd: props.cwd?.() }));
   return (
-    <div
+    <MarkdownBody
       class="chat-solid-markdown chat-markdown text-[13px] leading-relaxed text-[var(--fg)]"
-      innerHTML={renderedText()}
+      html={renderedText()}
       onClick={(event) => handleFileLinkClick(event, props.cwd?.(), props.onOpenFile)}
     />
   );

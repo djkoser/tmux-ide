@@ -8,14 +8,13 @@
  * generic [[WidgetHost]] component.
  */
 
-import { createMemo, createSignal, onMount, Show, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, on, onMount, Show, type JSX } from "solid-js";
 import {
   mountActivity,
   mountCostsDashboard,
   mountInspector,
   mountKanbanBoard,
   mountMissionControlDashboard,
-  mountPlansPanel,
   mountPlansRail,
   mountSkillsView,
   mountTasksView,
@@ -44,6 +43,7 @@ import {
 } from "@tmux-ide/v2-solid-widgets";
 import { Terminal } from "@/components/Terminal";
 import { API_BASE } from "@/lib/api";
+import { renderMarkdownHighlighted } from "@/lib/syntax/markdownShiki";
 import { ProblemsTab } from "./ProblemsTab";
 import { totalDiagnosticsCount } from "@/lib/lsp/diagnostics-store";
 import { WidgetHost } from "@tmux-ide/v2-solid-widgets";
@@ -171,6 +171,70 @@ export function TasksDashboardView(props: ProjectProps): JSX.Element {
 }
 
 /**
+ * Plan body renderer. The plan markdown used to dump into a raw
+ * monospace `<pre>`; now it routes through the shared shiki markdown
+ * pipeline so headings, tables, and fenced code render richly. The
+ * synchronous fallback (chat-solid `renderMarkdown`) is replaced by
+ * the highlighted HTML once the async shiki pass resolves.
+ */
+function PlanBodyView(props: {
+  plan: PlansPanelMountOptions["plan"];
+  data: PlansPanelMountOptions["planData"];
+}): JSX.Element {
+  const [html, setHtml] = createSignal<string>("");
+  createEffect(
+    on(
+      () => props.data?.content ?? "",
+      (content) => {
+        if (!content) {
+          setHtml("");
+          return;
+        }
+        let stale = false;
+        void renderMarkdownHighlighted(content)
+          .then((out) => {
+            if (!stale) setHtml(out);
+          })
+          .catch(() => {
+            if (!stale) setHtml("");
+          });
+        return () => {
+          stale = true;
+        };
+      },
+    ),
+  );
+  return (
+    <div data-testid="plan-body" class="h-full overflow-y-auto bg-[var(--bg)]">
+      <Show when={props.plan}>
+        {(meta) => (
+          <header class="sticky top-0 z-10 flex items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-strong,var(--bg))] px-8 py-3">
+            <h1 class="text-[13px] font-medium text-[var(--fg)]">{meta().title}</h1>
+            <span class="rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]">
+              {meta().status}
+            </span>
+          </header>
+        )}
+      </Show>
+      <Show
+        when={html()}
+        fallback={
+          <div class="flex h-40 items-center justify-center text-[12px] text-[var(--dim)]">
+            Rendering plan…
+          </div>
+        }
+      >
+        <div
+          class="chat-markdown w-full max-w-3xl px-8 py-8"
+          // eslint-disable-next-line solid/no-innerhtml
+          innerHTML={html()}
+        />
+      </Show>
+    </div>
+  );
+}
+
+/**
  * Plans surface: rail on the left, panel body on the right. The rail
  * owns its own polling (it calls /api/project/:name/plans internally);
  * the panel is prop-driven, so we fetch the body when a selection
@@ -226,11 +290,6 @@ export function PlansSurfaceView(props: ProjectProps): JSX.Element {
     },
   }));
 
-  const panelOptions = createMemo<PlansPanelMountOptions>(() => ({
-    plan: planMeta(),
-    planData: planData(),
-  }));
-
   return (
     <div
       class="grid h-full w-full min-h-0"
@@ -248,7 +307,7 @@ export function PlansSurfaceView(props: ProjectProps): JSX.Element {
             </div>
           }
         >
-          <WidgetHost mount={mountPlansPanel} options={panelOptions} class="h-full w-full" />
+          <PlanBodyView plan={planMeta()} data={planData()} />
         </Show>
       </main>
     </div>
