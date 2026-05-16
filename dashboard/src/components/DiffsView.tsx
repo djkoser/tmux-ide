@@ -1,23 +1,23 @@
 /**
- * DiffsView — entry surface for G18-P2 commit / PR flows.
+ * DiffsView — the single git surface the activity-bar git icon opens
+ * (`?view=diffs`).
  *
- * Mounts where the `view=diffs` placeholder used to live. Lists the
- * working-tree changes from `useGitStatus`, surfaces a top toolbar
- * with Commit / Push / Create-PR buttons, and opens the matching
- * dialog/modal on click. Hunk-level staging waits for the full diff
- * widget port — the dialog's checkbox lets the user pick whole-file
- * granularity for now, which already closes the audit's "Commit
- * action on Diffs widget" gap.
+ * Owns the git chrome: branch + ahead/behind, the Commit / Push /
+ * Create-PR actions, CheckRunsRail, and the commit/PR dialogs. The
+ * body delegates to `MonacoDiffsView`, which carries the full diff
+ * experience — working / staged / pr changes, commit history, and the
+ * Branch-vs-main (PR) range diff — so every git review mode is
+ * reachable from this one panel without losing the header actions.
  */
 
-import { createMemo, createSignal, For, Show } from "solid-js";
-import { createVirtualizer } from "@tanstack/solid-virtual";
+import { createMemo, createSignal, Show } from "solid-js";
 import { GitBranch, GitPullRequest, GitCommit } from "lucide-solid";
 import { useGitStatus } from "@/lib/git";
 import { CommitDialog } from "@/components/CommitDialog";
 import { CreatePrModal } from "@/components/CreatePrModal";
 import { PushButton } from "@/components/PushButton";
 import { CheckRunsRail } from "@/components/CheckRunsRail";
+import { MonacoDiffsView } from "@/components/diffs/MonacoDiffsView";
 
 interface DiffsViewProps {
   projectName: string;
@@ -30,44 +30,11 @@ export function DiffsView(props: DiffsViewProps) {
   const [lastCommit, setLastCommit] = createSignal<string | null>(null);
   const [lastPrUrl, setLastPrUrl] = createSignal<string | null>(null);
 
-  const rows = createMemo(() => {
+  const hasChanges = createMemo(() => {
     const s = status();
-    if (!s) return [] as Array<{ path: string; status: string; group: "staged" | "unstaged" }>;
-    const seen = new Set<string>();
-    const out: Array<{ path: string; status: string; group: "staged" | "unstaged" }> = [];
-    for (const c of s.staged) {
-      if (seen.has(c.path)) continue;
-      seen.add(c.path);
-      out.push({ path: c.path, status: c.status, group: "staged" });
-    }
-    for (const c of s.unstaged) {
-      if (seen.has(c.path)) continue;
-      seen.add(c.path);
-      out.push({ path: c.path, status: c.status, group: "unstaged" });
-    }
-    return out;
+    if (!s) return false;
+    return s.staged.length > 0 || s.unstaged.length > 0;
   });
-
-  const hasChanges = createMemo(() => rows().length > 0);
-
-  // A huge working-tree changeset (rename sweeps, generated-file
-  // churn) can list thousands of paths. createMemo wrappers per
-  // 9b139e5 keep the spacer + For subscribed to the virtualizer.
-  const [scrollEl, setScrollEl] = createSignal<HTMLDivElement | null>(null);
-  const virtualizer = createVirtualizer({
-    get count() {
-      return rows().length;
-    },
-    getScrollElement: () => scrollEl(),
-    estimateSize: () => 26,
-    overscan: 8,
-    getItemKey: (i) => {
-      const r = rows()[i];
-      return r ? `${r.group}:${r.path}` : i;
-    },
-  });
-  const virtualItems = createMemo(() => virtualizer.getVirtualItems());
-  const virtualTotalSize = createMemo(() => virtualizer.getTotalSize());
 
   return (
     <div
@@ -114,55 +81,8 @@ export function DiffsView(props: DiffsViewProps) {
         </span>
       </header>
 
-      <div ref={setScrollEl} class="relative min-h-0 flex-1 overflow-y-auto">
-        <Show
-          when={hasChanges()}
-          fallback={
-            <div data-empty-state class="flex h-full items-center justify-center text-[var(--dim)]">
-              <Show when={status.loading} fallback="No changes in the working tree.">
-                Loading status…
-              </Show>
-            </div>
-          }
-        >
-          <div
-            data-testid="diffs-view-spacer"
-            style={{
-              height: `${virtualTotalSize()}px`,
-              width: "100%",
-              position: "relative",
-            }}
-          >
-            <For each={virtualItems()}>
-              {(vItem) => {
-                const row = () => rows()[vItem.index]!;
-                return (
-                  <div
-                    data-index={vItem.index}
-                    data-testid={`diffs-row-${row().path}`}
-                    data-group={row().group}
-                    style={{
-                      position: "absolute",
-                      top: "0",
-                      left: "0",
-                      width: "100%",
-                      transform: `translateY(${vItem.start}px)`,
-                    }}
-                    class="flex items-center gap-3 border-b border-[var(--border-weak,var(--border))] px-3 py-1 hover:bg-[var(--surface-hover,rgba(127,127,127,0.04))]"
-                  >
-                    <span class="w-14 text-[10px] uppercase text-[var(--dim)]">{row().status}</span>
-                    <span class="flex-1 truncate font-mono" title={row().path}>
-                      {row().path}
-                    </span>
-                    <span class="text-[9px] uppercase tracking-wider text-[var(--dim)]">
-                      {row().group}
-                    </span>
-                  </div>
-                );
-              }}
-            </For>
-          </div>
-        </Show>
+      <div data-testid="diffs-view-body" class="min-h-0 flex-1 overflow-hidden">
+        <MonacoDiffsView projectName={props.projectName} />
       </div>
 
       <Show when={lastCommit() || lastPrUrl()}>
