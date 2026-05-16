@@ -69,9 +69,7 @@ describe("FileRenderer dispatch", () => {
     // Fixture supplies no preview bytes, so BinaryRenderer falls back
     // to its no-hex-dump message (the copy now states *why* there's
     // no preview rather than the older generic line).
-    expect(root.textContent).toContain(
-      "Binary file — file is larger than 64 KB or fetch failed.",
-    );
+    expect(root.textContent).toContain("Binary file — file is larger than 64 KB or fetch failed.");
   });
 
   it("too-large → TooLargeRenderer with formatted size", () => {

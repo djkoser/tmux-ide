@@ -14,13 +14,7 @@ import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
 import { createStore } from "solid-js/store";
 import { Router, Route } from "@solidjs/router";
-import type {
-  FileMatch,
-  MatchRow,
-  SearchOptions,
-  SearchService,
-  SearchState,
-} from "@/lib/search";
+import type { FileMatch, MatchRow, SearchOptions, SearchService, SearchState } from "@/lib/search";
 
 // Make `makeSearchService` return a stub backed by a seeded store so
 // the SearchView renders against deterministic data without hitting
