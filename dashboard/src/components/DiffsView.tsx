@@ -4,10 +4,13 @@
  *
  * Owns the git chrome: branch + ahead/behind, the Commit / Push /
  * Create-PR actions, CheckRunsRail, and the commit/PR dialogs. The
- * body delegates to `MonacoDiffsView`, which carries the full diff
- * experience — working / staged / pr changes, commit history, and the
- * Branch-vs-main (PR) range diff — so every git review mode is
- * reachable from this one panel without losing the header actions.
+ * body delegates to `SolidDiffsView`, a Solid-native + shiki diff
+ * renderer carrying the full read-only experience — working / staged /
+ * pr changes, commit history, and the Branch-vs-main (PR) range diff —
+ * so every git review mode is reachable from this one panel without
+ * losing the header actions. Monaco is intentionally retired here; it
+ * stays only for the editable hunk editor + three-way merge under
+ * `?view=changes`.
  */
 
 import { createMemo, createSignal, Show } from "solid-js";
@@ -17,7 +20,7 @@ import { CommitDialog } from "@/components/CommitDialog";
 import { CreatePrModal } from "@/components/CreatePrModal";
 import { PushButton } from "@/components/PushButton";
 import { CheckRunsRail } from "@/components/CheckRunsRail";
-import { MonacoDiffsView } from "@/components/diffs/MonacoDiffsView";
+import { SolidDiffsView } from "@/components/diffs/SolidDiffsView";
 
 interface DiffsViewProps {
   projectName: string;
@@ -82,7 +85,7 @@ export function DiffsView(props: DiffsViewProps) {
       </header>
 
       <div data-testid="diffs-view-body" class="min-h-0 flex-1 overflow-hidden">
-        <MonacoDiffsView projectName={props.projectName} />
+        <SolidDiffsView projectName={props.projectName} />
       </div>
 
       <Show when={lastCommit() || lastPrUrl()}>
