@@ -139,7 +139,11 @@ type LiveThread = AcpLiveThread | CodexLiveThread;
 
 const DEFAULT_PERMISSION_TIMEOUT_MS = 60_000;
 const DEFAULT_PERSIST_DEBOUNCE_MS = 750;
-const DEFAULT_TEXT_COALESCE_WINDOW_MS = 30;
+// ~1 animation frame. The client used to need a wide window to
+// amortize its O(N) per-token rebuild; the persistent rowStore +
+// incremental reducer removed that cost, so tighten the window to
+// near-frame latency for token-by-token streaming.
+const DEFAULT_TEXT_COALESCE_WINDOW_MS = 16;
 
 export class ThreadNotFoundError extends Error {
   readonly threadId: string;

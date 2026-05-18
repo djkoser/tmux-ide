@@ -17,6 +17,12 @@ import {
   type ApiRuntime,
 } from "../api";
 import { coalesceMessages, deriveRuntimeState } from "../coalesce";
+import {
+  applyAgentUpdateToRows,
+  applyUserPromptToRows,
+  createRowCursor,
+  finishStreamingRows,
+} from "../rowReducer";
 import { notifyAssistantTurnComplete } from "../lib/chatNotify";
 import { buildPlanImplementationPrompt, proposedPlanTitle } from "../lib/proposedPlan";
 import {
@@ -39,6 +45,7 @@ import type {
   ComposerAttachment,
   ComposerTerminalPane,
   ContentBlock,
+  MessagesTimelineRow,
   PermissionRequest,
   ProposedPlanSummary,
   SessionUpdate,
@@ -126,7 +133,9 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
   const [error, setError] = createSignal<Error | null>(null);
   const [inflight, setInflight] = createSignal(false);
   const [stopReason, setStopReason] = createSignal<StopReason | null>(null);
-  const [completedAt, setCompletedAt] = createSignal<string | null>(null);
+  // Only the setter is used now — the old `rows` memo was the sole
+  // reader; the reducer stamps completedAt onto the row itself.
+  const [, setCompletedAt] = createSignal<string | null>(null);
   const [availableCommands, setAvailableCommands] = createSignal<AvailableCommand[]>([]);
   const [currentModeId, setCurrentModeId] = createSignal<string | null>(null);
   const [pendingPromptId, setPendingPromptId] = createSignal<string | null>(null);
@@ -157,6 +166,15 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
     [],
   );
   const [store, setStore] = createStore<ChatStore>({ messages: [] });
+  // Persistent render model. `coalesceMessages` rebuilds the whole
+  // list (one-shot bootstrap only); live frames mutate `rowStore.rows`
+  // in place via the incremental reducer so a streaming turn grows a
+  // single row's `.text` and Solid updates one text node per token
+  // instead of reallocating the transcript. `cursor` carries the
+  // reducer's turn/assistant/plan/prompt state across frames and is
+  // reset (reassigned) on every thread switch / refetch.
+  const [rowStore, setRowStore] = createStore<{ rows: MessagesTimelineRow[] }>({ rows: [] });
+  let cursor = createRowCursor();
 
   const runtime = createMemo<ApiRuntime>(() => ({
     apiBaseUrl: options().apiBaseUrl,
@@ -174,6 +192,10 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
       setThread(next);
       setUsage(next.usage ?? null);
       setStore("messages", [...(next.messages ?? [])]);
+      // One-shot bootstrap of the render model from thread history.
+      // Live frames take over incrementally from here.
+      cursor = createRowCursor();
+      setRowStore("rows", coalesceMessages(next.messages ?? [], {}));
       setAvailableCommands(derived.availableCommands);
       setCurrentModeId(derived.currentModeId);
       setStopReason(null);
@@ -183,6 +205,8 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
       setThread(null);
       setUsage(null);
       setStore("messages", []);
+      cursor = createRowCursor();
+      setRowStore("rows", []);
       setAvailableCommands([]);
       setCurrentModeId(null);
       setPendingPermission(null);
@@ -258,45 +282,15 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
     });
   });
 
-  // Streaming-chunk coalescer. The daemon emits one
-  // `chat.thread.update` frame per token-burst — a long assistant
-  // turn produces 100s of frames per second. Pushing each as its
-  // own `AgentUpdate` made `store.messages` grow to 200+ entries
-  // per turn and forced `coalesceMessages` to walk every entry
-  // again on every keystroke (O(N) per token = jerky tail). We
-  // batch frames per animation frame and merge consecutive same-
-  // kind same-messageId chunks into the previous AgentUpdate's
-  // text content in place, so a turn ends up as a single
-  // AgentUpdate whose text grows character-by-character.
-  let pendingUpdateFrames: Array<Extract<ChatBusEvent, { type: "chat.thread.update" }>> = [];
-  let updateFlushScheduled = false;
-
-  function flushUpdateFrames(): void {
-    updateFlushScheduled = false;
-    if (pendingUpdateFrames.length === 0) return;
-    const queue = pendingUpdateFrames;
-    pendingUpdateFrames = [];
-    setStore(
-      produce((draft) => {
-        for (const frame of queue) applyUpdateFrame(frame, draft);
-      }),
-    );
-  }
-
-  function scheduleUpdateFlush(): void {
-    if (updateFlushScheduled) return;
-    updateFlushScheduled = true;
-    if (typeof requestAnimationFrame === "function") {
-      requestAnimationFrame(flushUpdateFrames);
-    } else {
-      // happy-dom / node test harness has no RAF — fall back to
-      // the next microtask so the test still observes the merged
-      // store within an `await Promise.resolve()` tick.
-      queueMicrotask(flushUpdateFrames);
-    }
-  }
-
-  function applyUpdateFrame(
+  // Raw-log writer. The daemon emits one `chat.thread.update` frame
+  // per token-burst; this merges consecutive same-kind same-messageId
+  // text chunks into the previous AgentUpdate's content in place so
+  // `store.messages` (the public `chat.messages()` contract) grows
+  // O(1) per turn. The render model is maintained separately by the
+  // incremental row reducer — there is no RAF batch any more: with a
+  // persistent rowStore, Solid's fine-grained tracking makes a
+  // per-chunk append cheap, so each frame applies synchronously.
+  function applyUpdateFrameToMessages(
     frame: Extract<ChatBusEvent, { type: "chat.thread.update" }>,
     draft: ChatStore,
   ): void {
@@ -408,13 +402,22 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
             setPendingPermission(null);
           }
         }
-        // Side-channel state above runs synchronously per frame.
-        // The store push lands in the next RAF flush, where the
-        // coalescer merges consecutive same-message chunks into a
-        // single AgentUpdate.
-        void now;
-        pendingUpdateFrames.push(frame);
-        scheduleUpdateFlush();
+        // Two synchronous applies per frame: the bounded raw log
+        // (chat.messages contract) and the persistent render model.
+        // The reducer mutates only the streaming row's `.text` in
+        // place, so Solid updates one text node per token.
+        setStore(produce((draft) => applyUpdateFrameToMessages(frame, draft)));
+        setRowStore(
+          produce((state) =>
+            applyAgentUpdateToRows(
+              state.rows,
+              cursor,
+              `agent-update:${frame.seq}`,
+              now,
+              frame.update,
+            ),
+          ),
+        );
         return;
       }
       if (frame.type === "chat.thread.stop") {
@@ -428,18 +431,29 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
           // (pending prompt matched), never on replay/reconnect.
           if (pending) notifyAssistantTurnComplete();
         }
+        // Close the streaming row for this prompt. Idempotent after an
+        // optimistic cancel (cursor.activePromptId already cleared) and
+        // a no-op for a replayed stop of a different prompt.
+        setRowStore(
+          produce((state) =>
+            finishStreamingRows(
+              state.rows,
+              cursor,
+              frame.promptId,
+              frame.stopReason,
+              new Date().toISOString(),
+            ),
+          ),
+        );
       }
     });
     onCleanup(() => socket.close());
   });
 
-  const rows = createMemo(() =>
-    coalesceMessages(store.messages, {
-      inflight: inflight(),
-      stopReason: stopReason(),
-      completedAt: completedAt(),
-    }),
-  );
+  // The render model is the persistent store, not a recompute.
+  // Streaming/stop state lives on the rows themselves (set by the
+  // reducer), so this no longer derives from inflight/stopReason.
+  const rows = (): MessagesTimelineRow[] => rowStore.rows;
 
   async function blocksForAttachments(items: ComposerAttachment[]): Promise<ContentBlock[]> {
     const terminalBlocks: ContentBlock[] = [];
@@ -485,15 +499,15 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
       const result = await chatSessionSend(runtime(), opts.threadId, fullContent);
       setPendingPromptId(result.promptId);
       setAttachments([]);
-      setStore(
-        produce((draft) => {
-          draft.messages.push({
-            _tag: "UserPrompt",
-            id: result.promptId,
-            createdAt: new Date().toISOString(),
-            content: fullContent,
-          });
-        }),
+      const userPrompt: Extract<ThreadMessage, { _tag: "UserPrompt" }> = {
+        _tag: "UserPrompt",
+        id: result.promptId,
+        createdAt: new Date().toISOString(),
+        content: fullContent,
+      };
+      setStore(produce((draft) => draft.messages.push(userPrompt)));
+      setRowStore(
+        produce((state) => applyUserPromptToRows(state.rows, cursor, userPrompt, result.promptId)),
       );
     } catch (err) {
       setPendingPromptId(null);
@@ -504,6 +518,20 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
   }
 
   async function cancel(): Promise<void> {
+    // Optimistic: clear the caret immediately instead of waiting for
+    // the provider to return and emit `chat.thread.stop`. A long
+    // turn otherwise shows a stuck caret for the whole tail latency.
+    // The eventual stop frame is reconciled away (cursor's active
+    // prompt is now cleared, so finishStreamingRows no-ops).
+    const completedAtIso = new Date().toISOString();
+    setRowStore(
+      produce((state) =>
+        finishStreamingRows(state.rows, cursor, cursor.activePromptId, "cancelled", completedAtIso),
+      ),
+    );
+    setInflight(false);
+    setStopReason("cancelled");
+    setCompletedAt(completedAtIso);
     await chatSessionCancel(runtime(), options().threadId);
   }
 
@@ -749,25 +777,46 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
         content,
       );
       setPendingPromptId(result.promptId);
+      const replacement: Extract<ThreadMessage, { _tag: "UserPrompt" }> = {
+        _tag: "UserPrompt",
+        id: result.promptId,
+        createdAt: new Date().toISOString(),
+        content,
+      };
       setStore(
         produce((draft) => {
           const idx = draft.messages.findIndex(
             (m) => m._tag === "UserPrompt" && m.id === userMessageId,
           );
           if (idx >= 0) draft.messages.splice(idx);
-          draft.messages.push({
-            _tag: "UserPrompt",
-            id: result.promptId,
-            createdAt: new Date().toISOString(),
-            content,
-          });
+          draft.messages.push(replacement);
         }),
       );
+      // Structural rewind (not the streaming hot path): rebuild the
+      // render model from the truncated log, then mark the new prompt
+      // active so the regenerated reply streams into a fresh row.
+      cursor = createRowCursor();
+      setRowStore("rows", coalesceMessages(store.messages, {}));
+      cursor.activePromptId = result.promptId;
+      cursor.latestUserRowId = result.promptId;
     } catch (err) {
       setInflight(false);
       setError(err instanceof Error ? err : new Error(String(err)));
       throw err;
     }
+  }
+
+  /**
+   * Revert-to-user-message: rewind the thread to an earlier user
+   * turn and resume from it unchanged. Re-uses `editFromTurn` with
+   * the message's *original* content (pulled from the local store)
+   * so the daemon truncates everything after and re-dispatches the
+   * same prompt — the agent simply re-runs from that point.
+   */
+  async function revertFromMessage(userMessageId: string): Promise<void> {
+    const target = store.messages.find((m) => m._tag === "UserPrompt" && m.id === userMessageId);
+    if (!target || target._tag !== "UserPrompt") return;
+    await editFromTurn(userMessageId, [...target.content]);
   }
 
   return {
@@ -812,6 +861,7 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
     planImplementationContent,
     implementPlanInNewThread,
     editFromTurn,
+    revertFromMessage,
     refetch,
   };
 }

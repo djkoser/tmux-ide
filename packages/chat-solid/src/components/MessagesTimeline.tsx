@@ -64,6 +64,8 @@ import {
 } from "./MessagesTimeline.logic";
 import { PlanCard } from "./PlanCard";
 import { ContentBlockView, ToolCallCard } from "./ToolCallCard";
+import { TerminalContextInlineChip } from "./TerminalContextInlineChip";
+import { parseTerminalContextResource } from "../lib/userMessageTerminalContexts";
 import { WorkingIndicator } from "./WorkingIndicator";
 
 /** Host-injected async HTML upgrader (syntax highlighting). */
@@ -150,7 +152,27 @@ export function MessagesTimeline(props: {
   const [container, setContainer] = createSignal<HTMLElement>();
   const [sentinel, setSentinel] = createSignal<HTMLElement>();
   const [expandedPreview, setExpandedPreview] = createSignal<ExpandedImagePreview | null>(null);
-  const followSignal = createMemo(() => props.rows().map(rowSignature).join("|"));
+  // Autoscroll follow-signal. The streaming row is always the tail,
+  // so subscribe to row count + the last row's growing length only —
+  // not a signature mapped over every row. With the persistent
+  // rowStore this re-fires O(1) per token (the streaming row's
+  // `.text` length) instead of rebuilding an N-row signature string
+  // each chunk.
+  const followSignal = createMemo(() => {
+    const rs = props.rows();
+    const last = rs[rs.length - 1];
+    if (!last) return `${rs.length}`;
+    if (last.kind === "message") {
+      const m = last.message;
+      if (m.role === "assistant") {
+        return `${rs.length}:a:${m.text.length}:${m.thoughtText?.length ?? 0}:${m.toolCalls.length}:${m.streaming}`;
+      }
+      return `${rs.length}:u:${m.content.length}`;
+    }
+    if (last.kind === "working") return `${rs.length}:w`;
+    if (last.kind === "plan") return `${rs.length}:p:${last.entries.length}`;
+    return `${rs.length}:work:${last.entries.length}`;
+  });
   const terminalAssistantIds = createMemo(() => deriveTerminalAssistantMessageIds(props.rows()));
   useAutoScroll(container, sentinel, followSignal);
 
@@ -901,6 +923,18 @@ function UserContentBlockView(props: {
           />
         </div>
       </Show>
+    );
+  }
+  const terminalContext = parseTerminalContextResource(props.block);
+  if (terminalContext) {
+    return (
+      <span class="my-0.5 inline-flex align-middle">
+        <TerminalContextInlineChip
+          label={terminalContext.label}
+          tooltipText={terminalContext.tooltipText}
+          expired={terminalContext.expired}
+        />
+      </span>
     );
   }
   if (props.block.type !== "text") return <ContentBlockView block={props.block} />;

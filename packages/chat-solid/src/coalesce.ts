@@ -139,6 +139,8 @@ export function coalesceMessages(
     }
   }
 
+  assignRevertTurnCounts(rows);
+
   if (latestAssistantRow?.message.role === "assistant") {
     const assistant = latestAssistantRow.message;
     if (runtime.inflight) {
@@ -158,6 +160,25 @@ export function coalesceMessages(
   }
 
   return rows;
+}
+
+/**
+ * Stamp `revertTurnCount` onto every user-message row in place. A
+ * user message is rewindable when at least one more user turn
+ * follows it; the count is how many later user turns
+ * `chat.session.editFromTurn` would discard when re-running from
+ * this point. The renderer keys the "Revert N turns" button off a
+ * non-zero count. Shared by the full-rebuild path (here) and the
+ * incremental row reducer so both stay consistent.
+ */
+export function assignRevertTurnCounts(rows: MessagesTimelineRow[]): void {
+  let trailingUserTurns = 0;
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    const row = rows[i];
+    if (!row || row.kind !== "message" || row.message.role !== "user") continue;
+    if (trailingUserTurns > 0) row.revertTurnCount = trailingUserTurns;
+    trailingUserTurns += 1;
+  }
 }
 
 export function deriveRuntimeState(messages: readonly ThreadMessage[]): {
@@ -224,7 +245,7 @@ function ensureAssistantMessage(input: {
   return { message, row };
 }
 
-function mergeToolCallUpdate(
+export function mergeToolCallUpdate(
   toolCalls: ToolCallView[],
   update: {
     toolCallId: string;
@@ -256,7 +277,9 @@ function mergeToolCallUpdate(
   if (update.rawOutput !== undefined) toolCall.rawOutput = update.rawOutput;
 }
 
-function assistantHasVisibleContent(message: Extract<ChatMessage, { role: "assistant" }>): boolean {
+export function assistantHasVisibleContent(
+  message: Extract<ChatMessage, { role: "assistant" }>,
+): boolean {
   return (
     message.text.length > 0 ||
     Boolean(message.thoughtText && message.thoughtText.length > 0) ||
