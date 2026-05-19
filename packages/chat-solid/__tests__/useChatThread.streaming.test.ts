@@ -18,8 +18,9 @@
  *      untouched rows).
  *   4. `chat.timeline.reset` replaces the timeline wholesale.
  *   5. Deltas for other threadIds are ignored.
- *   6. The raw `chat.messages()` log is independent of the timeline
- *      (the daemon still emits `chat.thread.update` for that contract).
+ *   6. A `chat.thread.update` (raw streaming chunk) performs ZERO
+ *      client reduction: it neither grows `chat.messages()` nor adds
+ *      a rendered row. The transcript is 100% server-materialized.
  */
 
 import { createRoot, createSignal, type Accessor } from "solid-js";
@@ -271,15 +272,16 @@ describe("useChatThread — server-materialized timeline", () => {
     dispose();
   });
 
-  it("keeps the raw chat.messages() log independent of the timeline", async () => {
+  it("performs zero client reduction on chat.thread.update (pure renderer)", async () => {
     const { chat, dispose } = mountHook();
     await waitFor(() => FakeWebSocket.instances.length > 0);
     const socket = FakeWebSocket.instances[0]!;
     await waitFor(() => chat.thread() !== null);
 
-    // The raw-log contract still grows from `chat.thread.update`
-    // (pinned in detail by streaming.test.ts) — independent of the
-    // server-materialized render rows.
+    // A raw streaming chunk frame must NOT be folded into anything
+    // client-side: the daemon already materialized the transcript and
+    // ships it via `chat.timeline.*`. `chat.thread.update` now carries
+    // only control signals (commands / mode / tool-call status).
     pushMessage(socket, {
       type: "chat.thread.update",
       threadId: "thread-1",
@@ -287,7 +289,9 @@ describe("useChatThread — server-materialized timeline", () => {
       update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "raw" } },
     });
 
-    await waitFor(() => chat.messages().length === 1);
+    // Give any errant handler a beat to (not) mutate state.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(chat.messages().length).toBe(0);
     expect(chat.rows().length).toBe(0);
     dispose();
   });

@@ -1,25 +1,28 @@
 /**
- * Regression: real-time chat streaming (task #103).
+ * Regression: real-time chat streaming (task #103) — pure-renderer era.
  *
- * The bug: chat-solid's bridge pointed `wsUrl` at `/ws/chat`, but the
- * daemon's unified push channel is `/ws/events`. The WebSocket open
- * silently dropped on the floor — the timeline received no
- * `chat.thread.update` frames, so streamed agent_message_chunk updates
- * never appeared. Only the post-stream durable refetch showed text,
- * which arrived all-at-once after the turn completed.
+ * The original bug: chat-solid's bridge pointed `wsUrl` at `/ws/chat`,
+ * but the daemon's unified push channel is `/ws/events`. The WebSocket
+ * open silently dropped on the floor, so streamed updates never
+ * appeared until the post-stream durable refetch.
  *
- * These tests pin the wire:
- *   1. useChatThread opens a WebSocket — the bridge's wsUrl is the
- *      one it connects to.
- *   2. A `chat.thread.update` frame appends an AgentUpdate row.
- *   3. Multiple chunks land in arrival order.
+ * Step 1 of the t3 convergence moved ALL reduction server-side: the
+ * daemon materializes the canonical transcript and ships whole-row
+ * `chat.timeline.*` frames; the client renders them with ZERO
+ * reduction. These tests pin the wire under that contract:
+ *   1. useChatThread opens a WebSocket at the configured URL.
+ *   2. A `chat.timeline.upsert` populates the rendered transcript
+ *      (the #103 regression, reframed: a misrouted socket → no rows).
+ *   3. A raw `chat.thread.update` chunk performs ZERO client reduction
+ *      (neither `chat.messages()` nor `chat.rows()` grows).
  *   4. Frames for other threadIds are ignored.
+ *   5. Non-chat frames on the unified channel are dropped.
  */
 
 import { createRoot, createSignal, type Accessor } from "solid-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useChatThread } from "../src/hooks/useChatThread";
-import type { ChatMountOptions, ThreadMessage } from "../src/types";
+import type { ChatMountOptions, MessagesTimelineRow } from "../src/types";
 
 class FakeWebSocket extends EventTarget {
   static instances: FakeWebSocket[] = [];
@@ -55,6 +58,7 @@ function emptyThread(id = "thread-1") {
       projectDir: "/Users/thijs/Developer/tmux-ide",
       messages: [],
     },
+    timeline: [],
   };
 }
 
@@ -91,10 +95,30 @@ function mountHook(wsUrl = "ws://127.0.0.1:6060/ws/events") {
   return { chat, dispose };
 }
 
+function assistantRow(id: string, text: string, streaming: boolean): MessagesTimelineRow {
+  return {
+    kind: "message",
+    id,
+    createdAt: "2026-05-13T00:00:05.000Z",
+    message: {
+      id,
+      role: "assistant",
+      createdAt: "2026-05-13T00:00:05.000Z",
+      streaming,
+      text,
+      toolCalls: [],
+    },
+  };
+}
+
+function upsert(rows: MessagesTimelineRow[], order: string[], threadId = "thread-1") {
+  return { type: "chat.timeline.upsert" as const, threadId, rows, order };
+}
+
 const originalFetch = globalThis.fetch;
 const OriginalWebSocket = globalThis.WebSocket;
 
-describe("useChatThread — real-time streaming wire", () => {
+describe("useChatThread — real-time streaming wire (pure renderer)", () => {
   beforeEach(() => {
     FakeWebSocket.instances = [];
     globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
@@ -118,102 +142,67 @@ describe("useChatThread — real-time streaming wire", () => {
     }
   });
 
-  it("appends a chat.thread.update frame to the messages timeline", async () => {
+  it("renders the server-materialized transcript from chat.timeline.upsert", async () => {
     const { chat, dispose } = mountHook();
     try {
       await waitFor(() => FakeWebSocket.instances.length === 1);
-      // Wait for the initial refetch's empty thread to settle so we
-      // don't race the WS append against the load.
       await waitFor(() => chat.loading() === false);
 
       const socket = FakeWebSocket.instances[0]!;
-      socket.emit({
-        type: "chat.thread.update",
-        threadId: "thread-1",
-        seq: 1,
-        update: {
-          sessionUpdate: "agent_message_chunk",
-          content: { type: "text", text: "Hello, " },
-        },
-      });
+      // The daemon ships whole rows with cumulative text — the client
+      // just mirrors them by id in the authoritative server order.
+      for (const text of ["Hello, ", "Hello, real-time ", "Hello, real-time streaming!"]) {
+        socket.emit(upsert([assistantRow("a1", text, true)], ["a1"]));
+      }
 
-      await waitFor(() => chat.messages().length === 1);
-      const msg = chat.messages()[0] as Extract<ThreadMessage, { _tag: "AgentUpdate" }>;
-      expect(msg._tag).toBe("AgentUpdate");
-      expect((msg.update as { sessionUpdate: string }).sessionUpdate).toBe("agent_message_chunk");
-      expect((msg.update as unknown as { content: { text: string } }).content.text).toBe("Hello, ");
+      await waitFor(() => chat.rows().length === 1);
+      const row = chat.rows()[0]!;
+      expect(row.kind).toBe("message");
+      if (row.kind === "message" && row.message.role === "assistant") {
+        expect(row.message.text).toBe("Hello, real-time streaming!");
+      }
     } finally {
       dispose();
     }
   });
 
-  it("coalesces consecutive streamed chunks into a single AgentUpdate", async () => {
-    // Post-coalescer (perf/chat): the daemon emits one frame per
-    // token-burst; same-kind same-messageId chunks merge in place
-    // so the store grows by O(1) per turn instead of O(N) per
-    // chunk. The visible text concatenates the way the user reads
-    // it, but `chat.messages()` carries a single entry.
+  it("performs zero client reduction on a raw chat.thread.update chunk", async () => {
     const { chat, dispose } = mountHook();
     try {
       await waitFor(() => FakeWebSocket.instances.length === 1);
       await waitFor(() => chat.loading() === false);
 
       const socket = FakeWebSocket.instances[0]!;
-      const chunks = ["Hello, ", "real-time ", "streaming!"];
-      chunks.forEach((text, idx) => {
-        socket.emit({
-          type: "chat.thread.update",
-          threadId: "thread-1",
-          seq: idx + 1,
-          update: {
-            sessionUpdate: "agent_message_chunk",
-            content: { type: "text", text },
-          },
-        });
+      // A raw streaming chunk must NOT be folded into the raw log or
+      // synthesized into a render row — the daemon already materialized
+      // the transcript and ships it via chat.timeline.*.
+      socket.emit({
+        type: "chat.thread.update",
+        threadId: "thread-1",
+        seq: 1,
+        update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "raw" } },
       });
 
-      await waitFor(() => chat.messages().length === 1);
-      const only = chat.messages()[0] as Extract<ThreadMessage, { _tag: "AgentUpdate" }>;
-      const text = (only.update as { content: { text: string } }).content.text;
-      expect(text).toBe(chunks.join(""));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(chat.messages().length).toBe(0);
+      expect(chat.rows().length).toBe(0);
     } finally {
       dispose();
     }
   });
 
-  it("ignores chat.thread.update frames for other threads", async () => {
+  it("ignores chat.timeline frames for other threads", async () => {
     const { chat, dispose } = mountHook();
     try {
       await waitFor(() => FakeWebSocket.instances.length === 1);
       await waitFor(() => chat.loading() === false);
 
       const socket = FakeWebSocket.instances[0]!;
-      socket.emit({
-        type: "chat.thread.update",
-        threadId: "OTHER-thread",
-        seq: 1,
-        update: {
-          sessionUpdate: "agent_message_chunk",
-          content: { type: "text", text: "wrong thread" },
-        },
-      });
-      // Drive one matching frame to give the hook *something* to do —
-      // assert the cross-thread frame did NOT land alongside it.
-      socket.emit({
-        type: "chat.thread.update",
-        threadId: "thread-1",
-        seq: 2,
-        update: {
-          sessionUpdate: "agent_message_chunk",
-          content: { type: "text", text: "right thread" },
-        },
-      });
+      socket.emit(upsert([assistantRow("x", "wrong thread", false)], ["x"], "OTHER-thread"));
+      socket.emit(upsert([assistantRow("a1", "right thread", false)], ["a1"]));
 
-      await waitFor(() => chat.messages().length === 1);
-      const msg = chat.messages()[0] as Extract<ThreadMessage, { _tag: "AgentUpdate" }>;
-      expect((msg.update as unknown as { content: { text: string } }).content.text).toBe(
-        "right thread",
-      );
+      await waitFor(() => chat.rows().length === 1);
+      expect(chat.rows()[0]!.id).toBe("a1");
     } finally {
       dispose();
     }
@@ -232,9 +221,8 @@ describe("useChatThread — real-time streaming wire", () => {
       socket.emit({ type: "task.changed", sessionName: "alpha", taskId: "t-1" });
       socket.emit({ type: "sessions.changed" });
 
-      // Give the event loop a beat in case any handler erroneously
-      // pushed something into the store.
       await new Promise((r) => setTimeout(r, 20));
+      expect(chat.rows().length).toBe(0);
       expect(chat.messages().length).toBe(0);
     } finally {
       dispose();

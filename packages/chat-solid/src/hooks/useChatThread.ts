@@ -90,37 +90,6 @@ interface ChatStore {
   messages: ThreadMessage[];
 }
 
-/**
- * Chunk-streaming session-update kinds that the daemon emits one
- * frame per token-burst for. The hook coalesces consecutive frames
- * of the same kind + messageId into a single `AgentUpdate` so the
- * store grows by O(1) per turn instead of O(N) per chunk.
- */
-type ContentChunkKind = "agent" | "thought" | "user";
-
-function chunkKindOf(update: SessionUpdate): ContentChunkKind | null {
-  switch (update.sessionUpdate) {
-    case "agent_message_chunk":
-      return "agent";
-    case "agent_thought_chunk":
-      return "thought";
-    case "user_message_chunk":
-      return "user";
-    default:
-      return null;
-  }
-}
-
-function chunkMessageId(update: SessionUpdate): string | null {
-  return (update as { messageId?: string | null }).messageId ?? null;
-}
-
-function chunkText(update: SessionUpdate): string | null {
-  const content = (update as { content?: ContentBlock | null }).content;
-  if (!content || content.type !== "text") return null;
-  return content.text;
-}
-
 export function useChatThread(options: Accessor<ChatMountOptions>) {
   const [thread, setThread] = createSignal<ThreadState | null>(null);
   const [loading, setLoading] = createSignal(true);
@@ -170,50 +139,22 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
   // and only the streaming row's text node re-renders per token.
   const [rowStore, setRowStore] = createStore<{ rows: MessagesTimelineRow[] }>({ rows: [] });
 
-  // Upsert rows into the current array in place: replace existing rows
-  // by id (so referential identity churns only for changed rows),
-  // append genuinely-new ids in arrival order. Never drops a row — the
-  // safe fallback when no authoritative `order` is available.
-  function upsertRowsInPlace(
-    current: ReadonlyArray<MessagesTimelineRow>,
-    rows: ReadonlyArray<MessagesTimelineRow>,
-  ): MessagesTimelineRow[] {
-    const byId = new Map(rows.map((row) => [row.id, row]));
-    const next: MessagesTimelineRow[] = current.map((row) => byId.get(row.id) ?? row);
-    const have = new Set(next.map((row) => row.id));
-    for (const row of rows) {
-      if (!have.has(row.id)) {
-        next.push(row);
-        have.add(row.id);
-      }
-    }
-    return next;
-  }
-
-  // Merge an incremental timeline delta. `order` is authoritative when
-  // present: rebuild in that order, reusing prior row objects for ids
-  // absent from `deltaRows` (referential stability → the per-row memo
-  // returns the same reference and that subtree skips re-derivation).
-  //
-  // Robustness: if `order` is missing/empty, or rebuilding from it
-  // would blank a non-empty transcript (a malformed / out-of-context
-  // frame), fall back to an in-place upsert so a bad delta can never
-  // wipe the rendered thread.
-  function applyTimelineDelta(deltaRows: MessagesTimelineRow[], order?: string[]): void {
-    if (!order || order.length === 0) {
-      setRowStore("rows", upsertRowsInPlace(rowStore.rows, deltaRows));
-      return;
-    }
-    const prev = new Map(rowStore.rows.map((row) => [row.id, row]));
+  // Apply a server-materialized timeline upsert. `serverOrder` is the
+  // authoritative full ordered id list the daemon's message-pipe emits
+  // alongside `rows` on every burst. Rebuild strictly from it: take the
+  // changed row from the delta, reuse the prior row object for ids the
+  // delta omits (referential stability → Solid's per-row memo skips
+  // untouched subtrees). Pure mirror — replace/keep by id,
+  // server-ordered, zero coalescing. A frame the renderer can't apply
+  // is a daemon bug to fix at the source (Step 2 resume), never a
+  // client-side reduction.
+  function applyTimelineUpsert(deltaRows: MessagesTimelineRow[], serverOrder: string[]): void {
     const delta = new Map(deltaRows.map((row) => [row.id, row]));
+    const prev = new Map(rowStore.rows.map((row) => [row.id, row]));
     const next: MessagesTimelineRow[] = [];
-    for (const id of order) {
+    for (const id of serverOrder) {
       const row = delta.get(id) ?? prev.get(id);
       if (row) next.push(row);
-    }
-    if (next.length === 0 && (rowStore.rows.length > 0 || deltaRows.length > 0)) {
-      setRowStore("rows", upsertRowsInPlace(rowStore.rows, deltaRows));
-      return;
     }
     setRowStore("rows", next);
   }
@@ -324,51 +265,6 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
     });
   });
 
-  // Raw-log writer. The daemon emits one `chat.thread.update` frame
-  // per token-burst; this merges consecutive same-kind same-messageId
-  // text chunks into the previous AgentUpdate's content in place so
-  // `store.messages` (the public `chat.messages()` contract) grows
-  // O(1) per turn. The render model is maintained separately by the
-  // incremental row reducer — there is no RAF batch any more: with a
-  // persistent rowStore, Solid's fine-grained tracking makes a
-  // per-chunk append cheap, so each frame applies synchronously.
-  function applyUpdateFrameToMessages(
-    frame: Extract<ChatBusEvent, { type: "chat.thread.update" }>,
-    draft: ChatStore,
-  ): void {
-    const update = frame.update;
-    const kind = chunkKindOf(update);
-    const text = chunkText(update);
-    if (kind !== null && text !== null) {
-      const last = draft.messages[draft.messages.length - 1];
-      if (last && last._tag === "AgentUpdate") {
-        const lastKind = chunkKindOf(last.update);
-        const lastText = chunkText(last.update);
-        if (
-          lastKind === kind &&
-          chunkMessageId(last.update) === chunkMessageId(update) &&
-          lastText !== null
-        ) {
-          // Mutate the existing chunk's text in place. Solid's
-          // `produce` records the fine-grained path so subscribers
-          // observing `messages[i].update.content.text` re-run
-          // without invalidating sibling rows.
-          (last.update as { content: ContentBlock }).content = {
-            type: "text",
-            text: lastText + text,
-          };
-          return;
-        }
-      }
-    }
-    draft.messages.push({
-      _tag: "AgentUpdate",
-      id: `agent-update:${frame.seq}`,
-      createdAt: new Date().toISOString(),
-      update,
-    });
-  }
-
   createEffect(() => {
     const opts = options();
     const socket = new WebSocket(withAuthQuery(opts.wsUrl, opts.bearerToken));
@@ -423,10 +319,10 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
         return;
       }
       if (frame.type === "chat.timeline.upsert") {
-        // Streaming hot path: the daemon already reduced the chunk
-        // into whole-row form. Merge by id; unchanged rows keep
-        // identity so only the streaming row re-renders.
-        applyTimelineDelta(frame.rows, frame.order);
+        // Streaming hot path: the daemon already materialized the
+        // chunk into whole-row form and sent the authoritative order.
+        // Pure mirror — keep/replace by id in server order.
+        applyTimelineUpsert(frame.rows, frame.order);
         return;
       }
       if (frame.type === "chat.thread.update") {
@@ -456,11 +352,11 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
             setPendingPermission(null);
           }
         }
-        // Raw event log only (the pinned `chat.messages()` contract):
-        // bounded O(1)-per-turn append. The rendered transcript is the
-        // server-materialized `chat.timeline.*` stream — the client no
-        // longer reduces chunks into rows.
-        setStore(produce((draft) => applyUpdateFrameToMessages(frame, draft)));
+        // `chat.thread.update` carries only control signals now
+        // (commands / mode / tool-call status). The rendered
+        // transcript AND the raw `chat.messages()` log are the
+        // server-materialized truth — the client performs zero
+        // reduction of streamed chunks.
         return;
       }
       if (frame.type === "chat.thread.stop") {
@@ -539,19 +435,12 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
         createdAt,
         content: fullContent,
       };
-      // Raw-log contract (`chat.messages()`), unchanged.
+      // Raw-log contract (`chat.messages()`) — user-authored, not a
+      // reduction; `revertFromMessage` reads it back. The rendered
+      // transcript is NOT touched here: `chat.session.send`
+      // re-materializes server-side and broadcasts `chat.timeline.reset`
+      // (carrying this prompt id) which the renderer mirrors.
       setStore(produce((draft) => draft.messages.push(userPrompt)));
-      // Optimistic user row so it shows instantly. Idempotent by id:
-      // the daemon also broadcasts `chat.timeline.reset` from send
-      // (carrying this same prompt id) and the two can race either way
-      // — upsert-in-place so we never duplicate or drop the bubble.
-      const optimisticUserRow: MessagesTimelineRow = {
-        kind: "message",
-        id: result.promptId,
-        createdAt,
-        message: { id: result.promptId, role: "user", createdAt, content: fullContent },
-      };
-      setRowStore("rows", (current) => upsertRowsInPlace(current, [optimisticUserRow]));
     } catch (err) {
       setPendingPromptId(null);
       setInflight(false);
@@ -561,30 +450,15 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
   }
 
   async function cancel(): Promise<void> {
-    // Optimistic: clear the caret immediately instead of waiting for
-    // the provider to return, emit `chat.thread.stop`, and the daemon
-    // to broadcast the streaming-off row upsert. A long turn otherwise
-    // shows a stuck caret for the whole tail latency. The eventual
-    // server upsert reconciles (it carries the same row id; finish is
-    // idempotent server-side).
-    const completedAtIso = new Date().toISOString();
-    setRowStore(
-      produce((state) => {
-        for (const row of state.rows) {
-          if (row.kind === "message" && row.message.role === "assistant" && row.message.streaming) {
-            row.message.streaming = false;
-            row.message.stopReason = "cancelled";
-            row.message.completedAt = completedAtIso;
-          }
-        }
-        // Drop any trailing working row (empty-turn placeholder).
-        const working = state.rows.findIndex((row) => row.kind === "working");
-        if (working !== -1) state.rows.splice(working, 1);
-      }),
-    );
+    // Local UI signals clear immediately so the composer unlocks; the
+    // rendered transcript is NOT touched here. The daemon owns the
+    // materialized row: cancel → dispatch resolves → `chat.thread.stop`
+    // + `pipe.finishTimeline` broadcasts the streaming-off
+    // `chat.timeline.upsert` the renderer mirrors. No client-side row
+    // mutation — that would be exactly the reduction Step 1 removes.
     setInflight(false);
     setStopReason("cancelled");
-    setCompletedAt(completedAtIso);
+    setCompletedAt(new Date().toISOString());
     await chatSessionCancel(runtime(), options().threadId);
   }
 
@@ -838,7 +712,11 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
         content,
       };
       // Raw-log contract (`chat.messages()` + revertFromMessage reads
-      // this to find the prompt), unchanged.
+      // this to find the prompt) — user-authored, not a reduction. The
+      // rendered transcript is NOT rewound here: the daemon truncates
+      // the log, re-materializes, and broadcasts `chat.timeline.reset`
+      // which the renderer mirrors wholesale; the regenerated reply
+      // then streams in via `chat.timeline.upsert`.
       setStore(
         produce((draft) => {
           const idx = draft.messages.findIndex(
@@ -848,24 +726,6 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
           draft.messages.push(replacement);
         }),
       );
-      // Optimistic rewind: drop the edited user row and everything
-      // after, append the replacement. The daemon truncates the log,
-      // re-materializes, and broadcasts `chat.timeline.reset` which
-      // reconciles this; the regenerated reply then streams in.
-      setRowStore("rows", (current) => {
-        const idx = current.findIndex(
-          (row) =>
-            row.kind === "message" && row.message.role === "user" && row.id === userMessageId,
-        );
-        const kept = idx >= 0 ? current.slice(0, idx) : [...current];
-        kept.push({
-          kind: "message",
-          id: result.promptId,
-          createdAt,
-          message: { id: result.promptId, role: "user", createdAt, content },
-        });
-        return kept;
-      });
     } catch (err) {
       setInflight(false);
       setError(err instanceof Error ? err : new Error(String(err)));
