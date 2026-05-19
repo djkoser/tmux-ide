@@ -59,6 +59,91 @@ interface ClientHandle {
   broadcastTerminalsChanged(sessionName: string): void;
 }
 const allClients = new Set<ClientHandle>();
+
+// ---------------------------------------------------------------------------
+// Chat timeline replay log (Step 2: WS reconnect/resume).
+//
+// Every materialized timeline frame is the server's authoritative truth
+// (Step 1 made the client a pure renderer). We stamp each with a
+// monotonic per-thread `seq` at this single broadcast choke point and
+// retain a bounded per-thread buffer. On `chat.subscribe { threadId,
+// lastSeq }` we replay the buffered frames with `seq > lastSeq` in
+// order, then live frames continue (they are already broadcast to all
+// clients). A `chat.timeline.reset` is a new baseline — it supersedes
+// every earlier buffered frame, so the buffer is cleared on reset and a
+// fresh client (lastSeq 0) always resumes from a wholesale snapshot:
+// gap-free, dupe-free, idempotent by row id.
+// ---------------------------------------------------------------------------
+
+interface BufferedChatFrame {
+  seq: number;
+  frame: ServerFrame;
+}
+
+const CHAT_REPLAY_CAP_PER_THREAD = 1024;
+const chatSeqByThread = new Map<string, number>();
+const chatReplayByThread = new Map<string, BufferedChatFrame[]>();
+
+function isChatTimelineFrame(
+  event: ChatEvent,
+): event is Extract<ChatEvent, { type: "chat.timeline.upsert" | "chat.timeline.reset" }> {
+  return event.type === "chat.timeline.upsert" || event.type === "chat.timeline.reset";
+}
+
+/**
+ * Stamp a per-thread `seq` onto a materialized timeline frame and append
+ * it to the bounded replay buffer. Mutates the event in place — this is
+ * the single sink every chat broadcast flows through, so all clients +
+ * the buffer observe the same seq. Non-timeline chat events pass through
+ * untouched (they are not part of the resumable transcript).
+ */
+function recordChatTimelineFrame(event: ChatEvent): void {
+  if (!isChatTimelineFrame(event)) return;
+  const threadId = event.threadId;
+  const seq = (chatSeqByThread.get(threadId) ?? 0) + 1;
+  chatSeqByThread.set(threadId, seq);
+  event.seq = seq;
+  let buf = chatReplayByThread.get(threadId);
+  if (!buf) {
+    buf = [];
+    chatReplayByThread.set(threadId, buf);
+  }
+  // A reset re-baselines the thread: every earlier buffered frame is
+  // superseded, so drop them and start the buffer at this snapshot.
+  if (event.type === "chat.timeline.reset") buf.length = 0;
+  buf.push({ seq, frame: event as ServerFrame });
+  if (buf.length > CHAT_REPLAY_CAP_PER_THREAD) {
+    buf.splice(0, buf.length - CHAT_REPLAY_CAP_PER_THREAD);
+  }
+}
+
+/**
+ * Replay the buffered materialized timeline frames for `threadId` with
+ * `seq > lastSeq`, in order, to a single (re)subscribing socket. Because
+ * a reset clears the buffer, a fresh client (`lastSeq` 0) always gets a
+ * wholesale baseline first — no gap, no duplicate, idempotent by id.
+ */
+function replayChatTimelineSince(
+  threadId: string,
+  lastSeq: number,
+  send: (frame: ServerFrame) => void,
+): void {
+  const buf = chatReplayByThread.get(threadId);
+  if (!buf) return;
+  for (const entry of buf) {
+    if (entry.seq > lastSeq) send(entry.frame);
+  }
+}
+
+/**
+ * Test-only: drop the chat replay log so e2e/unit suites don't bleed
+ * sequence state across cases.
+ */
+export function _resetChatReplayForTests(): void {
+  chatSeqByThread.clear();
+  chatReplayByThread.clear();
+}
+
 let sessionsPollTimer: ReturnType<typeof setInterval> | null = null;
 let lastSessionsHash = "";
 let projectRegistryListener: (() => void) | null = null;
@@ -154,6 +239,9 @@ export function broadcastTerminalsChanged(sessionName: string): void {
 }
 
 export function broadcastChatEvent(event: ChatEvent): void {
+  // Stamp seq + buffer (timeline frames only) BEFORE fan-out so every
+  // live client and the replay buffer share the same sequence.
+  recordChatTimelineFrame(event);
   for (const client of allClients) client.broadcastChatEvent(event);
 }
 
@@ -460,6 +548,13 @@ export function handleWsEventsConnection(socket: WebSocket | WsLike): void {
     }
     if (parsed.type === "ping") {
       send({ type: "pong" });
+      return;
+    }
+    if (parsed.type === "chat.subscribe") {
+      // Resume: replay the materialized timeline frames this socket
+      // missed (seq > lastSeq), in order, then live frames continue
+      // via the global broadcast. lastSeq omitted ⇒ 0 ⇒ full replay.
+      replayChatTimelineSince(parsed.threadId, parsed.lastSeq ?? 0, send);
       return;
     }
   });

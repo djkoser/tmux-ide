@@ -350,17 +350,13 @@ describe("chat pipeline e2e — server-materialized contract (must stay green)",
 // ===========================================================================
 
 describe("chat pipeline e2e — reconnect/resume (Step 2 gate)", () => {
-  // EXPECTED FAIL until Step 2 lands chat-WS resume/replay. The
-  // assertion is real: a client that drops mid-turn and reconnects
-  // must be able to recover the in-flight materialized turn from the
-  // socket. Today `/ws/events` only re-sends `hello` (+ session
-  // snapshot on subscribe) — there is NO chat timeline replay, so the
-  // reconnected socket never learns the in-flight assistant text and
-  // the assertion throws (→ this `it.fails` is green). When Step 2
-  // implements replay-from-sequence this assertion passes, `it.fails`
-  // turns RED, and that is the signal to delete `.fails` and lock the
-  // resume contract in.
-  it.fails("recovers an in-flight turn after a mid-stream socket drop + reconnect", async () => {
+  // STEP 2 (landed): a client that drops mid-turn and reconnects MUST
+  // recover the in-flight materialized turn from the socket. On
+  // reconnect the client sends `chat.subscribe { threadId, lastSeq }`
+  // and the daemon replays the buffered materialized timeline frames
+  // it missed (seq > lastSeq), in order, gap-free + dupe-free. This
+  // assertion is now hard (`it`, not `it.fails`) and must stay green.
+  it("recovers an in-flight turn after a mid-stream socket drop + reconnect", async () => {
     const store = freshStore();
     const stub = new ScriptedAcpClient();
     const manager = makeStubbedManager(store, stub);
@@ -397,9 +393,12 @@ describe("chat pipeline e2e — reconnect/resume (Step 2 gate)", () => {
         label: "hello on reconnected socket",
       });
 
-      // The reconnected client must recover the in-flight turn via
-      // replay (snapshot / chat.timeline.reset). This is the real
-      // gate — it throws today (no replay), passes once Step 2 ships.
+      // Resume: the reconnecting client asks for everything it missed
+      // (lastSeq 0 ⇒ full replay of the in-flight turn). The daemon
+      // replays the buffered materialized frames in order.
+      socketB.socket.send(JSON.stringify({ type: "chat.subscribe", threadId, lastSeq: 0 }));
+
+      // The reconnected socket recovers the in-flight turn via replay.
       await waitFor(
         () =>
           assistantRowsFrom(socketB.received).some((r) =>
@@ -407,6 +406,12 @@ describe("chat pipeline e2e — reconnect/resume (Step 2 gate)", () => {
           ),
         { timeoutMs: 1000, label: "resume: in-flight turn replayed to reconnected socket" },
       );
+
+      // Resume is gap-free + dupe-free: exactly one assistant row id,
+      // and the recovered text is the in-flight content (no loss).
+      const recovered = assistantRowsFrom(socketB.received);
+      expect(new Set(recovered.map((r) => r.id)).size).toBe(1);
+      expect(recovered.at(-1)!.message.text).toContain("partial in-flight answer");
     } finally {
       stub.finishPrompt("end_turn");
       await manager.shutdown();

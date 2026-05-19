@@ -101,6 +101,18 @@ export type TimelineRow = z.infer<typeof TimelineRowZ>;
 // ---------------------------------------------------------------------------
 
 /**
+ * Per-thread monotonic sequence stamped on every materialized timeline
+ * frame by the daemon's broadcast layer (Step 2: WS reconnect/resume).
+ * The client tracks the last applied `seq`; on (re)connect it sends a
+ * `ChatResumeSubscribe` carrying that value and the daemon replays the
+ * missed frames in order. Optional on the type because producers
+ * (message-pipe) construct frames without it — the broadcast choke
+ * point assigns it before the bytes leave the daemon, so on the wire it
+ * is always present.
+ */
+export type ChatTimelineSeq = number;
+
+/**
  * Incremental delta: `rows` are the changed/added rows; `order` is the
  * full authoritative ordered list of row ids. The client reuses prior
  * row objects for ids absent from `rows` (referential stability) and
@@ -111,13 +123,35 @@ export interface ChatTimelineUpsertEvent {
   threadId: string;
   rows: TimelineRow[];
   order: string[];
+  seq?: ChatTimelineSeq;
 }
 
-/** Full replacement — bootstrap after a structural rewind (editFromTurn). */
+/** Full replacement — bootstrap after a structural rewind (editFromTurn)
+ *  or the baseline snapshot a resuming client receives. A reset is a new
+ *  per-thread baseline: it supersedes every earlier buffered frame. */
 export interface ChatTimelineResetEvent {
   type: "chat.timeline.reset";
   threadId: string;
   rows: TimelineRow[];
+  seq?: ChatTimelineSeq;
 }
 
 export type ChatTimelineEvent = ChatTimelineUpsertEvent | ChatTimelineResetEvent;
+
+// ---------------------------------------------------------------------------
+// Client → server resume subscribe. Sent on every (re)connect: the
+// daemon replays buffered materialized timeline frames for `threadId`
+// with `seq > lastSeq`, in order, then resumes live. `lastSeq: 0`
+// (or omitted) means "give me everything buffered for this thread".
+// Strict — an unknown key is a protocol bug, not a silent no-op.
+// ---------------------------------------------------------------------------
+
+export const ChatResumeSubscribeZ = z
+  .object({
+    type: z.literal("chat.subscribe"),
+    threadId: z.string().min(1),
+    lastSeq: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+
+export type ChatResumeSubscribe = z.infer<typeof ChatResumeSubscribeZ>;

@@ -143,6 +143,15 @@ export function ChatThreadView(props: { options: Accessor<ChatMountOptions> }) {
               setDismissedErrorKey(`${err.message}:${err.stack ?? ""}`);
             }}
           />
+          <Show when={chat.connectionState() === "reconnecting"}>
+            <div
+              data-testid="chat-reconnecting"
+              class="flex flex-shrink-0 items-center gap-2 border-b border-border-weak bg-surface px-3 py-1 text-[11px] text-fg-secondary"
+            >
+              <span class="inline-block size-1.5 animate-pulse rounded-full bg-amber-500" />
+              Reconnecting… the conversation will resume automatically.
+            </div>
+          </Show>
           <MessagesTimeline
             rows={chat.rows}
             messages={chat.messages}

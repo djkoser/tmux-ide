@@ -116,6 +116,13 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
   // chat.permission.respond round-trip — see autoApproveOptionId.
   const [runtimeMode, setRuntimeMode] = createSignal<RuntimeMode>("approval-required");
   const [respondingToApproval, setRespondingToApproval] = createSignal(false);
+  // WS connection lifecycle (Step 2: reconnect/resume). Surfaced to the
+  // UI as a minimal indicator; rendering is never blocked on it — the
+  // last server-materialized timeline stays on screen while we
+  // reconnect, then resume replays the gap.
+  const [connectionState, setConnectionState] = createSignal<
+    "connecting" | "open" | "reconnecting" | "closed"
+  >("connecting");
   // Pending "pick one" prompt state. The questions themselves are
   // host-sourced (options().pendingUserInputs, mirroring the
   // mentionCandidates / bannerItems "host owns sourcing" pattern);
@@ -265,16 +272,38 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
     });
   });
 
+  // Reconnecting WS with sequence-replay resume (Step 2). The bare
+  // close-only socket lost the in-flight turn permanently on any drop.
+  // Now: a connection-state machine + bounded backoff; on every
+  // (re)connect we send `chat.subscribe { threadId, lastSeq }` and the
+  // daemon replays the materialized timeline frames we missed, in
+  // order, through the SAME pure-renderer path. `lastSeq` is the last
+  // applied per-thread timeline seq; replayed frames are deduped by it
+  // so reconnect is gap-free and dupe-free.
   createEffect(() => {
     const opts = options();
-    const socket = new WebSocket(withAuthQuery(opts.wsUrl, opts.bearerToken));
-    socket.addEventListener("message", (event) => {
-      let frame: ChatBusEvent;
-      try {
-        frame = JSON.parse(String(event.data)) as ChatBusEvent;
-      } catch {
-        return;
-      }
+    let lastSeq = 0;
+    let intentionalClose = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let backoffMs = 500;
+    const MAX_BACKOFF_MS = 8_000;
+    let socket: WebSocket | null = null;
+
+    // Pure-renderer reconciliation: after applying a server-materialized
+    // timeline frame, if nothing is streaming anymore but we still think
+    // a turn is inflight (we may have missed `chat.thread.stop` across a
+    // drop), clear the local UI flag. The transcript itself is already
+    // correct from the row's own `streaming:false`.
+    const reconcileInflight = (): void => {
+      if (!inflight()) return;
+      const streaming = rowStore.rows.some(
+        (row) =>
+          row.kind === "message" && row.message.role === "assistant" && row.message.streaming,
+      );
+      if (!streaming) setInflight(false);
+    };
+
+    const applyFrame = (frame: ChatBusEvent): void => {
       if (!frame || !frame.type.startsWith("chat.") || frame.threadId !== opts.threadId) return;
       if (frame.type === "chat.thread.usage") {
         setUsage(frame.usage);
@@ -313,16 +342,24 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
         return;
       }
       if (frame.type === "chat.timeline.reset") {
-        // Structural rewind (history bootstrap / editFromTurn): the
-        // daemon re-materialized the whole thread. Replace wholesale.
+        // Structural rewind / resume baseline: the daemon
+        // re-materialized the whole thread. Replace wholesale —
+        // idempotent, so always apply (even on replay) and advance the
+        // resume cursor.
         setRowStore("rows", frame.rows);
+        if (typeof frame.seq === "number") lastSeq = Math.max(lastSeq, frame.seq);
+        reconcileInflight();
         return;
       }
       if (frame.type === "chat.timeline.upsert") {
-        // Streaming hot path: the daemon already materialized the
-        // chunk into whole-row form and sent the authoritative order.
-        // Pure mirror — keep/replace by id in server order.
+        // Streaming hot path / replayed gap: the daemon already
+        // materialized the chunk into whole-row form with the
+        // authoritative order. Dedupe by seq (a resume never re-applies
+        // a frame we already had), then pure-mirror by id.
+        if (typeof frame.seq === "number" && frame.seq <= lastSeq) return;
         applyTimelineUpsert(frame.rows, frame.order);
+        if (typeof frame.seq === "number") lastSeq = frame.seq;
+        reconcileInflight();
         return;
       }
       if (frame.type === "chat.thread.update") {
@@ -375,8 +412,82 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
         // broadcasts a `chat.timeline.upsert` flipping the row's
         // `streaming` flag off. No client-side row mutation here.
       }
+    };
+
+    const onMessage = (event: MessageEvent): void => {
+      let frame: ChatBusEvent;
+      try {
+        frame = JSON.parse(String(event.data)) as ChatBusEvent;
+      } catch {
+        return;
+      }
+      applyFrame(frame);
+    };
+
+    const connect = (reconnect: boolean): void => {
+      setConnectionState(reconnect ? "reconnecting" : "connecting");
+      let ws: WebSocket;
+      try {
+        ws = new WebSocket(withAuthQuery(opts.wsUrl, opts.bearerToken));
+      } catch {
+        // Construction failed (bad URL / offline) — back off and retry.
+        scheduleReconnect();
+        return;
+      }
+      socket = ws;
+      ws.addEventListener("open", () => {
+        backoffMs = 500;
+        setConnectionState("open");
+        try {
+          // Resume: ask the daemon to replay everything past the last
+          // timeline seq we applied. lastSeq 0 ⇒ full in-flight replay.
+          ws.send(JSON.stringify({ type: "chat.subscribe", threadId: opts.threadId, lastSeq }));
+        } catch {
+          // The close handler will reconnect.
+        }
+      });
+      ws.addEventListener("message", onMessage);
+      ws.addEventListener("close", () => {
+        if (intentionalClose) {
+          setConnectionState("closed");
+          return;
+        }
+        scheduleReconnect();
+      });
+      ws.addEventListener("error", () => {
+        try {
+          ws.close();
+        } catch {
+          /* close handler drives the reconnect */
+        }
+      });
+    };
+
+    function scheduleReconnect(): void {
+      if (intentionalClose || reconnectTimer) return;
+      setConnectionState("reconnecting");
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connect(true);
+      }, backoffMs);
+      backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
+    }
+
+    connect(false);
+
+    onCleanup(() => {
+      intentionalClose = true;
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      try {
+        socket?.close();
+      } catch {
+        /* already closed */
+      }
+      setConnectionState("closed");
     });
-    onCleanup(() => socket.close());
   });
 
   // Pure mirror of the server-materialized timeline. Streaming / stop
@@ -751,6 +862,7 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
     loading,
     error,
     inflight,
+    connectionState,
     stopReason,
     rows,
     messages: () => store.messages,

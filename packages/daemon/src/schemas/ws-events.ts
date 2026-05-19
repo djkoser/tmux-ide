@@ -13,7 +13,11 @@
 
 import { z } from "zod";
 import { SessionOverviewSchemaZ, OrchestratorEventSchemaZ } from "./domain.ts";
-import { WorkspaceAddedFrameSchemaZ, WorkspaceRemovedFrameSchemaZ } from "@tmux-ide/contracts";
+import {
+  ChatResumeSubscribeZ,
+  WorkspaceAddedFrameSchemaZ,
+  WorkspaceRemovedFrameSchemaZ,
+} from "@tmux-ide/contracts";
 
 // ---------------------------------------------------------------------------
 // Snapshot payload — mirrors what `/api/project/<name>/stream` already pushes
@@ -50,6 +54,9 @@ export const ClientFrameSchemaZ = z.discriminatedUnion("type", [
   SubscribeFrameZ,
   UnsubscribeFrameZ,
   PingFrameZ,
+  // Step 2: chat WS reconnect/resume. Carries the last applied
+  // per-thread timeline seq so the daemon can replay the gap.
+  ChatResumeSubscribeZ,
 ]);
 
 export type ClientFrame = z.infer<typeof ClientFrameSchemaZ>;
@@ -232,17 +239,22 @@ const ChatTimelineRowZ = z
   .object({ kind: z.string(), id: z.string(), createdAt: z.string() })
   .passthrough();
 
+// `seq` is the per-thread monotonic sequence the broadcast layer
+// stamps for reconnect/resume (Step 2). Optional in the schema so a
+// pre-Step-2 emitter / replay-less path still validates.
 const ChatTimelineUpsertFrameZ = z.object({
   type: z.literal("chat.timeline.upsert"),
   threadId: z.string(),
   rows: z.array(ChatTimelineRowZ),
   order: z.array(z.string()),
+  seq: z.number().int().nonnegative().optional(),
 });
 
 const ChatTimelineResetFrameZ = z.object({
   type: z.literal("chat.timeline.reset"),
   threadId: z.string(),
   rows: z.array(ChatTimelineRowZ),
+  seq: z.number().int().nonnegative().optional(),
 });
 
 const ChatPermissionRequestFrameZ = z.object({

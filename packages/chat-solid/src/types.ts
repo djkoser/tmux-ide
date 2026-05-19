@@ -223,12 +223,18 @@ export type ChatTimelineUpsertEvent = {
   threadId: string;
   rows: MessagesTimelineRow[];
   order: string[];
+  /** Per-thread monotonic sequence for WS reconnect/resume (Step 2).
+   *  Stamped by the daemon's broadcast layer; absent only on a
+   *  pre-Step-2 / replay-less emitter. */
+  seq?: number;
 };
 
 export type ChatTimelineResetEvent = {
   type: "chat.timeline.reset";
   threadId: string;
   rows: MessagesTimelineRow[];
+  /** See ChatTimelineUpsertEvent.seq — a reset is a resume baseline. */
+  seq?: number;
 };
 
 export type ChatBusEvent =
