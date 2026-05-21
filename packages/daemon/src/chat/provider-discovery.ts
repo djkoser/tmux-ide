@@ -55,9 +55,14 @@ const CLAUDE_CODE_MODELS: ProviderModelInfo[] = [
   },
 ];
 
+// Codex-with-ChatGPT-account auth only accepts codex-suffixed models;
+// the bare `gpt-5` selection returns
+// `{"type":"invalid_request_error","message":"The 'gpt-5' model is not
+// supported when using Codex with a ChatGPT account."}`. Match t3's
+// codex-specific model list.
 const CODEX_MODELS: ProviderModelInfo[] = [
   { slug: "gpt-5-codex", name: "GPT-5 Codex", description: "Code-tuned" },
-  { slug: "gpt-5", name: "GPT-5", description: "General purpose" },
+  { slug: "gpt-5.3-codex", name: "GPT-5.3 Codex", description: "Newer code-tuned" },
 ];
 
 export interface ProviderDiscoveryExecResult {
