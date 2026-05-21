@@ -62,6 +62,15 @@ export interface ThreadManager {
      * model is currently persisted on the thread.
      */
     model?: string;
+    /**
+     * Per-turn driver kind override (Step 3b). When supplied, the
+     * daemon dispatches THIS turn through this kind regardless of
+     * `thread.provider.kind`. A live client bound to a different
+     * kind is disposed and respawned. The persisted thread.provider
+     * is NOT mutated here — that's the host's fire-and-forget
+     * `chat.thread.setProvider` responsibility.
+     */
+    providerKind?: "claude-code" | "codex" | "gemini" | "custom";
   }): Promise<{ promptId: string }>;
   cancel(input: { threadId: string }): Promise<void>;
   respondPermission(input: {
@@ -235,14 +244,18 @@ export function makeThreadManager(opts: MakeThreadManagerOptions): ThreadManager
     });
   }
 
-  async function spawnCodexLive(threadId: string): Promise<CodexLiveThread> {
+  async function spawnCodexLive(
+    threadId: string,
+    effectiveProvider?: AgentProvider,
+  ): Promise<CodexLiveThread> {
     const thread = await opts.store.get(threadId);
     if (!thread) throw new ThreadNotFoundError(threadId);
-    if (thread.provider.kind !== "codex") {
+    const provider = effectiveProvider ?? thread.provider;
+    if (provider.kind !== "codex") {
       throw new Error(`Expected codex provider on thread ${threadId}`);
     }
     const pipe = makePipeFor(threadId, thread.usage, initialSeq(thread.messages), thread.messages);
-    const client = await spawnCodexClient(thread.provider, {
+    const client = await spawnCodexClient(provider, {
       cwd: thread.projectDir,
       logger: createCodexDebugLogger(threadId),
     });
@@ -290,7 +303,7 @@ export function makeThreadManager(opts: MakeThreadManagerOptions): ThreadManager
     try {
       const conversation = await client.newConversation({
         cwd: thread.projectDir ?? process.cwd(),
-        ...(thread.provider.model ? { model: thread.provider.model } : {}),
+        ...(provider.model ? { model: provider.model } : {}),
       });
       liveThread.threadId = conversation.thread.id;
       return liveThread;
@@ -302,11 +315,15 @@ export function makeThreadManager(opts: MakeThreadManagerOptions): ThreadManager
     }
   }
 
-  async function spawnAcpLive(threadId: string): Promise<AcpLiveThread> {
+  async function spawnAcpLive(
+    threadId: string,
+    effectiveProvider?: AgentProvider,
+  ): Promise<AcpLiveThread> {
     const thread = await opts.store.get(threadId);
     if (!thread) throw new ThreadNotFoundError(threadId);
+    const provider = effectiveProvider ?? thread.provider;
     const pipe = makePipeFor(threadId, thread.usage, initialSeq(thread.messages), thread.messages);
-    const client = await opts.spawnClient(thread.provider, { cwd: thread.projectDir });
+    const client = await opts.spawnClient(provider, { cwd: thread.projectDir });
     await client.initialize();
     const session = await client.newSession({
       cwd: thread.projectDir ?? process.cwd(),
@@ -335,16 +352,52 @@ export function makeThreadManager(opts: MakeThreadManagerOptions): ThreadManager
     return liveThread;
   }
 
-  async function ensureLive(threadId: string): Promise<LiveThread> {
+  async function disposeLiveImmediate(threadId: string): Promise<void> {
     const existing = live.get(threadId);
-    if (existing) return existing;
-    const existingStart = starting.get(threadId);
-    if (existingStart) return existingStart;
-    const start = (async () => {
+    if (!existing) return;
+    permissions.cancelForThread(threadId);
+    await existing.pipe.forceFlush();
+    live.delete(threadId);
+    for (const unsub of existing.unsubs.splice(0)) {
+      try {
+        unsub();
+      } catch {
+        // best effort
+      }
+    }
+    await existing.client.close().catch(() => undefined);
+  }
+
+  async function ensureLive(
+    threadId: string,
+    effectiveProvider?: AgentProvider,
+  ): Promise<LiveThread> {
+    // Resolve the per-turn target kind. Step 3b: this may differ from
+    // thread.provider.kind — the client owns the visible provider and
+    // routes turns through whichever kind the user picked, without
+    // mutating the persisted thread.provider on the send path.
+    let target = effectiveProvider;
+    if (!target) {
       const thread = await opts.store.get(threadId);
       if (!thread) throw new ThreadNotFoundError(threadId);
-      return thread.provider.kind === "codex" ? spawnCodexLive(threadId) : spawnAcpLive(threadId);
-    })();
+      target = thread.provider;
+    }
+    const targetIsCodex = target.kind === "codex";
+
+    const existing = live.get(threadId);
+    if (existing) {
+      const existingIsCodex = existing.kind === "codex";
+      if (existingIsCodex === targetIsCodex) return existing;
+      // Kind override mismatches the running client — tear it down so
+      // we respawn under the new kind. Any in-flight permission /
+      // pipe state is flushed first.
+      await disposeLiveImmediate(threadId);
+    }
+
+    const existingStart = starting.get(threadId);
+    if (existingStart) return existingStart;
+    const start = (async () =>
+      targetIsCodex ? spawnCodexLive(threadId, target) : spawnAcpLive(threadId, target))();
     starting.set(threadId, start);
     try {
       return await start;
@@ -355,36 +408,45 @@ export function makeThreadManager(opts: MakeThreadManagerOptions): ThreadManager
 
   return {
     async send(input) {
-      // Per-turn model selection (superset §2 pattern):
-      //   apply BEFORE spawning the live client so a fresh
-      //   newSession/newConversation is bound to the chosen model.
-      //   If a live client is already up under a different model we
-      //   tear it down so the next ensureLive() respawns under the
-      //   new selection.
-      if (input.model) {
-        const existing = await opts.store.get(input.threadId);
-        if (existing && existing.provider.model !== input.model) {
-          await opts.store.setProvider(input.threadId, {
-            ...existing.provider,
-            model: input.model,
-          });
-          const liveBefore = live.get(input.threadId);
-          if (liveBefore) {
-            permissions.cancelForThread(input.threadId);
-            await liveBefore.pipe.forceFlush();
-            live.delete(input.threadId);
-            for (const unsub of liveBefore.unsubs.splice(0)) {
-              try {
-                unsub();
-              } catch {
-                // best effort
-              }
-            }
-            await liveBefore.client.close().catch(() => undefined);
-          }
-        }
+      const stored = await opts.store.get(input.threadId);
+      if (!stored) throw new ThreadNotFoundError(input.threadId);
+
+      // Compute the per-turn effective provider (Step 3b — t3-mirror):
+      //   - `providerKind` override → route through that kind for THIS
+      //     turn, regardless of thread.provider.kind. Persistence is
+      //     the client's fire-and-forget responsibility (see
+      //     `chat.thread.setProvider`).
+      //   - `model` override → route this turn with that model, AND
+      //     lazily persist on the matching-kind path so a reload uses
+      //     it as the default (kept from Step 3).
+      const overrideKind = input.providerKind;
+      const persistedKind = stored.provider.kind;
+      const sameKind = !overrideKind || overrideKind === persistedKind;
+
+      // Lazy model persistence — only when we're acting on the
+      // persisted-kind side. A kind override is treated as
+      // visible-only (per Step 3b design) and does NOT mutate
+      // thread.provider here.
+      if (input.model && sameKind && stored.provider.model !== input.model) {
+        await opts.store.setProvider(input.threadId, {
+          ...stored.provider,
+          model: input.model,
+        });
       }
-      const liveThread = await ensureLive(input.threadId);
+
+      // Refreshed thread (post any setProvider).
+      const thread = (await opts.store.get(input.threadId)) ?? stored;
+      const effectiveKind = overrideKind ?? thread.provider.kind;
+      const effectiveModel = input.model ?? thread.provider.model;
+
+      const effectiveProvider: AgentProvider =
+        effectiveKind === thread.provider.kind
+          ? { ...thread.provider, ...(effectiveModel ? { model: effectiveModel } : {}) }
+          : effectiveKind === "custom"
+            ? thread.provider // kind=custom override has no shape to synthesize → fall back
+            : { kind: effectiveKind, ...(effectiveModel ? { model: effectiveModel } : {}) };
+
+      const liveThread = await ensureLive(input.threadId, effectiveProvider);
       const promptId = randomUUID();
       await opts.store.appendMessage(input.threadId, {
         _tag: "UserPrompt",
@@ -397,12 +459,9 @@ export function makeThreadManager(opts: MakeThreadManagerOptions): ThreadManager
       // Broadcasts `chat.timeline.reset` so the client shows the user
       // row immediately; agent chunks stream in incrementally after.
       const persisted = await opts.store.get(input.threadId);
-      // The persisted thread.provider.model is the authoritative
-      // per-turn selection (we already wrote `input.model` to it
-      // above when supplied). Dispatch reads it from here so both
-      // model-overridden and "use the stored selection" sends take
-      // the same path.
-      const dispatchModel = persisted?.provider.model;
+      // Per-turn dispatch model = the effective model we just resolved
+      // (input.model wins; otherwise persisted thread.provider.model).
+      const dispatchModel = effectiveModel;
       liveThread.pipe.resyncTimeline(persisted?.messages ?? [], promptId);
       if (liveThread.kind === "codex") {
         void dispatchCodexPrompt({
@@ -501,19 +560,7 @@ export function makeThreadManager(opts: MakeThreadManagerOptions): ThreadManager
       return opts.providerStore.get(id);
     },
     async disposeLive(threadId) {
-      const liveThread = live.get(threadId);
-      if (!liveThread) return;
-      permissions.cancelForThread(threadId);
-      await liveThread.pipe.forceFlush();
-      live.delete(threadId);
-      for (const unsub of liveThread.unsubs.splice(0)) {
-        try {
-          unsub();
-        } catch {
-          // best effort
-        }
-      }
-      await liveThread.client.close().catch(() => undefined);
+      await disposeLiveImmediate(threadId);
     },
     async shutdown() {
       const closing = [...live.entries()].map(async ([threadId, liveThread]) => {

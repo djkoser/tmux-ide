@@ -50,7 +50,13 @@ import {
 import { makeThreadManager, type ThreadManager } from "../thread-manager.ts";
 import { makeThreadStore, type ThreadStore } from "../thread-store.ts";
 import type { ChatEvent } from "../types.ts";
-import { ScriptedAcpClient, textChunk, thoughtChunk, toolCall } from "./stub-provider.ts";
+import {
+  ScriptedAcpClient,
+  ScriptedCodexClient,
+  textChunk,
+  thoughtChunk,
+  toolCall,
+} from "./stub-provider.ts";
 
 // ---------------------------------------------------------------------------
 // In-process server + real WS client
@@ -156,12 +162,17 @@ function chatFrames(received: unknown[]): AnyFrame[] {
   return frames(received).filter((f) => f.type.startsWith("chat."));
 }
 
-function makeStubbedManager(store: ThreadStore, stub: ScriptedAcpClient): ThreadManager {
+function makeStubbedManager(
+  store: ThreadStore,
+  stub: ScriptedAcpClient,
+  codexStub?: ScriptedCodexClient,
+): ThreadManager {
   return makeThreadManager({
     store,
     // The ONLY substitution: model inference. Everything downstream is
     // the real production pipeline.
     spawnClient: async () => stub,
+    ...(codexStub ? { spawnCodexClient: async () => codexStub } : {}),
     busEmit: (event: ChatEvent) => broadcastChatEvent(event),
     // Deterministic, no real timers: flush every update eagerly so
     // ordering is exact and we never wait on a coalesce window.
@@ -480,6 +491,92 @@ describe("chat pipeline e2e — chat.session.send contract (Step 3 gate)", () =>
     expect(persisted?.provider.model).toBe("claude-sonnet-4-6");
 
     stub.finishPrompt("end_turn");
+    await manager.shutdown();
+  });
+});
+
+// ===========================================================================
+// 4. Per-turn provider routing — t3-mirror (Step 3b gate)
+// ===========================================================================
+
+describe("chat pipeline e2e — per-turn provider routing (Step 3b gate)", () => {
+  // (a) contract: ChatSessionSendInputZ accepts the per-turn
+  //     provider.kind. The CLIENT writes this synchronously when the
+  //     user picks a provider (see chat-solid's activeProviderStore);
+  //     the contract is the wire-level proof that the daemon now
+  //     consents to per-turn routing without a setProvider round-trip.
+  it("contract: ChatSessionSendInputZ accepts provider.kind", () => {
+    const parsed = ChatSessionSendInputZ.safeParse({
+      threadId: "thr-x",
+      content: [{ type: "text" as const, text: "hi" }],
+      model: "gpt-5-codex",
+      provider: { kind: "codex" },
+    });
+    expect(parsed.success).toBe(true);
+    // Unknown kinds rejected — additive but still strict.
+    const bad = ChatSessionSendInputZ.safeParse({
+      threadId: "thr-x",
+      content: [{ type: "text" as const, text: "hi" }],
+      provider: { kind: "magic-llm" },
+    });
+    expect(bad.success).toBe(false);
+  });
+
+  // (b) + (c): a thread persisted on `claude-code` receives a send
+  //     overriding `provider.kind: "codex"`. The daemon must spawn
+  //     the codex client (NOT the claude-code stub) for THIS turn,
+  //     and `thread.provider.kind` must remain `claude-code` —
+  //     persistence is the host's fire-and-forget responsibility, not
+  //     a side-effect of dispatch.
+  it("routes the turn through the per-turn provider.kind without mutating thread.provider", async () => {
+    const store = freshStore();
+    const acpStub = new ScriptedAcpClient();
+    const codexStub = new ScriptedCodexClient();
+    const manager = makeStubbedManager(store, acpStub, codexStub);
+    const deps = { store, manager, busEmit: (e: ChatEvent) => broadcastChatEvent(e) };
+
+    // Persisted thread is claude-code.
+    const created = await chatThreadCreateHandler(
+      { provider: { kind: "claude-code" }, title: "step-3b" },
+      deps,
+    );
+    const threadId = created.thread.id;
+
+    // Per-turn override: route through codex with a codex model.
+    const sent = await chatSessionSendHandler(
+      {
+        threadId,
+        content: [{ type: "text", text: "switch to codex for this turn" }],
+        model: "gpt-5-codex",
+        provider: { kind: "codex" },
+      },
+      deps,
+    );
+
+    // The daemon spawned the CODEX stub (not the ACP stub) for this
+    // turn and dispatched with the chosen model.
+    await waitFor(() => codexStub.sentMessages.length > 0, {
+      label: "codex stub received sendUserMessage",
+    });
+    expect(acpStub.promptRequests.length).toBe(0);
+    expect(codexStub.lastDispatchedModel).toBe("gpt-5-codex");
+
+    // The turn completes (stub emits turn/completed in a microtask).
+    await waitFor(
+      () =>
+        frames([]).length >= 0 && // touch eslint
+        codexStub.sentMessages.length > 0,
+      { label: "codex dispatch settled" },
+    );
+
+    // The PERSISTED thread.provider is unchanged — Step 3b's
+    // contract is "client owns visible provider; persistence is
+    // fire-and-forget via chat.thread.setProvider, NOT a side-effect
+    // of dispatch".
+    const persisted = await store.get(threadId);
+    expect(persisted?.provider.kind).toBe("claude-code");
+
+    void sent;
     await manager.shutdown();
   });
 });

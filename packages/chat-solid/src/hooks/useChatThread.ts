@@ -18,6 +18,7 @@ import {
 } from "../api";
 import { deriveRuntimeState } from "../lib/runtimeState";
 import { loadModelSelection } from "../lib/modelSelectionStore";
+import { loadActiveProviderKind } from "../lib/activeProviderStore";
 import { notifyAssistantTurnComplete } from "../lib/chatNotify";
 import { buildPlanImplementationPrompt, proposedPlanTitle } from "../lib/proposedPlan";
 import {
@@ -537,19 +538,19 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
     setCompletedAt(null);
     try {
       const fullContent = [...(await blocksForAttachments(pendingAttachments)), ...content];
-      // Per-turn model selection (Step 3): pick up whatever the
-      // header picker last persisted for {threadId, providerKind}.
-      // If absent, the daemon falls back to the thread's stored
-      // selection — so a fresh thread that never touched the picker
-      // sends with `model` omitted (existing behavior).
-      const providerKind = thread()?.provider.kind ?? null;
-      const selectedModel = providerKind ? loadModelSelection(opts.threadId, providerKind) : null;
-      const result = await chatSessionSend(
-        runtime(),
-        opts.threadId,
-        fullContent,
-        selectedModel ? { model: selectedModel } : {},
-      );
+      // Per-turn provider + model selection (Step 3b — t3-mirror).
+      // The CLIENT owns the visible provider and writes here
+      // synchronously when the user picks; the daemon routes THIS
+      // turn through that kind regardless of thread.provider.kind.
+      // Persisted thread.provider is only the reload fallback.
+      const overrideKind = loadActiveProviderKind(opts.threadId);
+      const persistedKind = thread()?.provider.kind ?? null;
+      const effectiveKind = overrideKind ?? persistedKind;
+      const selectedModel = effectiveKind ? loadModelSelection(opts.threadId, effectiveKind) : null;
+      const result = await chatSessionSend(runtime(), opts.threadId, fullContent, {
+        ...(selectedModel ? { model: selectedModel } : {}),
+        ...(overrideKind ? { provider: { kind: overrideKind } } : {}),
+      });
       setPendingPromptId(result.promptId);
       setAttachments([]);
       const createdAt = new Date().toISOString();

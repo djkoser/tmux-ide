@@ -690,6 +690,22 @@ export const ChatSessionSendInputZ = z
      * additive change.
      */
     providerInstanceId: z.string().min(1).optional(),
+    /**
+     * Per-turn driver kind (Step 3b — t3-mirror). When supplied, the
+     * daemon dispatches THIS turn through this provider regardless of
+     * `thread.provider.kind`. Lets the client own the "currently
+     * visible" provider without waiting on a `chat.thread.setProvider`
+     * round-trip (the persisted thread.provider is updated lazily,
+     * fire-and-forget, for reload memory only).
+     *
+     * If the live client for this thread is bound to a different
+     * kind, the daemon disposes it and respawns the right one before
+     * dispatching.
+     */
+    provider: z
+      .object({ kind: z.enum(["claude-code", "codex", "gemini", "custom"]) })
+      .strict()
+      .optional(),
   })
   .strict();
 export const ChatSessionSendResultZ = z

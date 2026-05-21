@@ -134,12 +134,13 @@ export function chatSessionSend(
   runtime: ApiRuntime,
   threadId: string,
   content: ContentBlock[],
-  options: { model?: string } = {},
+  options: { model?: string; provider?: { kind: AgentProvider["kind"] } } = {},
 ): Promise<{ accepted: true; promptId: string }> {
   return postAction(runtime, "chat.session.send", {
     threadId,
     content,
     ...(options.model ? { model: options.model } : {}),
+    ...(options.provider ? { provider: options.provider } : {}),
   });
 }
 

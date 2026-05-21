@@ -251,6 +251,7 @@ export async function chatSessionSendHandler(
     threadId: input.threadId,
     content: input.content as ContentBlock[],
     ...(input.model ? { model: input.model } : {}),
+    ...(input.provider?.kind ? { providerKind: input.provider.kind } : {}),
   });
   return { accepted: true, promptId };
 }

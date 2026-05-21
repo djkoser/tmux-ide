@@ -39,6 +39,16 @@ import type {
   SessionUpdate,
   StopReason,
 } from "../../acp/index.ts";
+import type {
+  CodexAgentEvent,
+  CodexClient,
+  CodexInitializeResponse,
+  InterruptRequest,
+  NewConversationRequest,
+  NewConversationResponse,
+  SendUserMessageRequest,
+  SendUserMessageResponse,
+} from "../../codex/index.ts";
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -176,5 +186,96 @@ export class ScriptedAcpClient implements AcpClient {
 
   async close(): Promise<void> {
     this.closeCount += 1;
+  }
+}
+
+/**
+ * Hermetic Codex client stub mirroring `ScriptedAcpClient`. Drives
+ * the Codex dispatch path (`sendUserMessage` + `onAgentEvent`) so the
+ * Step 3b harness can assert the daemon spawned codex for a turn
+ * whose `provider.kind` override differs from the thread's persisted
+ * provider.
+ */
+export class ScriptedCodexClient implements CodexClient {
+  readonly closed = Promise.resolve({ code: 0 as const, signal: null });
+  readonly codexThreadId: string;
+
+  private agentEventHandlers = new Set<(event: CodexAgentEvent) => void>();
+  readonly sentMessages: SendUserMessageRequest[] = [];
+  readonly newConversations: NewConversationRequest[] = [];
+  closeCount = 0;
+  interruptCount = 0;
+
+  constructor(codexThreadId = "stub-codex-thread-1") {
+    this.codexThreadId = codexThreadId;
+  }
+
+  async initialize(): Promise<CodexInitializeResponse> {
+    return {
+      codexHome: "/tmp/stub-codex",
+      platformFamily: "stub",
+      platformOs: "stub",
+      userAgent: "stub-codex-client/0.0.0",
+    };
+  }
+
+  async newConversation(req: NewConversationRequest): Promise<NewConversationResponse> {
+    this.newConversations.push(req);
+    return {
+      approvalPolicy: "on-request",
+      approvalsReviewer: "user",
+      cwd: req.cwd ?? "/tmp",
+      model: req.model ?? "gpt-5-codex",
+      modelProvider: req.modelProvider ?? "openai",
+      sandbox: "workspace-write",
+      thread: { id: this.codexThreadId },
+    };
+  }
+
+  async sendUserMessage(req: SendUserMessageRequest): Promise<SendUserMessageResponse> {
+    this.sentMessages.push(req);
+    const turnId = `stub-turn-${this.sentMessages.length}`;
+    // Fire-and-forget a terminal completion so the dispatcher resolves
+    // and the harness can observe `chat.thread.stop`. The shape mirrors
+    // codex's real `turn/completed` notification — see
+    // packages/daemon/src/chat/codex-event-handler.ts.
+    queueMicrotask(() => {
+      const event: CodexAgentEvent = {
+        method: "turn/completed",
+        params: {
+          threadId: this.codexThreadId,
+          turn: { id: turnId, status: "completed" },
+        },
+      } as CodexAgentEvent;
+      for (const handler of this.agentEventHandlers) handler(event);
+    });
+    return { turn: { id: turnId, status: "completed" } };
+  }
+
+  async interrupt(_req: InterruptRequest): Promise<void> {
+    this.interruptCount += 1;
+  }
+
+  onAgentEvent(handler: (event: CodexAgentEvent) => void): () => void {
+    this.agentEventHandlers.add(handler);
+    return () => this.agentEventHandlers.delete(handler);
+  }
+
+  onApplyPatchApproval(): () => void {
+    return () => {};
+  }
+
+  onChatgptTokenRefresh(): () => void {
+    return () => {};
+  }
+
+  async close(): Promise<void> {
+    this.closeCount += 1;
+  }
+
+  /** Last `{kind, model}` pair the daemon dispatched through Codex. */
+  get lastDispatchedModel(): string | null {
+    const last = this.sentMessages.at(-1);
+    return last?.model ?? null;
   }
 }

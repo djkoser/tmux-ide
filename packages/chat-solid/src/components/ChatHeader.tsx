@@ -10,6 +10,11 @@ import {
   type ModelFavorite,
 } from "../lib/modelFavoritesStore";
 import { loadModelSelection, saveModelSelection } from "../lib/modelSelectionStore";
+import {
+  activeProviderKindAccessor,
+  saveActiveProviderKind,
+  type ActiveProviderKind,
+} from "../lib/activeProviderStore";
 
 interface ChatHeaderProps {
   thread: Accessor<ThreadState | null>;
@@ -34,7 +39,21 @@ export function ChatHeader(props: ChatHeaderProps) {
   const [editing, setEditing] = createSignal(false);
   const [draft, setDraft] = createSignal("");
 
-  const activeProvider = createMemo(() => props.thread()?.provider ?? null);
+  // Step 3b: visible provider is owned client-side. The header picker
+  // writes here synchronously (no daemon round-trip); the persisted
+  // thread.provider is only the reload fallback.
+  const overrideKind = activeProviderKindAccessor(() => props.thread()?.id ?? null);
+  const activeProvider = createMemo<AgentProvider | null>(() => {
+    const persisted = props.thread()?.provider ?? null;
+    const ov = overrideKind();
+    // Only synthesize a built-in provider for kind overrides — a
+    // "custom" provider requires command/args we don't have here, so
+    // we fall back to the persisted record in that (rare) case.
+    if (ov && ov !== "custom" && (!persisted || ov !== persisted.kind)) {
+      return { kind: ov };
+    }
+    return persisted;
+  });
   const providerList = createMemo<ReadonlyArray<ProviderInfo>>(
     () => props.availableProviders?.() ?? [],
   );
@@ -89,11 +108,14 @@ export function ChatHeader(props: ChatHeaderProps) {
     const id = props.thread()?.id;
     if (id) saveModelSelection(id, kind, slug);
     setSelectionTick((n) => n + 1);
-    // Driver-kind switch still respawns the live client (existing
-    // behavior). Pure model-within-kind switches are intentionally a
-    // store write only — the daemon picks the model up on the next
-    // chat.session.send (superset §2).
-    if (kind !== (activeProvider()?.kind ?? null)) {
+    // Step 3b: kind switch flips the VISIBLE provider locally
+    // (synchronous — placeholder + dropdown update without a daemon
+    // round-trip). The host's fire-and-forget setProvider keeps the
+    // persisted thread.provider in sync for reload memory only.
+    if (id && kind !== (activeProvider()?.kind ?? null)) {
+      const isKnown =
+        kind === "claude-code" || kind === "codex" || kind === "gemini" || kind === "custom";
+      if (isKnown) saveActiveProviderKind(id, kind as ActiveProviderKind);
       const next = builtInProvider(kind);
       if (next) props.onProviderChange?.(next);
     }

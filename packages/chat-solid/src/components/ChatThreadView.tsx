@@ -1,6 +1,7 @@
 import { createMemo, createResource, createSignal, Show, type Accessor } from "solid-js";
 import { useChatThread } from "../hooks/useChatThread";
 import { providerDisplayName } from "../lib/provider";
+import { activeProviderKindAccessor } from "../lib/activeProviderStore";
 import { chatProvidersList, type ApiRuntime } from "../api";
 import type { ChatMountOptions } from "../types";
 import { ChatComposer } from "./ChatComposer";
@@ -34,7 +35,18 @@ export function ChatThreadView(props: { options: Accessor<ChatMountOptions> }) {
       setEffort(value);
     }
   };
-  const providerName = createMemo(() => providerDisplayName(chat.thread()?.provider));
+  // Step 3b: the displayed provider name follows the client-side
+  // activeProvider override first (set synchronously when the user
+  // picks a different provider) and falls back to the persisted
+  // thread.provider on first mount / when nothing has been picked.
+  const overrideKind = activeProviderKindAccessor(() => chat.thread()?.id ?? null);
+  const providerName = createMemo(() => {
+    const ov = overrideKind();
+    if (ov === "claude-code" || ov === "codex" || ov === "gemini") {
+      return providerDisplayName({ kind: ov });
+    }
+    return providerDisplayName(chat.thread()?.provider);
+  });
 
   // One-shot provider discovery for the header picker. The
   // ProviderStatusBanner does its own polling for liveness; this
