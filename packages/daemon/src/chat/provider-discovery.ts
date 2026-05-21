@@ -1,7 +1,11 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { once } from "node:events";
 import { constants } from "node:fs";
 import { access } from "node:fs/promises";
 import { delimiter, isAbsolute, join } from "node:path";
+import { makeJsonRpcEndpoint } from "../codex/protocol.ts";
+import { AGENT_METHODS, CODEX_METHODS } from "../codex/methods.ts";
+import { defaultInitializeRequest } from "../codex/schema.ts";
 
 export type DiscoverableProviderKind = "claude-code" | "codex";
 
@@ -78,9 +82,224 @@ export interface ProviderDiscoveryOptions {
     args: string[],
     opts?: { timeoutMs?: number },
   ) => Promise<ProviderDiscoveryExecResult>;
+  /**
+   * Probe Codex's `model/list` JSON-RPC method via the spawned
+   * `codex app-server`. Returns the parsed model list, or `null` to
+   * signal "use the static fallback". Injectable for tests so the
+   * unit suite never spawns a real codex binary.
+   */
+  probeCodexModels?: (
+    binaryPath: string,
+    opts: { timeoutMs?: number },
+  ) => Promise<ProviderModelInfo[] | null>;
+  /**
+   * Optional clock for the cache TTL. Tests use a fixed clock to make
+   * cache eviction deterministic.
+   */
+  now?: () => number;
 }
 
 const VERSION_TIMEOUT_MS = 1_500;
+const CODEX_PROBE_TIMEOUT_MS = 5_000;
+/**
+ * Codex-model-list cache TTL. Spawning `codex app-server` for a
+ * model list takes ~0.5–2s; `chat.providers.list` is a hot read so
+ * caching is essential. The 60s window lets us survive a burst of
+ * UI re-mounts while still picking up new models within a minute.
+ */
+const CODEX_MODELS_CACHE_TTL_MS = 60_000;
+
+interface CodexModelsCacheEntry {
+  binaryPath: string;
+  version: string | undefined;
+  expiresAt: number;
+  models: ProviderModelInfo[];
+}
+let codexModelsCache: CodexModelsCacheEntry | null = null;
+
+/** Test-only: clear the per-binary codex models cache. */
+export function _resetCodexModelsCacheForTests(): void {
+  codexModelsCache = null;
+}
+
+/**
+ * Conservative ChatGPT-account compatibility filter. Codex with
+ * ChatGPT-account auth rejects bare `gpt-5`:
+ *   "The 'gpt-5' model is not supported when using Codex with a
+ *    ChatGPT account."
+ * The codex-suffixed variants (`gpt-5-codex`, `gpt-5.3-codex`, …)
+ * are the accepted ones, and the codex `model/list` response does
+ * NOT carry an explicit "ChatGPT auth compatible" flag. When in
+ * doubt, only surface `*-codex` slugs.
+ */
+function isCodexCompatibleSlug(slug: string): boolean {
+  return /-codex(?:-|$)/.test(slug);
+}
+
+interface V2ModelListResponseModel {
+  readonly model?: unknown;
+  readonly displayName?: unknown;
+  readonly description?: unknown;
+  readonly hidden?: unknown;
+  readonly isDefault?: unknown;
+}
+
+interface V2ModelListResponse {
+  readonly data?: ReadonlyArray<V2ModelListResponseModel>;
+  readonly nextCursor?: string | null;
+}
+
+/**
+ * Best-effort parse of Codex's `model/list` JSON-RPC response into
+ * our `ProviderModelInfo` shape. Mirrors t3's
+ * `parseCodexModelListResponse` (`Layers/CodexProvider.ts:134`)
+ * without dragging in `effect-codex-app-server`. Filters out hidden
+ * models and (conservatively) anything that isn't `*-codex`.
+ *
+ * Exported so the unit test can verify parse + filter behavior
+ * without spawning a real codex binary.
+ */
+export function parseCodexModelListResponse(response: V2ModelListResponse): ProviderModelInfo[] {
+  const data = Array.isArray(response.data) ? response.data : [];
+  const out: ProviderModelInfo[] = [];
+  for (const model of data) {
+    const slug = typeof model.model === "string" ? model.model : null;
+    if (!slug) continue;
+    if (model.hidden === true) continue;
+    if (!isCodexCompatibleSlug(slug)) continue;
+    const displayName = typeof model.displayName === "string" ? model.displayName : slug;
+    const description = typeof model.description === "string" ? model.description : undefined;
+    const entry: ProviderModelInfo = {
+      slug,
+      name: prettifyCodexDisplayName(displayName),
+      ...(description ? { description } : {}),
+    };
+    out.push(entry);
+  }
+  // Move the default-flagged model (if surfaced and present in our
+  // filtered set) to the front so the picker seeds it as the
+  // recommended choice. Otherwise preserve codex's order.
+  const defaultSlug = data.find((m) => m.isDefault === true && typeof m.model === "string")
+    ?.model as string | undefined;
+  if (defaultSlug) {
+    const idx = out.findIndex((m) => m.slug === defaultSlug);
+    if (idx > 0) {
+      const [item] = out.splice(idx, 1);
+      if (item) out.unshift(item);
+    }
+  }
+  return out;
+}
+
+/**
+ * Light cosmetic transform of codex's `displayName`. Mirrors t3's
+ * `toDisplayName` (`Layers/CodexProvider.ts:127`) but kept tiny:
+ * we don't surface capabilities here, just the label.
+ */
+function prettifyCodexDisplayName(name: string): string {
+  return name.replace(/^gpt/i, "GPT").replace(/-([a-z])/g, (_, c) => "-" + c.toUpperCase());
+}
+
+/**
+ * Default Codex models probe — spawns `codex app-server`, drives
+ * the JSON-RPC `initialize` + `model/list` (with cursor pagination),
+ * then closes the child. Returns `null` on any failure so the
+ * caller falls back to the static `CODEX_MODELS` list.
+ */
+async function defaultProbeCodexModels(
+  binaryPath: string,
+  opts: { timeoutMs?: number } = {},
+): Promise<ProviderModelInfo[] | null> {
+  const timeoutMs = opts.timeoutMs ?? CODEX_PROBE_TIMEOUT_MS;
+  let timer: NodeJS.Timeout | null = null;
+  let child: ReturnType<typeof spawn> | null = null;
+  try {
+    child = spawn(binaryPath, ["app-server"], { stdio: ["pipe", "pipe", "pipe"] });
+    const spawnedChild = child;
+    if (!spawnedChild.stdin || !spawnedChild.stdout) return null;
+    // Drain stderr without buffering — keeps the child from blocking
+    // on a full pipe if it writes diagnostics.
+    spawnedChild.stderr?.on("data", () => undefined);
+
+    const spawnFailure = await Promise.race([
+      once(spawnedChild, "spawn").then(() => null),
+      once(spawnedChild, "error").then(([err]) => err as Error),
+      once(spawnedChild, "exit").then(
+        ([code, signal]) =>
+          new Error(`codex app-server exited during spawn (code=${code}, signal=${signal})`),
+      ),
+    ]);
+    if (spawnFailure) return null;
+
+    const endpoint = makeJsonRpcEndpoint({
+      input: spawnedChild.stdout,
+      output: spawnedChild.stdin,
+    });
+
+    const work = (async (): Promise<ProviderModelInfo[]> => {
+      await endpoint.request(AGENT_METHODS.initialize, defaultInitializeRequest());
+      const accumulated: ProviderModelInfo[] = [];
+      let cursor: string | null | undefined = undefined;
+      // Pagination cap — Codex returns a handful of models today; the
+      // bound is just a safety against a runaway server.
+      for (let page = 0; page < 16; page += 1) {
+        const params = cursor ? { cursor } : {};
+        const response = (await endpoint.request(
+          CODEX_METHODS.model_list,
+          params,
+        )) as V2ModelListResponse;
+        accumulated.push(...parseCodexModelListResponse(response));
+        cursor = response.nextCursor ?? null;
+        if (!cursor) break;
+      }
+      return accumulated;
+    })();
+
+    const timeout = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), timeoutMs);
+    });
+
+    const result = await Promise.race([work, timeout]);
+    if (result === null) return null;
+    return result.length > 0 ? result : null;
+  } catch {
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (child && !child.killed) {
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        // best effort
+      }
+    }
+  }
+}
+
+async function getCodexModelsCached(
+  binaryPath: string,
+  version: string | undefined,
+  now: number,
+  probe: NonNullable<ProviderDiscoveryOptions["probeCodexModels"]>,
+): Promise<ProviderModelInfo[]> {
+  if (
+    codexModelsCache &&
+    codexModelsCache.binaryPath === binaryPath &&
+    codexModelsCache.version === version &&
+    codexModelsCache.expiresAt > now
+  ) {
+    return codexModelsCache.models;
+  }
+  const probed = await probe(binaryPath, { timeoutMs: CODEX_PROBE_TIMEOUT_MS }).catch(() => null);
+  const models = probed ?? CODEX_MODELS;
+  codexModelsCache = {
+    binaryPath,
+    version,
+    expiresAt: now + CODEX_MODELS_CACHE_TTL_MS,
+    models,
+  };
+  return models;
+}
 
 async function isExecutable(path: string): Promise<boolean> {
   try {
@@ -184,6 +403,8 @@ async function discoverClaudeCode(
 async function discoverCodex(
   pathLookup: NonNullable<ProviderDiscoveryOptions["pathLookup"]>,
   exec: NonNullable<ProviderDiscoveryOptions["exec"]>,
+  probe: NonNullable<ProviderDiscoveryOptions["probeCodexModels"]>,
+  now: number,
 ): Promise<ProviderInfo> {
   const binary = await pathLookup("codex");
   if (!binary) {
@@ -198,6 +419,7 @@ async function discoverCodex(
   }
 
   const version = await bestEffortVersion(exec, binary);
+  const models = await getCodexModelsCached(binary, version, now, probe);
   return {
     kind: "codex",
     name: "Codex",
@@ -205,7 +427,7 @@ async function discoverCodex(
     available: true,
     binary,
     ...(version ? { version } : {}),
-    models: CODEX_MODELS,
+    models,
   };
 }
 
@@ -214,5 +436,10 @@ export async function discoverProviders(
 ): Promise<ProviderInfo[]> {
   const pathLookup = opts.pathLookup ?? resolveFromPath;
   const exec = opts.exec ?? defaultExec;
-  return [await discoverClaudeCode(pathLookup, exec), await discoverCodex(pathLookup, exec)];
+  const probe = opts.probeCodexModels ?? defaultProbeCodexModels;
+  const now = opts.now?.() ?? Date.now();
+  return [
+    await discoverClaudeCode(pathLookup, exec),
+    await discoverCodex(pathLookup, exec, probe, now),
+  ];
 }
