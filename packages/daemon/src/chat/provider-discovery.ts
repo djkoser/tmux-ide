@@ -5,6 +5,12 @@ import { delimiter, isAbsolute, join } from "node:path";
 
 export type DiscoverableProviderKind = "claude-code" | "codex";
 
+export interface ProviderModelInfo {
+  slug: string;
+  name: string;
+  description?: string;
+}
+
 export interface ProviderInfo {
   kind: DiscoverableProviderKind;
   name: string;
@@ -13,7 +19,46 @@ export interface ProviderInfo {
   binary?: string;
   version?: string;
   error?: string;
+  /**
+   * Real, daemon-owned model list. First entry is the recommended
+   * default. Empty when the provider binary is missing — callers should
+   * suppress the model picker in that case.
+   *
+   * Kept editorial in the daemon for now: claude-code has no
+   * remote-listing endpoint, and codex's `model/list` JSON-RPC sits
+   * behind app-server initialization. A future round can replace these
+   * with a live probe; the wire shape is stable.
+   */
+  models: ProviderModelInfo[];
 }
+
+/**
+ * Hand-maintained model catalog (daemon-owned, NOT the client's
+ * hardcoded list — see audit §3). The order matters: index 0 is the
+ * surfaced default. Bump these as providers ship new models.
+ */
+const CLAUDE_CODE_MODELS: ProviderModelInfo[] = [
+  {
+    slug: "claude-opus-4-7",
+    name: "Claude Opus 4.7",
+    description: "1M context · highest capability",
+  },
+  {
+    slug: "claude-sonnet-4-6",
+    name: "Claude Sonnet 4.6",
+    description: "Balanced speed + quality",
+  },
+  {
+    slug: "claude-haiku-4-5",
+    name: "Claude Haiku 4.5",
+    description: "Fastest · low cost",
+  },
+];
+
+const CODEX_MODELS: ProviderModelInfo[] = [
+  { slug: "gpt-5-codex", name: "GPT-5 Codex", description: "Code-tuned" },
+  { slug: "gpt-5", name: "GPT-5", description: "General purpose" },
+];
 
 export interface ProviderDiscoveryExecResult {
   stdout: string;
@@ -105,6 +150,7 @@ async function discoverClaudeCode(
       available: true,
       binary: direct,
       ...(version ? { version } : {}),
+      models: CLAUDE_CODE_MODELS,
     };
   }
 
@@ -116,6 +162,7 @@ async function discoverClaudeCode(
       description: "Claude Code via npx",
       available: true,
       binary: npx,
+      models: CLAUDE_CODE_MODELS,
     };
   }
 
@@ -125,6 +172,7 @@ async function discoverClaudeCode(
     description: "Claude Code via claude-code-acp",
     available: false,
     error: "neither claude-code-acp nor npx on PATH",
+    models: [],
   };
 }
 
@@ -140,6 +188,7 @@ async function discoverCodex(
       description: "Codex app-server proxy",
       available: false,
       error: "codex not on PATH",
+      models: [],
     };
   }
 
@@ -151,6 +200,7 @@ async function discoverCodex(
     available: true,
     binary,
     ...(version ? { version } : {}),
+    models: CODEX_MODELS,
   };
 }
 

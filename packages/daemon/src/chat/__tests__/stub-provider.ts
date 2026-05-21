@@ -143,6 +143,19 @@ export class ScriptedAcpClient implements AcpClient {
     return this.activePrompt.promise;
   }
 
+  /**
+   * Step 3 gate: which model the daemon applied to this turn. The
+   * daemon surfaces the per-turn model via `PromptRequest._meta.model`
+   * (real claude-code-acp ignores unknown `_meta` keys; this is the
+   * faithful channel that proves the daemon honored the picker).
+   */
+  get lastDispatchedModel(): string | null {
+    const last = this.promptRequests.at(-1);
+    if (!last) return null;
+    const meta = last._meta as { model?: unknown } | null | undefined;
+    return typeof meta?.model === "string" ? meta.model : null;
+  }
+
   /** Resolves once the dispatcher has actually called `prompt()`. */
   awaitPrompt(): Promise<void> {
     return this.promptInvoked.promise;

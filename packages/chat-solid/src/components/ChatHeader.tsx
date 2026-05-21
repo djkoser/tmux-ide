@@ -3,12 +3,13 @@ import type { AgentProvider, ChatThreadUsageSummary, StopReason, ThreadState } f
 import type { ProviderInfo } from "../api";
 import { ContextWindowMeter } from "./ContextWindowMeter";
 import { ProviderModelPicker } from "./ProviderModelPicker";
-import { DEFAULT_MODEL_BY_KIND, PROVIDER_MODEL_CATALOG } from "../lib/providerModelCatalog";
+import type { ModelListRowModel } from "./ModelListRow";
 import {
   loadModelFavorites,
   toggleModelFavorite,
   type ModelFavorite,
 } from "../lib/modelFavoritesStore";
+import { loadModelSelection, saveModelSelection } from "../lib/modelSelectionStore";
 
 interface ChatHeaderProps {
   thread: Accessor<ThreadState | null>;
@@ -38,19 +39,46 @@ export function ChatHeader(props: ChatHeaderProps) {
     () => props.availableProviders?.() ?? [],
   );
 
-  // Model picker: static catalog + persisted favorites. The daemon
-  // has no per-model transport, so picking a model switches the
-  // provider (when it differs) and records the slug client-side so
-  // the active row + trigger reflect the choice.
-  const modelsByKind = createMemo(() => PROVIDER_MODEL_CATALOG);
+  // Real, daemon-discovered model list (Step 3). The hardcoded
+  // PROVIDER_MODEL_CATALOG is gone — `availableProviders` now carries
+  // each provider's `models[]` straight from
+  // `provider-discovery.ts`.
+  const modelsByKind = createMemo<ReadonlyMap<string, ReadonlyArray<ModelListRowModel>>>(() => {
+    const out = new Map<string, ReadonlyArray<ModelListRowModel>>();
+    for (const info of providerList()) {
+      out.set(
+        info.kind,
+        (info.models ?? []).map((m) => ({
+          slug: m.slug,
+          name: m.name,
+          ...(m.description ? { subProvider: m.description } : {}),
+        })),
+      );
+    }
+    return out;
+  });
+
+  const defaultModelFor = (kind: string): string | null => {
+    const list = modelsByKind().get(kind);
+    return list && list.length > 0 ? (list[0]?.slug ?? null) : null;
+  };
+
   const [favorites, setFavorites] = createSignal<ModelFavorite[]>(loadModelFavorites());
   const favoriteTuples = createMemo(() => favorites().map((f) => ({ kind: f.kind, slug: f.slug })));
-  const [pickedModelByKind, setPickedModelByKind] = createSignal<Record<string, string>>({});
+
+  // Per-thread model selection: persisted via modelSelectionStore so
+  // a reload restores the pick. The picked slug rides on the next
+  // `chat.session.send` (see useChatThread.send).
+  const [selectionTick, setSelectionTick] = createSignal(0);
   const activeModel = createMemo<string | null>(() => {
+    selectionTick(); // re-run on any save
+    const id = props.thread()?.id ?? null;
     const kind = activeProvider()?.kind ?? null;
-    if (!kind) return null;
-    return pickedModelByKind()[kind] ?? DEFAULT_MODEL_BY_KIND.get(kind) ?? null;
+    if (!id || !kind) return null;
+    const fromThread = props.thread()?.provider.model ?? null;
+    return fromThread ?? loadModelSelection(id, kind) ?? defaultModelFor(kind);
   });
+
   const builtInProvider = (kind: string): AgentProvider | null => {
     if (kind === "claude-code") return { kind: "claude-code" };
     if (kind === "codex") return { kind: "codex" };
@@ -58,7 +86,13 @@ export function ChatHeader(props: ChatHeaderProps) {
     return null;
   };
   const handlePickModel = (kind: string, slug: string): void => {
-    setPickedModelByKind((prev) => ({ ...prev, [kind]: slug }));
+    const id = props.thread()?.id;
+    if (id) saveModelSelection(id, kind, slug);
+    setSelectionTick((n) => n + 1);
+    // Driver-kind switch still respawns the live client (existing
+    // behavior). Pure model-within-kind switches are intentionally a
+    // store write only — the daemon picks the model up on the next
+    // chat.session.send (superset §2).
     if (kind !== (activeProvider()?.kind ?? null)) {
       const next = builtInProvider(kind);
       if (next) props.onProviderChange?.(next);

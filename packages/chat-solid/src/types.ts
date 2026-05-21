@@ -42,10 +42,16 @@ export interface ComposerTerminalPane {
 export type StopReason = "end_turn" | "max_tokens" | "max_turn_requests" | "refusal" | "cancelled";
 
 export type AgentProvider =
-  | { kind: "claude-code"; binary?: string }
-  | { kind: "codex"; binary?: string }
-  | { kind: "gemini"; binary?: string }
-  | { kind: "custom"; command: string; args: string[]; env?: Record<string, string> };
+  | { kind: "claude-code"; binary?: string; model?: string }
+  | { kind: "codex"; binary?: string; model?: string }
+  | { kind: "gemini"; binary?: string; model?: string }
+  | {
+      kind: "custom";
+      command: string;
+      args: string[];
+      env?: Record<string, string>;
+      model?: string;
+    };
 
 export type ThreadIndexEntry = {
   id: string;

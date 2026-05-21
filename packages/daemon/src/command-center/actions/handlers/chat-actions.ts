@@ -250,6 +250,7 @@ export async function chatSessionSendHandler(
   const { promptId } = await managerFrom(deps).send({
     threadId: input.threadId,
     content: input.content as ContentBlock[],
+    ...(input.model ? { model: input.model } : {}),
   });
   return { accepted: true, promptId };
 }

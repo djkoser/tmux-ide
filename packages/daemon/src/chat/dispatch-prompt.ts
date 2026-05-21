@@ -39,6 +39,12 @@ export interface DispatchCodexInput {
   readActivePrompt(): CodexActivePrompt | null;
   promptId: string;
   content: ContentBlock[];
+  /**
+   * Per-turn model. Forwarded as `model` on Codex's `sendUserMessage`
+   * — Codex applies the model to this turn without re-creating the
+   * conversation.
+   */
+  model?: string;
 }
 
 export async function dispatchCodexPrompt(input: DispatchCodexInput): Promise<void> {
@@ -49,6 +55,7 @@ export async function dispatchCodexPrompt(input: DispatchCodexInput): Promise<vo
     const response: SendUserMessageResponse = await input.client.sendUserMessage({
       threadId: input.codexThreadId,
       input: codexInputFromContent(input.content),
+      ...(input.model ? { model: input.model } : {}),
     });
     const active = input.readActivePrompt();
     if (active?.promptId === input.promptId) {
@@ -93,6 +100,13 @@ export interface DispatchAcpInput {
   logger: Logger;
   promptId: string;
   content: ContentBlock[];
+  /**
+   * Per-turn model. Surfaced on `PromptRequest._meta.model` — claude-code-acp
+   * ignores `_meta` keys it doesn't recognize, so this is a safe channel for
+   * surfacing the selection to the agent (and for the e2e harness to assert
+   * the daemon applied it).
+   */
+  model?: string;
 }
 
 export async function dispatchAcpPrompt(input: DispatchAcpInput): Promise<void> {
@@ -100,6 +114,7 @@ export async function dispatchAcpPrompt(input: DispatchAcpInput): Promise<void> 
     const response = await input.client.prompt({
       sessionId: input.sessionId,
       prompt: input.content,
+      ...(input.model ? { _meta: { model: input.model } } : {}),
     });
     const stopReason = stopReasonFromResponse(response);
     await input.pipe.forceFlush();

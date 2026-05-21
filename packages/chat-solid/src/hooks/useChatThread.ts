@@ -17,6 +17,7 @@ import {
   type ApiRuntime,
 } from "../api";
 import { deriveRuntimeState } from "../lib/runtimeState";
+import { loadModelSelection } from "../lib/modelSelectionStore";
 import { notifyAssistantTurnComplete } from "../lib/chatNotify";
 import { buildPlanImplementationPrompt, proposedPlanTitle } from "../lib/proposedPlan";
 import {
@@ -536,7 +537,19 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
     setCompletedAt(null);
     try {
       const fullContent = [...(await blocksForAttachments(pendingAttachments)), ...content];
-      const result = await chatSessionSend(runtime(), opts.threadId, fullContent);
+      // Per-turn model selection (Step 3): pick up whatever the
+      // header picker last persisted for {threadId, providerKind}.
+      // If absent, the daemon falls back to the thread's stored
+      // selection — so a fresh thread that never touched the picker
+      // sends with `model` omitted (existing behavior).
+      const providerKind = thread()?.provider.kind ?? null;
+      const selectedModel = providerKind ? loadModelSelection(opts.threadId, providerKind) : null;
+      const result = await chatSessionSend(
+        runtime(),
+        opts.threadId,
+        fullContent,
+        selectedModel ? { model: selectedModel } : {},
+      );
       setPendingPromptId(result.promptId);
       setAttachments([]);
       const createdAt = new Date().toISOString();

@@ -134,8 +134,13 @@ export function chatSessionSend(
   runtime: ApiRuntime,
   threadId: string,
   content: ContentBlock[],
+  options: { model?: string } = {},
 ): Promise<{ accepted: true; promptId: string }> {
-  return postAction(runtime, "chat.session.send", { threadId, content });
+  return postAction(runtime, "chat.session.send", {
+    threadId,
+    content,
+    ...(options.model ? { model: options.model } : {}),
+  });
 }
 
 export function chatSessionCancel(
@@ -191,6 +196,12 @@ export function chatContextCaptureTerminal(
   return postAction(runtime, "chat.context.captureTerminal", input);
 }
 
+export interface ProviderModelInfo {
+  slug: string;
+  name: string;
+  description?: string;
+}
+
 /**
  * Wire shape from `GET /api/chat/providers`. Mirrors the daemon's
  * `ProviderInfo` (packages/daemon/src/chat/provider-discovery.ts) —
@@ -204,6 +215,8 @@ export interface ProviderInfo {
   binary?: string;
   version?: string;
   error?: string;
+  /** Daemon-owned model list. First entry is the recommended default. */
+  models: ProviderModelInfo[];
 }
 
 /**
@@ -228,7 +241,11 @@ export async function chatProvidersList(
     );
   }
   const data = (await res.json()) as { providers?: ProviderInfo[] };
-  return { providers: Array.isArray(data.providers) ? data.providers : [] };
+  const providers = (Array.isArray(data.providers) ? data.providers : []).map((p) => ({
+    ...p,
+    models: Array.isArray(p.models) ? p.models : [],
+  }));
+  return { providers };
 }
 
 export async function fetchProjectPanes(

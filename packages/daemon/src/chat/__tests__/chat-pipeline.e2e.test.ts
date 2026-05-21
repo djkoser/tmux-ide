@@ -430,27 +430,56 @@ describe("chat pipeline e2e — chat.session.send contract (Step 3 gate)", () =>
     content: [{ type: "text" as const, text: "hi" }],
   };
 
-  it("documents TODAY's contract: ChatSessionSendInputZ is strict {threadId, content}", () => {
-    // Baseline shape is accepted.
+  it("baseline: ChatSessionSendInputZ accepts {threadId, content}", () => {
     expect(ChatSessionSendInputZ.safeParse(validBase).success).toBe(true);
-    // Strict object → an unknown `model` key is rejected today. This
-    // is exactly why picking a Codex model is cosmetic-only (see
-    // docs/audit-provider-switcher-convergence.md ROOT CAUSE).
-    const withModel = ChatSessionSendInputZ.safeParse({ ...validBase, model: "gpt-5-codex" });
-    expect(withModel.success).toBe(false);
   });
 
-  // EXPECTED FAIL until Step 3 adds optional `model` /
-  // `providerInstanceId` to ChatSessionSendInputZ. The assertion is
-  // real; when Step 3 widens the contract this passes, `it.fails`
-  // turns RED, and that is the signal to delete `.fails` and require
-  // the field end-to-end through dispatch.
-  it.fails("Step 3 gate: ChatSessionSendInputZ should accept model + providerInstanceId", () => {
+  // Step 3 (LANDED): ChatSessionSendInputZ now accepts a per-turn
+  // `model` + (forward-compat) `providerInstanceId`. The earlier
+  // `.fails` wrapper has been removed — this assertion is now a hard
+  // gate.
+  it("contract: ChatSessionSendInputZ accepts model + providerInstanceId", () => {
     const parsed = ChatSessionSendInputZ.safeParse({
       ...validBase,
       model: "gpt-5-codex",
       providerInstanceId: "codex",
     });
     expect(parsed.success).toBe(true);
+  });
+
+  it("daemon applies the per-turn model: persisted on thread.provider AND surfaced to the agent", async () => {
+    const store = freshStore();
+    const stub = new ScriptedAcpClient();
+    const manager = makeStubbedManager(store, stub);
+    const deps = { store, manager, busEmit: (e: ChatEvent) => broadcastChatEvent(e) };
+
+    const created = await chatThreadCreateHandler(
+      { provider: { kind: "claude-code" }, title: "model-switch" },
+      deps,
+    );
+    const threadId = created.thread.id;
+
+    // Send with an explicit model. The daemon should:
+    //   (a) write `model` onto thread.provider before spawning the
+    //       live client, and
+    //   (b) forward it to the agent on this turn so a downstream
+    //       observer (the stub) can confirm dispatch honored it.
+    await chatSessionSendHandler(
+      {
+        threadId,
+        content: [{ type: "text", text: "pick a codex model" }],
+        model: "claude-sonnet-4-6",
+      },
+      deps,
+    );
+
+    await stub.awaitPrompt();
+    expect(stub.lastDispatchedModel).toBe("claude-sonnet-4-6");
+
+    const persisted = await store.get(threadId);
+    expect(persisted?.provider.model).toBe("claude-sonnet-4-6");
+
+    stub.finishPrompt("end_turn");
+    await manager.shutdown();
   });
 });

@@ -49,7 +49,20 @@ export interface CreateSessionInput {
 }
 
 export interface ThreadManager {
-  send(input: { threadId: string; content: ContentBlock[] }): Promise<{ promptId: string }>;
+  send(input: {
+    threadId: string;
+    content: ContentBlock[];
+    /**
+     * Per-turn model override (superset pattern, see
+     * docs/learn-from-superset.md §2). Applied to the thread's
+     * provider record BEFORE the live client is spawned, so a fresh
+     * session is bound to the new model. When the live client is
+     * already up under a different model, it is torn down so the next
+     * send re-spawns with the new selection. Omit to use whatever
+     * model is currently persisted on the thread.
+     */
+    model?: string;
+  }): Promise<{ promptId: string }>;
   cancel(input: { threadId: string }): Promise<void>;
   respondPermission(input: {
     threadId: string;
@@ -277,6 +290,7 @@ export function makeThreadManager(opts: MakeThreadManagerOptions): ThreadManager
     try {
       const conversation = await client.newConversation({
         cwd: thread.projectDir ?? process.cwd(),
+        ...(thread.provider.model ? { model: thread.provider.model } : {}),
       });
       liveThread.threadId = conversation.thread.id;
       return liveThread;
@@ -341,6 +355,35 @@ export function makeThreadManager(opts: MakeThreadManagerOptions): ThreadManager
 
   return {
     async send(input) {
+      // Per-turn model selection (superset §2 pattern):
+      //   apply BEFORE spawning the live client so a fresh
+      //   newSession/newConversation is bound to the chosen model.
+      //   If a live client is already up under a different model we
+      //   tear it down so the next ensureLive() respawns under the
+      //   new selection.
+      if (input.model) {
+        const existing = await opts.store.get(input.threadId);
+        if (existing && existing.provider.model !== input.model) {
+          await opts.store.setProvider(input.threadId, {
+            ...existing.provider,
+            model: input.model,
+          });
+          const liveBefore = live.get(input.threadId);
+          if (liveBefore) {
+            permissions.cancelForThread(input.threadId);
+            await liveBefore.pipe.forceFlush();
+            live.delete(input.threadId);
+            for (const unsub of liveBefore.unsubs.splice(0)) {
+              try {
+                unsub();
+              } catch {
+                // best effort
+              }
+            }
+            await liveBefore.client.close().catch(() => undefined);
+          }
+        }
+      }
       const liveThread = await ensureLive(input.threadId);
       const promptId = randomUUID();
       await opts.store.appendMessage(input.threadId, {
@@ -354,6 +397,12 @@ export function makeThreadManager(opts: MakeThreadManagerOptions): ThreadManager
       // Broadcasts `chat.timeline.reset` so the client shows the user
       // row immediately; agent chunks stream in incrementally after.
       const persisted = await opts.store.get(input.threadId);
+      // The persisted thread.provider.model is the authoritative
+      // per-turn selection (we already wrote `input.model` to it
+      // above when supplied). Dispatch reads it from here so both
+      // model-overridden and "use the stored selection" sends take
+      // the same path.
+      const dispatchModel = persisted?.provider.model;
       liveThread.pipe.resyncTimeline(persisted?.messages ?? [], promptId);
       if (liveThread.kind === "codex") {
         void dispatchCodexPrompt({
@@ -370,6 +419,7 @@ export function makeThreadManager(opts: MakeThreadManagerOptions): ThreadManager
           readActivePrompt: () => liveThread.activePrompt,
           promptId,
           content: input.content,
+          ...(dispatchModel ? { model: dispatchModel } : {}),
         });
       } else {
         void dispatchAcpPrompt({
@@ -380,6 +430,7 @@ export function makeThreadManager(opts: MakeThreadManagerOptions): ThreadManager
           busEmit: opts.busEmit,
           store: opts.store,
           logger,
+          ...(dispatchModel ? { model: dispatchModel } : {}),
           promptId,
           content: input.content,
         });

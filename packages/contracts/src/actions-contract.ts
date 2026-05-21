@@ -476,15 +476,34 @@ export const StopReasonZ = z.enum([
 ]);
 
 export const AgentProviderZ = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("claude-code"), binary: z.string().optional() }).strict(),
-  z.object({ kind: z.literal("codex"), binary: z.string().optional() }).strict(),
-  z.object({ kind: z.literal("gemini"), binary: z.string().optional() }).strict(),
+  z
+    .object({
+      kind: z.literal("claude-code"),
+      binary: z.string().optional(),
+      model: z.string().min(1).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("codex"),
+      binary: z.string().optional(),
+      model: z.string().min(1).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("gemini"),
+      binary: z.string().optional(),
+      model: z.string().min(1).optional(),
+    })
+    .strict(),
   z
     .object({
       kind: z.literal("custom"),
       command: z.string().min(1),
       args: z.array(z.string()),
       env: z.record(z.string(), z.string()).optional(),
+      model: z.string().min(1).optional(),
     })
     .strict(),
 ]);
@@ -569,6 +588,14 @@ export const ChatThreadListResultZ = z
   })
   .strict();
 
+export const ProviderModelInfoZ = z
+  .object({
+    slug: z.string().min(1),
+    name: z.string().min(1),
+    description: z.string().optional(),
+  })
+  .strict();
+
 export const ChatProvidersListInputZ = z.object({}).strict();
 export const ChatProvidersListResultZ = z
   .object({
@@ -582,6 +609,13 @@ export const ChatProvidersListResultZ = z
           binary: z.string().optional(),
           version: z.string().optional(),
           error: z.string().optional(),
+          /**
+           * Real per-provider model list, surfaced by the daemon's
+           * `provider-discovery`. Empty when the provider binary is
+           * unavailable or when the discovery probe returned nothing
+           * usable. The first entry is the recommended default.
+           */
+          models: z.array(ProviderModelInfoZ).default([]),
         })
         .strict(),
     ),
@@ -640,6 +674,22 @@ export const ChatSessionSendInputZ = z
   .object({
     threadId: z.string().min(1),
     content: z.array(ContentBlockZ).min(1),
+    /**
+     * Per-turn model override (superset-pattern flat `provider/model`,
+     * see docs/learn-from-superset.md §2). The daemon writes this onto
+     * the thread's provider record BEFORE dispatch, so picking a
+     * different Codex / Claude Code model takes effect on the next
+     * turn without any client-side reduction or session teardown.
+     * Omit to use the thread's currently-stored selection.
+     */
+    model: z.string().min(1).optional(),
+    /**
+     * Accepted for forward-compat with multi-instance providers; not
+     * yet acted on. Today the daemon resolves the live client from
+     * `thread.provider.kind` alone — instance routing is a future
+     * additive change.
+     */
+    providerInstanceId: z.string().min(1).optional(),
   })
   .strict();
 export const ChatSessionSendResultZ = z
