@@ -420,14 +420,17 @@ export function PlansSurfaceView(props: ProjectProps): JSX.Element {
         mtime?: number | null;
       };
       const incomingMtime = json.mtime ?? null;
-      if (json.plan) {
-        setPlanMeta({
-          name: json.plan.name ?? filename,
-          path: json.plan.path ?? filename,
-          title: json.plan.title ?? filename,
-          status: json.plan.status ?? "in-progress",
-        });
-      }
+      // Always populate planMeta when the fetch succeeds — otherwise the
+      // PlanBodyView header is gated on `props.plan` and the Edit button
+      // never appears even though canEdit() (which only needs planData)
+      // returns true and Cmd+E works. Fall back to the filename for the
+      // visible label when the API omits the `plan` envelope.
+      setPlanMeta({
+        name: json.plan?.name ?? filename,
+        path: json.plan?.path ?? filename,
+        title: json.plan?.title ?? filename.replace(/\.md$/i, ""),
+        status: json.plan?.status ?? "in-progress",
+      });
       // Don't stomp a user's in-progress edit. If the user is editing
       // and the remote mtime moved forward, surface a banner; the user
       // decides whether to keep the local draft or discard it.
