@@ -130,17 +130,29 @@ export function chatThreadSetProvider(
   return postAction(runtime, "chat.thread.setProvider", { id, provider });
 }
 
+export interface ChatProviderOption {
+  id: string;
+  value: string | boolean;
+}
+
 export function chatSessionSend(
   runtime: ApiRuntime,
   threadId: string,
   content: ContentBlock[],
-  options: { model?: string; provider?: { kind: AgentProvider["kind"] } } = {},
+  options: {
+    model?: string;
+    provider?: { kind: AgentProvider["kind"] };
+    providerOptions?: ReadonlyArray<ChatProviderOption>;
+  } = {},
 ): Promise<{ accepted: true; promptId: string }> {
   return postAction(runtime, "chat.session.send", {
     threadId,
     content,
     ...(options.model ? { model: options.model } : {}),
     ...(options.provider ? { provider: options.provider } : {}),
+    ...(options.providerOptions && options.providerOptions.length > 0
+      ? { providerOptions: options.providerOptions }
+      : {}),
   });
 }
 
@@ -197,10 +209,20 @@ export function chatContextCaptureTerminal(
   return postAction(runtime, "chat.context.captureTerminal", input);
 }
 
+export interface ProviderModelCapabilities {
+  reasoningEfforts?: string[];
+  defaultReasoningEffort?: string;
+  supportsFastMode?: boolean;
+}
+
 export interface ProviderModelInfo {
   slug: string;
   name: string;
   description?: string;
+  /** Codex-style per-model capabilities — drives the reasoning-effort
+   *  select + fast-mode toggle adjacent to the model picker. Empty /
+   *  undefined when the model has no advertised efforts. */
+  capabilities?: ProviderModelCapabilities;
 }
 
 /**

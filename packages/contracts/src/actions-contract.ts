@@ -588,11 +588,44 @@ export const ChatThreadListResultZ = z
   })
   .strict();
 
+/**
+ * Per-turn provider option selection (Codex effort / fast-mode, etc).
+ *
+ * Mirrors t3's canonical `Array<{id, value}>` shape
+ * (`context/t3code/packages/contracts/src/model.ts:49-53`) so a future
+ * multi-option model migrates additively. Only string + boolean values
+ * are accepted today (matches the t3 ProviderOptionSelectionValue
+ * union).
+ */
+export const ProviderOptionSelectionZ = z
+  .object({
+    id: z.string().min(1),
+    value: z.union([z.string().min(1), z.boolean()]),
+  })
+  .strict();
+
 export const ProviderModelInfoZ = z
   .object({
     slug: z.string().min(1),
     name: z.string().min(1),
     description: z.string().optional(),
+    /**
+     * Codex-style per-model capabilities mirroring t3's
+     * `mapCodexModelCapabilities`
+     * (`context/t3code/apps/server/src/provider/Layers/CodexProvider.ts:96`).
+     * Picker renders the reasoning-effort select + fast-mode toggle
+     * straight from this — present only when the daemon's
+     * `provider-discovery` parses non-empty values from the live
+     * `model/list` response.
+     */
+    capabilities: z
+      .object({
+        reasoningEfforts: z.array(z.string().min(1)).optional(),
+        defaultReasoningEffort: z.string().min(1).optional(),
+        supportsFastMode: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
@@ -706,6 +739,15 @@ export const ChatSessionSendInputZ = z
       .object({ kind: z.enum(["claude-code", "codex", "gemini", "custom"]) })
       .strict()
       .optional(),
+    /**
+     * Per-turn provider options (Codex reasoning effort + fast-mode).
+     * Canonical t3 array shape (`Array<{id, value}>`) so future
+     * multi-option models migrate additively. Recognized keys today:
+     *   - `reasoningEffort` (string: minimal | low | medium | high | xhigh)
+     *   - `fastMode` (boolean — forwarded as `serviceTier: "fast"`)
+     * Unknown ids are accepted but ignored by the daemon.
+     */
+    providerOptions: z.array(ProviderOptionSelectionZ).optional(),
   })
   .strict();
 export const ChatSessionSendResultZ = z

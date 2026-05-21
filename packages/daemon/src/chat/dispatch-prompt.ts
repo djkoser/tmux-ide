@@ -7,11 +7,19 @@
 
 import type { ContentBlock, StopReason } from "../acp/index.ts";
 import type { AcpClient } from "../acp/index.ts";
-import type { CodexClient, SendUserMessageResponse } from "../codex/index.ts";
+import type { CodexClient, ReasoningEffort, SendUserMessageResponse } from "../codex/index.ts";
 import type { ChatEvent } from "./types.ts";
 import type { ThreadStore } from "./thread-store.ts";
 import { codexInputFromContent, stopReasonFromResponse } from "./codex-helpers.ts";
 import type { MessagePipe } from "./message-pipe.ts";
+
+/** Recognized reasoning-effort levels (codex). Includes `xhigh` per
+ *  t3's CodexProvider.ts:96-137. Unrecognized values pass through
+ *  unchanged — codex will reject anything it doesn't know. */
+const KNOWN_REASONING_EFFORTS: ReasoningEffort[] = ["minimal", "low", "medium", "high", "xhigh"];
+function asReasoningEffort(value: string): ReasoningEffort | null {
+  return (KNOWN_REASONING_EFFORTS as string[]).includes(value) ? (value as ReasoningEffort) : null;
+}
 
 export type Logger = (event: {
   level: "info" | "warn" | "error";
@@ -45,6 +53,19 @@ export interface DispatchCodexInput {
    * conversation.
    */
   model?: string;
+  /**
+   * Per-turn reasoning effort (Codex `effort`). When omitted, Codex
+   * applies the model's `defaultReasoningEffort`. Mirrors t3's
+   * `CodexAdapter.ts:1509-1530` wire — the daemon forwards only when
+   * the value is present and known.
+   */
+  reasoningEffort?: string;
+  /**
+   * Per-turn fast-mode opt-in. Forwarded as `serviceTier: "fast"`
+   * (Codex's "additionalSpeedTier") when true. Skipped otherwise so
+   * Codex uses the standard tier.
+   */
+  fastMode?: boolean;
 }
 
 export async function dispatchCodexPrompt(input: DispatchCodexInput): Promise<void> {
@@ -52,10 +73,13 @@ export async function dispatchCodexPrompt(input: DispatchCodexInput): Promise<vo
     input.bindActivePrompt({ promptId: input.promptId, turnId: null, resolve });
   });
   try {
+    const effortLevel = input.reasoningEffort ? asReasoningEffort(input.reasoningEffort) : null;
     const response: SendUserMessageResponse = await input.client.sendUserMessage({
       threadId: input.codexThreadId,
       input: codexInputFromContent(input.content),
       ...(input.model ? { model: input.model } : {}),
+      ...(effortLevel ? { effort: effortLevel } : {}),
+      ...(input.fastMode ? { serviceTier: "fast" } : {}),
     });
     const active = input.readActivePrompt();
     if (active?.promptId === input.promptId) {
@@ -107,14 +131,25 @@ export interface DispatchAcpInput {
    * the daemon applied it).
    */
   model?: string;
+  /** Per-turn reasoning effort (currently a no-op on the ACP side —
+   *  surfaced on `_meta` so future claude-code-acp builds can pick it
+   *  up without a contract change). */
+  reasoningEffort?: string;
+  /** Per-turn fast-mode opt-in (no-op on ACP today; same rationale as
+   *  reasoningEffort). */
+  fastMode?: boolean;
 }
 
 export async function dispatchAcpPrompt(input: DispatchAcpInput): Promise<void> {
   try {
+    const meta: Record<string, unknown> = {};
+    if (input.model) meta.model = input.model;
+    if (input.reasoningEffort) meta.reasoningEffort = input.reasoningEffort;
+    if (input.fastMode) meta.fastMode = true;
     const response = await input.client.prompt({
       sessionId: input.sessionId,
       prompt: input.content,
-      ...(input.model ? { _meta: { model: input.model } } : {}),
+      ...(Object.keys(meta).length > 0 ? { _meta: meta } : {}),
     });
     const stopReason = stopReasonFromResponse(response);
     await input.pipe.forceFlush();

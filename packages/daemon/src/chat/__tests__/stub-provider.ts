@@ -166,6 +166,23 @@ export class ScriptedAcpClient implements AcpClient {
     return typeof meta?.model === "string" ? meta.model : null;
   }
 
+  /** CODEX-FULL gate: per-turn reasoning-effort the daemon forwarded
+   *  through the ACP `_meta` channel. Null when none was applied. */
+  get lastDispatchedReasoningEffort(): string | null {
+    const last = this.promptRequests.at(-1);
+    if (!last) return null;
+    const meta = last._meta as { reasoningEffort?: unknown } | null | undefined;
+    return typeof meta?.reasoningEffort === "string" ? meta.reasoningEffort : null;
+  }
+
+  /** CODEX-FULL gate: per-turn fast-mode flag forwarded on `_meta`. */
+  get lastDispatchedFastMode(): boolean {
+    const last = this.promptRequests.at(-1);
+    if (!last) return false;
+    const meta = last._meta as { fastMode?: unknown } | null | undefined;
+    return meta?.fastMode === true;
+  }
+
   /** Resolves once the dispatcher has actually called `prompt()`. */
   awaitPrompt(): Promise<void> {
     return this.promptInvoked.promise;
@@ -277,5 +294,19 @@ export class ScriptedCodexClient implements CodexClient {
   get lastDispatchedModel(): string | null {
     const last = this.sentMessages.at(-1);
     return last?.model ?? null;
+  }
+
+  /** CODEX-FULL gate: per-turn reasoning effort forwarded to Codex
+   *  as `effort` on `sendUserMessage`. */
+  get lastDispatchedEffort(): string | null {
+    const last = this.sentMessages.at(-1);
+    return last?.effort ?? null;
+  }
+
+  /** CODEX-FULL gate: per-turn fast-mode forwarded as `serviceTier:
+   *  "fast"` on `sendUserMessage`. */
+  get lastDispatchedServiceTier(): string | null {
+    const last = this.sentMessages.at(-1);
+    return last?.serviceTier ?? null;
   }
 }

@@ -1,8 +1,9 @@
 import { createMemo, createSignal, Show, type Accessor } from "solid-js";
 import type { AgentProvider, ChatThreadUsageSummary, StopReason, ThreadState } from "../types";
-import type { ProviderInfo } from "../api";
+import type { ProviderInfo, ProviderModelCapabilities } from "../api";
 import { ContextWindowMeter } from "./ContextWindowMeter";
 import { ProviderModelPicker } from "./ProviderModelPicker";
+import { ModelCapabilitiesPicker } from "./ModelCapabilitiesPicker";
 import type { ModelListRowModel } from "./ModelListRow";
 import {
   loadModelFavorites,
@@ -15,6 +16,7 @@ import {
   saveActiveProviderKind,
   type ActiveProviderKind,
 } from "../lib/activeProviderStore";
+import { loadProviderOptions, upsertProviderOption } from "../lib/providerOptionsStore";
 
 interface ChatHeaderProps {
   thread: Accessor<ThreadState | null>;
@@ -77,6 +79,19 @@ export function ChatHeader(props: ChatHeaderProps) {
     return out;
   });
 
+  // CODEX-FULL: capabilities surface (effort + fast-mode) for the
+  // currently-active model. Drives the small adjacent selector — when
+  // the model declares neither, the selector renders nothing.
+  const capabilitiesByKindSlug = createMemo<Map<string, ProviderModelCapabilities>>(() => {
+    const out = new Map<string, ProviderModelCapabilities>();
+    for (const info of providerList()) {
+      for (const m of info.models ?? []) {
+        if (m.capabilities) out.set(`${info.kind}::${m.slug}`, m.capabilities);
+      }
+    }
+    return out;
+  });
+
   const defaultModelFor = (kind: string): string | null => {
     const list = modelsByKind().get(kind);
     return list && list.length > 0 ? (list[0]?.slug ?? null) : null;
@@ -122,6 +137,50 @@ export function ChatHeader(props: ChatHeaderProps) {
   };
   const handleToggleFavorite = (kind: string, slug: string): void => {
     setFavorites((current) => toggleModelFavorite(current, { kind, slug }));
+  };
+
+  // CODEX-FULL: per-thread × kind × model effort + fast-mode store.
+  // Bump on save so the createMemo re-reads localStorage.
+  const [optionsTick, setOptionsTick] = createSignal(0);
+  const activeCapabilities = createMemo<ProviderModelCapabilities | undefined>(() => {
+    const kind = activeProvider()?.kind;
+    const slug = activeModel();
+    if (!kind || !slug) return undefined;
+    return capabilitiesByKindSlug().get(`${kind}::${slug}`);
+  });
+  const activeEffort = createMemo<string | null>(() => {
+    optionsTick();
+    const id = props.thread()?.id ?? null;
+    const kind = activeProvider()?.kind ?? null;
+    const slug = activeModel();
+    if (!id || !kind || !slug) return null;
+    const entry = loadProviderOptions(id, kind, slug).find((o) => o.id === "reasoningEffort");
+    return typeof entry?.value === "string" ? entry.value : null;
+  });
+  const activeFastMode = createMemo<boolean>(() => {
+    optionsTick();
+    const id = props.thread()?.id ?? null;
+    const kind = activeProvider()?.kind ?? null;
+    const slug = activeModel();
+    if (!id || !kind || !slug) return false;
+    const entry = loadProviderOptions(id, kind, slug).find((o) => o.id === "fastMode");
+    return entry?.value === true;
+  });
+  const handleEffortChange = (_id: "reasoningEffort", value: string): void => {
+    const id = props.thread()?.id;
+    const kind = activeProvider()?.kind;
+    const slug = activeModel();
+    if (!id || !kind || !slug) return;
+    upsertProviderOption(id, kind, slug, "reasoningEffort", value);
+    setOptionsTick((n) => n + 1);
+  };
+  const handleFastModeToggle = (next: boolean): void => {
+    const id = props.thread()?.id;
+    const kind = activeProvider()?.kind;
+    const slug = activeModel();
+    if (!id || !kind || !slug) return;
+    upsertProviderOption(id, kind, slug, "fastMode", next ? true : null);
+    setOptionsTick((n) => n + 1);
   };
 
   function beginEdit() {
@@ -174,6 +233,14 @@ export function ChatHeader(props: ChatHeaderProps) {
           onPickModel={handlePickModel}
           favorites={favoriteTuples}
           onToggleFavorite={handleToggleFavorite}
+        />
+        <ModelCapabilitiesPicker
+          capabilities={activeCapabilities}
+          effort={activeEffort}
+          fastMode={activeFastMode}
+          onChange={handleEffortChange}
+          onToggleFastMode={handleFastModeToggle}
+          disabled={props.inflight}
         />
       </Show>
       <Show when={props.sessionName()}>

@@ -252,6 +252,7 @@ export async function chatSessionSendHandler(
     content: input.content as ContentBlock[],
     ...(input.model ? { model: input.model } : {}),
     ...(input.provider?.kind ? { providerKind: input.provider.kind } : {}),
+    ...(input.providerOptions ? { providerOptions: input.providerOptions } : {}),
   });
   return { accepted: true, promptId };
 }

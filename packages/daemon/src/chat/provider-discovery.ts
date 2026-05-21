@@ -9,10 +9,65 @@ import { defaultInitializeRequest } from "../codex/schema.ts";
 
 export type DiscoverableProviderKind = "claude-code" | "codex";
 
+/**
+ * Per-model capability surface mirrored from t3's
+ * `mapCodexModelCapabilities`
+ * (`context/t3code/apps/server/src/provider/Layers/CodexProvider.ts:96`).
+ * Today only Codex populates this — Claude Code's models have no
+ * equivalent picker. Empty / undefined when the upstream `model/list`
+ * response omits the data (or when we fall back to the static catalog
+ * for a model with no canonical reasoning-tier surface).
+ */
+export interface ProviderModelCapabilities {
+  reasoningEfforts?: string[];
+  defaultReasoningEffort?: string;
+  supportsFastMode?: boolean;
+}
+
 export interface ProviderModelInfo {
   slug: string;
   name: string;
   description?: string;
+  capabilities?: ProviderModelCapabilities;
+}
+
+/**
+ * Slug aliases mirroring t3's `MODEL_SLUG_ALIASES_BY_PROVIDER`
+ * (`context/t3code/packages/contracts/src/model.ts:155-194`). Applied
+ * server-side in `thread-manager.send()` before dispatch so a stale
+ * client (or a CLI default that still names a renamed model) lands on
+ * the current canonical slug. Forward-compat: keep the wire shape
+ * unchanged — the daemon normalises silently.
+ */
+export const MODEL_SLUG_ALIASES_BY_KIND: Record<
+  DiscoverableProviderKind,
+  Record<string, string>
+> = {
+  codex: {
+    "gpt-5-codex": "gpt-5.4",
+    "5.4": "gpt-5.4",
+    "5.3": "gpt-5.3-codex",
+    "gpt-5.3": "gpt-5.3-codex",
+    "5.3-spark": "gpt-5.3-codex-spark",
+    "gpt-5.3-spark": "gpt-5.3-codex-spark",
+  },
+  "claude-code": {
+    opus: "claude-opus-4-7",
+    "opus-4.7": "claude-opus-4-7",
+    "claude-opus-4.7": "claude-opus-4-7",
+    sonnet: "claude-sonnet-4-6",
+    "sonnet-4.6": "claude-sonnet-4-6",
+    "claude-sonnet-4.6": "claude-sonnet-4-6",
+    haiku: "claude-haiku-4-5",
+    "haiku-4.5": "claude-haiku-4-5",
+    "claude-haiku-4-5-20251001": "claude-haiku-4-5",
+  },
+};
+
+/** Resolve `slug` to its canonical alias for `kind`. Returns the slug
+ *  unchanged when no alias applies — safe to call with any input. */
+export function resolveModelSlug(kind: DiscoverableProviderKind, slug: string): string {
+  return MODEL_SLUG_ALIASES_BY_KIND[kind]?.[slug] ?? slug;
 }
 
 export interface ProviderInfo {
@@ -62,11 +117,50 @@ const CLAUDE_CODE_MODELS: ProviderModelInfo[] = [
 // Codex-with-ChatGPT-account auth only accepts codex-suffixed models;
 // the bare `gpt-5` selection returns
 // `{"type":"invalid_request_error","message":"The 'gpt-5' model is not
-// supported when using Codex with a ChatGPT account."}`. Match t3's
-// codex-specific model list.
+// supported when using Codex with a ChatGPT account."}`. The static
+// fallback ships the newer slugs from t3 (`model.ts:135`) so the
+// offline catalog isn't artificially impoverished — when the live
+// `model/list` probe fails (binary missing, auth not yet completed,
+// timeout) we still surface the current generation. Capabilities are a
+// best-effort copy of what newer Codex models advertise.
+const CODEX_STATIC_DEFAULT_REASONING = "medium";
+const CODEX_STATIC_REASONING_EFFORTS = ["minimal", "low", "medium", "high", "xhigh"];
 const CODEX_MODELS: ProviderModelInfo[] = [
-  { slug: "gpt-5-codex", name: "GPT-5 Codex", description: "Code-tuned" },
-  { slug: "gpt-5.3-codex", name: "GPT-5.3 Codex", description: "Newer code-tuned" },
+  {
+    slug: "gpt-5.4",
+    name: "GPT-5.4",
+    description: "Current default · reasoning + fast mode",
+    capabilities: {
+      reasoningEfforts: CODEX_STATIC_REASONING_EFFORTS,
+      defaultReasoningEffort: CODEX_STATIC_DEFAULT_REASONING,
+      supportsFastMode: true,
+    },
+  },
+  {
+    slug: "gpt-5.3-codex",
+    name: "GPT-5.3 Codex",
+    description: "Newer code-tuned",
+    capabilities: {
+      reasoningEfforts: CODEX_STATIC_REASONING_EFFORTS,
+      defaultReasoningEffort: CODEX_STATIC_DEFAULT_REASONING,
+      supportsFastMode: true,
+    },
+  },
+  {
+    slug: "gpt-5.3-codex-spark",
+    name: "GPT-5.3 Codex Spark",
+    description: "Faster code-tuned",
+    capabilities: {
+      reasoningEfforts: CODEX_STATIC_REASONING_EFFORTS,
+      defaultReasoningEffort: CODEX_STATIC_DEFAULT_REASONING,
+      supportsFastMode: true,
+    },
+  },
+  {
+    slug: "gpt-5-codex",
+    name: "GPT-5 Codex",
+    description: "Code-tuned (legacy)",
+  },
 ];
 
 export interface ProviderDiscoveryExecResult {
@@ -142,11 +236,67 @@ interface V2ModelListResponseModel {
   readonly description?: unknown;
   readonly hidden?: unknown;
   readonly isDefault?: unknown;
+  /**
+   * Codex newer-gen surface:
+   *   - `supportedReasoningEfforts`: either `string[]` or
+   *     `Array<{reasoningEffort: string}>` depending on protocol vintage;
+   *     we accept both.
+   *   - `defaultReasoningEffort`: plain string.
+   *   - `additionalSpeedTiers`: `["fast"]` when the model accepts the
+   *     fast service tier.
+   */
+  readonly supportedReasoningEfforts?: unknown;
+  readonly defaultReasoningEffort?: unknown;
+  readonly additionalSpeedTiers?: unknown;
 }
 
 interface V2ModelListResponse {
   readonly data?: ReadonlyArray<V2ModelListResponseModel>;
   readonly nextCursor?: string | null;
+}
+
+/**
+ * Pull reasoning-effort + fast-mode capabilities out of one model
+ * entry. Accepts both the older string-array shape (`["low",
+ * "medium"]`) and the newer object-array shape (`[{reasoningEffort:
+ * "low"}, ...]`) emitted by different `codex app-server` vintages —
+ * the t3 reference resolves to the same string set in both cases.
+ *
+ * Returns `undefined` when the entry has neither a reasoning surface
+ * nor a fast-mode tier, so we don't decorate models with empty
+ * capability shells.
+ */
+function extractCodexCapabilities(
+  model: V2ModelListResponseModel,
+): ProviderModelCapabilities | undefined {
+  const efforts: string[] = [];
+  if (Array.isArray(model.supportedReasoningEfforts)) {
+    for (const entry of model.supportedReasoningEfforts) {
+      if (typeof entry === "string" && entry.length > 0) {
+        efforts.push(entry);
+      } else if (
+        entry &&
+        typeof entry === "object" &&
+        typeof (entry as { reasoningEffort?: unknown }).reasoningEffort === "string"
+      ) {
+        efforts.push((entry as { reasoningEffort: string }).reasoningEffort);
+      }
+    }
+  }
+  const defaultEffort =
+    typeof model.defaultReasoningEffort === "string" && model.defaultReasoningEffort.length > 0
+      ? model.defaultReasoningEffort
+      : undefined;
+  const speedTiers = Array.isArray(model.additionalSpeedTiers)
+    ? model.additionalSpeedTiers.filter((t): t is string => typeof t === "string")
+    : [];
+  const supportsFastMode = speedTiers.includes("fast");
+  if (efforts.length === 0 && !defaultEffort && !supportsFastMode) return undefined;
+  const out: ProviderModelCapabilities = {};
+  if (efforts.length > 0) out.reasoningEfforts = efforts;
+  if (defaultEffort) out.defaultReasoningEffort = defaultEffort;
+  if (supportsFastMode) out.supportsFastMode = true;
+  return out;
 }
 
 /**
@@ -169,10 +319,12 @@ export function parseCodexModelListResponse(response: V2ModelListResponse): Prov
     if (!isCodexCompatibleSlug(slug)) continue;
     const displayName = typeof model.displayName === "string" ? model.displayName : slug;
     const description = typeof model.description === "string" ? model.description : undefined;
+    const capabilities = extractCodexCapabilities(model);
     const entry: ProviderModelInfo = {
       slug,
       name: prettifyCodexDisplayName(displayName),
       ...(description ? { description } : {}),
+      ...(capabilities ? { capabilities } : {}),
     };
     out.push(entry);
   }

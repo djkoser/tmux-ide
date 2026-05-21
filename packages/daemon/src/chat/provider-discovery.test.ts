@@ -180,6 +180,64 @@ describe("parseCodexModelListResponse", () => {
       [],
     );
   });
+
+  it("surfaces supportedReasoningEfforts + defaultReasoningEffort + fast-mode capabilities", () => {
+    const parsed = parseCodexModelListResponse({
+      data: [
+        {
+          model: "gpt-5.4-codex",
+          displayName: "gpt-5.4-codex",
+          hidden: false,
+          isDefault: false,
+          // Newer object-array shape (`{reasoningEffort: ...}`).
+          supportedReasoningEfforts: [
+            { reasoningEffort: "low" },
+            { reasoningEffort: "medium" },
+            { reasoningEffort: "high" },
+            { reasoningEffort: "xhigh" },
+          ],
+          defaultReasoningEffort: "medium",
+          additionalSpeedTiers: ["fast"],
+        },
+      ],
+    } as never);
+    expect(parsed[0]?.capabilities).toEqual({
+      reasoningEfforts: ["low", "medium", "high", "xhigh"],
+      defaultReasoningEffort: "medium",
+      supportsFastMode: true,
+    });
+  });
+
+  it("also accepts the older string-array supportedReasoningEfforts shape", () => {
+    const parsed = parseCodexModelListResponse({
+      data: [
+        {
+          model: "gpt-5.3-codex",
+          displayName: "gpt-5.3-codex",
+          hidden: false,
+          isDefault: false,
+          supportedReasoningEfforts: ["low", "medium", "high"],
+          defaultReasoningEffort: "medium",
+        },
+      ],
+    } as never);
+    expect(parsed[0]?.capabilities?.reasoningEfforts).toEqual(["low", "medium", "high"]);
+    expect(parsed[0]?.capabilities?.supportsFastMode).toBeUndefined();
+  });
+
+  it("omits the capabilities surface when the model advertises neither", () => {
+    const parsed = parseCodexModelListResponse({
+      data: [
+        {
+          model: "gpt-5-codex",
+          displayName: "gpt-5-codex",
+          hidden: false,
+          isDefault: false,
+        },
+      ],
+    } as never);
+    expect(parsed[0]?.capabilities).toBeUndefined();
+  });
 });
 
 describe("discoverProviders — dynamic codex models", () => {
@@ -209,10 +267,11 @@ describe("discoverProviders — dynamic codex models", () => {
       now: () => 1_000,
     });
 
-    // Static fallback is the codex-suffix-only list (gpt-5-codex,
-    // gpt-5.3-codex) — see CODEX_MODELS in provider-discovery.ts.
+    // CODEX-FULL #4: static fallback now includes gpt-5.4 (the new
+    // default in t3) and gpt-5.3-codex-spark — see CODEX_MODELS in
+    // provider-discovery.ts.
     const slugs = providers[1]?.models.map((m) => m.slug) ?? [];
-    expect(slugs).toEqual(["gpt-5-codex", "gpt-5.3-codex"]);
+    expect(slugs).toEqual(["gpt-5.4", "gpt-5.3-codex", "gpt-5.3-codex-spark", "gpt-5-codex"]);
   });
 
   it("caches the probed model list across calls (skips re-probe within TTL)", async () => {

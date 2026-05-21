@@ -25,7 +25,7 @@ export interface CodexInitializeResponse {
 
 export type ApprovalPolicy = "untrusted" | "on-failure" | "on-request" | "never";
 export type SandboxMode = "read-only" | "workspace-write" | "danger-full-access";
-export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
+export type ReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
 export type ReasoningSummary = "auto" | "concise" | "detailed" | "none";
 
 export interface NewConversationRequest {

@@ -35,6 +35,41 @@ import {
 } from "./dispatch-prompt.ts";
 import type { ProviderStore } from "./provider-store.ts";
 import type { ProviderInstance } from "@tmux-ide/contracts";
+import { MODEL_SLUG_ALIASES_BY_KIND } from "./provider-discovery.ts";
+
+/** Per-turn option selection mirror of the contract's
+ *  `ProviderOptionSelectionZ`. Only string + boolean values are
+ *  recognized today. */
+export interface ProviderOptionSelection {
+  id: string;
+  value: string | boolean;
+}
+
+/** Pull the canonical effort/fastMode pair out of a t3-shaped
+ *  `Array<{id, value}>`. Unknown ids are ignored. */
+function extractKnownOptions(options: ReadonlyArray<ProviderOptionSelection> | undefined): {
+  reasoningEffort?: string;
+  fastMode?: boolean;
+} {
+  if (!options) return {};
+  const out: { reasoningEffort?: string; fastMode?: boolean } = {};
+  for (const sel of options) {
+    if (sel.id === "reasoningEffort" && typeof sel.value === "string") {
+      out.reasoningEffort = sel.value;
+    } else if (sel.id === "fastMode" && typeof sel.value === "boolean") {
+      out.fastMode = sel.value;
+    }
+  }
+  return out;
+}
+
+/** Server-side normalisation: a stale client or a CLI default may
+ *  request a renamed slug. The daemon maps to the canonical one
+ *  silently so dispatch still hits a known model. */
+function aliasModelSlug(kind: "claude-code" | "codex" | "gemini" | "custom", slug: string): string {
+  if (kind !== "claude-code" && kind !== "codex") return slug;
+  return MODEL_SLUG_ALIASES_BY_KIND[kind]?.[slug] ?? slug;
+}
 
 export { InvalidPermissionOptionError, PermissionRequestNotFoundError };
 
@@ -71,6 +106,15 @@ export interface ThreadManager {
      * `chat.thread.setProvider` responsibility.
      */
     providerKind?: "claude-code" | "codex" | "gemini" | "custom";
+    /**
+     * Per-turn provider options (Codex reasoning effort + fast-mode).
+     * Canonical t3 array shape — see
+     * `packages/contracts/src/actions-contract.ts`
+     * `ProviderOptionSelectionZ`. The daemon remembers the last set per
+     * thread so a subsequent send that omits `providerOptions`
+     * inherits the previous selection.
+     */
+    providerOptions?: ReadonlyArray<ProviderOptionSelection>;
   }): Promise<{ promptId: string }>;
   cancel(input: { threadId: string }): Promise<void>;
   respondPermission(input: {
@@ -196,6 +240,14 @@ function resolveCodexPrompt(
 export function makeThreadManager(opts: MakeThreadManagerOptions): ThreadManager {
   const live = new Map<string, LiveThread>();
   const starting = new Map<string, Promise<LiveThread>>();
+  /**
+   * Per-thread last-used provider options. Daemon-lifetime only —
+   * deliberately not persisted across daemon restarts so an
+   * inadvertently-set xhigh effort doesn't outlive the session.
+   * Cleared on `disposeLive` so a re-spawned thread starts from the
+   * model's `defaultReasoningEffort` again.
+   */
+  const lastProviderOptions = new Map<string, ProviderOptionSelection[]>();
   const logger = opts.logger ?? (() => undefined);
   const permissionTimeoutMs = opts.permissionTimeoutMs ?? DEFAULT_PERMISSION_TIMEOUT_MS;
   const persistDebounceMs = opts.persistDebounceMs ?? DEFAULT_PERSIST_DEBOUNCE_MS;
@@ -358,6 +410,7 @@ export function makeThreadManager(opts: MakeThreadManagerOptions): ThreadManager
     permissions.cancelForThread(threadId);
     await existing.pipe.forceFlush();
     live.delete(threadId);
+    lastProviderOptions.delete(threadId);
     for (const unsub of existing.unsubs.splice(0)) {
       try {
         unsub();
@@ -423,21 +476,30 @@ export function makeThreadManager(opts: MakeThreadManagerOptions): ThreadManager
       const persistedKind = stored.provider.kind;
       const sameKind = !overrideKind || overrideKind === persistedKind;
 
+      // Server-side slug normalisation (CODEX-FULL #4 / t3
+      // `MODEL_SLUG_ALIASES_BY_PROVIDER`). A stale client or a CLI
+      // default may pass a renamed slug — alias to the canonical one
+      // so dispatch hits a known model. Applied only when both kind +
+      // slug are present so we don't mis-alias the `claude-code`
+      // selection through the codex table.
+      const aliasKind = overrideKind ?? persistedKind;
+      const normalizedInputModel = input.model ? aliasModelSlug(aliasKind, input.model) : undefined;
+
       // Lazy model persistence — only when we're acting on the
       // persisted-kind side. A kind override is treated as
       // visible-only (per Step 3b design) and does NOT mutate
       // thread.provider here.
-      if (input.model && sameKind && stored.provider.model !== input.model) {
+      if (normalizedInputModel && sameKind && stored.provider.model !== normalizedInputModel) {
         await opts.store.setProvider(input.threadId, {
           ...stored.provider,
-          model: input.model,
+          model: normalizedInputModel,
         });
       }
 
       // Refreshed thread (post any setProvider).
       const thread = (await opts.store.get(input.threadId)) ?? stored;
       const effectiveKind = overrideKind ?? thread.provider.kind;
-      const effectiveModel = input.model ?? thread.provider.model;
+      const effectiveModel = normalizedInputModel ?? thread.provider.model;
 
       const effectiveProvider: AgentProvider =
         effectiveKind === thread.provider.kind
@@ -462,6 +524,19 @@ export function makeThreadManager(opts: MakeThreadManagerOptions): ThreadManager
       // Per-turn dispatch model = the effective model we just resolved
       // (input.model wins; otherwise persisted thread.provider.model).
       const dispatchModel = effectiveModel;
+
+      // Per-turn provider options resolve as: explicit input wins,
+      // otherwise the in-memory last-used carry-over. When neither
+      // exists we forward nothing and Codex applies the model's own
+      // `defaultReasoningEffort`. Save the explicit selection back so
+      // the next omit-args send inherits it.
+      const effectiveOptions: ReadonlyArray<ProviderOptionSelection> | undefined =
+        input.providerOptions ?? lastProviderOptions.get(input.threadId);
+      if (input.providerOptions) {
+        lastProviderOptions.set(input.threadId, [...input.providerOptions]);
+      }
+      const known = extractKnownOptions(effectiveOptions);
+
       liveThread.pipe.resyncTimeline(persisted?.messages ?? [], promptId);
       if (liveThread.kind === "codex") {
         void dispatchCodexPrompt({
@@ -479,6 +554,8 @@ export function makeThreadManager(opts: MakeThreadManagerOptions): ThreadManager
           promptId,
           content: input.content,
           ...(dispatchModel ? { model: dispatchModel } : {}),
+          ...(known.reasoningEffort ? { reasoningEffort: known.reasoningEffort } : {}),
+          ...(known.fastMode ? { fastMode: known.fastMode } : {}),
         });
       } else {
         void dispatchAcpPrompt({
@@ -490,6 +567,8 @@ export function makeThreadManager(opts: MakeThreadManagerOptions): ThreadManager
           store: opts.store,
           logger,
           ...(dispatchModel ? { model: dispatchModel } : {}),
+          ...(known.reasoningEffort ? { reasoningEffort: known.reasoningEffort } : {}),
+          ...(known.fastMode ? { fastMode: known.fastMode } : {}),
           promptId,
           content: input.content,
         });

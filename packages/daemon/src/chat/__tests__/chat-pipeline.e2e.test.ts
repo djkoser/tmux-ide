@@ -554,12 +554,15 @@ describe("chat pipeline e2e — per-turn provider routing (Step 3b gate)", () =>
     );
 
     // The daemon spawned the CODEX stub (not the ACP stub) for this
-    // turn and dispatched with the chosen model.
+    // turn and dispatched with the chosen model. The slug landed by
+    // sendUserMessage is the alias-normalised one — the legacy
+    // `gpt-5-codex` selection resolves server-side to the current
+    // canonical `gpt-5.4` (CODEX-FULL #4).
     await waitFor(() => codexStub.sentMessages.length > 0, {
       label: "codex stub received sendUserMessage",
     });
     expect(acpStub.promptRequests.length).toBe(0);
-    expect(codexStub.lastDispatchedModel).toBe("gpt-5-codex");
+    expect(codexStub.lastDispatchedModel).toBe("gpt-5.4");
 
     // The turn completes (stub emits turn/completed in a microtask).
     await waitFor(
@@ -578,5 +581,172 @@ describe("chat pipeline e2e — per-turn provider routing (Step 3b gate)", () =>
 
     void sent;
     await manager.shutdown();
+  });
+});
+
+// ===========================================================================
+// 5. CODEX-FULL — per-turn reasoning effort + fast-mode + slug alias
+// ===========================================================================
+
+describe("chat pipeline e2e — codex per-turn reasoning effort + fast mode (CODEX-FULL gate)", () => {
+  // (a) Contract: the canonical t3 `Array<{id, value}>` shape is
+  //     accepted by ChatSessionSendInputZ.
+  it("contract: ChatSessionSendInputZ accepts providerOptions", () => {
+    const parsed = ChatSessionSendInputZ.safeParse({
+      threadId: "thr-effort",
+      content: [{ type: "text" as const, text: "hi" }],
+      providerOptions: [
+        { id: "reasoningEffort", value: "high" },
+        { id: "fastMode", value: true },
+      ],
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  // (b) Dispatch wire: when the client supplies reasoningEffort +
+  //     fastMode on a Codex turn, the daemon must forward them to
+  //     `sendUserMessage` as `effort` + `serviceTier: "fast"` —
+  //     mirroring t3's `CodexAdapter.ts:1509-1530`.
+  it("forwards reasoningEffort + fastMode to Codex sendUserMessage", async () => {
+    const store = freshStore();
+    const acpStub = new ScriptedAcpClient();
+    const codexStub = new ScriptedCodexClient();
+    const manager = makeStubbedManager(store, acpStub, codexStub);
+    const deps = { store, manager, busEmit: (e: ChatEvent) => broadcastChatEvent(e) };
+
+    const created = await chatThreadCreateHandler(
+      { provider: { kind: "codex", model: "gpt-5.4" }, title: "codex-effort" },
+      deps,
+    );
+    const threadId = created.thread.id;
+
+    await chatSessionSendHandler(
+      {
+        threadId,
+        content: [{ type: "text", text: "think harder" }],
+        providerOptions: [
+          { id: "reasoningEffort", value: "high" },
+          { id: "fastMode", value: true },
+        ],
+      },
+      deps,
+    );
+
+    await waitFor(() => codexStub.sentMessages.length > 0, {
+      label: "codex stub received sendUserMessage",
+    });
+    expect(codexStub.lastDispatchedEffort).toBe("high");
+    expect(codexStub.lastDispatchedServiceTier).toBe("fast");
+
+    await manager.shutdown();
+  });
+
+  // (c) Carry-over: a second send that OMITS providerOptions inherits
+  //     the previous selection from the in-memory map. The daemon
+  //     doesn't re-prompt the user for the same effort every turn.
+  it("carries the last providerOptions forward when the next send omits them", async () => {
+    const store = freshStore();
+    const acpStub = new ScriptedAcpClient();
+    const codexStub = new ScriptedCodexClient();
+    const manager = makeStubbedManager(store, acpStub, codexStub);
+    const deps = { store, manager, busEmit: (e: ChatEvent) => broadcastChatEvent(e) };
+
+    const created = await chatThreadCreateHandler(
+      { provider: { kind: "codex", model: "gpt-5.4" }, title: "codex-carryover" },
+      deps,
+    );
+    const threadId = created.thread.id;
+
+    await chatSessionSendHandler(
+      {
+        threadId,
+        content: [{ type: "text", text: "first turn" }],
+        providerOptions: [{ id: "reasoningEffort", value: "xhigh" }],
+      },
+      deps,
+    );
+    await waitFor(() => codexStub.sentMessages.length >= 1, {
+      label: "codex stub: first sendUserMessage",
+    });
+
+    await chatSessionSendHandler(
+      { threadId, content: [{ type: "text", text: "second turn — no options" }] },
+      deps,
+    );
+    await waitFor(() => codexStub.sentMessages.length >= 2, {
+      label: "codex stub: second sendUserMessage",
+    });
+
+    expect(codexStub.lastDispatchedEffort).toBe("xhigh");
+    // fastMode was never set → stays unset, not silently "true".
+    expect(codexStub.lastDispatchedServiceTier).toBeNull();
+
+    await manager.shutdown();
+  });
+
+  // (d) Slug alias: a stale client (or a CLI default) sends a
+  //     deprecated slug. The daemon normalises to the canonical one
+  //     server-side and dispatches with that — wire stays
+  //     forward-compatible (the request shape is unchanged) but the
+  //     model that lands on `sendUserMessage` is the renamed one.
+  it("aliases a legacy codex slug to the canonical model before dispatch", async () => {
+    const store = freshStore();
+    const acpStub = new ScriptedAcpClient();
+    const codexStub = new ScriptedCodexClient();
+    const manager = makeStubbedManager(store, acpStub, codexStub);
+    const deps = { store, manager, busEmit: (e: ChatEvent) => broadcastChatEvent(e) };
+
+    const created = await chatThreadCreateHandler(
+      { provider: { kind: "codex" }, title: "codex-alias" },
+      deps,
+    );
+    const threadId = created.thread.id;
+
+    await chatSessionSendHandler(
+      // Client picks the legacy slug; daemon should swap it for the
+      // current canonical (`gpt-5-codex` → `gpt-5.4`).
+      { threadId, content: [{ type: "text", text: "alias me" }], model: "gpt-5-codex" },
+      deps,
+    );
+
+    await waitFor(() => codexStub.sentMessages.length > 0, {
+      label: "codex stub received sendUserMessage",
+    });
+    expect(codexStub.lastDispatchedModel).toBe("gpt-5.4");
+
+    // Persistence reflects the normalised slug (lazy setProvider).
+    const persisted = await store.get(threadId);
+    expect(persisted?.provider.model).toBe("gpt-5.4");
+
+    await manager.shutdown();
+  });
+
+  // (e) Capability surface: ProviderModelInfo carries optional
+  //     capabilities — when present, the picker reads it directly.
+  //     We assert the contract here so any drift trips this test.
+  it("contract: ProviderModelInfoZ accepts the capabilities surface", async () => {
+    const { ChatProvidersListResultZ } = await import("@tmux-ide/contracts");
+    const parsed = ChatProvidersListResultZ.safeParse({
+      providers: [
+        {
+          kind: "codex",
+          name: "Codex",
+          description: "Codex app-server proxy",
+          available: true,
+          models: [
+            {
+              slug: "gpt-5.4",
+              name: "GPT-5.4",
+              capabilities: {
+                reasoningEfforts: ["low", "medium", "high", "xhigh"],
+                defaultReasoningEffort: "medium",
+                supportsFastMode: true,
+              },
+            },
+          ],
+        },
+      ],
+    });
+    expect(parsed.success).toBe(true);
   });
 });

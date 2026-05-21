@@ -19,6 +19,7 @@ import {
 import { deriveRuntimeState } from "../lib/runtimeState";
 import { loadModelSelection } from "../lib/modelSelectionStore";
 import { loadActiveProviderKind } from "../lib/activeProviderStore";
+import { loadProviderOptions } from "../lib/providerOptionsStore";
 import { notifyAssistantTurnComplete } from "../lib/chatNotify";
 import { buildPlanImplementationPrompt, proposedPlanTitle } from "../lib/proposedPlan";
 import {
@@ -547,9 +548,18 @@ export function useChatThread(options: Accessor<ChatMountOptions>) {
       const persistedKind = thread()?.provider.kind ?? null;
       const effectiveKind = overrideKind ?? persistedKind;
       const selectedModel = effectiveKind ? loadModelSelection(opts.threadId, effectiveKind) : null;
+      // Per-turn provider options (CODEX-FULL) — Codex reasoning
+      // effort + fast-mode. Read from the per-thread×kind×model
+      // store; daemon falls back to its in-memory carry-over when
+      // we send nothing.
+      const providerOptions =
+        effectiveKind && selectedModel
+          ? loadProviderOptions(opts.threadId, effectiveKind, selectedModel)
+          : [];
       const result = await chatSessionSend(runtime(), opts.threadId, fullContent, {
         ...(selectedModel ? { model: selectedModel } : {}),
         ...(overrideKind ? { provider: { kind: overrideKind } } : {}),
+        ...(providerOptions.length > 0 ? { providerOptions } : {}),
       });
       setPendingPromptId(result.promptId);
       setAttachments([]);
