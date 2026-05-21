@@ -19,12 +19,8 @@ import { createMemo, createResource, For, Show, type JSX } from "solid-js";
 import { A, useNavigate, useParams } from "@solidjs/router";
 import { Effect } from "effect";
 import { Plus } from "lucide-solid";
-import {
-  fetchProjects,
-  fetchSessions,
-  type RegisteredProject,
-  type SessionOverview,
-} from "@/lib/api";
+import { fetchProjects, fetchSessions, type RegisteredProject } from "@/lib/api";
+import type { SessionOverview } from "@tmux-ide/contracts";
 import { projectsBusTick, useProjectsBus } from "@/lib/projectsBus";
 import { recordProjectOpened } from "@/components/projects/ProjectQuickSwitcher";
 
