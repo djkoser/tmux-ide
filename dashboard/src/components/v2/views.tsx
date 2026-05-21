@@ -46,6 +46,7 @@ import { API_BASE } from "@/lib/api";
 import { renderMarkdownHighlighted } from "@/lib/syntax/markdownShiki";
 import { ProblemsTab } from "./ProblemsTab";
 import { totalDiagnosticsCount } from "@/lib/lsp/diagnostics-store";
+import { TabStrip, type TabStripItem } from "@/components/ui/TabStrip";
 import { WidgetHost } from "@tmux-ide/v2-solid-widgets";
 import {
   createMetrics,
@@ -440,37 +441,33 @@ export function BottomPanelView(props: ProjectProps): JSX.Element {
     hideHeartbeats: true,
   }));
 
+  const tabs = createMemo<TabStripItem<Tab>[]>(() => [
+    { id: "terminal", label: "terminal" },
+    {
+      id: "problems",
+      label: "problems",
+      badge:
+        problemCount() > 0 ? (
+          <span
+            data-testid="v2-problems-badge"
+            class="rounded bg-[var(--red,#cc6666)] px-1 text-[9px] font-mono text-[var(--bg)]"
+          >
+            {problemCount()}
+          </span>
+        ) : undefined,
+    },
+    { id: "output", label: "output" },
+  ]);
+
   return (
     <div data-testid="v2-bottom-panel-host" class="flex h-full min-h-0 flex-col overflow-hidden">
-      <div class="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-strong)] px-3 text-[11px] uppercase tracking-wide">
-        {(["terminal", "problems", "output"] as Tab[]).map((t) => {
-          const active = () => tab() === t;
-          return (
-            <button
-              type="button"
-              data-testid={`v2-bottom-tab-${t}`}
-              data-active={active() ? "true" : undefined}
-              onClick={() => setTab(t)}
-              class={
-                "flex items-center gap-1 px-2 py-0.5 transition-colors " +
-                (active()
-                  ? "text-[var(--fg)] border-b border-[var(--accent)]"
-                  : "text-[var(--dim)] hover:text-[var(--fg)]")
-              }
-            >
-              <span>{t}</span>
-              <Show when={t === "problems" && problemCount() > 0}>
-                <span
-                  data-testid="v2-problems-badge"
-                  class="rounded bg-[var(--red,#cc6666)] px-1 text-[9px] font-mono text-[var(--bg)]"
-                >
-                  {problemCount()}
-                </span>
-              </Show>
-            </button>
-          );
-        })}
-      </div>
+      <TabStrip
+        items={tabs()}
+        activeId={tab()}
+        onSelect={setTab}
+        testid="v2-bottom-tab"
+        ariaLabel="Bottom panel sections"
+      />
       <div class="min-h-0 flex-1">
         <Show when={tab() === "terminal"}>
           <Terminal id={`v2-${props.projectName}`} showHeader={false} />

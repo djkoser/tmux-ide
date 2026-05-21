@@ -48,6 +48,7 @@ import {
   type DiffStyle,
 } from "@/components/editor/StickyDiffEditor";
 import { DiffToolbar, LargeDiffGuard, isLargeDiff } from "@/components/diffs/DiffToolbar";
+import { TabStrip } from "@/components/ui/TabStrip";
 
 interface MonacoDiffsViewProps {
   projectName: string;
@@ -370,38 +371,18 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
             </span>
           )}
         </Show>
-        <div
-          role="group"
-          aria-label="diff mode"
-          class="inline-flex overflow-hidden rounded border border-[var(--border)]"
-        >
-          <For
-            each={
-              [
-                ["changes", "Changes"],
-                ["history", "History"],
-                ["branch", `Branch vs ${BRANCH_BASE}`],
-              ] as [DiffMode, string][]
-            }
-          >
-            {([m, lbl]) => (
-              <button
-                type="button"
-                data-testid={`v2-monaco-diffs-mode-${m}`}
-                onClick={() => switchMode(m)}
-                aria-pressed={mode() === m}
-                class={
-                  "h-5 px-2 text-[11px] font-mono " +
-                  (mode() === m
-                    ? "bg-[var(--surface-active)] text-[var(--fg)]"
-                    : "bg-transparent text-[var(--dim)] hover:text-[var(--fg)]")
-                }
-              >
-                {lbl}
-              </button>
-            )}
-          </For>
-        </div>
+        <TabStrip<DiffMode>
+          variant="pill"
+          ariaLabel="diff mode"
+          testid="v2-monaco-diffs-mode"
+          items={[
+            { id: "changes", label: "Changes" },
+            { id: "history", label: "History" },
+            { id: "branch", label: `Branch vs ${BRANCH_BASE}` },
+          ]}
+          activeId={mode()}
+          onSelect={(next) => switchMode(next)}
+        />
         <Show when={mode() === "changes"}>
           <div
             role="group"

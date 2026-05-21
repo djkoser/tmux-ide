@@ -301,18 +301,26 @@ export function InspectorView(props: InspectorViewProps) {
         </div>
       </Show>
 
-      {/* Footer — severity filter chips */}
+      {/* Footer — severity filter strip (inline-styled to mirror the
+          dashboard TabStrip: underline-with-accent variant. Inline styles
+          are kept because v2-solid-widgets can't import dashboard
+          components without a cross-package cycle.) */}
       <footer
         data-testid="inspector-footer"
+        role="tablist"
+        aria-label="Severity filter"
         style={{
           display: "flex",
           "align-items": "center",
-          gap: "4px",
+          gap: "8px",
           "flex-shrink": "0",
-          height: "26px",
-          padding: "0 8px",
+          height: "28px",
+          padding: "0 12px",
           "border-top": "1px solid var(--border)",
           "background-color": "var(--bg-strong, var(--bg))",
+          "font-size": "11px",
+          "text-transform": "uppercase",
+          "letter-spacing": "0.05em",
         }}
       >
         <For each={["all", "errors", "completions"] as const}>
@@ -321,19 +329,27 @@ export function InspectorView(props: InspectorViewProps) {
             return (
               <button
                 type="button"
+                role="tab"
+                aria-selected={active()}
                 data-testid={`inspector-severity-${value}`}
                 data-active={active() ? "true" : "false"}
+                tabIndex={active() ? 0 : -1}
                 onClick={() => setSeverity(value)}
                 style={{
                   background: "transparent",
                   border: "none",
+                  "border-bottom": active() ? "2px solid var(--accent)" : "2px solid transparent",
                   color: active() ? "var(--accent)" : "var(--dim)",
                   cursor: "pointer",
                   "font-family": "inherit",
                   "font-size": "11px",
-                  padding: "0 6px",
-                  height: "20px",
-                  "border-radius": "4px",
+                  "text-transform": "uppercase",
+                  "letter-spacing": "0.05em",
+                  padding: "0 8px",
+                  height: "100%",
+                  "align-self": "stretch",
+                  display: "inline-flex",
+                  "align-items": "center",
                 }}
               >
                 {value}

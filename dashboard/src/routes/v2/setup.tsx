@@ -25,6 +25,7 @@ import {
   type ProjectInspect,
   type ProjectInspectDetected,
 } from "@/lib/api";
+import { TabStrip, type TabStripItem } from "@/components/ui/TabStrip";
 
 type StepId = "detect" | "layout" | "naming" | "review";
 
@@ -339,34 +340,23 @@ interface StepTabsProps {
 }
 
 function StepTabs(props: StepTabsProps) {
+  const items = createMemo<TabStripItem<StepId>[]>(() =>
+    props.steps.map((s, idx) => ({
+      id: s.id,
+      label: s.label,
+      disabled: !(idx <= props.stepIndex || props.canStepDirectly(s.id)),
+    })),
+  );
   return (
-    <div
-      data-testid="setup-step-tabs"
-      class="inline-flex rounded-md border border-[var(--border)] bg-[var(--surface)] p-0.5"
-    >
-      <For each={props.steps}>
-        {(s, i) => {
-          const selected = () => s.id === props.currentStep;
-          const reachable = () => i() <= props.stepIndex || props.canStepDirectly(s.id);
-          return (
-            <button
-              type="button"
-              data-testid={`setup-step-tab-${s.id}`}
-              disabled={!reachable()}
-              data-selected={selected() ? "true" : "false"}
-              onClick={() => reachable() && props.onSelect(s.id)}
-              class={`rounded px-3 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                selected()
-                  ? "bg-[var(--accent)] text-[var(--bg)]"
-                  : "text-[var(--dim)] hover:bg-[var(--surface-hover)] hover:text-[var(--fg)]"
-              }`}
-            >
-              {s.label}
-            </button>
-          );
-        }}
-      </For>
-    </div>
+    <TabStrip<StepId>
+      variant="pill"
+      testid="setup-step-tab"
+      containerTestid="setup-step-tabs"
+      ariaLabel="Setup wizard steps"
+      items={items()}
+      activeId={props.currentStep}
+      onSelect={(id) => props.onSelect(id)}
+    />
   );
 }
 
