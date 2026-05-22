@@ -14,7 +14,7 @@
  *     `dispatchAction`) run via `Effect.runPromise`.
  */
 
-import { createMemo, For, Show, type JSX } from "solid-js";
+import { createMemo, createSignal, For, Show, type JSX } from "solid-js";
 import { createStore } from "solid-js/store";
 import { A, useNavigate } from "@solidjs/router";
 import { Effect } from "effect";
@@ -26,6 +26,7 @@ import {
   type ProjectInspectDetected,
 } from "@/lib/api";
 import { TabStrip, type TabStripItem } from "@/components/ui/TabStrip";
+import { DirectoryPicker } from "@/components/DirectoryPicker";
 
 type StepId = "detect" | "layout" | "naming" | "review";
 
@@ -437,18 +438,41 @@ interface DetectPanelProps {
 }
 
 function DetectPanel(props: DetectPanelProps) {
+  const [pickerOpen, setPickerOpen] = createSignal(false);
   return (
     <SetupCard title="Detect project">
       <p class="mb-3 text-xs text-[var(--dim)]">
         Point the wizard at a directory. The daemon inspects it and reports the package manager,
         frameworks, and detected dev/test commands.
       </p>
-      <SetupInput
-        label="Directory"
-        placeholder="/Users/me/Developer/my-project"
-        value={props.dir}
-        onInput={props.onDir}
-        data-testid="setup-detect-dir"
+      <label class="block">
+        <span class="mb-1 block text-sm text-[var(--dim)]">Directory</span>
+        <div class="flex items-stretch gap-2">
+          <input
+            type="text"
+            spellcheck={false}
+            autocomplete="off"
+            value={props.dir}
+            placeholder="/Users/me/Developer/my-project"
+            data-testid="setup-detect-dir"
+            onInput={(e) => props.onDir(e.currentTarget.value)}
+            class="block w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--fg)] placeholder:text-[var(--dimmer)] focus:border-[var(--accent)] focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            data-testid="setup-detect-browse"
+            class="shrink-0 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-xs text-[var(--fg)] hover:bg-[var(--surface-hover)]"
+          >
+            Browse…
+          </button>
+        </div>
+      </label>
+      <DirectoryPicker
+        open={pickerOpen()}
+        initialPath={props.dir}
+        onClose={() => setPickerOpen(false)}
+        onSelect={(path) => props.onDir(path)}
       />
       <div class="mt-3 flex items-center justify-between gap-3">
         <span class="text-sm text-[var(--dim)]">{props.inspectLoading ? "Inspecting..." : ""}</span>
