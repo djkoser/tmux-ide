@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { CopyButton } from "./copy-button";
 import { AsciiLogo } from "./ascii-logo";
 import { MockIde } from "./MockIde";
+import { DotAvatar } from "@/components/dot-avatar";
 import TerminalDemo from "@/components/terminal-demo";
 
 export const metadata: Metadata = {
@@ -169,8 +170,22 @@ export default async function HomePage() {
   const stars = await fetchStarCount();
   return (
     <div className="font-mono">
-      {/* HERO ROW 1 — full-width ASCII logo + subtitle */}
-      <section className="max-w-screen-xl mx-auto pt-16 md:pt-28 px-6 text-center">
+      {/* HERO ROW 1 — full-width ASCII logo + subtitle + floating agent ghosts */}
+      <section className="relative max-w-screen-xl mx-auto pt-16 md:pt-28 px-6 text-center">
+        {/* Floating agent ghosts framing the logo — same visual language
+            as the Prototyper canvas (orange = claude code, purple = codex). */}
+        <div className="pointer-events-none absolute left-4 top-12 hidden md:flex items-center gap-1.5">
+          <DotAvatar theme="ember" face="happy" size={44} glow title="claude code" />
+          <span className="rounded-full bg-orange-500 px-2 py-0.5 text-[10px] text-white">
+            ● claude code
+          </span>
+        </div>
+        <div className="pointer-events-none absolute right-4 top-20 hidden md:flex items-center gap-1.5">
+          <span className="rounded-full bg-purple-500 px-2 py-0.5 text-[10px] text-white">
+            ● codex
+          </span>
+          <DotAvatar theme="phantom" face="sparkle" size={44} glow title="codex" />
+        </div>
         <AsciiLogo />
         <div className="mt-4 flex items-center justify-center gap-3">
           <h1 className="font-sans text-3xl md:text-4xl lg:text-5xl leading-[1.1] tracking-tight text-fd-foreground">

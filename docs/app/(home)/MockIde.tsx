@@ -249,13 +249,13 @@ export function MockIde() {
           dashboard surfaces these through chat-thread provider chips. */}
       <div className="pointer-events-none absolute -top-4 -right-2 z-10 hidden sm:flex items-center gap-1.5">
         <DotAvatar theme="ember" face="happy" size={36} glow title="claude code" />
-        <span className="rounded-full bg-orange-500 px-2 py-0.5 text-[9px] uppercase tracking-wider text-white">
+        <span className="rounded-full bg-orange-500 px-2 py-0.5 text-[10px] text-white">
           ● claude code
         </span>
       </div>
       <div className="pointer-events-none absolute -bottom-3 -left-2 z-10 hidden sm:flex items-center gap-1.5">
         <DotAvatar theme="phantom" face="sparkle" size={36} glow title="codex" />
-        <span className="rounded-full bg-purple-500 px-2 py-0.5 text-[9px] uppercase tracking-wider text-white">
+        <span className="rounded-full bg-purple-500 px-2 py-0.5 text-[10px] text-white">
           ● codex
         </span>
       </div>
