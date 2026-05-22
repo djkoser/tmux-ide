@@ -190,29 +190,85 @@ export default function ProjectV2Route(): JSX.Element {
 
   return (
     <div class="flex h-screen w-screen min-h-0 min-w-0 flex-col bg-[var(--bg)] text-[var(--fg)]">
-      {/* Auto-launch overlay — covers the shell while we boot the tmux
-          session. Skipping this means every project-scoped fetch 404s
-          for the first few hundred ms and the console floods with errors. */}
-      <Show when={sessionState() !== "ready"}>
-        <div class="absolute inset-0 z-50 flex items-center justify-center bg-[var(--bg)]/95">
-          <div class="flex flex-col items-center gap-3 text-center">
-            <div class="h-6 w-6 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--accent)]" />
-            <span class="text-sm text-[var(--dim)]">
-              {sessionState() === "checking"
-                ? `Opening ${projectName()}…`
-                : `Launching ${projectName()}…`}
-            </span>
-          </div>
-        </div>
+      {/* Until the tmux session is up, render ONLY a centered status
+          screen — not the IDE shell. The shell components fire their
+          data fetches on mount and would flood the console with 404s
+          ("Session not found") for the few hundred ms before launch
+          completes. */}
+      <Show
+        when={sessionState() === "ready" && !launchError()}
+        fallback={
+          <SessionBootScreen
+            state={sessionState()}
+            error={launchError()}
+            projectName={projectName()}
+            onRetry={() => {
+              setLaunchError(null);
+              setSessionState("checking");
+              void ensureSessionRunning(projectName());
+            }}
+          />
+        }
+      >
+        <ProjectShell
+          projectName={projectName()}
+          view={view()}
+          setView={setView}
+          onActivityBarView={onActivityBarView}
+        />
       </Show>
-      <Show when={launchError()}>
-        <div
-          role="alert"
-          class="border-b border-[var(--red)]/40 bg-[var(--red)]/10 px-3 py-1.5 text-xs text-[var(--red-foreground,var(--red))]"
+    </div>
+  );
+}
+
+function SessionBootScreen(props: {
+  state: "checking" | "launching" | "ready";
+  error: string | null;
+  projectName: string;
+  onRetry: () => void;
+}): JSX.Element {
+  return (
+    <div class="flex h-full w-full items-center justify-center bg-[var(--bg)]">
+      <div class="flex max-w-md flex-col items-center gap-4 text-center">
+        <Show
+          when={props.error}
+          fallback={
+            <>
+              <div class="h-6 w-6 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--accent)]" />
+              <span class="text-sm text-[var(--dim)]">
+                {props.state === "checking"
+                  ? `Opening ${props.projectName}…`
+                  : `Launching ${props.projectName}…`}
+              </span>
+            </>
+          }
         >
-          Launch failed: {launchError()}
-        </div>
-      </Show>
+          <span class="text-md text-[var(--fg)]">Couldn't launch {props.projectName}</span>
+          <span class="text-sm text-[var(--red-foreground,var(--red))]">{props.error}</span>
+          <button
+            type="button"
+            onClick={props.onRetry}
+            class="mt-2 rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--bg)] hover:opacity-90"
+          >
+            Retry launch
+          </button>
+        </Show>
+      </div>
+    </div>
+  );
+}
+
+function ProjectShell(props: {
+  projectName: string;
+  view: ViewId;
+  setView: (v: ViewId) => void;
+  onActivityBarView: (id: ActivityBarViewId) => void;
+}): JSX.Element {
+  const projectName = () => props.projectName;
+  const view = () => props.view;
+  const setView = props.setView;
+  return (
+    <>
       {/* Document-level right-click handler for [data-dir-path]
           rows in the Files surface. Always mounted so the menu
           works from any view — closes itself on switch. */}
@@ -221,7 +277,7 @@ export default function ProjectV2Route(): JSX.Element {
       <TopBar projectName={projectName()} />
       <div class="flex flex-1 min-h-0">
         <ProjectRail activeName={projectName()} />
-        <V2ActivityBar view={view()} onView={onActivityBarView} />
+        <V2ActivityBar view={view()} onView={props.onActivityBarView} />
 
         <div
           class="grid flex-1 min-w-0"
@@ -268,7 +324,7 @@ export default function ProjectV2Route(): JSX.Element {
       </div>
 
       <StatusBar projectName={projectName()} running={false} agentCount={0} />
-    </div>
+    </>
   );
 }
 
