@@ -1,0 +1,110 @@
+---
+title: Web Dashboard
+description: The web-based IDE that ships with tmux-ide 2.5+ — open localhost:6060 to use it
+---
+
+# Web Dashboard
+
+The dashboard is a browser-based IDE served by the tmux-ide daemon. It runs locally on `localhost:6060` and gives you a file editor, multi-thread chat, diff viewer, terminal, plans editor, search, and LSP — all wired to the same project state your CLI commands operate on.
+
+## Open the dashboard
+
+```bash
+# In any project directory:
+tmux-ide              # launches the tmux session + daemon; prints the URL
+tmux-ide dashboard    # opens the browser at the daemon's URL
+```
+
+Flags for `tmux-ide dashboard`:
+
+- `--no-open` — print the URL without opening a browser
+- `--json` — emit `{"url", "port", "pid"}` for scripts
+
+The dashboard is also reachable at `http://localhost:6060` directly if you prefer.
+
+## Layout
+
+The route is `/project/:name`. Five regions:
+
+```
+┌──┬───┬──────────┬───────────────────┬─────┐
+│PR│ AB│ Sidebar  │ Editor / View     │ Insp│
+│  │   │ (240px)  │                   │(260)│
+├──┴───┴──────────┴───────────────────┴─────┤
+│ Bottom Panel — terminal / problems / output│
+├───────────────────────────────────────────┤
+│ Status Bar                                │
+└───────────────────────────────────────────┘
+```
+
+- **Project Rail (PR)** — leftmost. One row per registered project; click to switch.
+- **Activity Bar (AB)** — view picker: files / search / diffs / plans / tasks / skills / notes / mission / chat / terminal / widgets.
+- **Sidebar** — context for the active view (file tree, plan list, etc.).
+- **Editor** — the active view's main surface.
+- **Inspector** — collapsible right rail with the event timeline (Cmd+I to toggle).
+- **Bottom Panel** — tabs for terminal, problems, output.
+
+## Keyboard shortcuts
+
+- `Cmd+K` — command palette: jump to any project, thread, terminal, or command.
+- `Cmd+/` — keyboard shortcut cheat sheet (every registered keybind in the app).
+- `Cmd+B` / `Cmd+Alt+B` / `Cmd+J` — toggle left sidebar / right inspector / bottom panel.
+- `Cmd+P` — quick switcher: project picker.
+- `Cmd+Shift+F` — workspace search.
+- `Cmd+Shift+C/T/E` — focus chat / terminal / files view.
+- `Cmd+E` (in plans view) — enter plan edit mode.
+- `Cmd+S` (in plan edit) — save plan body.
+- `Esc` (in plan edit) — cancel without saving.
+
+## Views
+
+### Files
+
+VS Code-style file tree + multi-tab editor with Shiki syntax highlighting. Right-click for context menu (open in folder, copy path, search in folder). LSP-powered hover, go-to-definition, rename across TypeScript / Python / Rust / Go. Autosave with crash recovery.
+
+### Chat
+
+Multichat threads per project, both Claude Code and Codex providers, per-turn model selection (with reasoning-effort + fast-mode for Codex). Inline image preview, plan follow-up cards, ToolCallCard expansion, edit-from-message. Threads stay isolated per workspace.
+
+### Diffs
+
+Working / staged / branch-vs-main views with commit history. Per-hunk apply. Inline diff for selected file. Multi-source groups (working / staged / git / PR).
+
+### Plans
+
+Shiki-rendered markdown for files in `plans/`. Inline editing: Edit button or `Cmd+E` enters edit mode (raw markdown textarea); `Cmd+S` saves; `Esc` cancels with dirty-check.
+
+### Search
+
+Ripgrep-backed workspace search. Glob includes/excludes, regex toggle, replace, F3 to navigate matches. Click a match to open the file at that line.
+
+### Terminal
+
+Vertical-rail tab strip. Each new terminal opens with the project's cwd. Tabs are kept-alive on switch (no remount latency). `Cmd+T` opens a new terminal; `Cmd+W` closes the active one; `Cmd+1..9` jumps to a tab.
+
+### Tasks / Plans / Skills / Mission / Notes
+
+Mission-orchestration surfaces: view tasks, milestones, validation status, plans, skill definitions. Same data the CLI's `tmux-ide task / mission / plan / skill` commands operate on.
+
+### Bottom Panel
+
+- **terminal** — quick terminal scoped to the project cwd
+- **problems** — LSP diagnostics across the workspace
+- **output** — daemon event log (project.launch, chat.thread.created, task completion, etc.)
+
+## Project switching
+
+The project rail on the left lists every registered project. Click to switch — the route changes to `/project/:name`. If the project's tmux session isn't running, the route auto-launches it on mount (the IDE shell shows a centered "Launching…" spinner during the boot, then renders once the session is up).
+
+To add a project: open the dashboard at `localhost:6060/setup` or click "Add project" in the activity bar. The wizard auto-detects the package manager, frameworks, and recommended dev/test commands.
+
+## Settings
+
+`localhost:6060/settings` — terminal font, theme, keybind customization, provider configuration.
+
+## See also
+
+- [Getting Started](/docs/getting-started) — install + first project
+- [Commands](/docs/commands) — every CLI subcommand including `tmux-ide dashboard`
+- [Configuration](/docs/configuration) — `ide.yml` reference
+- [What's New in 2.5](/docs/release-2-5-0) — feature list
