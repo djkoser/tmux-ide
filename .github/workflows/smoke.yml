@@ -1,11 +1,10 @@
 name: Smoke
 
+# Smoke spec targets the old /v2/* routes + React testids that were
+# removed in the G16 Solid cutover. Disabled until the spec is ported
+# to the new Solid surface; trigger manually from the Actions tab.
 on:
-  push:
-    branches:
-      - main
-      - master
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   v2-smoke:
