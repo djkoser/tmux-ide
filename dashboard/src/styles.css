@@ -203,6 +203,33 @@
      against the same stack consumers see via `var(--font-sans)`. */
   --ease-out-fluid: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Design tokens — DUPLICATED here from @theme inline.
+   *
+   * Why: Tailwind v4 tree-shakes `@theme inline` tokens and only emits a
+   * `--token: value` declaration when the matching utility class (e.g.
+   * `text-xs`, `p-3`) is actually used in the source. Inline `var(--token)`
+   * references inside JSX style strings are invisible to Tailwind's scanner,
+   * so the variables silently disappear from the compiled CSS.
+   *
+   * Emitting them here in a regular `:root` block guarantees every consumer
+   * can resolve `var(--space-N)` / `var(--text-N)` / `var(--chrome-h)`
+   * regardless of which utilities Tailwind decides to keep. */
+  --text-xs: 10px;
+  --text-sm: 11px;
+  --text-base: 12px;
+  --text-md: 13px;
+  --text-lg: 14px;
+  --text-xl: 16px;
+  --text-2xl: 18px;
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --chrome-h: 28px;
 }
 
 /* IDE-shell scroll containment: the root grid sizes to 100vh; inner
