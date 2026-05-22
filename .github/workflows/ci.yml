@@ -43,12 +43,11 @@ jobs:
       - name: Build
         run: pnpm build
 
-      # Tests require Bun runtime; exclude integration tests (need tmux)
+      # test:unit is scoped to src/cli.test.ts only (integration.test.ts
+      # needs a real tmux session and is excluded by path).
       - name: Run test suite
         if: matrix.node >= 22
-        run: |
-          mv src/integration.test.ts src/integration.test.ts.skip 2>/dev/null || true
-          pnpm test:unit
+        run: pnpm test:unit
 
       - name: Validate package contents
         run: pnpm pack:check

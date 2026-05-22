@@ -94,7 +94,7 @@ afterAll(async () => {
   restoreExec();
 });
 
-afterEach(() => {
+afterEach(async () => {
   for (const sock of openSockets.splice(0)) {
     try {
       sock.close();
@@ -103,7 +103,21 @@ afterEach(() => {
     }
   }
   for (const dir of tempStoreDirs.splice(0)) {
-    rmSync(dir, { recursive: true, force: true });
+    // better-sqlite3 occasionally still holds a flush in flight when the
+    // ws teardown above resolves; the resulting ENOTEMPTY shows up only
+    // on slower CI runners. Retry a few times before failing the test.
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        rmSync(dir, { recursive: true, force: true });
+        lastErr = undefined;
+        break;
+      } catch (err) {
+        lastErr = err;
+        await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+      }
+    }
+    if (lastErr) throw lastErr;
   }
 });
 
