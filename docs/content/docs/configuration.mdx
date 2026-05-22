@@ -291,11 +291,11 @@ For each binary it finds, the daemon records the version and queries the live mo
 
 Every chat turn carries its own provider/model selection. The dashboard composer surfaces a picker; under the hood it sets these fields on `chat.session.send`:
 
-| Field             | Type                  | Description                                                                       |
-| ----------------- | --------------------- | --------------------------------------------------------------------------------- |
-| `provider.kind`   | `"claude-code"` / `"codex"` | Which driver dispatches this turn. The thread's stored provider updates lazily.   |
-| `model`           | string                | Provider model slug (e.g. `claude-sonnet-4-5`, `gpt-5-codex`).                    |
-| `providerOptions` | `Array<{id, value}>`  | Per-turn knobs. Currently `reasoningEffort` (string) and `fastMode` (boolean).    |
+| Field             | Type                        | Description                                                                     |
+| ----------------- | --------------------------- | ------------------------------------------------------------------------------- |
+| `provider.kind`   | `"claude-code"` / `"codex"` | Which driver dispatches this turn. The thread's stored provider updates lazily. |
+| `model`           | string                      | Provider model slug (e.g. `claude-sonnet-4-5`, `gpt-5-codex`).                  |
+| `providerOptions` | `Array<{id, value}>`        | Per-turn knobs. Currently `reasoningEffort` (string) and `fastMode` (boolean).  |
 
 Switching model or provider mid-thread takes effect on the next turn — no session teardown required.
 
@@ -303,10 +303,10 @@ Switching model or provider mid-thread takes effect on the next turn — no sess
 
 When the active model advertises Codex capabilities, the picker exposes two extra controls:
 
-| Option            | Values                                        | Effect                                                              |
-| ----------------- | --------------------------------------------- | ------------------------------------------------------------------- |
-| `reasoningEffort` | `minimal`, `low`, `medium`, `high`, `xhigh`   | How much hidden reasoning Codex burns before responding.            |
-| `fastMode`        | boolean                                       | Forwarded as `serviceTier: "fast"` — trades depth for latency.      |
+| Option            | Values                                      | Effect                                                         |
+| ----------------- | ------------------------------------------- | -------------------------------------------------------------- |
+| `reasoningEffort` | `minimal`, `low`, `medium`, `high`, `xhigh` | How much hidden reasoning Codex burns before responding.       |
+| `fastMode`        | boolean                                     | Forwarded as `serviceTier: "fast"` — trades depth for latency. |
 
 The daemon also recognizes shorthand **slug aliases** in the model list (e.g. `gpt-5-codex-high` resolves to `gpt-5-codex` with `reasoningEffort: high`) so the picker can present pre-configured presets alongside the base models.
 
