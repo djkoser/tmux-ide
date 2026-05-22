@@ -390,11 +390,11 @@ This walkthrough takes you from an empty repo to a merged pull request for a JWT
 
 The mission has three milestones:
 
-| Milestone | Theme           | Tasks                                                      |
-| --------- | --------------- | ---------------------------------------------------------- |
-| `M1`      | Foundation      | DB schema, JWT helpers, env wiring                         |
-| `M2`      | Endpoints       | `/login`, `/refresh`, route-protection middleware          |
-| `M3`      | Tests           | Unit coverage + integration login-refresh-logout flow      |
+| Milestone | Theme      | Tasks                                                 |
+| --------- | ---------- | ----------------------------------------------------- |
+| `M1`      | Foundation | DB schema, JWT helpers, env wiring                    |
+| `M2`      | Endpoints  | `/login`, `/refresh`, route-protection middleware     |
+| `M3`      | Tests      | Unit coverage + integration login-refresh-logout flow |
 
 Once the lead types `tmux-ide mission plan-complete`, the orchestrator does the rest: dispatch, retry-with-backoff, validation, auto-remediation, milestone advancement, and the final pull request.
 
@@ -826,4 +826,4 @@ Use it for:
 
 Callout: streams are virtualized (`@tanstack/solid-virtual`) so long-running missions with thousands of messages stay smooth. Use Cmd+P to quickly jump between panes without leaving the chat surface.
 
-Together, Mission tells you *where the mission is*, Tasks tells you *what each agent is doing and why*, and Chat tells you *what they are actually saying*. The CLI (`tmux-ide orch`, `tmux-ide mission status`, `tmux-ide validate report`) gives you the same data in any shell that has the project cwd, including the Shell pane inside the session itself.
+Together, Mission tells you _where the mission is_, Tasks tells you _what each agent is doing and why_, and Chat tells you _what they are actually saying_. The CLI (`tmux-ide orch`, `tmux-ide mission status`, `tmux-ide validate report`) gives you the same data in any shell that has the project cwd, including the Shell pane inside the session itself.

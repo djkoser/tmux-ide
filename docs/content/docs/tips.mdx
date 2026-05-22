@@ -11,7 +11,7 @@ Missions are how tmux-ide turns "I want to ship feature X" into a sequence the o
 
 **Pick the right scope.** A good mission has **1-3 milestones**, each with **2-5 goals**, each with **3-8 tasks**. Anything bigger and you'll spend more time grooming the queue than shipping; anything smaller and you might as well just send the lead a prompt. If you find yourself writing milestone M7, that's a signal you're describing the engineering process instead of the deliverable — break it into a second mission instead.
 
-**Write the mission as an outcome, not a checklist.** "Add JWT auth with refresh tokens, mounted into the existing Hono app, plus migration of the three existing endpoints" is a mission. "Step 1: install jose. Step 2: write middleware" is a Jira ticket — and worse, it locks the agent into an approach you haven't validated. Put the *why* and the *acceptance criteria* in the description so the orchestrator can build a rich prompt:
+**Write the mission as an outcome, not a checklist.** "Add JWT auth with refresh tokens, mounted into the existing Hono app, plus migration of the three existing endpoints" is a mission. "Step 1: install jose. Step 2: write middleware" is a Jira ticket — and worse, it locks the agent into an approach you haven't validated. Put the _why_ and the _acceptance criteria_ in the description so the orchestrator can build a rich prompt:
 
 ```bash
 tmux-ide mission set "JWT migration" -d "Replace session cookies with JWT + refresh. \
@@ -39,9 +39,9 @@ Skills live in `.tmux-ide/skills/*.md` and are injected into the dispatch prompt
 
 **Reuse before you customize.** If your project is "yet another Next.js app," the bundled `frontend.md` covers 90% of what you'd write by hand. Only write a custom skill when you can name three specific patterns you'd put in it. "I want a skill" is not a reason; "Every agent forgets we use `effect/Schema` for IO" is.
 
-**Keep skill files under 200 lines.** The bundled skills are 42-78 lines each, and that's not by accident. The skill content is prepended to *every* dispatched prompt for *every* matching pane — every token in a skill file is a token you pay for on every task. If your skill is over 200 lines, you're paying agent context for something that probably belongs in `.tmux-ide/library/architecture.md` (loaded once per mission, not per task).
+**Keep skill files under 200 lines.** The bundled skills are 42-78 lines each, and that's not by accident. The skill content is prepended to _every_ dispatched prompt for _every_ matching pane — every token in a skill file is a token you pay for on every task. If your skill is over 200 lines, you're paying agent context for something that probably belongs in `.tmux-ide/library/architecture.md` (loaded once per mission, not per task).
 
-**Compose with the library, don't duplicate.** The pattern that works: skill files contain *role-specific* guidance ("you are a reviewer, your job is X"), and the library contains *project-wide* facts ("we use Prisma with these conventions"). When a `role: validator` pane dispatches, it gets `reviewer.md` + `architecture.md` + `AGENTS.md` — three small files composing into a rich prompt, instead of one 500-line skill file repeating context everyone needs.
+**Compose with the library, don't duplicate.** The pattern that works: skill files contain _role-specific_ guidance ("you are a reviewer, your job is X"), and the library contains _project-wide_ facts ("we use Prisma with these conventions"). When a `role: validator` pane dispatches, it gets `reviewer.md` + `architecture.md` + `AGENTS.md` — three small files composing into a rich prompt, instead of one 500-line skill file repeating context everyone needs.
 
 ```bash
 tmux-ide skill list --json          # see what's already loaded
@@ -57,7 +57,7 @@ The validation contract at `.tasks/validation-contract.md` is the only thing sta
 
 **Pair every task with an assertion claim.** Use `--fulfills VAL-003` when creating tasks. The coverage invariant (`tmux-ide validate coverage --json`) catches "task with no validation claim" before the orchestrator dispatches it — but only if you actually set up the contract first. Run `tmux-ide validate coverage` after creating tasks for a new milestone; orphan tasks are a red flag that you skipped writing the assertion they were supposed to satisfy.
 
-**Update assertions as you ship.** The validator pane updates state automatically when it runs, but if you're driving validation manually, `tmux-ide validate assert VAL-001 --status passing --evidence "..."` keeps the milestone-gating logic honest. In `dispatch_mode: missions`, M2 tasks don't dispatch until M1 is `done` *and* its assertions pass — a stale `pending` assertion will silently block the entire next milestone.
+**Update assertions as you ship.** The validator pane updates state automatically when it runs, but if you're driving validation manually, `tmux-ide validate assert VAL-001 --status passing --evidence "..."` keeps the milestone-gating logic honest. In `dispatch_mode: missions`, M2 tasks don't dispatch until M1 is `done` _and_ its assertions pass — a stale `pending` assertion will silently block the entire next milestone.
 
 ## Working alongside the agents
 

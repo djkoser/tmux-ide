@@ -11,6 +11,7 @@
  */
 
 import { useState, type ReactNode } from "react";
+import { DotAvatar } from "../../components/dot-avatar";
 
 type ViewId = "files" | "chat" | "diffs" | "plans";
 
@@ -241,7 +242,24 @@ export function MockIde() {
   const project = PROJECTS.find((p) => p.id === activeProject) ?? PROJECTS[0];
 
   return (
-    <div className="border border-fd-border overflow-hidden bg-fd-background font-mono text-[12px] text-fd-foreground">
+    <div className="relative border border-fd-border bg-fd-background font-mono text-[12px] text-fd-foreground">
+      {/* Floating agent ghosts — mirrors the Prototyper "agents on the
+          canvas" visual, where each ghost is a live agent paired to the
+          surface it's working on. Pure decoration here; the real
+          dashboard surfaces these through chat-thread provider chips. */}
+      <div className="pointer-events-none absolute -top-4 -right-2 z-10 hidden sm:flex items-center gap-1.5">
+        <DotAvatar theme="ember" face="happy" size={36} glow title="claude code" />
+        <span className="rounded-full bg-orange-500 px-2 py-0.5 text-[9px] uppercase tracking-wider text-white">
+          ● claude code
+        </span>
+      </div>
+      <div className="pointer-events-none absolute -bottom-3 -left-2 z-10 hidden sm:flex items-center gap-1.5">
+        <DotAvatar theme="phantom" face="sparkle" size={36} glow title="codex" />
+        <span className="rounded-full bg-purple-500 px-2 py-0.5 text-[9px] uppercase tracking-wider text-white">
+          ● codex
+        </span>
+      </div>
+
       {/* Browser chrome */}
       <div className="flex items-center gap-2 border-b border-fd-border bg-fd-muted/30 px-3 py-1.5">
         <div className="flex gap-1.5">
