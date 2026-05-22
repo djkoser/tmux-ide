@@ -26,8 +26,9 @@
  *     the React `useViewParam.ts`).
  */
 
-import { onCleanup, onMount, Show, type JSX } from "solid-js";
+import { createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { useParams } from "@solidjs/router";
+import { API_BASE } from "@/lib/api";
 import { V2ActivityBar, type ActivityBarViewId } from "@/components/ActivityBar";
 import { ProjectRail } from "@/components/ProjectRail";
 import { StatusBar } from "@/components/StatusBar";
@@ -80,9 +81,58 @@ export default function ProjectV2Route(): JSX.Element {
 
   useChromeShortcuts();
 
+  // Session bootstrap. Three states:
+  //   "checking" — fetching /api/sessions on mount (very brief)
+  //   "launching" — session missing; project.launch dispatched, waiting
+  //   "ready"     — session running OR launch errored (UI renders + may
+  //                 show 404s; better than trapping the user in a spinner)
+  // The IDE shell only mounts in "ready". Otherwise every project-scoped
+  // /api/project/:name/* endpoint 404s and the console floods with errors
+  // before the session is up.
+  type SessionState = "checking" | "launching" | "ready";
+  const [sessionState, setSessionState] = createSignal<SessionState>("checking");
+  const [launchError, setLaunchError] = createSignal<string | null>(null);
+
+  async function ensureSessionRunning(name: string): Promise<void> {
+    try {
+      const res = await fetch(`${API_BASE}/api/sessions`, { cache: "no-store" });
+      const body = (await res.json()) as { sessions?: Array<{ name: string }> };
+      const hasSession = body.sessions?.some((s) => s.name === name);
+      if (hasSession) {
+        setSessionState("ready");
+        return;
+      }
+    } catch {
+      // Fall through to launch attempt — if /api/sessions is down, the
+      // launch dispatch will surface the real error.
+    }
+    setSessionState("launching");
+    try {
+      const res = await fetch(`${API_BASE}/api/v2/action/${encodeURIComponent("project.launch")}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const body = (await res.json()) as {
+        ok: boolean;
+        error?: { message?: string };
+      };
+      if (!body.ok) {
+        setLaunchError(body.error?.message ?? `Failed to launch "${name}"`);
+      }
+    } catch (err) {
+      setLaunchError(err instanceof Error ? err.message : String(err));
+    } finally {
+      // Always advance to "ready" — even on error we want the user to see
+      // the shell + the error banner; trapping them in a spinner is worse.
+      setSessionState("ready");
+    }
+  }
+
   onMount(() => {
     recordProjectOpened(projectName());
     setCurrentProjectName(projectName());
+    void ensureSessionRunning(projectName());
     onCleanup(() => setCurrentProjectName(null));
   });
 
@@ -140,6 +190,29 @@ export default function ProjectV2Route(): JSX.Element {
 
   return (
     <div class="flex h-screen w-screen min-h-0 min-w-0 flex-col bg-[var(--bg)] text-[var(--fg)]">
+      {/* Auto-launch overlay — covers the shell while we boot the tmux
+          session. Skipping this means every project-scoped fetch 404s
+          for the first few hundred ms and the console floods with errors. */}
+      <Show when={sessionState() !== "ready"}>
+        <div class="absolute inset-0 z-50 flex items-center justify-center bg-[var(--bg)]/95">
+          <div class="flex flex-col items-center gap-3 text-center">
+            <div class="h-6 w-6 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--accent)]" />
+            <span class="text-sm text-[var(--dim)]">
+              {sessionState() === "checking"
+                ? `Opening ${projectName()}…`
+                : `Launching ${projectName()}…`}
+            </span>
+          </div>
+        </div>
+      </Show>
+      <Show when={launchError()}>
+        <div
+          role="alert"
+          class="border-b border-[var(--red)]/40 bg-[var(--red)]/10 px-3 py-1.5 text-xs text-[var(--red-foreground,var(--red))]"
+        >
+          Launch failed: {launchError()}
+        </div>
+      </Show>
       {/* Document-level right-click handler for [data-dir-path]
           rows in the Files surface. Always mounted so the menu
           works from any view — closes itself on switch. */}
