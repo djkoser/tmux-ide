@@ -12,10 +12,29 @@ import { launch as launchDefault } from "../../../launch.ts";
 import { ActionError } from "../errors.ts";
 import { type ActionInput, type ActionResult } from "../contract.ts";
 import { resolveProject, type ProjectResolverDeps } from "./_resolve-project.ts";
+import { getDefaultWorkspaceRegistry } from "../../../lib/workspace-registry.ts";
 
 export interface ProjectLaunchDeps extends ProjectResolverDeps {
   hasSession?: (session: string) => boolean;
   launch?: (dir: string, options: { json: boolean; attach: boolean }) => Promise<void>;
+}
+
+/**
+ * Ensure the workspace registry knows about this project. The project
+ * registry (`registerProject`) only updates the project-list — but
+ * `discoverSessions` / `/api/project/:name` consult the WORKSPACE registry
+ * before returning anything. Without this sync, every dashboard fetch
+ * 404s for projects that weren't passed as the daemon's primary sessionName.
+ */
+function ensureWorkspaceRegistered(name: string, sessionName: string, dir: string): void {
+  const reg = getDefaultWorkspaceRegistry();
+  if (reg.has(name)) return;
+  try {
+    reg.add({ name, sessionName, projectDir: dir });
+  } catch {
+    // ALREADY_EXISTS or persistence error — non-fatal; the next discover
+    // pass will pick it up if persistence eventually succeeds.
+  }
 }
 
 export async function projectLaunchHandler(
@@ -26,6 +45,10 @@ export async function projectLaunchHandler(
   const hasSession = deps.hasSession ?? hasSessionDefault;
 
   if (hasSession(project.sessionName)) {
+    // Session already running — but the workspace registry may still be
+    // stale (e.g. tmux session created via curl, or daemon restarted).
+    // Sync before returning so /api/project/:name resolves.
+    ensureWorkspaceRegistered(project.name, project.sessionName, project.dir);
     return { sessionName: project.sessionName, started: false };
   }
 
@@ -41,5 +64,7 @@ export async function projectLaunchHandler(
     });
   }
 
+  // Freshly launched — workspace registry definitely needs the entry.
+  ensureWorkspaceRegistered(project.name, project.sessionName, project.dir);
   return { sessionName: project.sessionName, started: true };
 }
