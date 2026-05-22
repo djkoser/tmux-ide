@@ -71,8 +71,8 @@ async function postAction<T>(name: string, input: unknown): Promise<T> {
 async function resolveProjectDir(projectName: string): Promise<string | null> {
   // The session/registry endpoint surfaces the workspace's absolute
   // dir alongside its name. We use it to scope chat threads to a
-  // single project — without this, `chat.thread.list({})` returned
-  // every thread across every project and the dashboard mounted the
+  // single project — without this, `chat.thread.list({})` returns
+  // every thread across every project and the dashboard mounts the
   // first one regardless of which project was open.
   try {
     const res = await fetch(`${API_BASE}/api/sessions`, { cache: "no-store" });
@@ -82,12 +82,18 @@ async function resolveProjectDir(projectName: string): Promise<string | null> {
   } catch {
     // fallthrough to projects registry
   }
+  // Fallback to the project registry. Use the *list* endpoint (which
+  // always returns registered projects regardless of session state) —
+  // the singular /api/projects/:name endpoint 404s with "Session not
+  // found" when no tmux session is running, which would silently fall
+  // through to the global thread view and leak threads across projects.
   try {
-    const res = await fetch(`${API_BASE}/api/projects/${encodeURIComponent(projectName)}`, {
-      cache: "no-store",
-    });
-    const body = (await res.json()) as { project?: { dir?: string } };
-    if (body.project?.dir) return body.project.dir;
+    const res = await fetch(`${API_BASE}/api/projects`, { cache: "no-store" });
+    const body = (await res.json()) as {
+      projects?: Array<{ name: string; dir?: string }>;
+    };
+    const project = body.projects?.find((p) => p.name === projectName);
+    if (project?.dir) return project.dir;
   } catch {
     // give up — chat falls back to the global (untagged) thread view.
   }
