@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --port 3000",
     "build": "vite build",
+    "build:demo": "vite build --base=/demo/ --outDir=../docs/public/demo --emptyOutDir",
     "preview": "vite preview --port 3000",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

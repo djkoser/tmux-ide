@@ -28,9 +28,15 @@ const SettingsRoute = lazy(() => import("./routes/settings"));
 const TerminalRoute = lazy(() => import("./routes/terminal/[id]"));
 const WidgetRoute = lazy(() => import("./routes/widget/[name]"));
 
+// When the SPA is bundled under a subpath (e.g. `/demo/` inside the docs
+// site), Vite injects `import.meta.env.BASE_URL` ("/demo/"). Solid Router
+// needs the same prefix on the route path matching. Strip the trailing
+// slash to match Solid Router's convention.
+const ROUTER_BASE = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "") || "/";
+
 render(
   () => (
-    <Router root={App}>
+    <Router root={App} base={ROUTER_BASE === "/" ? undefined : ROUTER_BASE}>
       <Route path="/" component={ProjectsHomeRoute} />
       <Route path="/widgets" component={WidgetsRoute} />
       <Route path="/setup" component={SetupRoute} />

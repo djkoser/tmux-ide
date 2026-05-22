@@ -22,6 +22,13 @@ export function isDemoMode(): boolean {
     }
     if (window.localStorage.getItem(DEMO_FLAG_KEY) === "1") return true;
     if (window.location.hostname.startsWith("demo.")) return true;
+    // Auto-activate when the SPA is served under a /demo/ subpath
+    // (e.g. bundled into the docs site at docs/public/demo/). Visitors
+    // get the canned data with no URL flag required.
+    if (window.location.pathname.startsWith("/demo/")) return true;
+    // Vite injects this when built with `--base=/demo/`.
+    const baseUrl = (import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL;
+    if (baseUrl && baseUrl !== "/" && baseUrl.includes("demo")) return true;
   } catch {
     // SSR / restricted contexts — fall through.
   }
