@@ -167,6 +167,35 @@ export function onboardProject(
 }
 
 /**
+ * Register-only flow for the "this project already has ide.yml" path.
+ * POSTs to `/api/projects` and treats `409 already-registered` as success
+ * (we just want the project known to the daemon so launch by name works).
+ */
+export function registerExistingProject(input: {
+  dir: string;
+  name?: string;
+}): Effect.Effect<OnboardedProject, ApiError> {
+  return request<{ project: OnboardedProject }>("/api/projects", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  }).pipe(
+    Effect.map((res) => res.project),
+    Effect.catchAll((err) => {
+      // already-registered is a no-op for our purposes — synthesize a project
+      // record from the input so the caller can continue with launch.
+      if (err.status === 409) {
+        return Effect.succeed({
+          name: input.name ?? input.dir.split("/").filter(Boolean).pop() ?? input.dir,
+          dir: input.dir,
+        });
+      }
+      return Effect.fail(err);
+    }),
+  );
+}
+
+/**
  * Fire a v2 typed action by name. The daemon's envelope is
  * `{ ok: true, data }` or `{ ok: false, error }`; we only surface
  * the wire-level success/failure here — the setup wizard maps that to

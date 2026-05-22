@@ -22,6 +22,7 @@ import {
   dispatchAction,
   inspectDirectory,
   onboardProject,
+  registerExistingProject,
   type ProjectInspect,
   type ProjectInspectDetected,
 } from "@/lib/api";
@@ -130,6 +131,11 @@ const INITIAL_STATE: SetupState = {
 function computeCanAdvance(state: SetupState): boolean {
   switch (state.step) {
     case "detect":
+      // Project already configured? Don't let the user walk through the
+      // rest of the wizard — they should use the inline "Open project"
+      // CTA instead. The save endpoint will reject the onboard call with
+      // a 409 and we end up with a confusing double-error on Review.
+      if (state.inspect?.hasIdeYml) return false;
       return state.inspect !== null;
     case "layout":
       return true;
@@ -147,7 +153,7 @@ function canStepDirectly(state: SetupState, target: StepId): boolean {
   const idx = order.indexOf(target);
   for (let i = 0; i < idx; i += 1) {
     const sId = order[i];
-    if (sId === "detect" && state.inspect === null) return false;
+    if (sId === "detect" && (state.inspect === null || state.inspect.hasIdeYml)) return false;
     if (
       sId === "naming" &&
       (state.projectName.trim().length === 0 || state.agentNames.some((n) => !n.trim()))
@@ -180,6 +186,37 @@ export default function SetupRoute() {
       set({
         inspectLoading: false,
         inspectError: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  async function handleOpenExisting() {
+    if (!state.inspect) return;
+    set({ saving: true, saveError: null });
+    try {
+      const project = await Effect.runPromise(
+        registerExistingProject({
+          dir: state.inspect.dir,
+          name: state.projectName.trim() || state.inspect.name,
+        }),
+      );
+      set({ saving: false, savedName: project.name });
+
+      set({ launching: true, launchError: null });
+      try {
+        await Effect.runPromise(dispatchAction("project.launch", { name: project.name }));
+        set({ launching: false });
+        navigate(`/v2/project/${encodeURIComponent(project.name)}`);
+      } catch (err) {
+        set({
+          launching: false,
+          launchError: err instanceof Error ? err.message : String(err),
+        });
+      }
+    } catch (err) {
+      set({
+        saving: false,
+        saveError: err instanceof Error ? err.message : String(err),
       });
     }
   }
@@ -260,6 +297,9 @@ export default function SetupRoute() {
               inspect={state.inspect}
               onDir={(dir) => set({ dir, inspectError: null })}
               onDetect={handleDetect}
+              onOpenExisting={handleOpenExisting}
+              opening={state.saving || state.launching}
+              openError={state.saveError ?? state.launchError}
             />
           </Show>
           <Show when={state.step === "layout"}>
@@ -435,6 +475,10 @@ interface DetectPanelProps {
   inspect: ProjectInspect | null;
   onDir: (dir: string) => void;
   onDetect: () => void;
+  /** Skip the rest of the wizard — register (if needed) + launch. */
+  onOpenExisting: () => void;
+  opening: boolean;
+  openError: string | null;
 }
 
 function DetectPanel(props: DetectPanelProps) {
@@ -492,6 +536,29 @@ function DetectPanel(props: DetectPanelProps) {
       <Show when={props.inspect}>
         {(insp) => <DetectSummary detected={insp().detected} hasIdeYml={insp().hasIdeYml} />}
       </Show>
+
+      {/* Existing-project shortcut: skip the wizard and just open. */}
+      <Show when={props.inspect?.hasIdeYml}>
+        <div class="mt-4 rounded-md border border-[var(--accent)]/40 bg-[var(--accent)]/5 p-3">
+          <p class="mb-2 text-sm text-[var(--fg)]">
+            This project already has an <code class="font-mono">ide.yml</code>. Skip the wizard and
+            open it directly.
+          </p>
+          <div class="flex items-center justify-between gap-3">
+            <Show when={props.openError}>
+              <span class="text-xs text-[var(--red-foreground,var(--red))]">{props.openError}</span>
+            </Show>
+            <span class="flex-1" />
+            <SetupButton
+              onClick={props.onOpenExisting}
+              disabled={props.opening}
+              data-testid="setup-open-existing"
+            >
+              {props.opening ? "Opening…" : "Open project"}
+            </SetupButton>
+          </div>
+        </div>
+      </Show>
     </SetupCard>
   );
 }
@@ -519,7 +586,7 @@ function DetectSummary(props: { detected: ProjectInspectDetected; hasIdeYml: boo
       </SetupRow>
       <SetupRow>
         <span class="text-[var(--dim)]">Existing ide.yml</span>
-        <span>{props.hasIdeYml ? "yes (will be replaced)" : "no"}</span>
+        <span>{props.hasIdeYml ? "yes — open project instead" : "no"}</span>
       </SetupRow>
     </div>
   );
