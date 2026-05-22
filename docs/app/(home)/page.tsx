@@ -28,6 +28,31 @@ export const metadata: Metadata = {
 const installCommand = "npm i -g tmux-ide";
 const openCommand = "tmux-ide dashboard";
 
+/**
+ * Server-side fetch of the GitHub star count. Cached for an hour via
+ * Next's revalidate so we don't burn the API rate limit on every render.
+ * Falls back to `null` on failure (rate-limited, network down) — the
+ * button degrades to plain "GitHub" without a counter.
+ */
+async function fetchStarCount(): Promise<number | null> {
+  try {
+    const res = await fetch("https://api.github.com/repos/wavyrai/tmux-ide", {
+      next: { revalidate: 3600 },
+      headers: { Accept: "application/vnd.github+json" },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { stargazers_count?: number };
+    return typeof data.stargazers_count === "number" ? data.stargazers_count : null;
+  } catch {
+    return null;
+  }
+}
+
+function formatStars(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  return String(n);
+}
+
 const STRIPE_BG =
   "repeating-linear-gradient(-60deg, transparent, transparent 4px, var(--fd-border) 4px, var(--fd-border) 5px)";
 
@@ -140,7 +165,8 @@ const features = [
   },
 ];
 
-export default function HomePage() {
+export default async function HomePage() {
+  const stars = await fetchStarCount();
   return (
     <div className="font-mono">
       {/* HERO ROW 1 — full-width ASCII logo + subtitle */}
@@ -209,9 +235,15 @@ export default function HomePage() {
               href="https://github.com/wavyrai/tmux-ide"
               target="_blank"
               rel="noopener noreferrer"
-              className="border border-fd-border px-6 py-2.5 text-sm font-mono text-fd-foreground hover:bg-fd-accent transition-colors"
+              className="inline-flex items-center gap-2 border border-fd-border px-6 py-2.5 text-sm font-mono text-fd-foreground hover:bg-fd-accent transition-colors"
             >
-              GitHub
+              <span>GitHub</span>
+              {stars !== null && (
+                <span className="inline-flex items-center gap-1 text-fd-muted-foreground">
+                  <span aria-hidden="true">★</span>
+                  <span>{formatStars(stars)}</span>
+                </span>
+              )}
             </a>
           </div>
         </div>
@@ -548,6 +580,14 @@ export default function HomePage() {
               rel="noopener noreferrer"
             >
               GitHub
+            </a>
+            <a
+              href="https://prototyper.co"
+              className="hover:text-fd-foreground transition-colors"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              prototyper.co
             </a>
           </div>
         </div>
