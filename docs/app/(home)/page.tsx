@@ -6,20 +6,20 @@ import { MockIde } from "./MockIde";
 import TerminalDemo from "@/components/terminal-demo";
 
 export const metadata: Metadata = {
-  title: "tmux-ide — A multi-agent IDE in your browser",
+  title: "tmux-ide — Autonomous multi-agent missions",
   description:
-    "Open any project, run Claude + Codex side-by-side, edit files with full LSP, diff, and chat in a web dashboard powered by a tmux daemon.",
+    "Define a mission. Agents plan, execute, validate. You watch from a browser-based IDE that runs Claude + Codex side-by-side, all powered by a local tmux daemon.",
   openGraph: {
-    title: "tmux-ide 2.5 — A multi-agent IDE in your browser",
+    title: "tmux-ide 2.5 — Autonomous multi-agent missions",
     description:
-      "Web IDE for AI-first development: multichat threads, project rail, files, diffs, terminals, plans, LSP — all powered by tmux.",
+      "Mission-driven orchestration with milestones, validation contracts, and skill-based dispatch — now with a web IDE cockpit (multichat, files, diffs, LSP).",
     images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "tmux-ide 2.5" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "tmux-ide 2.5 — A multi-agent IDE in your browser",
+    title: "tmux-ide 2.5 — Autonomous multi-agent missions",
     description:
-      "Web IDE for AI-first development: multichat threads, project rail, files, diffs, terminals, plans, LSP.",
+      "Mission-driven orchestration with milestones, validation, skill-based dispatch — and a web IDE to watch it run.",
     images: ["/og-image.png"],
   },
   alternates: { canonical: "/" },
@@ -64,26 +64,6 @@ function VLine() {
 
 const features = [
   {
-    title: "Web IDE",
-    description:
-      "Full dashboard in your browser at localhost:6060. File explorer, multi-tab editor, diff viewer, terminal, plans, search — no Electron, no install beyond npm.",
-  },
-  {
-    title: "Multichat Threads",
-    description:
-      "Run as many Claude + Codex threads as you want per project. Switch between them in the rail; threads stay isolated per workspace.",
-  },
-  {
-    title: "Multi-Project Rail",
-    description:
-      "Open all your projects in one window. The leftmost rail switches between them; each project keeps its own tmux session, chat threads, and state.",
-  },
-  {
-    title: "Cmd+K Palette",
-    description:
-      "One keystroke jumps to any project, thread, terminal, or command. Cmd+/ shows every keybind in the app.",
-  },
-  {
     title: "Milestone Gating",
     description:
       "Sequential execution phases, each gating the next. Tasks only dispatch when their milestone is active.",
@@ -101,7 +81,27 @@ const features = [
   {
     title: "Knowledge Library",
     description:
-      "Shared learnings that persist across tasks. Architecture docs and tag-matched references inject into prompts.",
+      "Shared learnings persist across tasks. Architecture docs + tag-matched references inject into prompts.",
+  },
+  {
+    title: "Web IDE Cockpit",
+    description:
+      "Watch agents work from your browser at localhost:6060. File editor, diff viewer, terminal, plans, search, LSP — all live.",
+  },
+  {
+    title: "Multichat Threads",
+    description:
+      "Claude + Codex side-by-side, as many threads as you want per project. Threads stay isolated per workspace.",
+  },
+  {
+    title: "Multi-Project Rail",
+    description:
+      "Open all your projects in one window. Leftmost rail switches between them; each keeps its own tmux session + state.",
+  },
+  {
+    title: "Cmd+K Palette",
+    description:
+      "One keystroke jumps to any project, thread, terminal, or command. Cmd+/ shows every keybind in the app.",
   },
   {
     title: "Researcher Agent",
@@ -112,11 +112,6 @@ const features = [
     title: "Live Metrics",
     description:
       "Session duration, agent utilization, completion rates, retry rates. All computed in real-time.",
-  },
-  {
-    title: "Web Dashboard",
-    description:
-      "Real-time KPIs, milestone timeline, agent performance table, validation status. Auto-refreshes.",
   },
   {
     title: "Coverage Invariant",
@@ -153,7 +148,7 @@ export default function HomePage() {
         <AsciiLogo />
         <div className="mt-4 flex items-center justify-center gap-3">
           <h1 className="font-sans text-3xl md:text-4xl lg:text-5xl leading-[1.1] tracking-tight text-fd-foreground">
-            A multi-agent IDE in your browser.
+            Autonomous multi-agent missions.
           </h1>
           <Link
             href="/docs/release-2-0-0"
@@ -168,8 +163,9 @@ export default function HomePage() {
       <section className="max-w-screen-xl mx-auto pb-12 md:pb-28 pt-8 md:pt-12 flex flex-col lg:flex-row gap-12 justify-between items-center px-6">
         <div className="lg:max-w-[480px] space-y-8 w-full">
           <p className="text-fd-muted-foreground text-base leading-normal">
-            Open any project in a browser-based IDE. Run Claude + Codex side-by-side, edit files
-            with LSP, review diffs, manage plans — all powered by a tmux daemon under the hood.
+            Define a mission. Agents self-organize through milestones, dispatch to skill-matched
+            workers, and validate against assertions you can audit. You watch from a browser-based
+            IDE that runs Claude + Codex side-by-side — local tmux daemon, no signup.
           </p>
 
           <div className="max-w-[480px] space-y-2">
