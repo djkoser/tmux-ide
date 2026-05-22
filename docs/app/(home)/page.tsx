@@ -5,26 +5,27 @@ import { AsciiLogo } from "./ascii-logo";
 import TerminalDemo from "@/components/terminal-demo";
 
 export const metadata: Metadata = {
-  title: "tmux-ide — Autonomous Multi-Agent Missions",
+  title: "tmux-ide — A multi-agent IDE in your browser",
   description:
-    "Turn any project into a mission-driven development environment. One config file, multiple AI agents, fully autonomous orchestration.",
+    "Open any project, run Claude + Codex side-by-side, edit files with full LSP, diff, and chat in a web dashboard powered by a tmux daemon.",
   openGraph: {
-    title: "tmux-ide 2.0 — Autonomous Multi-Agent Missions",
+    title: "tmux-ide 2.5 — A multi-agent IDE in your browser",
     description:
-      "Mission-driven orchestration with milestones, validation contracts, skill-based dispatch, and live metrics.",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "tmux-ide 2.0" }],
+      "Web IDE for AI-first development: multichat threads, project rail, files, diffs, terminals, plans, LSP — all powered by tmux.",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "tmux-ide 2.5" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "tmux-ide 2.0 — Autonomous Multi-Agent Missions",
+    title: "tmux-ide 2.5 — A multi-agent IDE in your browser",
     description:
-      "Mission-driven orchestration with milestones, validation contracts, and skill-based dispatch.",
+      "Web IDE for AI-first development: multichat threads, project rail, files, diffs, terminals, plans, LSP.",
     images: ["/og-image.png"],
   },
   alternates: { canonical: "/" },
 };
 
 const installCommand = "npm i -g tmux-ide";
+const openCommand = "tmux-ide dashboard";
 
 const STRIPE_BG =
   "repeating-linear-gradient(-60deg, transparent, transparent 4px, var(--fd-border) 4px, var(--fd-border) 5px)";
@@ -61,6 +62,26 @@ function VLine() {
 }
 
 const features = [
+  {
+    title: "Web IDE",
+    description:
+      "Full dashboard in your browser at localhost:6060. File explorer, multi-tab editor, diff viewer, terminal, plans, search — no Electron, no install beyond npm.",
+  },
+  {
+    title: "Multichat Threads",
+    description:
+      "Run as many Claude + Codex threads as you want per project. Switch between them in the rail; threads stay isolated per workspace.",
+  },
+  {
+    title: "Multi-Project Rail",
+    description:
+      "Open all your projects in one window. The leftmost rail switches between them; each project keeps its own tmux session, chat threads, and state.",
+  },
+  {
+    title: "Cmd+K Palette",
+    description:
+      "One keystroke jumps to any project, thread, terminal, or command. Cmd+/ shows every keybind in the app.",
+  },
   {
     title: "Milestone Gating",
     description:
@@ -131,13 +152,13 @@ export default function HomePage() {
         <AsciiLogo />
         <div className="mt-4 flex items-center justify-center gap-3">
           <h1 className="font-sans text-3xl md:text-4xl lg:text-5xl leading-[1.1] tracking-tight text-fd-foreground">
-            Autonomous multi-agent missions.
+            A multi-agent IDE in your browser.
           </h1>
           <Link
             href="/docs/release-2-0-0"
             className="inline-flex items-center border border-fd-border px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.18em] text-fd-muted-foreground transition-colors hover:bg-fd-accent hover:text-fd-foreground shrink-0"
           >
-            2.0
+            2.5
           </Link>
         </div>
       </section>
@@ -146,11 +167,11 @@ export default function HomePage() {
       <section className="max-w-screen-xl mx-auto pb-12 md:pb-28 pt-8 md:pt-12 flex flex-col lg:flex-row gap-12 justify-between items-center px-6">
         <div className="lg:max-w-[480px] space-y-8 w-full">
           <p className="text-fd-muted-foreground text-base leading-normal">
-            Turn any project into a mission-driven development environment. One config file,
-            multiple AI agents, fully autonomous orchestration.
+            Open any project in a browser-based IDE. Run Claude + Codex side-by-side, edit files
+            with LSP, review diffs, manage plans — all powered by a tmux daemon under the hood.
           </p>
 
-          <div className="max-w-[480px]">
+          <div className="max-w-[480px] space-y-2">
             <CopyButton
               text={installCommand}
               className="group flex items-center gap-3 w-full border border-fd-border p-2 px-4 text-sm transition-colors hover:bg-fd-accent cursor-pointer relative bg-fd-muted/10"
@@ -170,6 +191,13 @@ export default function HomePage() {
                 <rect x="9" y="9" width="13" height="13" rx="0" ry="0" />
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
               </svg>
+            </CopyButton>
+            <CopyButton
+              text={openCommand}
+              className="group flex items-center gap-3 w-full border border-fd-border p-2 px-4 text-sm transition-colors hover:bg-fd-accent cursor-pointer relative bg-fd-muted/10"
+            >
+              <span className="text-fd-foreground">$ {openCommand}</span>
+              <span className="ml-auto text-fd-muted-foreground text-xs">opens browser</span>
             </CopyButton>
           </div>
 
