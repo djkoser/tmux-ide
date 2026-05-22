@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { CopyButton } from "./copy-button";
 import { AsciiLogo } from "./ascii-logo";
+import { MockIde } from "./MockIde";
 import TerminalDemo from "@/components/terminal-demo";
 
 export const metadata: Metadata = {
@@ -223,37 +224,17 @@ export default function HomePage() {
       </section>
 
       <div className="space-y-16 max-w-screen-lg mx-auto px-6">
-        {/* LIVE DEMO — iframe the dashboard SPA with ?demo=1 so visitors
-            can click through the real IDE without installing anything. */}
+        {/* INTERACTIVE MOCKUP — clickable IDE layout, hand-built React.
+            Not the real dashboard SPA; swaps canned content on tab clicks.
+            See ./MockIde.tsx for the data + structure. */}
         <div>
-          <h2 className="font-sans text-2xl text-fd-foreground">Try it in your browser</h2>
+          <h2 className="font-sans text-2xl text-fd-foreground">Click around the IDE</h2>
           <p className="text-fd-muted-foreground text-sm mt-1">
-            Click around the live IDE — fake project, scripted chat, no install.
+            A taste of the layout — click projects, views, files, threads, commits. For the real
+            thing, run <code className="font-mono">tmux-ide dashboard</code> locally.
           </p>
-          <div className="mt-4 border border-fd-border overflow-hidden">
-            {/* Browser chrome */}
-            <div className="flex items-center gap-2 border-b border-fd-border bg-fd-muted/30 px-3 py-1.5">
-              <div className="flex gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-red-400/60" />
-                <span className="h-2 w-2 rounded-full bg-yellow-400/60" />
-                <span className="h-2 w-2 rounded-full bg-green-400/60" />
-              </div>
-              <div className="flex-1 mx-2">
-                <div className="border border-fd-border bg-fd-background px-2 py-0.5 text-[10px] text-fd-muted-foreground font-mono">
-                  localhost:6060/project/demo-todo-app
-                </div>
-              </div>
-              <span className="text-[10px] font-mono uppercase tracking-wider text-fd-muted-foreground">
-                demo
-              </span>
-            </div>
-            <iframe
-              src="/demo/"
-              title="tmux-ide demo"
-              className="block w-full bg-fd-background"
-              style={{ height: "720px", border: "0" }}
-              loading="lazy"
-            />
+          <div className="mt-4">
+            <MockIde />
           </div>
         </div>
 

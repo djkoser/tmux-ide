@@ -4,8 +4,7 @@
   "private": true,
   "scripts": {
     "generate": "fumadocs-mdx",
-    "build:demo": "pnpm --filter @tmux-ide/dashboard build:demo",
-    "build": "pnpm run build:demo && pnpm run generate && next build",
+    "build": "pnpm run generate && next build",
     "dev": "pnpm run generate && next dev",
     "lint": "pnpm run typecheck",
     "start": "next start",
