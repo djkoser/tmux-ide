@@ -319,8 +319,6 @@ export function InspectorView(props: InspectorViewProps) {
           "border-top": "1px solid var(--border)",
           "background-color": "var(--bg-strong, var(--bg))",
           "font-size": "var(--text-sm)",
-          "text-transform": "uppercase",
-          "letter-spacing": "0.05em",
         }}
       >
         <For each={["all", "errors", "completions"] as const}>
@@ -343,8 +341,6 @@ export function InspectorView(props: InspectorViewProps) {
                   cursor: "pointer",
                   "font-family": "inherit",
                   "font-size": "var(--text-sm)",
-                  "text-transform": "uppercase",
-                  "letter-spacing": "0.05em",
                   padding: "0 8px",
                   height: "100%",
                   "align-self": "stretch",

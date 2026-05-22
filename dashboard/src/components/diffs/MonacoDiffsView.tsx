@@ -376,9 +376,9 @@ export function MonacoDiffsView(props: MonacoDiffsViewProps): JSX.Element {
           ariaLabel="diff mode"
           testid="v2-monaco-diffs-mode"
           items={[
-            { id: "changes", label: "Changes" },
-            { id: "history", label: "History" },
-            { id: "branch", label: `Branch vs ${BRANCH_BASE}` },
+            { id: "changes", label: "changes" },
+            { id: "history", label: "history" },
+            { id: "branch", label: `branch vs ${BRANCH_BASE}` },
           ]}
           activeId={mode()}
           onSelect={(next) => switchMode(next)}
