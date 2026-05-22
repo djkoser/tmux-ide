@@ -93,7 +93,7 @@ export function AttachmentPicker(props: {
         <div class="mb-3 flex rounded-md border border-border-weak bg-bg p-0.5">
           <button
             type="button"
-            class={`flex-1 rounded px-2 py-1 text-[12px] ${
+            class={`flex-1 rounded px-2 py-1 text-base ${
               tab() === "terminal" ? "bg-surface-hover text-fg" : "text-dim hover:text-fg"
             }`}
             onClick={() => setTab("terminal")}
@@ -102,7 +102,7 @@ export function AttachmentPicker(props: {
           </button>
           <button
             type="button"
-            class={`flex-1 rounded px-2 py-1 text-[12px] ${
+            class={`flex-1 rounded px-2 py-1 text-base ${
               tab() === "file" ? "bg-surface-hover text-fg" : "text-dim hover:text-fg"
             }`}
             onClick={() => setTab("file")}
@@ -117,10 +117,10 @@ export function AttachmentPicker(props: {
               when={props.terminalPanes().length > 0}
               fallback={
                 <div class="space-y-2">
-                  <div class="text-[12px] text-dim">Enter a tmux pane id</div>
+                  <div class="text-base text-dim">Enter a tmux pane id</div>
                   <div class="flex gap-2">
                     <input
-                      class="min-w-0 flex-1 rounded-md border border-border bg-bg px-2 py-1.5 text-[12px] text-fg outline-none focus:border-accent"
+                      class="min-w-0 flex-1 rounded-md border border-border bg-bg px-2 py-1.5 text-base text-fg outline-none focus:border-accent"
                       value={paneId()}
                       disabled={!props.sessionName()}
                       placeholder="%1"
@@ -134,7 +134,7 @@ export function AttachmentPicker(props: {
                     />
                     <button
                       type="button"
-                      class="rounded-md border border-border bg-bg px-2 text-[12px] text-fg-secondary hover:border-accent hover:text-accent disabled:opacity-45"
+                      class="rounded-md border border-border bg-bg px-2 text-base text-fg-secondary hover:border-accent hover:text-accent disabled:opacity-45"
                       disabled={!paneId().trim() || !props.sessionName()}
                       onClick={addManualPane}
                     >
@@ -148,11 +148,11 @@ export function AttachmentPicker(props: {
                 {(pane) => (
                   <button
                     type="button"
-                    class="block w-full rounded-md border-0 bg-transparent px-2 py-1.5 text-left text-[12px] text-fg hover:bg-surface-hover"
+                    class="block w-full rounded-md border-0 bg-transparent px-2 py-1.5 text-left text-base text-fg hover:bg-surface-hover"
                     onClick={() => addPane(pane)}
                   >
                     <span class="block truncate">{pane.paneTitle}</span>
-                    <span class="block truncate text-[11px] text-dim">
+                    <span class="block truncate text-sm text-dim">
                       {pane.paneId}
                       {pane.currentCommand ? ` - ${pane.currentCommand}` : ""}
                     </span>
@@ -165,7 +165,7 @@ export function AttachmentPicker(props: {
 
         <Show when={tab() === "file"}>
           <input
-            class="w-full rounded-md border border-border bg-bg px-2 py-1.5 text-[12px] text-fg outline-none placeholder:text-dim focus:border-accent"
+            class="w-full rounded-md border border-border bg-bg px-2 py-1.5 text-base text-fg outline-none placeholder:text-dim focus:border-accent"
             value={filePath()}
             placeholder="/tmp/output.log or ~/notes.md"
             aria-label="File path"

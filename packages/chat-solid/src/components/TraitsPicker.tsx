@@ -97,15 +97,15 @@ function defaultTriggerLabel(descriptors: ReadonlyArray<TraitDescriptor>): strin
 }
 
 const TRIGGER_CLASS =
-  "inline-flex h-7 min-w-0 max-w-56 cursor-pointer items-center gap-1.5 truncate rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-[11px] text-[var(--fg-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex h-7 min-w-0 max-w-56 cursor-pointer items-center gap-1.5 truncate rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-sm text-[var(--fg-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50";
 
 const POPUP_CLASS =
   "absolute right-0 bottom-[calc(100%+0.25rem)] z-30 min-w-56 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface-elevated,var(--bg-strong))] shadow-2xl";
 
-const SECTION_LABEL_CLASS = "px-2 py-1.5 text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]";
+const SECTION_LABEL_CLASS = "px-2 py-1.5 text-xs uppercase tracking-[0.08em] text-[var(--dim)]";
 
 const RADIO_ITEM_CLASS =
-  "flex w-full cursor-pointer items-center gap-2 rounded-sm border-0 bg-transparent px-2 py-1.5 text-left text-[12px] text-[var(--fg)] hover:bg-[var(--surface-hover,var(--surface))] disabled:cursor-not-allowed disabled:opacity-50";
+  "flex w-full cursor-pointer items-center gap-2 rounded-sm border-0 bg-transparent px-2 py-1.5 text-left text-base text-[var(--fg)] hover:bg-[var(--surface-hover,var(--surface))] disabled:cursor-not-allowed disabled:opacity-50";
 
 const DIVIDER_CLASS = "my-1 border-t border-[var(--border-weak,var(--border))]";
 
@@ -233,7 +233,7 @@ export function TraitsPicker(props: TraitsPickerProps): JSX.Element {
                           <span class="flex-1">
                             {option.label}
                             <Show when={option.isDefault}>
-                              <span class="ml-1 text-[10px] text-[var(--dim)]">(default)</span>
+                              <span class="ml-1 text-xs text-[var(--dim)]">(default)</span>
                             </Show>
                           </span>
                         </button>

@@ -107,7 +107,7 @@ export function ChatThreadView(props: { options: Accessor<ChatMountOptions> }) {
       <Show
         when={!chat.loading()}
         fallback={
-          <div class="flex min-h-0 flex-1 items-center justify-center text-[13px] text-dim">
+          <div class="flex min-h-0 flex-1 items-center justify-center text-md text-dim">
             Loading chat...
           </div>
         }
@@ -115,7 +115,7 @@ export function ChatThreadView(props: { options: Accessor<ChatMountOptions> }) {
         <Show
           when={chat.thread()}
           fallback={
-            <div class="p-5 text-[13px] text-red">
+            <div class="p-5 text-md text-red">
               {chat.error()?.message ??
                 "This chat thread does not exist or is no longer available."}
             </div>
@@ -158,7 +158,7 @@ export function ChatThreadView(props: { options: Accessor<ChatMountOptions> }) {
           <Show when={chat.connectionState() === "reconnecting"}>
             <div
               data-testid="chat-reconnecting"
-              class="flex flex-shrink-0 items-center gap-2 border-b border-border-weak bg-surface px-3 py-1 text-[11px] text-fg-secondary"
+              class="flex flex-shrink-0 items-center gap-2 border-b border-border-weak bg-surface px-3 py-1 text-sm text-fg-secondary"
             >
               <span class="inline-block size-1.5 animate-pulse rounded-full bg-amber-500" />
               Reconnecting… the conversation will resume automatically.

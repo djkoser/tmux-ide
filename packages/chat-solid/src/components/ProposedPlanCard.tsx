@@ -76,7 +76,7 @@ const MENU_POPUP_CLASS =
   "absolute right-0 top-[calc(100%+0.25rem)] z-30 min-w-48 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface-elevated,var(--bg-strong))] shadow-2xl";
 
 const MENU_ITEM_CLASS =
-  "flex w-full cursor-pointer items-center gap-2 rounded-sm border-0 bg-transparent px-3 py-1.5 text-left text-[12px] text-[var(--fg)] hover:bg-[var(--surface-hover,var(--surface))] disabled:cursor-not-allowed disabled:opacity-50";
+  "flex w-full cursor-pointer items-center gap-2 rounded-sm border-0 bg-transparent px-3 py-1.5 text-left text-base text-[var(--fg)] hover:bg-[var(--surface-hover,var(--surface))] disabled:cursor-not-allowed disabled:opacity-50";
 
 const DIALOG_OVERLAY_CLASS = "fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4";
 
@@ -84,10 +84,10 @@ const DIALOG_PANEL_CLASS =
   "w-full max-w-md rounded-md border border-[var(--border)] bg-[var(--surface-elevated,var(--bg))] p-4 shadow-2xl";
 
 const PRIMARY_BUTTON_CLASS =
-  "inline-flex h-8 cursor-pointer items-center rounded-md border border-transparent bg-[var(--accent)] px-3 text-[12px] font-medium text-[var(--bg)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex h-8 cursor-pointer items-center rounded-md border border-transparent bg-[var(--accent)] px-3 text-base font-medium text-[var(--bg)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
 
 const SECONDARY_BUTTON_CLASS =
-  "inline-flex h-8 cursor-pointer items-center rounded-md border border-[var(--border)] bg-transparent px-3 text-[12px] text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed";
+  "inline-flex h-8 cursor-pointer items-center rounded-md border border-[var(--border)] bg-transparent px-3 text-base text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed";
 
 async function defaultCopy(contents: string): Promise<void> {
   if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
@@ -227,14 +227,14 @@ export function ProposedPlanCard(props: ProposedPlanCardProps): JSX.Element {
       <header class="flex flex-wrap items-center justify-between gap-2">
         <div class="flex min-w-0 items-center gap-2">
           <span
-            class="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-[var(--fg-secondary)]"
+            class="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-xs uppercase tracking-[0.08em] text-[var(--fg-secondary)]"
             aria-hidden="true"
           >
             Plan
           </span>
           <p
             data-testid="proposed-plan-card-title"
-            class="m-0 truncate text-[13px] font-medium text-[var(--fg)]"
+            class="m-0 truncate text-md font-medium text-[var(--fg)]"
           >
             {title()}
           </p>
@@ -303,7 +303,7 @@ export function ProposedPlanCard(props: ProposedPlanCardProps): JSX.Element {
           class={canCollapse() && !expanded() ? "relative max-h-72 overflow-hidden" : "relative"}
         >
           <div
-            class="chat-solid-markdown chat-markdown text-[13px] leading-relaxed text-[var(--fg)]"
+            class="chat-solid-markdown chat-markdown text-md leading-relaxed text-[var(--fg)]"
             innerHTML={bodyHtml()}
           />
           <Show when={canCollapse() && !expanded()}>
@@ -346,19 +346,19 @@ export function ProposedPlanCard(props: ProposedPlanCardProps): JSX.Element {
           <div class={DIALOG_PANEL_CLASS}>
             <h3
               id="proposed-plan-card-save-title"
-              class="m-0 text-[13px] font-semibold text-[var(--fg)]"
+              class="m-0 text-md font-semibold text-[var(--fg)]"
             >
               Save plan to workspace
             </h3>
-            <p class="mt-1 text-[12px] text-[var(--dim)]">
+            <p class="mt-1 text-base text-[var(--dim)]">
               Enter a path relative to{" "}
-              <code class="rounded bg-[var(--surface)] px-1 py-0.5 font-mono text-[11px] text-[var(--fg-secondary)]">
+              <code class="rounded bg-[var(--surface)] px-1 py-0.5 font-mono text-sm text-[var(--fg-secondary)]">
                 {props.workspaceRoot?.() ?? "the workspace"}
               </code>
               .
             </p>
             <label class="mt-3 flex flex-col gap-1.5">
-              <span class="text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]">
+              <span class="text-xs uppercase tracking-[0.08em] text-[var(--dim)]">
                 Workspace path
               </span>
               <input
@@ -369,14 +369,14 @@ export function ProposedPlanCard(props: ProposedPlanCardProps): JSX.Element {
                 spellcheck={false}
                 placeholder={downloadFilename()}
                 onInput={(event) => setSavePath(event.currentTarget.value)}
-                class="rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-[12px] text-[var(--fg)] outline-none focus:border-[var(--accent)]"
+                class="rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-base text-[var(--fg)] outline-none focus:border-[var(--accent)]"
               />
             </label>
             <Show when={saveError()}>
               {(error) => (
                 <p
                   data-testid="proposed-plan-card-save-error"
-                  class="mt-2 text-[11px] text-[var(--red,#c33)]"
+                  class="mt-2 text-sm text-[var(--red,#c33)]"
                 >
                   {error()}
                 </p>

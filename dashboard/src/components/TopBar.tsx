@@ -30,7 +30,7 @@ export function TopBar(props: TopBarProps): JSX.Element {
   return (
     <div
       data-testid="v2-top-bar"
-      class="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-strong)] px-2 text-[12px] text-[var(--fg)]"
+      class="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-strong)] px-2 text-base text-[var(--fg)]"
     >
       <A
         href="/"
@@ -54,14 +54,14 @@ export function TopBar(props: TopBarProps): JSX.Element {
       </button>
       <Show when={branch()}>
         <span class="text-[var(--dim)]">·</span>
-        <span class="truncate font-mono text-[11px] text-[var(--dim)]">
+        <span class="truncate font-mono text-sm text-[var(--dim)]">
           {branch()}
           <Show when={dirty()}>
             <span class="ml-1 text-[var(--accent)]">●</span>
           </Show>
         </span>
       </Show>
-      <span class="ml-auto text-[10px] text-[var(--dim)]">⌘P</span>
+      <span class="ml-auto text-xs text-[var(--dim)]">⌘P</span>
     </div>
   );
 }

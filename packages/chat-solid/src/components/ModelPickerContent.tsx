@@ -282,7 +282,7 @@ export function ModelPickerContent(props: ModelPickerContentProps): JSX.Element 
           <input
             data-testid="model-picker-content-search"
             type="text"
-            class="w-full rounded-sm border-0 bg-transparent px-1 text-[12px] text-fg outline-none placeholder:text-dim"
+            class="w-full rounded-sm border-0 bg-transparent px-1 text-base text-fg outline-none placeholder:text-dim"
             placeholder={props.placeholder ?? "Search models…"}
             value={query()}
             onInput={(event) => setQuery(event.currentTarget.value)}
@@ -300,7 +300,7 @@ export function ModelPickerContent(props: ModelPickerContentProps): JSX.Element 
             fallback={
               <div
                 data-testid="provider-model-picker-empty"
-                class="px-3 py-6 text-center text-[12px] text-dim"
+                class="px-3 py-6 text-center text-base text-dim"
               >
                 <Show when={props.instances().length === 0} fallback={<span>No models match</span>}>
                   No providers discovered

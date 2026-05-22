@@ -354,20 +354,20 @@ export function TerminalSurface(props: TerminalSurfaceProps) {
       data-testid="terminal-surface"
       data-session-name={props.projectName}
       data-project-dir={effectiveCwd() ?? ""}
-      class="flex h-full min-h-0 w-full min-w-0 flex-1 bg-[var(--bg)] text-[12px] text-[var(--fg)] focus:outline-none"
+      class="flex h-full min-h-0 w-full min-w-0 flex-1 bg-[var(--bg)] text-base text-[var(--fg)] focus:outline-none"
     >
       <aside
         data-testid="terminal-rail"
         class="flex h-full w-60 min-w-[15rem] flex-shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)]"
       >
         <div class="flex h-10 flex-shrink-0 items-center justify-between gap-2 border-b border-[var(--border)] px-3">
-          <span class="text-[12px] font-medium text-[var(--fg)]">Terminals</span>
+          <span class="text-base font-medium text-[var(--fg)]">Terminals</span>
           <button
             type="button"
             data-testid="terminal-tab-new"
             disabled={busy()}
             onClick={() => void handleNewTab()}
-            class="rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-0.5 text-[11px] text-[var(--fg)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+            class="rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-0.5 text-sm text-[var(--fg)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
             title="New terminal (⌘T)"
           >
             {busy() ? "…" : "+ New"}
@@ -377,7 +377,7 @@ export function TerminalSurface(props: TerminalSurfaceProps) {
           <Show
             when={(terminals() ?? []).length > 0}
             fallback={
-              <div class="px-3 py-4 text-[11px] leading-relaxed text-[var(--dim)]">
+              <div class="px-3 py-4 text-sm leading-relaxed text-[var(--dim)]">
                 <Show when={terminals.loading} fallback="No terminals — click + New to start one.">
                   Loading terminals…
                 </Show>
@@ -411,7 +411,7 @@ export function TerminalSurface(props: TerminalSurfaceProps) {
                           onDblClick={() => startRename(t)}
                           title={t.name}
                         >
-                          <span class="block truncate text-[12px]">
+                          <span class="block truncate text-base">
                             <Show
                               when={isTmuxIdeHostTerminal(t, props.projectName)}
                               fallback={
@@ -436,7 +436,7 @@ export function TerminalSurface(props: TerminalSurfaceProps) {
                       <input
                         type="text"
                         data-testid={`terminal-tab-rename-${t.id}`}
-                        class="w-full rounded border border-[var(--accent)] bg-[var(--bg)] px-1 py-0.5 text-[12px] text-[var(--fg)] outline-none"
+                        class="w-full rounded border border-[var(--accent)] bg-[var(--bg)] px-1 py-0.5 text-base text-[var(--fg)] outline-none"
                         value={renamingValue()}
                         onInput={(e) => setRenamingValue(e.currentTarget.value)}
                         onBlur={() => void commitRename()}
@@ -463,11 +463,11 @@ export function TerminalSurface(props: TerminalSurfaceProps) {
                           when={!isConfirming()}
                           fallback={
                             <>
-                              <span class="text-[10px] text-[var(--dim)]">Close?</span>
+                              <span class="text-xs text-[var(--dim)]">Close?</span>
                               <button
                                 type="button"
                                 data-testid={`terminal-tab-delete-confirm-${t.id}`}
-                                class="text-[10px] text-[var(--red,#f55)] hover:underline"
+                                class="text-xs text-[var(--red,#f55)] hover:underline"
                                 onClick={() => void handleClose(t.id)}
                               >
                                 Yes
@@ -475,7 +475,7 @@ export function TerminalSurface(props: TerminalSurfaceProps) {
                               <button
                                 type="button"
                                 data-testid={`terminal-tab-delete-cancel-${t.id}`}
-                                class="text-[10px] text-[var(--dim)] hover:underline"
+                                class="text-xs text-[var(--dim)] hover:underline"
                                 onClick={() => setConfirmDeleteId(null)}
                               >
                                 No
@@ -486,7 +486,7 @@ export function TerminalSurface(props: TerminalSurfaceProps) {
                           <button
                             type="button"
                             data-testid={`terminal-tab-rename-button-${t.id}`}
-                            class="text-[10px] text-[var(--dim)] hover:text-[var(--accent)]"
+                            class="text-xs text-[var(--dim)] hover:text-[var(--accent)]"
                             onClick={() => startRename(t)}
                           >
                             Rename
@@ -494,7 +494,7 @@ export function TerminalSurface(props: TerminalSurfaceProps) {
                           <button
                             type="button"
                             data-testid={`terminal-tab-close-${t.id}`}
-                            class="text-[10px] text-[var(--dim)] hover:text-[var(--red,#f55)]"
+                            class="text-xs text-[var(--dim)] hover:text-[var(--red,#f55)]"
                             onClick={() => {
                               setConfirmDeleteId(t.id);
                               setRenaming(null);
@@ -515,7 +515,7 @@ export function TerminalSurface(props: TerminalSurfaceProps) {
           <Show when={error()}>
             <div
               data-testid="terminal-surface-error"
-              class="mx-1 mt-2 truncate rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[10px] text-[var(--danger,#d34)]"
+              class="mx-1 mt-2 truncate rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--danger,#d34)]"
             >
               {error()}
             </div>

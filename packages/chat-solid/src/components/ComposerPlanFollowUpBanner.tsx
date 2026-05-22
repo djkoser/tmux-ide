@@ -35,7 +35,7 @@ export function ComposerPlanFollowUpBanner(props: ComposerPlanFollowUpBannerProp
           class="rounded-lg border border-info/40 bg-info/10 px-3 py-2.5 text-sm text-info-foreground"
         >
           <header class="flex flex-wrap items-center gap-2">
-            <span class="text-[10px] uppercase tracking-[0.14em] opacity-80">Plan ready</span>
+            <span class="text-xs uppercase tracking-[0.14em] opacity-80">Plan ready</span>
             <Show when={plan().title}>
               <span class="min-w-0 flex-1 truncate font-medium">{plan().title}</span>
             </Show>

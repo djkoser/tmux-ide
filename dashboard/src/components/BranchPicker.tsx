@@ -197,13 +197,11 @@ export function BranchPicker(props: BranchPickerProps) {
         <div
           data-testid="branch-picker"
           style={{ ...positionStyle(), width: "320px", "max-height": "70vh" }}
-          class="flex flex-col rounded-md border border-[var(--border)] bg-[var(--bg)] text-[12px] shadow-2xl"
+          class="flex flex-col rounded-md border border-[var(--border)] bg-[var(--bg)] text-base shadow-2xl"
         >
           <header class="flex items-center gap-2 border-b border-[var(--border-weak,var(--border))] px-3 py-2">
-            <span class="text-[10px] uppercase tracking-wider text-[var(--dim)]">
-              Switch branch
-            </span>
-            <span class="ml-auto text-[10px] text-[var(--dim)] tabular-nums">
+            <span class="text-xs uppercase tracking-wider text-[var(--dim)]">Switch branch</span>
+            <span class="ml-auto text-xs text-[var(--dim)] tabular-nums">
               {filtered().length}/{entries().length}
             </span>
           </header>
@@ -214,7 +212,7 @@ export function BranchPicker(props: BranchPickerProps) {
               placeholder="Filter branches…"
               value={query()}
               onInput={(e) => setQuery(e.currentTarget.value)}
-              class="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[12px] text-[var(--fg)]"
+              class="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-base text-[var(--fg)]"
             />
           </div>
           <Show when={resource.loading}>
@@ -288,10 +286,10 @@ export function BranchPicker(props: BranchPickerProps) {
                           {entry().name}
                         </span>
                         <Show when={entry().group === "remote"}>
-                          <span class="text-[10px] text-[var(--dim)]">{entry().remote}</span>
+                          <span class="text-xs text-[var(--dim)]">{entry().remote}</span>
                         </Show>
                         <Show when={busy() === entry().name}>
-                          <span class="text-[10px] text-[var(--dim)]">…</span>
+                          <span class="text-xs text-[var(--dim)]">…</span>
                         </Show>
                         <Show
                           when={
@@ -299,7 +297,7 @@ export function BranchPicker(props: BranchPickerProps) {
                             ((entry().ahead ?? 0) > 0 || (entry().behind ?? 0) > 0)
                           }
                         >
-                          <span class="text-[10px] text-[var(--dim)] tabular-nums">
+                          <span class="text-xs text-[var(--dim)] tabular-nums">
                             <Show when={(entry().ahead ?? 0) > 0}>↑{entry().ahead}</Show>
                             <Show when={(entry().behind ?? 0) > 0}>↓{entry().behind}</Show>
                           </span>

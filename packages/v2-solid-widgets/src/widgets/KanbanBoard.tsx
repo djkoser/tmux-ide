@@ -220,8 +220,8 @@ export function KanbanBoardView(props: KanbanBoardProps) {
         width: "100%",
         "background-color": "var(--bg)",
         color: "var(--fg)",
-        "font-family": "var(--font-family-mono, var(--font-mono))",
-        "font-size": "12px",
+        "font-family": "var(--font-mono)",
+        "font-size": "var(--text-base)",
       }}
     >
       {/* ----- Toolbar -------------------------------------------------- */}
@@ -285,7 +285,7 @@ export function KanbanBoardView(props: KanbanBoardProps) {
             "background-color": "var(--bg)",
             color: "var(--fg)",
             "font-family": "inherit",
-            "font-size": "11px",
+            "font-size": "var(--text-sm)",
           }}
         />
         <Show when={hasActiveFilters()}>
@@ -300,7 +300,7 @@ export function KanbanBoardView(props: KanbanBoardProps) {
               "background-color": "transparent",
               color: "var(--fg-soft)",
               "font-family": "inherit",
-              "font-size": "11px",
+              "font-size": "var(--text-sm)",
               cursor: "pointer",
             }}
           >
@@ -319,7 +319,7 @@ export function KanbanBoardView(props: KanbanBoardProps) {
               "background-color": "color-mix(in oklab, var(--accent) 14%, transparent)",
               color: "var(--accent)",
               "font-family": "inherit",
-              "font-size": "11px",
+              "font-size": "var(--text-sm)",
               cursor: "pointer",
             }}
           >
@@ -380,7 +380,7 @@ export function KanbanBoardView(props: KanbanBoardProps) {
                 <span
                   style={{
                     color: "var(--fg)",
-                    "font-size": "11px",
+                    "font-size": "var(--text-sm)",
                     "font-weight": "600",
                     "text-transform": "uppercase",
                     "letter-spacing": "0.04em",
@@ -393,7 +393,7 @@ export function KanbanBoardView(props: KanbanBoardProps) {
                   style={{
                     "margin-left": "auto",
                     color: "var(--fg-soft)",
-                    "font-size": "10px",
+                    "font-size": "var(--text-xs)",
                     "font-variant-numeric": "tabular-nums",
                   }}
                 >
@@ -466,7 +466,7 @@ function KanbanColumnBody(props: KanbanColumnBodyProps): JSX.Element {
             data-empty-state
             style={{
               color: "var(--dim)",
-              "font-size": "10px",
+              "font-size": "var(--text-xs)",
               padding: "10px 4px",
               "text-align": "center",
             }}
@@ -546,7 +546,7 @@ function KanbanColumnBody(props: KanbanColumnBodyProps): JSX.Element {
                       <span
                         style={{
                           color: "var(--fg-soft)",
-                          "font-size": "10px",
+                          "font-size": "var(--text-xs)",
                           "font-variant-numeric": "tabular-nums",
                         }}
                       >
@@ -568,7 +568,7 @@ function KanbanColumnBody(props: KanbanColumnBodyProps): JSX.Element {
                     <div
                       style={{
                         color: "var(--fg)",
-                        "font-size": "12px",
+                        "font-size": "var(--text-base)",
                         "line-height": "1.3",
                         "white-space": "nowrap",
                         overflow: "hidden",
@@ -587,7 +587,7 @@ function KanbanColumnBody(props: KanbanColumnBodyProps): JSX.Element {
                           "align-items": "center",
                           gap: "6px",
                           color: "var(--fg-soft)",
-                          "font-size": "10px",
+                          "font-size": "var(--text-xs)",
                         }}
                       >
                         <Show when={task().assignee}>
@@ -636,7 +636,7 @@ function ChipGroup(props: {
       <span
         style={{
           color: "var(--fg-soft)",
-          "font-size": "10px",
+          "font-size": "var(--text-xs)",
           "text-transform": "uppercase",
           "letter-spacing": "0.05em",
         }}
@@ -663,7 +663,7 @@ function ChipGroup(props: {
                   : "transparent",
                 color: isSelected() ? "var(--accent)" : (item.color ?? "var(--fg-soft)"),
                 "font-family": "inherit",
-                "font-size": "10px",
+                "font-size": "var(--text-xs)",
                 cursor: "pointer",
                 "white-space": "nowrap",
               }}

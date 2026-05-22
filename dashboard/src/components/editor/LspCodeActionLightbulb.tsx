@@ -188,7 +188,7 @@ export function LspCodeActionLightbulb(props: LspCodeActionLightbulbProps): JSX.
               e.stopPropagation();
               setMenuOpen((v) => !v);
             }}
-            class="absolute z-20 flex h-4 w-4 items-center justify-center rounded-sm bg-[var(--bg-strong)] text-[10px] text-[var(--yellow,#d6a44b)] shadow"
+            class="absolute z-20 flex h-4 w-4 items-center justify-center rounded-sm bg-[var(--bg-strong)] text-xs text-[var(--yellow,#d6a44b)] shadow"
             style={{ left: `${state().left}px`, top: `${state().top}px` }}
             aria-label={`${state().actions.length} code action${state().actions.length === 1 ? "" : "s"} available`}
           >
@@ -211,20 +211,20 @@ export function LspCodeActionLightbulb(props: LspCodeActionLightbulbProps): JSX.
                     data-action-kind={action.kind ?? ""}
                     disabled={applying() || !!action.disabled}
                     onClick={() => void applyAction(action)}
-                    class="flex flex-col items-start px-3 py-1.5 text-left text-[11px] text-[var(--fg)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
+                    class="flex flex-col items-start px-3 py-1.5 text-left text-sm text-[var(--fg)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
                   >
                     <span class="truncate">{action.title}</span>
                     <Show when={action.disabled?.reason}>
-                      {(reason) => <span class="text-[10px] text-[var(--dim)]">{reason()}</span>}
+                      {(reason) => <span class="text-xs text-[var(--dim)]">{reason()}</span>}
                     </Show>
                     <Show when={!action.edit && action.command}>
-                      <span class="text-[10px] text-[var(--dim)]">command — not yet supported</span>
+                      <span class="text-xs text-[var(--dim)]">command — not yet supported</span>
                     </Show>
                   </button>
                 )}
               </For>
               <Show when={error()}>
-                <div class="border-t border-[var(--border-weak)] px-3 py-1 text-[10px] text-[var(--red,#cc6666)]">
+                <div class="border-t border-[var(--border-weak)] px-3 py-1 text-xs text-[var(--red,#cc6666)]">
                   {error()}
                 </div>
               </Show>

@@ -50,7 +50,7 @@ export function ContextWindowMeter(props: { usage: Accessor<ChatThreadUsageSumma
     <Show when={props.usage()}>
       {(usage) => (
         <span
-          class="inline-flex max-w-[220px] items-center gap-1.5 rounded-md border border-border-weak px-1.5 py-0.5 text-[11px] text-dim"
+          class="inline-flex max-w-[220px] items-center gap-1.5 rounded-md border border-border-weak px-1.5 py-0.5 text-sm text-dim"
           title={tooltip(usage())}
           aria-label="Chat usage"
         >

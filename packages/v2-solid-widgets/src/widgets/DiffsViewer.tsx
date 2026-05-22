@@ -190,8 +190,8 @@ export function DiffsViewerView(props: DiffsViewerViewProps) {
         "min-width": "0",
         "background-color": "var(--bg)",
         color: "var(--fg)",
-        "font-family": "var(--font-family-mono, var(--font-mono))",
-        "font-size": "12px",
+        "font-family": "var(--font-mono)",
+        "font-size": "var(--text-base)",
       }}
     >
       <Show
@@ -269,7 +269,7 @@ export function DiffsViewerView(props: DiffsViewerViewProps) {
                     style={{
                       padding: "0 8px",
                       height: "20px",
-                      "font-size": "11px",
+                      "font-size": "var(--text-sm)",
                       background: diffStyle() === style ? "var(--surface-active)" : "transparent",
                       color: diffStyle() === style ? "var(--fg)" : "var(--dim)",
                       border: "none",
@@ -416,7 +416,7 @@ export function DiffsViewerView(props: DiffsViewerViewProps) {
                     color: "var(--red)",
                     "background-color": "var(--bg-strong)",
                     "border-bottom": "1px solid var(--red)",
-                    "font-size": "11px",
+                    "font-size": "var(--text-sm)",
                   }}
                 >
                   {error()}

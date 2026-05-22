@@ -207,7 +207,7 @@ export function CodeEditor(props: CodeEditorProps) {
       <Show when={status() === "loading"}>
         <div
           data-testid="code-editor-loading"
-          class="absolute inset-0 z-10 flex items-center justify-center bg-[var(--bg)]/80 text-[11px] text-[var(--dim)]"
+          class="absolute inset-0 z-10 flex items-center justify-center bg-[var(--bg)]/80 text-sm text-[var(--dim)]"
         >
           loading…
         </div>
@@ -215,7 +215,7 @@ export function CodeEditor(props: CodeEditorProps) {
       <Show when={status() === "error"}>
         <div
           data-testid="code-editor-error"
-          class="absolute inset-0 z-10 flex items-center justify-center bg-[var(--bg)]/80 text-[11px] text-[var(--red-foreground,var(--red))]"
+          class="absolute inset-0 z-10 flex items-center justify-center bg-[var(--bg)]/80 text-sm text-[var(--red-foreground,var(--red))]"
         >
           failed to load file
         </div>

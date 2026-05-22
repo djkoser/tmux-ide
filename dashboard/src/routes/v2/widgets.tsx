@@ -351,17 +351,17 @@ export function WidgetsRoute() {
     >
       <header
         data-testid="widgets-gallery-header"
-        class="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-strong)] px-4 py-3 text-[12px]"
+        class="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-strong)] px-4 py-3 text-base"
       >
         <Grid3X3 size={16} class="text-[var(--accent)]" aria-hidden="true" />
-        <h1 class="text-[13px] font-medium text-[var(--fg)]">Widgets</h1>
-        <span class="text-[11px] text-[var(--dim)]">
+        <h1 class="text-md font-medium text-[var(--fg)]">Widgets</h1>
+        <span class="text-sm text-[var(--dim)]">
           ({filtered().length}/{WIDGETS.length})
         </span>
         <span class="flex-1" />
         <A
           href="/v2"
-          class="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+          class="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-sm text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
         >
           ← Back to v2
         </A>
@@ -377,7 +377,7 @@ export function WidgetsRoute() {
           onInput={(e) => setQuery(e.currentTarget.value)}
           placeholder="Search widgets"
           data-testid="widgets-gallery-search"
-          class="h-7 w-64 max-w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-[12px] text-[var(--fg)] outline-none focus:border-[var(--accent)]"
+          class="h-7 w-64 max-w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-base text-[var(--fg)] outline-none focus:border-[var(--accent)]"
         />
         <div class="flex flex-wrap items-center gap-1">
           <For each={FILTER_ORDER}>
@@ -391,7 +391,7 @@ export function WidgetsRoute() {
                   data-active={active() ? "true" : undefined}
                   onClick={() => setKindFilter(kind)}
                   class={
-                    "h-7 cursor-pointer rounded-md border px-2 text-[11px] " +
+                    "h-7 cursor-pointer rounded-md border px-2 text-sm " +
                     (active()
                       ? "border-[var(--accent)] bg-[var(--surface-active)] text-[var(--accent)]"
                       : "border-[var(--border)] bg-[var(--surface)] text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]")
@@ -416,7 +416,7 @@ export function WidgetsRoute() {
         <Show when={filtered().length === 0}>
           <div
             data-testid="widgets-gallery-empty"
-            class="col-span-full flex h-32 items-center justify-center text-[12px] text-[var(--dim)]"
+            class="col-span-full flex h-32 items-center justify-center text-base text-[var(--dim)]"
           >
             No widgets match the current filters.
           </div>
@@ -457,7 +457,7 @@ function WidgetTile(props: { entry: WidgetEntry; activeSession: SessionOverview 
         </span>
         <div class="min-w-0 flex-1">
           <div
-            class="truncate font-mono text-[13px] text-[var(--fg)] group-hover:text-[var(--accent)]"
+            class="truncate font-mono text-md text-[var(--fg)] group-hover:text-[var(--accent)]"
             data-testid="widget-tile-name"
           >
             {props.entry.name}
@@ -477,12 +477,12 @@ function WidgetTile(props: { entry: WidgetEntry; activeSession: SessionOverview 
         </div>
       </div>
       <p
-        class="flex-1 overflow-hidden text-[11px] leading-relaxed text-[var(--fg-secondary)]"
+        class="flex-1 overflow-hidden text-sm leading-relaxed text-[var(--fg-secondary)]"
         data-testid="widget-tile-description"
       >
         {props.entry.description}
       </p>
-      <div class="flex items-center justify-between text-[10px] text-[var(--dim)]">
+      <div class="flex items-center justify-between text-xs text-[var(--dim)]">
         <span class="font-mono">{props.entry.href}</span>
         <span class="inline-flex items-center gap-1 text-[var(--fg-secondary)] group-hover:text-[var(--accent)]">
           Open <CornerDownRight size={10} aria-hidden="true" />

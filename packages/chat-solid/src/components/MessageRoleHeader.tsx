@@ -44,13 +44,13 @@ export function MessageRoleHeader(props: MessageRoleHeaderProps) {
     <header
       data-testid="message-role-header"
       data-tone={props.tone}
-      class="mb-1.5 flex items-center gap-2 text-[11px] text-[var(--fg-muted,var(--fg-secondary))]"
+      class="mb-1.5 flex items-center gap-2 text-sm text-[var(--fg-muted,var(--fg-secondary))]"
     >
       <span
         aria-hidden="true"
         data-testid="message-role-glyph"
         style={{ color: ROLE_COLOR[props.tone] }}
-        class="inline-flex h-4 w-4 shrink-0 items-center justify-center text-[12px] leading-none"
+        class="inline-flex h-4 w-4 shrink-0 items-center justify-center text-base leading-none"
       >
         {ROLE_GLYPH[props.tone]}
       </span>
@@ -61,7 +61,7 @@ export function MessageRoleHeader(props: MessageRoleHeaderProps) {
         {(badge) => (
           <span
             data-testid="message-role-badge"
-            class="inline-flex items-center rounded-full border border-[var(--border)] bg-[var(--bg-strong,var(--bg-weak))] px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-[var(--fg-muted,var(--fg-secondary))]"
+            class="inline-flex items-center rounded-full border border-[var(--border)] bg-[var(--bg-strong,var(--bg-weak))] px-2 py-0.5 text-xs uppercase tracking-[0.08em] text-[var(--fg-muted,var(--fg-secondary))]"
           >
             {badge().replaceAll("_", " ")}
           </span>
@@ -71,7 +71,7 @@ export function MessageRoleHeader(props: MessageRoleHeaderProps) {
         {(ts) => (
           <span
             data-testid="message-role-timestamp"
-            class="text-[10px] tabular-nums text-[var(--fg-muted,var(--fg-secondary))]"
+            class="text-xs tabular-nums text-[var(--fg-muted,var(--fg-secondary))]"
           >
             {formatTimestamp(ts())}
           </span>

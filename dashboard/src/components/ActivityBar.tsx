@@ -220,11 +220,11 @@ function AccountPopover(props: { onClose: () => void }) {
       data-testid="v2-account-popover"
       class="absolute bottom-1 left-[calc(100%+0.5rem)] z-50 w-56 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface-elevated,var(--bg-strong))] shadow-2xl"
     >
-      <div class="flex items-center gap-2 border-b border-[var(--border)] px-3 py-2 text-[12px]">
+      <div class="flex items-center gap-2 border-b border-[var(--border)] px-3 py-2 text-base">
         <UserCircle size={16} aria-hidden="true" class="text-[var(--accent)]" />
         <div class="min-w-0 flex-1">
           <div class="truncate text-[var(--fg)]">Local user</div>
-          <div class="truncate text-[10px] text-[var(--dim)]">
+          <div class="truncate text-xs text-[var(--dim)]">
             tmux-ide runs locally — no auth wired yet
           </div>
         </div>
@@ -235,7 +235,7 @@ function AccountPopover(props: { onClose: () => void }) {
             href="/v2/settings"
             data-testid="v2-account-popover-settings"
             onClick={() => props.onClose()}
-            class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-[12px] text-[var(--fg)] hover:bg-[var(--surface-hover)]"
+            class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-base text-[var(--fg)] hover:bg-[var(--surface-hover)]"
           >
             <Sliders size={12} aria-hidden="true" />
             <span>Preferences</span>
@@ -247,7 +247,7 @@ function AccountPopover(props: { onClose: () => void }) {
             data-testid="v2-account-popover-signout"
             onClick={() => props.onClose()}
             disabled
-            class="flex w-full items-center gap-2 rounded-sm border-0 bg-transparent px-2 py-1.5 text-left text-[12px] text-[var(--dim)] disabled:cursor-not-allowed"
+            class="flex w-full items-center gap-2 rounded-sm border-0 bg-transparent px-2 py-1.5 text-left text-base text-[var(--dim)] disabled:cursor-not-allowed"
             title="Sign-out is not wired — tmux-ide runs locally"
           >
             <LogOut size={12} aria-hidden="true" />

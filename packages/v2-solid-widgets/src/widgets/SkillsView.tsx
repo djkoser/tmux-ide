@@ -230,8 +230,8 @@ export function SkillsViewView(props: SkillsViewProps) {
         width: "100%",
         "background-color": "var(--bg)",
         color: "var(--fg)",
-        "font-family": "var(--font-family-mono, var(--font-mono))",
-        "font-size": "12px",
+        "font-family": "var(--font-mono)",
+        "font-size": "var(--text-base)",
       }}
     >
       {/* ----- Left rail ------------------------------------------------ */}
@@ -258,7 +258,7 @@ export function SkillsViewView(props: SkillsViewProps) {
           <span
             style={{
               color: "var(--fg-muted, var(--fg-soft))",
-              "font-size": "10px",
+              "font-size": "var(--text-xs)",
               "text-transform": "uppercase",
               "letter-spacing": "0.08em",
             }}
@@ -270,7 +270,7 @@ export function SkillsViewView(props: SkillsViewProps) {
             style={{
               "margin-left": "auto",
               color: "var(--dim)",
-              "font-size": "10px",
+              "font-size": "var(--text-xs)",
               "font-variant-numeric": "tabular-nums",
             }}
           >
@@ -289,7 +289,7 @@ export function SkillsViewView(props: SkillsViewProps) {
                 "background-color": "transparent",
                 color: "var(--accent)",
                 "font-family": "inherit",
-                "font-size": "10px",
+                "font-size": "var(--text-xs)",
                 cursor: "pointer",
               }}
             >
@@ -312,7 +312,7 @@ export function SkillsViewView(props: SkillsViewProps) {
               "background-color": "var(--bg)",
               color: "var(--fg)",
               "font-family": "inherit",
-              "font-size": "11px",
+              "font-size": "var(--text-sm)",
             }}
           />
         </div>
@@ -333,7 +333,7 @@ export function SkillsViewView(props: SkillsViewProps) {
                 data-empty-state
                 style={{
                   color: "var(--dim)",
-                  "font-size": "11px",
+                  "font-size": "var(--text-sm)",
                   padding: "16px 8px",
                   "text-align": "center",
                 }}
@@ -387,7 +387,7 @@ export function SkillsViewView(props: SkillsViewProps) {
                             : "transparent",
                           color: isActive() ? "var(--accent)" : "var(--fg)",
                           "font-family": "inherit",
-                          "font-size": "12px",
+                          "font-size": "var(--text-base)",
                           "text-align": "left",
                           cursor: "pointer",
                         }}
@@ -418,7 +418,7 @@ export function SkillsViewView(props: SkillsViewProps) {
                           <span
                             style={{
                               color: "var(--fg-muted, var(--fg-soft))",
-                              "font-size": "10px",
+                              "font-size": "var(--text-xs)",
                             }}
                           >
                             {skill().specialties![0]}
@@ -456,7 +456,7 @@ export function SkillsViewView(props: SkillsViewProps) {
                 "align-items": "center",
                 "justify-content": "center",
                 color: "var(--dim)",
-                "font-size": "12px",
+                "font-size": "var(--text-base)",
                 padding: "40px 12px",
               }}
             >
@@ -483,7 +483,7 @@ export function SkillsViewView(props: SkillsViewProps) {
                   data-testid="skill-detail-name"
                   style={{
                     margin: "0",
-                    "font-size": "14px",
+                    "font-size": "var(--text-lg)",
                     "font-weight": "600",
                     color: "var(--fg)",
                   }}
@@ -497,7 +497,7 @@ export function SkillsViewView(props: SkillsViewProps) {
                     "border-radius": "10px",
                     "background-color": "color-mix(in oklab, var(--accent) 14%, transparent)",
                     color: "var(--accent)",
-                    "font-size": "10px",
+                    "font-size": "var(--text-xs)",
                     "text-transform": "uppercase",
                     "letter-spacing": "0.04em",
                   }}
@@ -517,7 +517,7 @@ export function SkillsViewView(props: SkillsViewProps) {
                             "border-radius": "10px",
                             border: "1px solid var(--border-weak, var(--border))",
                             color: "var(--fg-muted, var(--fg-soft))",
-                            "font-size": "10px",
+                            "font-size": "var(--text-xs)",
                           }}
                         >
                           {s}
@@ -546,7 +546,7 @@ export function SkillsViewView(props: SkillsViewProps) {
                           "background-color": "transparent",
                           color: "var(--fg)",
                           "font-family": "inherit",
-                          "font-size": "11px",
+                          "font-size": "var(--text-sm)",
                           cursor: "pointer",
                         }}
                       >
@@ -568,7 +568,7 @@ export function SkillsViewView(props: SkillsViewProps) {
                           "background-color": "transparent",
                           color: "var(--danger, #d34)",
                           "font-family": "inherit",
-                          "font-size": "11px",
+                          "font-size": "var(--text-sm)",
                           cursor: "pointer",
                         }}
                       >
@@ -586,7 +586,7 @@ export function SkillsViewView(props: SkillsViewProps) {
                     padding: "10px 14px",
                     "border-bottom": "1px solid var(--border-weak, var(--border))",
                     color: "var(--fg-muted, var(--fg-soft))",
-                    "font-size": "12px",
+                    "font-size": "var(--text-base)",
                     "line-height": "1.5",
                   }}
                 >
@@ -608,7 +608,7 @@ export function SkillsViewView(props: SkillsViewProps) {
                       data-empty-state
                       style={{
                         color: "var(--dim)",
-                        "font-size": "11px",
+                        "font-size": "var(--text-sm)",
                         "font-style": "italic",
                       }}
                     >
@@ -665,7 +665,7 @@ export function SkillsViewView(props: SkillsViewProps) {
                 style={{
                   padding: "10px 14px",
                   "border-bottom": "1px solid var(--border-weak, var(--border))",
-                  "font-size": "13px",
+                  "font-size": "var(--text-md)",
                   "font-weight": "600",
                 }}
               >
@@ -687,7 +687,7 @@ export function SkillsViewView(props: SkillsViewProps) {
                 <label style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
                   <span
                     style={{
-                      "font-size": "10px",
+                      "font-size": "var(--text-xs)",
                       color: "var(--dim)",
                       "text-transform": "uppercase",
                       "letter-spacing": "0.06em",
@@ -708,14 +708,14 @@ export function SkillsViewView(props: SkillsViewProps) {
                       "background-color": "var(--bg-weak, var(--bg))",
                       color: "var(--fg)",
                       "font-family": "inherit",
-                      "font-size": "12px",
+                      "font-size": "var(--text-base)",
                     }}
                   />
                 </label>
                 <label style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
                   <span
                     style={{
-                      "font-size": "10px",
+                      "font-size": "var(--text-xs)",
                       color: "var(--dim)",
                       "text-transform": "uppercase",
                       "letter-spacing": "0.06em",
@@ -735,14 +735,14 @@ export function SkillsViewView(props: SkillsViewProps) {
                       "background-color": "var(--bg-weak, var(--bg))",
                       color: "var(--fg)",
                       "font-family": "inherit",
-                      "font-size": "12px",
+                      "font-size": "var(--text-base)",
                     }}
                   />
                 </label>
                 <label style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
                   <span
                     style={{
-                      "font-size": "10px",
+                      "font-size": "var(--text-xs)",
                       color: "var(--dim)",
                       "text-transform": "uppercase",
                       "letter-spacing": "0.06em",
@@ -762,14 +762,14 @@ export function SkillsViewView(props: SkillsViewProps) {
                       "background-color": "var(--bg-weak, var(--bg))",
                       color: "var(--fg)",
                       "font-family": "inherit",
-                      "font-size": "12px",
+                      "font-size": "var(--text-base)",
                     }}
                   />
                 </label>
                 <label style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
                   <span
                     style={{
-                      "font-size": "10px",
+                      "font-size": "var(--text-xs)",
                       color: "var(--dim)",
                       "text-transform": "uppercase",
                       "letter-spacing": "0.06em",
@@ -789,7 +789,7 @@ export function SkillsViewView(props: SkillsViewProps) {
                       "background-color": "var(--bg-weak, var(--bg))",
                       color: "var(--fg)",
                       "font-family": "inherit",
-                      "font-size": "12px",
+                      "font-size": "var(--text-base)",
                     }}
                   />
                 </label>
@@ -804,7 +804,7 @@ export function SkillsViewView(props: SkillsViewProps) {
                 >
                   <span
                     style={{
-                      "font-size": "10px",
+                      "font-size": "var(--text-xs)",
                       color: "var(--dim)",
                       "text-transform": "uppercase",
                       "letter-spacing": "0.06em",
@@ -822,8 +822,8 @@ export function SkillsViewView(props: SkillsViewProps) {
                       "border-radius": "4px",
                       "background-color": "var(--bg-weak, var(--bg))",
                       color: "var(--fg)",
-                      "font-family": "var(--font-family-mono, var(--font-mono))",
-                      "font-size": "12px",
+                      "font-family": "var(--font-mono)",
+                      "font-size": "var(--text-base)",
                       "min-height": "180px",
                       resize: "vertical",
                     }}
@@ -832,7 +832,7 @@ export function SkillsViewView(props: SkillsViewProps) {
                 <Show when={errorMsg()}>
                   <div
                     data-testid="skill-form-error"
-                    style={{ color: "var(--danger, #d34)", "font-size": "11px" }}
+                    style={{ color: "var(--danger, #d34)", "font-size": "var(--text-sm)" }}
                   >
                     {errorMsg()}
                   </div>
@@ -859,7 +859,7 @@ export function SkillsViewView(props: SkillsViewProps) {
                     "background-color": "transparent",
                     color: "var(--fg)",
                     "font-family": "inherit",
-                    "font-size": "11px",
+                    "font-size": "var(--text-sm)",
                     cursor: "pointer",
                   }}
                 >
@@ -877,7 +877,7 @@ export function SkillsViewView(props: SkillsViewProps) {
                     "background-color": "var(--accent)",
                     color: "var(--bg)",
                     "font-family": "inherit",
-                    "font-size": "11px",
+                    "font-size": "var(--text-sm)",
                     cursor: "pointer",
                   }}
                 >
@@ -919,7 +919,13 @@ export function SkillsViewView(props: SkillsViewProps) {
                 "box-shadow": "0 12px 32px rgba(0,0,0,0.4)",
               }}
             >
-              <p style={{ margin: "0 0 12px 0", "font-size": "12px", "line-height": "1.5" }}>
+              <p
+                style={{
+                  margin: "0 0 12px 0",
+                  "font-size": "var(--text-base)",
+                  "line-height": "1.5",
+                }}
+              >
                 Delete skill <strong>{name()}</strong>? This removes{" "}
                 <code>.tmux-ide/skills/{name()}.md</code> from disk.
               </p>
@@ -928,7 +934,7 @@ export function SkillsViewView(props: SkillsViewProps) {
                   data-testid="skill-delete-error"
                   style={{
                     color: "var(--danger, #d34)",
-                    "font-size": "11px",
+                    "font-size": "var(--text-sm)",
                     "margin-bottom": "8px",
                   }}
                 >
@@ -948,7 +954,7 @@ export function SkillsViewView(props: SkillsViewProps) {
                     "background-color": "transparent",
                     color: "var(--fg)",
                     "font-family": "inherit",
-                    "font-size": "11px",
+                    "font-size": "var(--text-sm)",
                     cursor: "pointer",
                   }}
                 >
@@ -966,7 +972,7 @@ export function SkillsViewView(props: SkillsViewProps) {
                     "background-color": "var(--danger, #d34)",
                     color: "var(--bg)",
                     "font-family": "inherit",
-                    "font-size": "11px",
+                    "font-size": "var(--text-sm)",
                     cursor: "pointer",
                   }}
                 >

@@ -117,20 +117,18 @@ export function CreatePrModal(props: CreatePrModalProps) {
       >
         <div
           data-testid="create-pr-modal"
-          class="flex w-[min(540px,92vw)] max-h-[85vh] flex-col rounded-md border border-[var(--border)] bg-[var(--bg)] text-[12px] text-[var(--fg)] shadow-2xl"
+          class="flex w-[min(540px,92vw)] max-h-[85vh] flex-col rounded-md border border-[var(--border)] bg-[var(--bg)] text-base text-[var(--fg)] shadow-2xl"
         >
           <header class="flex items-center gap-2 border-b border-[var(--border-weak,var(--border))] px-3 py-2">
-            <span class="text-[10px] uppercase tracking-wider text-[var(--dim)]">
-              New pull request
-            </span>
-            <span class="ml-auto font-mono text-[10px] text-[var(--dim)]">
+            <span class="text-xs uppercase tracking-wider text-[var(--dim)]">New pull request</span>
+            <span class="ml-auto font-mono text-xs text-[var(--dim)]">
               {head() || "—"} <span aria-hidden>→</span> {base() || "—"}
             </span>
           </header>
 
           <div class="flex min-h-0 flex-1 flex-col gap-2 px-3 py-2">
             <label class="flex flex-col gap-1">
-              <span class="text-[10px] uppercase tracking-wider text-[var(--dim)]">Title</span>
+              <span class="text-xs uppercase tracking-wider text-[var(--dim)]">Title</span>
               <input
                 type="text"
                 data-testid="create-pr-title"
@@ -143,9 +141,7 @@ export function CreatePrModal(props: CreatePrModalProps) {
             </label>
 
             <label class="flex flex-col gap-1">
-              <span class="text-[10px] uppercase tracking-wider text-[var(--dim)]">
-                Base branch
-              </span>
+              <span class="text-xs uppercase tracking-wider text-[var(--dim)]">Base branch</span>
               <select
                 data-testid="create-pr-base"
                 value={base()}
@@ -168,7 +164,7 @@ export function CreatePrModal(props: CreatePrModalProps) {
             </label>
 
             <label class="flex min-h-0 flex-1 flex-col gap-1">
-              <span class="text-[10px] uppercase tracking-wider text-[var(--dim)]">
+              <span class="text-xs uppercase tracking-wider text-[var(--dim)]">
                 Description (markdown)
               </span>
               <textarea

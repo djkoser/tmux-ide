@@ -434,8 +434,8 @@ export function SolidDiffsView(props: SolidDiffsViewProps): JSX.Element {
           "line-height": `${ROW_HEIGHT}px`,
           "white-space": "pre",
           "background-color": LINE_TINT[ln.kind],
-          "font-family": "var(--font-mono, ui-monospace, monospace)",
-          "font-size": "12px",
+          "font-family": "var(--font-mono)",
+          "font-size": "var(--text-base)",
         }}
       >
         <span
@@ -488,7 +488,7 @@ export function SolidDiffsView(props: SolidDiffsViewProps): JSX.Element {
       data-testid="v2-solid-diffs-view"
       class="flex h-full min-h-0 w-full flex-col bg-[var(--bg)] text-[var(--fg)]"
     >
-      <header class="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-3 text-[12px]">
+      <header class="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-3 text-base">
         <GitCompare class="h-3 w-3 text-[var(--accent)]" aria-hidden="true" />
         <span data-testid="v2-solid-diffs-summary" class="text-[var(--dim)]">
           {files().length} file{files().length !== 1 ? "s" : ""} changed
@@ -518,7 +518,7 @@ export function SolidDiffsView(props: SolidDiffsViewProps): JSX.Element {
           {(base) => (
             <span
               data-testid="v2-solid-diffs-pr-base"
-              class="text-[10px] text-[var(--dim)]"
+              class="text-xs text-[var(--dim)]"
               title="Diff base branch"
             >
               vs {base()}
@@ -546,7 +546,7 @@ export function SolidDiffsView(props: SolidDiffsViewProps): JSX.Element {
                 onClick={() => switchMode(m)}
                 aria-pressed={mode() === m}
                 class={
-                  "h-5 px-2 text-[11px] font-mono " +
+                  "h-5 px-2 text-sm font-mono " +
                   (mode() === m
                     ? "bg-[var(--surface-active)] text-[var(--fg)]"
                     : "bg-transparent text-[var(--dim)] hover:text-[var(--fg)]")
@@ -581,7 +581,7 @@ export function SolidDiffsView(props: SolidDiffsViewProps): JSX.Element {
                         : "Pull request (base ↔ HEAD)"
                   }
                   class={
-                    "h-5 px-2 text-[11px] font-mono " +
+                    "h-5 px-2 text-sm font-mono " +
                     (source() === s
                       ? "bg-[var(--surface-active)] text-[var(--fg)]"
                       : "bg-transparent text-[var(--dim)] hover:text-[var(--fg)]")
@@ -606,7 +606,7 @@ export function SolidDiffsView(props: SolidDiffsViewProps): JSX.Element {
                 onClick={() => setDiffStyle(style)}
                 aria-pressed={diffStyle() === style}
                 class={
-                  "h-5 px-2 text-[11px] font-mono " +
+                  "h-5 px-2 text-sm font-mono " +
                   (diffStyle() === style
                     ? "bg-[var(--surface-active)] text-[var(--fg)]"
                     : "bg-transparent text-[var(--dim)] hover:text-[var(--fg)]")
@@ -627,14 +627,14 @@ export function SolidDiffsView(props: SolidDiffsViewProps): JSX.Element {
           >
             <Show
               when={!commitsRes.loading}
-              fallback={<div class="px-3 py-2 text-[11px] text-[var(--dim)]">loading commits…</div>}
+              fallback={<div class="px-3 py-2 text-sm text-[var(--dim)]">loading commits…</div>}
             >
               <Show
                 when={commitList().length > 0}
                 fallback={
                   <div
                     data-testid="v2-solid-diffs-commits-empty"
-                    class="px-3 py-2 text-[11px] text-[var(--dim)]"
+                    class="px-3 py-2 text-sm text-[var(--dim)]"
                   >
                     No commits
                   </div>
@@ -652,7 +652,7 @@ export function SolidDiffsView(props: SolidDiffsViewProps): JSX.Element {
                         onClick={() => pickCommit(commit.sha)}
                         aria-pressed={isActive()}
                         class={
-                          "flex flex-col gap-0.5 border-b border-[var(--border)] px-2 py-1.5 text-left text-[12px] " +
+                          "flex flex-col gap-0.5 border-b border-[var(--border)] px-2 py-1.5 text-left text-base " +
                           (isActive()
                             ? "bg-[var(--surface-active)]"
                             : "hover:bg-[var(--surface-hover)]")
@@ -676,7 +676,7 @@ export function SolidDiffsView(props: SolidDiffsViewProps): JSX.Element {
                             {commit.subject}
                           </span>
                         </span>
-                        <span class="flex items-center gap-1.5 text-[10px] text-[var(--dim)]">
+                        <span class="flex items-center gap-1.5 text-xs text-[var(--dim)]">
                           <span class="font-mono">{commit.shortSha}</span>
                           <span class="opacity-40">·</span>
                           <span class="min-w-0 truncate">{commit.author}</span>
@@ -697,14 +697,14 @@ export function SolidDiffsView(props: SolidDiffsViewProps): JSX.Element {
         >
           <Show
             when={!data.loading}
-            fallback={<div class="px-3 py-2 text-[11px] text-[var(--dim)]">loading…</div>}
+            fallback={<div class="px-3 py-2 text-sm text-[var(--dim)]">loading…</div>}
           >
             <Show
               when={files().length > 0}
               fallback={
                 <div
                   data-testid="v2-solid-diffs-empty"
-                  class="flex flex-col gap-2 px-3 py-2 text-[11px] text-[var(--dim)]"
+                  class="flex flex-col gap-2 px-3 py-2 text-sm text-[var(--dim)]"
                 >
                   <Show
                     when={mode() === "history"}
@@ -718,7 +718,7 @@ export function SolidDiffsView(props: SolidDiffsViewProps): JSX.Element {
                               type="button"
                               data-testid="v2-solid-diffs-browse-history"
                               onClick={() => switchMode("history")}
-                              class="inline-flex items-center gap-1 self-start rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[11px] text-[var(--fg)] hover:bg-[var(--surface-hover)]"
+                              class="inline-flex items-center gap-1 self-start rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-sm text-[var(--fg)] hover:bg-[var(--surface-hover)]"
                             >
                               <History class="h-3 w-3" aria-hidden="true" />
                               Browse commit history
@@ -746,7 +746,7 @@ export function SolidDiffsView(props: SolidDiffsViewProps): JSX.Element {
                       onClick={() => setSelectedFile(f.file)}
                       aria-pressed={isActive()}
                       class={
-                        "flex h-6 w-full items-center px-2 text-left text-[12px] " +
+                        "flex h-6 w-full items-center px-2 text-left text-base " +
                         (isActive()
                           ? "bg-[var(--surface-active)]"
                           : "hover:bg-[var(--surface-hover)]")
@@ -814,7 +814,7 @@ export function SolidDiffsView(props: SolidDiffsViewProps): JSX.Element {
               fallback={
                 <div
                   data-testid="v2-solid-diffs-empty-preview"
-                  class="flex h-full items-center justify-center text-[11px] text-[var(--dim)]"
+                  class="flex h-full items-center justify-center text-sm text-[var(--dim)]"
                 >
                   Pick a file to diff.
                 </div>
@@ -843,7 +843,7 @@ export function SolidDiffsView(props: SolidDiffsViewProps): JSX.Element {
                           padding: "4px 12px",
                           "background-color": "var(--surface)",
                           "border-bottom": "1px solid var(--border)",
-                          "font-size": "11px",
+                          "font-size": "var(--text-sm)",
                           position: "sticky",
                           top: "0",
                           "z-index": "1",

@@ -64,10 +64,10 @@ const TRIGGER_CLASS =
 const POPUP_CLASS =
   "absolute right-0 bottom-[calc(100%+0.25rem)] z-30 min-w-56 overflow-hidden rounded-md border border-border bg-[var(--surface-elevated,var(--bg-strong))] shadow-2xl";
 
-const SECTION_LABEL_CLASS = "px-2 py-1.5 text-[10px] uppercase tracking-[0.08em] text-dim";
+const SECTION_LABEL_CLASS = "px-2 py-1.5 text-xs uppercase tracking-[0.08em] text-dim";
 
 const RADIO_ITEM_CLASS =
-  "flex w-full cursor-pointer items-center gap-2 rounded-sm border-0 bg-transparent px-2 py-1.5 text-left text-[12px] text-fg hover:bg-[var(--surface-hover,var(--surface))] disabled:cursor-not-allowed";
+  "flex w-full cursor-pointer items-center gap-2 rounded-sm border-0 bg-transparent px-2 py-1.5 text-left text-base text-fg hover:bg-[var(--surface-hover,var(--surface))] disabled:cursor-not-allowed";
 
 const DIVIDER_CLASS = "my-1 border-t border-border-weak";
 

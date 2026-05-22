@@ -84,11 +84,11 @@ function renderMarkdown(markdown: string): JSX.Element {
     <For each={blocks}>
       {(block) =>
         block.kind === "code" ? (
-          <pre class="m-0 whitespace-pre-wrap break-words font-mono text-[11px] text-[var(--fg)]">
+          <pre class="m-0 whitespace-pre-wrap break-words font-mono text-sm text-[var(--fg)]">
             {block.value}
           </pre>
         ) : (
-          <p class="m-0 whitespace-pre-wrap text-[11px] text-[var(--fg)]">{block.value}</p>
+          <p class="m-0 whitespace-pre-wrap text-sm text-[var(--fg)]">{block.value}</p>
         )
       }
     </For>

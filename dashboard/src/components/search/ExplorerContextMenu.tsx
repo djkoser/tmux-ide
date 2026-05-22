@@ -230,7 +230,7 @@ export function ExplorerContextMenu(props: ExplorerContextMenuProps) {
               }}
               class="z-50 rounded-md border border-[var(--border)] bg-[var(--surface)] py-1 shadow-2xl"
             >
-              <div class="px-3 py-1 text-[10px] uppercase tracking-wider text-[var(--dim)]">
+              <div class="px-3 py-1 text-xs uppercase tracking-wider text-[var(--dim)]">
                 {s().path}
               </div>
               <For each={items}>
@@ -240,12 +240,12 @@ export function ExplorerContextMenu(props: ExplorerContextMenuProps) {
                     role="menuitem"
                     data-testid={`explorer-context-${item.id}`}
                     onClick={item.onPick}
-                    class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] text-[var(--fg)] hover:bg-[var(--surface-hover,var(--bg-strong))]"
+                    class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-base text-[var(--fg)] hover:bg-[var(--surface-hover,var(--bg-strong))]"
                   >
                     <item.icon size={14} />
                     <span>{item.label}</span>
                     <Show when={item.shortcut}>
-                      <span class="ml-auto text-[10px] text-[var(--dim)]">{item.shortcut}</span>
+                      <span class="ml-auto text-xs text-[var(--dim)]">{item.shortcut}</span>
                     </Show>
                   </button>
                 )}

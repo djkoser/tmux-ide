@@ -168,8 +168,8 @@ export function ExplorerView(props: ExplorerViewProps) {
         "flex-direction": "column",
         height: "100%",
         "min-height": "0",
-        "font-family": "var(--font-family-mono, var(--font-mono))",
-        "font-size": "12px",
+        "font-family": "var(--font-mono)",
+        "font-size": "var(--text-base)",
         color: "var(--theme-text, var(--fg))",
         "background-color": "var(--theme-background, var(--bg))",
       }}
@@ -182,7 +182,7 @@ export function ExplorerView(props: ExplorerViewProps) {
           display: "flex",
           gap: "12px",
           "align-items": "center",
-          "font-size": "11px",
+          "font-size": "var(--text-sm)",
           "font-variant-numeric": "tabular-nums",
         }}
       >
@@ -205,7 +205,7 @@ export function ExplorerView(props: ExplorerViewProps) {
             color: "var(--red)",
             "background-color": "var(--bg-strong)",
             "border-bottom": "1px solid var(--red)",
-            "font-size": "11px",
+            "font-size": "var(--text-sm)",
           }}
         >
           {error()}
@@ -312,7 +312,7 @@ export function ExplorerView(props: ExplorerViewProps) {
                   <Show when={row().node.truncated}>
                     <span
                       style={{
-                        "font-size": "10px",
+                        "font-size": "var(--text-xs)",
                         color: "var(--theme-focused-foreground-subdued, var(--dim))",
                       }}
                     >
@@ -331,7 +331,7 @@ export function ExplorerView(props: ExplorerViewProps) {
           padding: "4px 12px",
           "border-top": "1px solid var(--theme-border-subdued, var(--border-weak))",
           color: "var(--theme-focused-foreground-subdued, var(--dim))",
-          "font-size": "10px",
+          "font-size": "var(--text-xs)",
           "flex-shrink": "0",
         }}
       >

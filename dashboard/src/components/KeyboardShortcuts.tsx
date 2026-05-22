@@ -75,11 +75,11 @@ export function KeyboardShortcuts(): JSX.Element {
             class="flex w-[680px] max-w-[92vw] max-h-[80vh] flex-col overflow-hidden rounded-md border border-[var(--border)] bg-[var(--bg-strong)] shadow-2xl"
           >
             <div class="flex items-center justify-between border-b border-[var(--border)] px-3 py-2">
-              <span class="text-[13px] font-medium text-[var(--fg)]">Keyboard shortcuts</span>
+              <span class="text-md font-medium text-[var(--fg)]">Keyboard shortcuts</span>
               <button
                 type="button"
                 data-testid="keyboard-shortcuts-close"
-                class="text-[11px] text-[var(--dim)] hover:text-[var(--fg)]"
+                class="text-sm text-[var(--dim)] hover:text-[var(--fg)]"
                 onClick={() => closeKeyboardShortcuts()}
               >
                 Esc
@@ -89,7 +89,7 @@ export function KeyboardShortcuts(): JSX.Element {
               <For each={grouped()}>
                 {(entry) => (
                   <section class="mb-4 last:mb-0">
-                    <h3 class="mb-1 text-[10px] uppercase tracking-wider text-[var(--dim)]">
+                    <h3 class="mb-1 text-xs uppercase tracking-wider text-[var(--dim)]">
                       {entry.group}
                     </h3>
                     <ul class="grid grid-cols-1 gap-y-0.5">
@@ -99,10 +99,8 @@ export function KeyboardShortcuts(): JSX.Element {
                             data-testid={`keyboard-shortcut-${binding.id}`}
                             class="flex items-center justify-between gap-3 rounded px-2 py-1 hover:bg-[var(--surface-hover)]"
                           >
-                            <span class="truncate text-[12px] text-[var(--fg)]">
-                              {binding.label}
-                            </span>
-                            <span class="font-mono text-[11px] text-[var(--dim)]">
+                            <span class="truncate text-base text-[var(--fg)]">{binding.label}</span>
+                            <span class="font-mono text-sm text-[var(--dim)]">
                               {formatCombo(binding.combo)}
                               <Show when={binding.altCombo}>
                                 {(() => {

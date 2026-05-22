@@ -103,14 +103,14 @@ export function BinaryRenderer(props: BinaryRendererProps): JSX.Element {
       >
         {(buf) => (
           <>
-            <div class="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-3 text-[11px] text-[var(--dim)]">
+            <div class="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--dim)]">
               <span class="font-mono">{fileName()}</span>
               <span class="opacity-30">│</span>
               <span>{buf().byteLength.toLocaleString()} bytes</span>
             </div>
             <pre
               data-testid="editor-binary-hex-dump"
-              class="m-0 flex-1 overflow-auto bg-[var(--bg)] px-3 py-3 font-mono text-[11px] leading-[1.5] text-[var(--fg-secondary)]"
+              class="m-0 flex-1 overflow-auto bg-[var(--bg)] px-3 py-3 font-mono text-sm leading-[1.5] text-[var(--fg-secondary)]"
             >
               {formatHexDump(buf())}
             </pre>

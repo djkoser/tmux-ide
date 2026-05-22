@@ -43,13 +43,13 @@ const CARD_CLASS =
 
 const THUMB_CLASS = "h-10 w-full overflow-hidden bg-[var(--bg)]";
 
-const FOOTER_CLASS = "flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-[var(--fg-secondary)]";
+const FOOTER_CLASS = "flex items-center gap-1 px-1.5 py-0.5 text-xs text-[var(--fg-secondary)]";
 
 const REMOVE_CLASS =
-  "absolute right-1 top-1 inline-flex h-4 w-4 cursor-pointer items-center justify-center rounded-sm bg-black/40 text-[10px] leading-none text-white opacity-0 transition-opacity hover:opacity-100 group-hover/attachment:opacity-100";
+  "absolute right-1 top-1 inline-flex h-4 w-4 cursor-pointer items-center justify-center rounded-sm bg-black/40 text-xs leading-none text-white opacity-0 transition-opacity hover:opacity-100 group-hover/attachment:opacity-100";
 
 const REORDER_BUTTON_CLASS =
-  "inline-flex h-4 w-4 cursor-pointer items-center justify-center rounded-sm bg-transparent text-[10px] text-[var(--fg-secondary)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-30";
+  "inline-flex h-4 w-4 cursor-pointer items-center justify-center rounded-sm bg-transparent text-xs text-[var(--fg-secondary)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-30";
 
 export function formatAttachmentSize(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return "";

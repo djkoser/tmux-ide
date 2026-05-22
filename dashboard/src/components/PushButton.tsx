@@ -81,19 +81,19 @@ export function PushButton(props: PushButtonProps) {
       >
         <Upload aria-hidden="true" size={12} />
         <Show when={(props.ahead ?? 0) > 0}>
-          <span class="text-[10px] tabular-nums">↑{props.ahead}</span>
+          <span class="text-xs tabular-nums">↑{props.ahead}</span>
         </Show>
         <Show when={busy()}>
-          <span class="text-[10px]">…</span>
+          <span class="text-xs">…</span>
         </Show>
       </button>
       <Show when={success()}>
-        <span data-testid="status-bar-push-success" class="text-[10px] text-[var(--accent)]">
+        <span data-testid="status-bar-push-success" class="text-xs text-[var(--accent)]">
           {success()}
         </span>
       </Show>
       <Show when={error()}>
-        <span data-testid="status-bar-push-error" class="text-[10px] text-[var(--danger,#d34)]">
+        <span data-testid="status-bar-push-error" class="text-xs text-[var(--danger,#d34)]">
           {error()}
         </span>
       </Show>

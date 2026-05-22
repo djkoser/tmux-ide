@@ -47,7 +47,7 @@ const VARIANT_CLASS: Record<OptionVariant, string> = {
 
 function optionClass(option: PermissionOption): string {
   const base =
-    "h-9 rounded-md border px-3 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50";
+    "h-9 rounded-md border px-3 text-base font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50";
   return `${base} ${VARIANT_CLASS[variantFor(option)]}`;
 }
 
@@ -129,31 +129,31 @@ export function PermissionDialog(props: {
                 <div class="w-full max-w-md overflow-hidden rounded-lg border border-border bg-surface-elevated text-fg shadow-2xl">
                   <div class="flex gap-3 border-b border-border-weak p-4">
                     <div
-                      class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-yellow/50 text-[13px] font-bold text-yellow"
+                      class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-yellow/50 text-md font-bold text-yellow"
                       aria-hidden="true"
                     >
                       !
                     </div>
                     <div class="min-w-0 flex-1">
-                      <Dialog.Title class="m-0 text-[14px] font-semibold leading-tight text-fg">
+                      <Dialog.Title class="m-0 text-lg font-semibold leading-tight text-fg">
                         Permission required
                       </Dialog.Title>
-                      <Dialog.Description class="mt-1 text-[12px] leading-relaxed text-fg-secondary">
+                      <Dialog.Description class="mt-1 text-base leading-relaxed text-fg-secondary">
                         Claude wants to: {pending().toolCall.title}
                       </Dialog.Description>
                     </div>
                   </div>
 
                   <div class="grid gap-3 p-4">
-                    <div class="flex items-center justify-between gap-3 text-[12px] text-dim">
+                    <div class="flex items-center justify-between gap-3 text-base text-dim">
                       <span class="flex-shrink-0">Tool</span>
-                      <code class="min-w-0 truncate font-mono text-[11px] text-fg-secondary">
+                      <code class="min-w-0 truncate font-mono text-sm text-fg-secondary">
                         {pending().toolCall.kind ?? pending().toolCall.toolCallId}
                       </code>
                     </div>
                     <Show when={preview()}>
                       {(text) => (
-                        <pre class="m-0 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-md border border-border-weak bg-bg p-2 font-mono text-[11px] leading-relaxed text-fg-secondary">
+                        <pre class="m-0 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-md border border-border-weak bg-bg p-2 font-mono text-sm leading-relaxed text-fg-secondary">
                           {text()}
                         </pre>
                       )}
@@ -178,7 +178,7 @@ export function PermissionDialog(props: {
                     </For>
                   </div>
 
-                  <div class="border-t border-border-weak px-4 py-2.5 text-[12px] text-dim">
+                  <div class="border-t border-border-weak px-4 py-2.5 text-base text-dim">
                     Auto-reject in{" "}
                     <span class="text-fg" style={{ "font-variant-numeric": "tabular-nums" }}>
                       {remainingSeconds()}s

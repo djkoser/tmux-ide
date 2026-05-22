@@ -63,7 +63,7 @@ export function MissionStatementView(props: MissionStatementViewProps): JSX.Elem
     <div
       data-testid="mission-statement-view"
       class="flex h-full min-h-0 w-full flex-col overflow-y-auto bg-[var(--bg)] text-[var(--fg)]"
-      style={{ "font-family": "var(--font-family-mono, var(--font-mono))", "font-size": "12px" }}
+      style={{ "font-family": "var(--font-mono)", "font-size": "var(--text-base)" }}
     >
       <Show
         when={mission()}
@@ -74,7 +74,7 @@ export function MissionStatementView(props: MissionStatementViewProps): JSX.Elem
           >
             <div>
               <div class="mb-2 text-[var(--fg-secondary)]">No active mission</div>
-              <code class="inline-flex rounded bg-[var(--surface)] px-2 py-1 text-[11px] text-[var(--fg-secondary)]">
+              <code class="inline-flex rounded bg-[var(--surface)] px-2 py-1 text-sm text-[var(--fg-secondary)]">
                 tmux-ide mission set &lt;title&gt;
               </code>
             </div>
@@ -114,7 +114,7 @@ function Hero(props: { mission: NonNullable<ProjectDetailLike["mission"]> }): JS
         <Show when={props.mission.status}>
           <span
             data-mission-status={props.mission.status}
-            class="rounded-full border px-2 py-[1px] text-[10px] uppercase tracking-wider"
+            class="rounded-full border px-2 py-[1px] text-xs uppercase tracking-wider"
             style={{
               "border-color": statusColor(props.mission.status),
               color: statusColor(props.mission.status),
@@ -124,11 +124,11 @@ function Hero(props: { mission: NonNullable<ProjectDetailLike["mission"]> }): JS
           </span>
         </Show>
         <Show when={props.mission.branch}>
-          <span class="text-[11px] text-[var(--dim)]">⎇ {props.mission.branch}</span>
+          <span class="text-sm text-[var(--dim)]">⎇ {props.mission.branch}</span>
         </Show>
       </div>
       <Show when={props.mission.description}>
-        <p class="m-0 whitespace-pre-wrap text-[12px] leading-relaxed text-[var(--fg-secondary)]">
+        <p class="m-0 whitespace-pre-wrap text-base leading-relaxed text-[var(--fg-secondary)]">
           {props.mission.description}
         </p>
       </Show>
@@ -147,8 +147,8 @@ function ValidationBar(props: {
       data-mission-section="validation"
       class="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3"
     >
-      <div class="mb-2 flex items-center gap-3 text-[11px]">
-        <span class="text-[10px] uppercase tracking-wider text-[var(--dim)]">validation</span>
+      <div class="mb-2 flex items-center gap-3 text-sm">
+        <span class="text-xs uppercase tracking-wider text-[var(--dim)]">validation</span>
         <span class="font-medium tabular-nums text-[var(--fg)]">
           {passing()}/{total()} passing · {pct()}%
         </span>
@@ -195,8 +195,8 @@ function Milestones(props: { items: NonNullable<ProjectDetailLike["milestones"]>
                     style={{ background: statusColor(m.status) }}
                   />
                   <span class="font-medium text-[var(--fg)]">{m.title}</span>
-                  <span class="text-[11px] text-[var(--dim)]">{m.status}</span>
-                  <span class="ml-auto tabular-nums text-[11px] text-[var(--dim)]">
+                  <span class="text-sm text-[var(--dim)]">{m.status}</span>
+                  <span class="ml-auto tabular-nums text-sm text-[var(--dim)]">
                     {m.tasksDone ?? 0}/{m.taskCount ?? 0} · {pct()}%
                   </span>
                 </div>
@@ -228,27 +228,27 @@ function Goals(props: { items: NonNullable<ProjectDetailLike["goals"]> }): JSX.E
               class="rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-3"
             >
               <header class="mb-1 flex flex-wrap items-center gap-2">
-                <span class="font-mono text-[11px] text-[var(--dim)]">{g.id}</span>
+                <span class="font-mono text-sm text-[var(--dim)]">{g.id}</span>
                 <span class="font-medium text-[var(--fg)]">{g.title}</span>
                 <Show when={typeof g.priority === "number"}>
-                  <span class="rounded border border-[var(--border)] px-1 text-[10px] uppercase tracking-wider text-[var(--dim)]">
+                  <span class="rounded border border-[var(--border)] px-1 text-xs uppercase tracking-wider text-[var(--dim)]">
                     {PRIORITY_LABEL[g.priority ?? 99] ?? `P${g.priority}`}
                   </span>
                 </Show>
                 <Show when={g.status}>
                   <span
-                    class="rounded-full border px-2 py-[1px] text-[10px] uppercase tracking-wider"
+                    class="rounded-full border px-2 py-[1px] text-xs uppercase tracking-wider"
                     style={{ "border-color": statusColor(g.status), color: statusColor(g.status) }}
                   >
                     {g.status}
                   </span>
                 </Show>
                 <Show when={g.assignee}>
-                  <span class="ml-auto text-[10px] text-[var(--dim)]">@{g.assignee}</span>
+                  <span class="ml-auto text-xs text-[var(--dim)]">@{g.assignee}</span>
                 </Show>
               </header>
               <Show when={g.description}>
-                <p class="m-0 mb-2 whitespace-pre-wrap text-[12px] leading-relaxed text-[var(--fg-secondary)]">
+                <p class="m-0 mb-2 whitespace-pre-wrap text-base leading-relaxed text-[var(--fg-secondary)]">
                   {g.description}
                 </p>
               </Show>
@@ -257,10 +257,10 @@ function Goals(props: { items: NonNullable<ProjectDetailLike["goals"]> }): JSX.E
                   data-mission-goal-acceptance={g.id}
                   class="rounded border-l-2 border-[var(--accent)] bg-[var(--bg-strong,var(--surface))] px-3 py-2"
                 >
-                  <div class="mb-1 text-[10px] uppercase tracking-wider text-[var(--dim)]">
+                  <div class="mb-1 text-xs uppercase tracking-wider text-[var(--dim)]">
                     acceptance
                   </div>
-                  <pre class="m-0 whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-[var(--fg-secondary)]">
+                  <pre class="m-0 whitespace-pre-wrap font-mono text-sm leading-relaxed text-[var(--fg-secondary)]">
                     {g.acceptance}
                   </pre>
                 </div>
@@ -275,6 +275,6 @@ function Goals(props: { items: NonNullable<ProjectDetailLike["goals"]> }): JSX.E
 
 function SectionLabel(props: { children: string }): JSX.Element {
   return (
-    <div class="mb-2 text-[10px] uppercase tracking-wider text-[var(--dim)]">{props.children}</div>
+    <div class="mb-2 text-xs uppercase tracking-wider text-[var(--dim)]">{props.children}</div>
   );
 }

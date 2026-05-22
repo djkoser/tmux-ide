@@ -169,8 +169,8 @@ export function ExplorerDashboardView(props: ExplorerDashboardViewProps) {
         height: "100%",
         "min-height": "0",
         "overflow-y": "auto",
-        "font-family": "var(--font-family-mono, var(--font-mono))",
-        "font-size": "12px",
+        "font-family": "var(--font-mono)",
+        "font-size": "var(--text-base)",
         color: "var(--fg)",
         "background-color": "var(--bg-weak, var(--bg))",
         position: "relative",
@@ -184,7 +184,7 @@ export function ExplorerDashboardView(props: ExplorerDashboardViewProps) {
             style={{
               padding: "16px",
               color: "var(--dim)",
-              "font-size": "11px",
+              "font-size": "var(--text-sm)",
             }}
           >
             no files
@@ -290,7 +290,7 @@ function ExplorerRow(props: ExplorerRowProps) {
           "flex-shrink": "0",
           color: "var(--fg-muted, var(--dim))",
           "text-align": "center",
-          "font-size": "10px",
+          "font-size": "var(--text-xs)",
         }}
       >
         <Show when={props.entry.isDir} fallback={"·"}>
@@ -312,7 +312,7 @@ function ExplorerRow(props: ExplorerRowProps) {
         <span
           style={{
             "flex-shrink": "0",
-            "font-size": "10px",
+            "font-size": "var(--text-xs)",
             color: "var(--dim)",
             "font-variant-numeric": "tabular-nums",
           }}

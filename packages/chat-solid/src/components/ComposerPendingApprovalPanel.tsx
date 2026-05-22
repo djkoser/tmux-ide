@@ -45,14 +45,10 @@ export function ComposerPendingApprovalPanel(
       class="px-4 py-3.5 sm:px-5 sm:py-4"
     >
       <div class="flex flex-wrap items-center gap-2">
-        <span class="text-[11px] uppercase tracking-[0.2em] text-fg-secondary">
-          PENDING APPROVAL
-        </span>
-        <span class="text-[13px] font-medium text-fg">
-          {summaryFor(props.approval.requestKind)}
-        </span>
+        <span class="text-sm uppercase tracking-[0.2em] text-fg-secondary">PENDING APPROVAL</span>
+        <span class="text-md font-medium text-fg">{summaryFor(props.approval.requestKind)}</span>
         <Show when={props.pendingCount > 1}>
-          <span class="text-[11px] text-dim">1/{props.pendingCount}</span>
+          <span class="text-sm text-dim">1/{props.pendingCount}</span>
         </Show>
       </div>
     </div>

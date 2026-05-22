@@ -124,7 +124,7 @@ export function PtyPane(props: PtyPaneProps) {
       class="relative flex h-full min-h-0 w-full min-w-0 flex-col bg-[var(--term-bg,#101010)]"
     >
       <Show when={props.showHeader}>
-        <div class="flex h-6 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-strong)] px-2 text-[10px] uppercase tracking-wide text-[var(--dim)]">
+        <div class="flex h-6 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-strong)] px-2 text-xs uppercase tracking-wide text-[var(--dim)]">
           <span data-testid="pty-pane-id">{props.sessionId.slice(0, 12)}</span>
           <span aria-hidden="true">·</span>
           <span data-testid="pty-pane-status">{statusText()}</span>

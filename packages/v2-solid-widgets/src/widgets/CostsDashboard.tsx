@@ -116,8 +116,8 @@ export function CostsDashboardView(props: CostsDashboardViewProps) {
         width: "100%",
         "background-color": "var(--bg)",
         color: "var(--fg)",
-        "font-family": "var(--font-family-mono, var(--font-mono))",
-        "font-size": "12px",
+        "font-family": "var(--font-mono)",
+        "font-size": "var(--text-base)",
         "overflow-y": "auto",
       }}
     >
@@ -180,7 +180,7 @@ export function CostsDashboardView(props: CostsDashboardViewProps) {
                 display: "flex",
                 "flex-wrap": "wrap",
                 gap: "4px 16px",
-                "font-size": "12px",
+                "font-size": "var(--text-base)",
                 color: "var(--dim)",
               }}
             >
@@ -273,7 +273,7 @@ export function CostsDashboardView(props: CostsDashboardViewProps) {
                           <span
                             data-costs-milestone-pill
                             style={{
-                              "font-size": "10px",
+                              "font-size": "var(--text-xs)",
                               "text-transform": "uppercase",
                               "letter-spacing": "0.05em",
                               padding: "1px 6px",
@@ -310,7 +310,7 @@ export function CostsDashboardView(props: CostsDashboardViewProps) {
                           <span
                             style={{
                               "flex-shrink": "0",
-                              "font-size": "11px",
+                              "font-size": "var(--text-sm)",
                               "font-variant-numeric": "tabular-nums",
                               color: "var(--dim)",
                             }}
@@ -320,7 +320,7 @@ export function CostsDashboardView(props: CostsDashboardViewProps) {
                           <Show when={m.durationMs > 0}>
                             <span
                               style={{
-                                "font-size": "11px",
+                                "font-size": "var(--text-sm)",
                                 "font-variant-numeric": "tabular-nums",
                                 color: "var(--dim)",
                               }}
@@ -352,7 +352,7 @@ export function CostsDashboardView(props: CostsDashboardViewProps) {
                           "border-radius": "4px",
                           background: "var(--surface)",
                           padding: "2px 8px",
-                          "font-size": "12px",
+                          "font-size": "var(--text-base)",
                         }}
                       >
                         <span
@@ -417,7 +417,7 @@ export function CostsDashboardView(props: CostsDashboardViewProps) {
                               overflow: "hidden",
                               "text-overflow": "ellipsis",
                               "white-space": "nowrap",
-                              "font-size": "10px",
+                              "font-size": "var(--text-xs)",
                               color: "var(--cyan, var(--accent))",
                             }}
                           >
@@ -443,7 +443,7 @@ export function CostsDashboardView(props: CostsDashboardViewProps) {
                   display: "flex",
                   "flex-wrap": "wrap",
                   gap: "4px 12px",
-                  "font-size": "12px",
+                  "font-size": "var(--text-base)",
                 }}
               >
                 <span style={{ color: "var(--dim)" }}>
@@ -516,7 +516,7 @@ export function CostsDashboardView(props: CostsDashboardViewProps) {
                               "border-radius": "4px",
                               background: "var(--surface)",
                               padding: "2px 8px",
-                              "font-size": "11px",
+                              "font-size": "var(--text-sm)",
                               "font-variant-numeric": "tabular-nums",
                               color: "var(--dim)",
                               "box-sizing": "border-box",
@@ -573,7 +573,7 @@ export function CostsDashboardView(props: CostsDashboardViewProps) {
                 <div style={{ "margin-bottom": "4px", color: "var(--fg-secondary)" }}>
                   No usage yet
                 </div>
-                <div style={{ "font-size": "11px" }}>
+                <div style={{ "font-size": "var(--text-sm)" }}>
                   Metrics populate once agents start working on tasks.
                 </div>
               </div>
@@ -598,7 +598,7 @@ function Kpi(props: { label: string; value: string; color?: string }) {
     >
       <div
         style={{
-          "font-size": "10px",
+          "font-size": "var(--text-xs)",
           "text-transform": "uppercase",
           "letter-spacing": "0.05em",
           color: "var(--dim)",
@@ -625,7 +625,7 @@ function SectionLabel(props: { children: string }) {
   return (
     <div
       style={{
-        "font-size": "10px",
+        "font-size": "var(--text-xs)",
         "text-transform": "uppercase",
         "letter-spacing": "0.08em",
         color: "var(--dim)",

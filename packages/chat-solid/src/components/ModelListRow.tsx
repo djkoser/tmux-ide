@@ -136,7 +136,7 @@ export function ModelListRow(props: ModelListRowProps): JSX.Element {
 
       <div class="min-w-0 flex-1 text-left">
         <div class="flex items-center justify-between gap-2">
-          <div class="flex min-w-0 items-center gap-1.5 text-[12px] font-medium leading-snug text-fg">
+          <div class="flex min-w-0 items-center gap-1.5 text-base font-medium leading-snug text-fg">
             <span class="truncate">{labelText()}</span>
             <Show when={props.showNewBadge}>
               <span
@@ -161,7 +161,7 @@ export function ModelListRow(props: ModelListRowProps): JSX.Element {
             {(label) => (
               <kbd
                 data-testid="model-list-row-jump-label"
-                class="h-4 shrink-0 rounded-sm border border-border-weak px-1 text-[10px] leading-tight text-fg-secondary"
+                class="h-4 shrink-0 rounded-sm border border-border-weak px-1 text-xs leading-tight text-fg-secondary"
               >
                 {label()}
               </kbd>
@@ -185,14 +185,14 @@ export function ModelListRow(props: ModelListRowProps): JSX.Element {
                 />
               )}
             </Show>
-            <span class="truncate text-[11px] font-normal leading-snug text-dim">
+            <span class="truncate text-sm font-normal leading-snug text-dim">
               {providerFooter()}
             </span>
             <Show when={props.providerStatus && props.providerStatus !== "ready"}>
               {(status) => (
                 <span
                   data-testid="model-list-row-status"
-                  class="ml-1 inline-flex shrink-0 rounded-sm border border-border-weak px-1 text-[10px] uppercase tracking-wide text-dim"
+                  class="ml-1 inline-flex shrink-0 rounded-sm border border-border-weak px-1 text-xs uppercase tracking-wide text-dim"
                 >
                   {status()}
                 </span>

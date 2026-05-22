@@ -69,18 +69,18 @@ export function MessageCopyButton(props: MessageCopyButtonProps): JSX.Element {
             <Show
               when={error()}
               fallback={
-                <span aria-hidden="true" class="text-[11px] leading-none">
+                <span aria-hidden="true" class="text-sm leading-none">
                   ⧉
                 </span>
               }
             >
-              <span aria-hidden="true" class="text-[11px] leading-none">
+              <span aria-hidden="true" class="text-sm leading-none">
                 ✕
               </span>
             </Show>
           }
         >
-          <span aria-hidden="true" class="text-[11px] leading-none">
+          <span aria-hidden="true" class="text-sm leading-none">
             ✓
           </span>
         </Show>

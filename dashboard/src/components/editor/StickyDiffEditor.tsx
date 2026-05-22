@@ -197,7 +197,7 @@ function HunkList(props: {
   return (
     <div
       data-testid="sticky-diff-hunk-list"
-      class="shrink-0 border-b border-[var(--border)] bg-[var(--bg-strong)] text-[11px]"
+      class="shrink-0 border-b border-[var(--border)] bg-[var(--bg-strong)] text-sm"
     >
       <button
         type="button"
@@ -208,7 +208,7 @@ function HunkList(props: {
         <Show when={props.collapsed} fallback={<ChevronDown class="h-3 w-3" aria-hidden="true" />}>
           <ChevronUp class="h-3 w-3" aria-hidden="true" />
         </Show>
-        <span class="font-mono text-[10px] uppercase tracking-wider text-[var(--dim)]">
+        <span class="font-mono text-xs uppercase tracking-wider text-[var(--dim)]">
           {props.hunks.length} {props.hunks.length === 1 ? "hunk" : "hunks"}
         </span>
       </button>
@@ -228,7 +228,7 @@ function HunkList(props: {
                   type="button"
                   data-testid="sticky-diff-hunk-focus"
                   onClick={() => props.onFocus(hunk)}
-                  class="flex-1 text-left font-mono text-[10px] text-[var(--fg-secondary)] hover:text-[var(--accent)]"
+                  class="flex-1 text-left font-mono text-xs text-[var(--fg-secondary)] hover:text-[var(--accent)]"
                 >
                   Hunk #{i() + 1} ·{" "}
                   <span class="text-[var(--diff-del-text,var(--red))]">
@@ -248,7 +248,7 @@ function HunkList(props: {
                   type="button"
                   data-testid="sticky-diff-hunk-accept"
                   onClick={() => props.onAccept(hunk)}
-                  class="inline-flex h-5 items-center gap-1 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 text-[10px] text-[var(--green,var(--accent))] hover:bg-[var(--surface-active)]"
+                  class="inline-flex h-5 items-center gap-1 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 text-xs text-[var(--green,var(--accent))] hover:bg-[var(--surface-active)]"
                   title="Accept this hunk"
                 >
                   <Check class="h-3 w-3" aria-hidden="true" />
@@ -258,7 +258,7 @@ function HunkList(props: {
                   type="button"
                   data-testid="sticky-diff-hunk-reject"
                   onClick={() => props.onReject(hunk)}
-                  class="inline-flex h-5 items-center gap-1 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 text-[10px] text-[var(--red,var(--accent))] hover:bg-[var(--surface-active)]"
+                  class="inline-flex h-5 items-center gap-1 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 text-xs text-[var(--red,var(--accent))] hover:bg-[var(--surface-active)]"
                   title="Reject this hunk"
                 >
                   <X class="h-3 w-3" aria-hidden="true" />

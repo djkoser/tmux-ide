@@ -212,7 +212,7 @@ export function StackedDiffsView(props: StackedDiffsViewProps): JSX.Element {
       data-testid="v2-stacked-diffs-view"
       class="flex h-full min-h-0 w-full flex-col bg-[var(--bg)] text-[var(--fg)]"
     >
-      <header class="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-3 text-[12px]">
+      <header class="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-3 text-base">
         <GitCompare class="h-3 w-3 text-[var(--accent)]" aria-hidden="true" />
         <span data-testid="v2-stacked-diffs-summary" class="text-[var(--dim)]">
           {files().length} file{files().length !== 1 ? "s" : ""} changed
@@ -237,7 +237,7 @@ export function StackedDiffsView(props: StackedDiffsViewProps): JSX.Element {
                 onClick={() => setDiffStyle(style)}
                 aria-pressed={diffStyle() === style}
                 class={
-                  "h-5 px-2 text-[11px] font-mono " +
+                  "h-5 px-2 text-sm font-mono " +
                   (diffStyle() === style
                     ? "bg-[var(--surface-active)] text-[var(--fg)]"
                     : "bg-transparent text-[var(--dim)] hover:text-[var(--fg)]")
@@ -257,14 +257,14 @@ export function StackedDiffsView(props: StackedDiffsViewProps): JSX.Element {
         >
           <Show
             when={!data.loading}
-            fallback={<div class="px-3 py-2 text-[11px] text-[var(--dim)]">loading…</div>}
+            fallback={<div class="px-3 py-2 text-sm text-[var(--dim)]">loading…</div>}
           >
             <Show
               when={files().length > 0}
               fallback={
                 <div
                   data-testid="v2-stacked-diffs-empty"
-                  class="px-3 py-2 text-[11px] text-[var(--dim)]"
+                  class="px-3 py-2 text-sm text-[var(--dim)]"
                 >
                   No uncommitted changes
                 </div>
@@ -281,7 +281,7 @@ export function StackedDiffsView(props: StackedDiffsViewProps): JSX.Element {
                       onClick={() => scrollToFile(f.file)}
                       aria-pressed={isActive()}
                       class={
-                        "flex h-6 w-full items-center px-2 text-left text-[12px] " +
+                        "flex h-6 w-full items-center px-2 text-left text-base " +
                         (isActive()
                           ? "bg-[var(--surface-active)]"
                           : "hover:bg-[var(--surface-hover)]")
@@ -319,7 +319,7 @@ export function StackedDiffsView(props: StackedDiffsViewProps): JSX.Element {
           <Show
             when={files().length > 0}
             fallback={
-              <div class="flex h-full items-center justify-center text-[11px] text-[var(--dim)]">
+              <div class="flex h-full items-center justify-center text-sm text-[var(--dim)]">
                 No uncommitted changes
               </div>
             }

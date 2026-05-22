@@ -38,7 +38,7 @@ export function TerminalContextInlineChip(props: TerminalContextInlineChipProps)
       data-expired={props.expired ? "true" : "false"}
       title={props.tooltipText}
       class={
-        "inline-flex max-w-full items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] leading-snug " +
+        "inline-flex max-w-full items-center gap-1 rounded-md border px-1.5 py-0.5 text-sm leading-snug " +
         variantClass()
       }
     >
@@ -61,7 +61,7 @@ export function TerminalContextInlineChip(props: TerminalContextInlineChipProps)
           <button
             type="button"
             data-testid="terminal-context-inline-chip-remove"
-            class="ml-0.5 inline-flex shrink-0 cursor-pointer items-center justify-center rounded-sm px-0.5 text-[10px] opacity-60 hover:opacity-100"
+            class="ml-0.5 inline-flex shrink-0 cursor-pointer items-center justify-center rounded-sm px-0.5 text-xs opacity-60 hover:opacity-100"
             aria-label="Remove terminal context"
             onClick={(event) => {
               event.stopPropagation();

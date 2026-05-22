@@ -47,12 +47,12 @@ export function statusBadgeMeta(status: ToolCallStatus | null | undefined): Stat
 
 const BADGE_CLASS: Record<StatusBadgeMeta["variant"], string> = {
   running:
-    "inline-flex items-center gap-1 rounded border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--accent)]",
-  done: "inline-flex items-center gap-1 rounded border border-[var(--green,#0a0)]/40 bg-[var(--green,#0a0)]/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--green,#0a0)]",
+    "inline-flex items-center gap-1 rounded border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-1.5 py-0.5 text-xs uppercase tracking-wide text-[var(--accent)]",
+  done: "inline-flex items-center gap-1 rounded border border-[var(--green,#0a0)]/40 bg-[var(--green,#0a0)]/10 px-1.5 py-0.5 text-xs uppercase tracking-wide text-[var(--green,#0a0)]",
   error:
-    "inline-flex items-center gap-1 rounded border border-[var(--red,#c33)]/40 bg-[var(--red,#c33)]/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--red,#c33)]",
+    "inline-flex items-center gap-1 rounded border border-[var(--red,#c33)]/40 bg-[var(--red,#c33)]/10 px-1.5 py-0.5 text-xs uppercase tracking-wide text-[var(--red,#c33)]",
   queued:
-    "inline-flex items-center gap-1 rounded border border-[var(--border)] bg-transparent px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--dim)]",
+    "inline-flex items-center gap-1 rounded border border-[var(--border)] bg-transparent px-1.5 py-0.5 text-xs uppercase tracking-wide text-[var(--dim)]",
 };
 
 /**
@@ -133,13 +133,13 @@ export function ToolCallCard(props: { toolCall: ToolCallView }) {
       open={expanded()}
       onToggle={(event) => setExpanded(event.currentTarget.open)}
     >
-      <summary class="flex cursor-pointer items-center gap-2 px-2.5 py-1.5 text-[12px] text-fg-secondary">
+      <summary class="flex cursor-pointer items-center gap-2 px-2.5 py-1.5 text-base text-fg-secondary">
         <span data-testid="tool-call-card-chevron" aria-hidden="true">
           {expanded() ? "▾" : "▸"}
         </span>
         <strong class="min-w-0 flex-1 truncate text-fg">{props.toolCall.title}</strong>
         <Show when={props.toolCall.kind}>
-          {(kind) => <span class="text-[11px] text-dim">{kind()}</span>}
+          {(kind) => <span class="text-sm text-dim">{kind()}</span>}
         </Show>
         <span
           data-testid="tool-call-card-status"
@@ -165,7 +165,7 @@ export function ToolCallCard(props: { toolCall: ToolCallView }) {
       </summary>
       <div
         data-testid="tool-call-card-body"
-        class="border-t border-border-weak px-2.5 py-2 text-[12px] text-fg-secondary"
+        class="border-t border-border-weak px-2.5 py-2 text-base text-fg-secondary"
       >
         <Show
           when={props.toolCall.content.length > 0}
@@ -212,13 +212,13 @@ function ToolContent(props: {
   }
   if (props.content.type === "diff") {
     return (
-      <div data-testid="tool-call-card-diff" class="font-mono text-[11px]">
+      <div data-testid="tool-call-card-diff" class="font-mono text-sm">
         <span class="text-dim">{props.content.path}</span>
       </div>
     );
   }
   return (
-    <div data-testid="tool-call-card-terminal" class="font-mono text-[11px] text-dim">
+    <div data-testid="tool-call-card-terminal" class="font-mono text-sm text-dim">
       Terminal: {props.content.terminalId}
     </div>
   );
@@ -244,7 +244,7 @@ export function ContentBlockView(props: {
         <div>
           <p
             data-testid="tool-call-text"
-            class="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-fg"
+            class="whitespace-pre-wrap break-words text-md leading-relaxed text-fg"
           >
             {result().visible}
           </p>
@@ -253,7 +253,7 @@ export function ContentBlockView(props: {
               type="button"
               data-testid="tool-call-show-more"
               data-hidden-lines={result().hiddenLines}
-              class="mt-1 cursor-pointer border-0 bg-transparent p-0 text-[11px] text-accent hover:underline"
+              class="mt-1 cursor-pointer border-0 bg-transparent p-0 text-sm text-accent hover:underline"
               onClick={() => props.onShowFullOutput?.()}
             >
               Show full output
@@ -277,7 +277,7 @@ export function ContentBlockView(props: {
       return (
         <Show
           when={src().length > 0}
-          fallback={<p class="text-[12px] text-dim">Image attachment ({props.block.mimeType})</p>}
+          fallback={<p class="text-base text-dim">Image attachment ({props.block.mimeType})</p>}
         >
           <div data-testid="tool-image-block" class="my-1.5 inline-block max-w-[400px]">
             <InlineImagePreview
@@ -290,10 +290,10 @@ export function ContentBlockView(props: {
       );
     }
     case "audio":
-      return <p class="text-[12px] text-dim">Audio attachment ({props.block.mimeType})</p>;
+      return <p class="text-base text-dim">Audio attachment ({props.block.mimeType})</p>;
     case "resource":
       return (
-        <p class="text-[12px] text-dim">{props.block.resource.text ?? props.block.resource.uri}</p>
+        <p class="text-base text-dim">{props.block.resource.text ?? props.block.resource.uri}</p>
       );
     case "resource_link":
       return (

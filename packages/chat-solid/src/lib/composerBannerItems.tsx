@@ -87,7 +87,7 @@ export function buildPlanBannerItem(
     variant: "info",
     title: (
       <span>
-        <span class="text-[10px] uppercase tracking-[0.14em] opacity-80">Plan ready</span>
+        <span class="text-xs uppercase tracking-[0.14em] opacity-80">Plan ready</span>
         <span class="ml-2 font-medium">{title}</span>
       </span>
     ),

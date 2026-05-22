@@ -55,7 +55,7 @@ export function ComposerMentionMenu(props: ComposerMentionMenuProps) {
   return (
     <Show when={props.open()}>
       <div
-        class="absolute bottom-[calc(100%+0.5rem)] left-0 z-30 overflow-hidden rounded-md border border-border bg-surface-elevated text-[12px] shadow-2xl"
+        class="absolute bottom-[calc(100%+0.5rem)] left-0 z-30 overflow-hidden rounded-md border border-border bg-surface-elevated text-base shadow-2xl"
         style={{ width: `${width()}px` }}
         role="listbox"
         aria-label="Mentions"
@@ -80,13 +80,13 @@ export function ComposerMentionMenu(props: ComposerMentionMenuProps) {
                   onMouseEnter={() => props.onHighlight(index())}
                   onClick={() => props.onSelect(result.candidate)}
                 >
-                  <span aria-hidden="true" class="w-4 text-center text-[11px] text-dim">
+                  <span aria-hidden="true" class="w-4 text-center text-sm text-dim">
                     {kindGlyph(result.candidate.kind)}
                   </span>
                   <span class="min-w-0 flex-1">
                     <div class="truncate">{highlightedLabel(result)}</div>
                     <Show when={result.candidate.hint}>
-                      {(hint) => <div class="mt-0.5 truncate text-[11px] text-dim">{hint()}</div>}
+                      {(hint) => <div class="mt-0.5 truncate text-sm text-dim">{hint()}</div>}
                     </Show>
                   </span>
                 </button>
@@ -94,7 +94,7 @@ export function ComposerMentionMenu(props: ComposerMentionMenuProps) {
             </For>
           </div>
         </Show>
-        <div class="border-t border-border-weak px-3 py-1.5 text-[11px] text-dim">
+        <div class="border-t border-border-weak px-3 py-1.5 text-sm text-dim">
           ↑↓ navigate · Enter select · Esc close
         </div>
       </div>

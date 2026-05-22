@@ -206,8 +206,8 @@ export function TasksViewView(props: TasksViewProps) {
         width: "100%",
         "background-color": "var(--bg)",
         color: "var(--fg)",
-        "font-family": "var(--font-family-mono, var(--font-mono))",
-        "font-size": "12px",
+        "font-family": "var(--font-mono)",
+        "font-size": "var(--text-base)",
       }}
     >
       {/* ----- Toolbar (chips + search + actions) -------------------- */}
@@ -283,7 +283,7 @@ export function TasksViewView(props: TasksViewProps) {
             "background-color": "var(--bg)",
             color: "var(--fg)",
             "font-family": "inherit",
-            "font-size": "11px",
+            "font-size": "var(--text-sm)",
           }}
         />
         <Show
@@ -306,7 +306,7 @@ export function TasksViewView(props: TasksViewProps) {
               "background-color": "transparent",
               color: "var(--fg-soft)",
               "font-family": "inherit",
-              "font-size": "11px",
+              "font-size": "var(--text-sm)",
               cursor: "pointer",
             }}
           >
@@ -325,7 +325,7 @@ export function TasksViewView(props: TasksViewProps) {
               "background-color": "color-mix(in oklab, var(--accent) 14%, transparent)",
               color: "var(--accent)",
               "font-family": "inherit",
-              "font-size": "11px",
+              "font-size": "var(--text-sm)",
               cursor: "pointer",
             }}
           >
@@ -363,7 +363,7 @@ export function TasksViewView(props: TasksViewProps) {
                   "justify-content": "center",
                   padding: "40px 12px",
                   color: "var(--dim)",
-                  "font-size": "12px",
+                  "font-size": "var(--text-base)",
                 }}
               >
                 <Show when={allTasks().length === 0} fallback="No tasks match the current filters.">
@@ -385,7 +385,7 @@ export function TasksViewView(props: TasksViewProps) {
                   style={{
                     "text-align": "left",
                     color: "var(--fg-soft)",
-                    "font-size": "10px",
+                    "font-size": "var(--text-xs)",
                     "text-transform": "uppercase",
                     "letter-spacing": "0.05em",
                   }}
@@ -552,13 +552,13 @@ export function TasksViewView(props: TasksViewProps) {
               }}
             >
               <header style={{ display: "flex", "align-items": "baseline", gap: "8px" }}>
-                <span style={{ color: "var(--fg-soft)", "font-size": "10px" }}>
+                <span style={{ color: "var(--fg-soft)", "font-size": "var(--text-xs)" }}>
                   {taskAccessor().id}
                 </span>
                 <span
                   data-testid="task-detail-priority"
                   style={{
-                    "font-size": "10px",
+                    "font-size": "var(--text-xs)",
                     color: PRIORITY_COLOR[taskAccessor().priority] ?? "var(--dim)",
                   }}
                 >
@@ -574,7 +574,7 @@ export function TasksViewView(props: TasksViewProps) {
                     border: "none",
                     color: "var(--fg-soft)",
                     cursor: "pointer",
-                    "font-size": "14px",
+                    "font-size": "var(--text-lg)",
                     "line-height": "1",
                   }}
                   aria-label="Close detail panel"
@@ -586,7 +586,7 @@ export function TasksViewView(props: TasksViewProps) {
                 data-testid="task-detail-title"
                 style={{
                   margin: "0",
-                  "font-size": "13px",
+                  "font-size": "var(--text-md)",
                   "font-weight": "600",
                   color: "var(--fg)",
                 }}
@@ -615,7 +615,7 @@ export function TasksViewView(props: TasksViewProps) {
                           "border-radius": "10px",
                           "background-color": "color-mix(in oklab, var(--accent) 14%, transparent)",
                           color: "var(--accent)",
-                          "font-size": "10px",
+                          "font-size": "var(--text-xs)",
                         }}
                       >
                         {tag}
@@ -635,7 +635,7 @@ export function TasksViewView(props: TasksViewProps) {
                     color: "var(--fg-soft)",
                     margin: "0",
                     "line-height": "1.45",
-                    "font-size": "11px",
+                    "font-size": "var(--text-sm)",
                   }}
                 >
                   {taskAccessor().description}
@@ -670,7 +670,7 @@ function ChipGroup(props: {
       <span
         style={{
           color: "var(--fg-soft)",
-          "font-size": "10px",
+          "font-size": "var(--text-xs)",
           "text-transform": "uppercase",
           "letter-spacing": "0.05em",
         }}
@@ -695,7 +695,7 @@ function ChipGroup(props: {
                   : "transparent",
                 color: isSelected() ? "var(--accent)" : (item.color ?? "var(--fg-soft)"),
                 "font-family": "inherit",
-                "font-size": "10px",
+                "font-size": "var(--text-xs)",
                 cursor: "pointer",
                 "white-space": "nowrap",
               }}
@@ -725,7 +725,7 @@ function DetailField(props: { label: string; value: string; color?: string }) {
       <div
         style={{
           color: props.color ?? "var(--fg)",
-          "font-size": "11px",
+          "font-size": "var(--text-sm)",
           "white-space": "nowrap",
           overflow: "hidden",
           "text-overflow": "ellipsis",

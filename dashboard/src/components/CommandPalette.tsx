@@ -473,7 +473,7 @@ export function CommandPalette(): JSX.Element {
               value={query()}
               onInput={(e) => setQuery(e.currentTarget.value)}
               onKeyDown={onInputKey}
-              class="border-b border-[var(--border)] bg-transparent px-3 py-2 text-[13px] text-[var(--fg)] outline-none"
+              class="border-b border-[var(--border)] bg-transparent px-3 py-2 text-md text-[var(--fg)] outline-none"
             />
             <ul
               role="listbox"
@@ -482,7 +482,7 @@ export function CommandPalette(): JSX.Element {
             >
               <Show
                 when={filtered().length > 0}
-                fallback={<li class="px-3 py-2 text-[11px] text-[var(--dim)]">No matches.</li>}
+                fallback={<li class="px-3 py-2 text-sm text-[var(--dim)]">No matches.</li>}
               >
                 <For each={filtered()}>
                   {(item, index) => {
@@ -499,7 +499,7 @@ export function CommandPalette(): JSX.Element {
                           onClick={() => item.activate()}
                           onMouseEnter={() => setFocusIndex(index())}
                           class={
-                            "flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] " +
+                            "flex w-full items-center gap-2 px-3 py-1.5 text-left text-base " +
                             (focused()
                               ? "bg-[var(--surface-hover)] text-[var(--accent)]"
                               : "text-[var(--fg)] hover:bg-[var(--surface-hover)]")
@@ -507,20 +507,18 @@ export function CommandPalette(): JSX.Element {
                         >
                           <span
                             aria-hidden="true"
-                            class="inline-flex h-4 w-4 shrink-0 items-center justify-center text-[11px] text-[var(--dim)]"
+                            class="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sm text-[var(--dim)]"
                           >
                             {item.glyph}
                           </span>
                           <span class="truncate">{item.label}</span>
                           <Show when={item.detail}>
-                            <span class="ml-auto truncate text-[10px] text-[var(--dim)]">
+                            <span class="ml-auto truncate text-xs text-[var(--dim)]">
                               {item.detail}
                             </span>
                           </Show>
                           <Show when={item.shortcut}>
-                            <span class="font-mono text-[10px] text-[var(--dim)]">
-                              {item.shortcut}
-                            </span>
+                            <span class="font-mono text-xs text-[var(--dim)]">{item.shortcut}</span>
                           </Show>
                         </button>
                       </li>

@@ -724,7 +724,7 @@ export function ChatComposer(props: {
           <div
             data-testid="composer-attach-error"
             role="status"
-            class="mb-2 rounded-md border border-red/40 bg-red/10 px-2.5 py-1.5 text-[12px] text-red"
+            class="mb-2 rounded-md border border-red/40 bg-red/10 px-2.5 py-1.5 text-base text-red"
           >
             {message()}
           </div>
@@ -744,7 +744,7 @@ export function ChatComposer(props: {
         <Show when={dragOver()}>
           <div
             data-testid="composer-drop-overlay"
-            class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-md border-2 border-dashed border-accent bg-bg/80 text-[12px] font-medium text-accent"
+            class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-md border-2 border-dashed border-accent bg-bg/80 text-base font-medium text-accent"
           >
             Drop images to attach
           </div>
@@ -767,7 +767,7 @@ export function ChatComposer(props: {
         />
         <textarea
           ref={setTextarea}
-          class="min-h-[68px] flex-1 resize-none border-0 bg-transparent text-[13px] leading-relaxed text-fg outline-none placeholder:text-dim"
+          class="min-h-[68px] flex-1 resize-none border-0 bg-transparent text-md leading-relaxed text-fg outline-none placeholder:text-dim"
           value={value()}
           disabled={props.disabled()}
           placeholder={`Message ${props.providerName()}`}

@@ -162,7 +162,7 @@ export function LspRenameModal(props: LspRenameModalProps): JSX.Element {
             data-testid="v2-rename-modal"
             class="flex max-h-[80vh] w-[720px] max-w-[95vw] flex-col overflow-hidden rounded-md border border-[var(--border)] bg-[var(--bg-strong)] shadow-2xl"
           >
-            <div class="border-b border-[var(--border)] px-4 py-2 text-[12px] text-[var(--dim)]">
+            <div class="border-b border-[var(--border)] px-4 py-2 text-base text-[var(--dim)]">
               Rename symbol
             </div>
             <Show when={phase() === "input" || phase() === "loading"}>
@@ -180,13 +180,13 @@ export function LspRenameModal(props: LspRenameModalProps): JSX.Element {
                   value={newName()}
                   onInput={(e) => setNewName(e.currentTarget.value)}
                   disabled={phase() === "loading"}
-                  class="rounded border border-[var(--border)] bg-transparent px-2 py-1 text-[13px] font-mono text-[var(--fg)] outline-none focus:border-[var(--accent)]"
+                  class="rounded border border-[var(--border)] bg-transparent px-2 py-1 text-md font-mono text-[var(--fg)] outline-none focus:border-[var(--accent)]"
                 />
                 <div class="flex items-center justify-end gap-2">
                   <button
                     type="button"
                     onClick={close}
-                    class="px-2 py-1 text-[11px] text-[var(--dim)] hover:text-[var(--fg)]"
+                    class="px-2 py-1 text-sm text-[var(--dim)] hover:text-[var(--fg)]"
                   >
                     Cancel
                   </button>
@@ -194,7 +194,7 @@ export function LspRenameModal(props: LspRenameModalProps): JSX.Element {
                     type="submit"
                     data-testid="v2-rename-preview-btn"
                     disabled={phase() === "loading" || !newName().trim()}
-                    class="rounded border border-[var(--accent)] px-2 py-1 text-[11px] text-[var(--accent)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
+                    class="rounded border border-[var(--accent)] px-2 py-1 text-sm text-[var(--accent)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
                   >
                     {phase() === "loading" ? "Computing preview…" : "Preview"}
                   </button>
@@ -208,7 +208,7 @@ export function LspRenameModal(props: LspRenameModalProps): JSX.Element {
                 return (
                   <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
                     <Show when={data.warnings.length > 0}>
-                      <ul class="border-b border-[var(--border)] px-4 py-2 text-[11px] text-[var(--yellow,#d6a44b)]">
+                      <ul class="border-b border-[var(--border)] px-4 py-2 text-sm text-[var(--yellow,#d6a44b)]">
                         <For each={data.warnings}>{(w) => <li>⚠ {w}</li>}</For>
                       </ul>
                     </Show>
@@ -217,7 +217,7 @@ export function LspRenameModal(props: LspRenameModalProps): JSX.Element {
                       fallback={
                         <div
                           data-testid="v2-rename-empty"
-                          class="flex flex-1 items-center justify-center text-[11px] text-[var(--dim)]"
+                          class="flex flex-1 items-center justify-center text-sm text-[var(--dim)]"
                         >
                           No files would change.
                         </div>
@@ -227,7 +227,7 @@ export function LspRenameModal(props: LspRenameModalProps): JSX.Element {
                         <For each={data.files}>
                           {(file) => (
                             <div class="border-b border-[var(--border-weak)]">
-                              <div class="bg-[var(--surface,var(--bg))] px-4 py-1 text-[11px] font-mono text-[var(--dim)]">
+                              <div class="bg-[var(--surface,var(--bg))] px-4 py-1 text-sm font-mono text-[var(--dim)]">
                                 {file.filePath}
                               </div>
                               <RenameDiff before={file.before} after={file.after} />
@@ -237,14 +237,14 @@ export function LspRenameModal(props: LspRenameModalProps): JSX.Element {
                       </div>
                     </Show>
                     <div class="flex items-center justify-between border-t border-[var(--border)] px-4 py-2">
-                      <span class="text-[11px] text-[var(--dim)]">
+                      <span class="text-sm text-[var(--dim)]">
                         {data.files.length} file{data.files.length === 1 ? "" : "s"} affected
                       </span>
                       <div class="flex items-center gap-2">
                         <button
                           type="button"
                           onClick={close}
-                          class="px-2 py-1 text-[11px] text-[var(--dim)] hover:text-[var(--fg)]"
+                          class="px-2 py-1 text-sm text-[var(--dim)] hover:text-[var(--fg)]"
                         >
                           Cancel
                         </button>
@@ -253,7 +253,7 @@ export function LspRenameModal(props: LspRenameModalProps): JSX.Element {
                           data-testid="v2-rename-apply-btn"
                           disabled={data.files.length === 0}
                           onClick={() => void applyRename()}
-                          class="rounded border border-[var(--accent)] px-2 py-1 text-[11px] text-[var(--accent)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
+                          class="rounded border border-[var(--accent)] px-2 py-1 text-sm text-[var(--accent)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
                         >
                           Apply
                         </button>
@@ -264,12 +264,12 @@ export function LspRenameModal(props: LspRenameModalProps): JSX.Element {
               })()}
             </Show>
             <Show when={phase() === "applying"}>
-              <div class="flex h-24 items-center justify-center text-[11px] text-[var(--dim)]">
+              <div class="flex h-24 items-center justify-center text-sm text-[var(--dim)]">
                 Applying changes…
               </div>
             </Show>
             <Show when={phase() === "error"}>
-              <div class="flex flex-col gap-2 p-4 text-[11px]">
+              <div class="flex flex-col gap-2 p-4 text-sm">
                 <div class="text-[var(--red,#cc6666)]">{errorMessage() ?? "Rename failed."}</div>
                 <div class="flex justify-end">
                   <button
@@ -298,7 +298,7 @@ export function LspRenameModal(props: LspRenameModalProps): JSX.Element {
 function RenameDiff(props: { before: string; after: string }): JSX.Element {
   const rows = () => diffLines(props.before, props.after);
   return (
-    <div class="overflow-x-auto px-4 py-2 font-mono text-[11px] leading-snug">
+    <div class="overflow-x-auto px-4 py-2 font-mono text-sm leading-snug">
       <For each={rows()}>
         {(row) => {
           if (row.kind === "removed") {

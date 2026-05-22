@@ -153,8 +153,8 @@ export function ChangesView(props: ChangesViewProps) {
         "flex-direction": "column",
         height: "100%",
         "min-height": "0",
-        "font-family": "var(--font-family-mono, var(--font-mono))",
-        "font-size": "12px",
+        "font-family": "var(--font-mono)",
+        "font-size": "var(--text-base)",
         color: "var(--theme-text, var(--fg))",
         "background-color": "var(--theme-background, var(--bg))",
       }}
@@ -168,7 +168,7 @@ export function ChangesView(props: ChangesViewProps) {
           padding: "6px 12px",
           "border-bottom": "1px solid var(--theme-border, var(--border))",
           "flex-shrink": "0",
-          "font-size": "11px",
+          "font-size": "var(--text-sm)",
           "font-variant-numeric": "tabular-nums",
         }}
       >
@@ -197,7 +197,7 @@ export function ChangesView(props: ChangesViewProps) {
             onClick={() => setDiffStyle("unified")}
             style={{
               padding: "1px 8px",
-              "font-size": "11px",
+              "font-size": "var(--text-sm)",
               "font-family": "inherit",
               cursor: "pointer",
               border: "none",
@@ -216,7 +216,7 @@ export function ChangesView(props: ChangesViewProps) {
             onClick={() => setDiffStyle("split")}
             style={{
               padding: "1px 8px",
-              "font-size": "11px",
+              "font-size": "var(--text-sm)",
               "font-family": "inherit",
               cursor: "pointer",
               border: "none",
@@ -239,7 +239,7 @@ export function ChangesView(props: ChangesViewProps) {
             color: "var(--red)",
             "background-color": "var(--bg-strong)",
             "border-bottom": "1px solid var(--red)",
-            "font-size": "11px",
+            "font-size": "var(--text-sm)",
           }}
         >
           {error()}
@@ -373,7 +373,7 @@ export function ChangesView(props: ChangesViewProps) {
           padding: "4px 12px",
           "border-top": "1px solid var(--theme-border-subdued, var(--border-weak))",
           color: "var(--theme-focused-foreground-subdued, var(--dim))",
-          "font-size": "10px",
+          "font-size": "var(--text-xs)",
           "flex-shrink": "0",
         }}
       >
@@ -406,7 +406,7 @@ function UnifiedDiff(props: DiffViewProps) {
     <div
       data-testid="v2-changes-unified-spacer"
       style={{
-        "font-size": "11px",
+        "font-size": "var(--text-sm)",
         "line-height": "1.5",
         height: `${virtualTotalSize()}px`,
         width: "100%",
@@ -464,7 +464,7 @@ function SplitDiff(props: DiffViewProps) {
     <div
       data-testid="v2-changes-split-spacer"
       style={{
-        "font-size": "11px",
+        "font-size": "var(--text-sm)",
         "line-height": "1.5",
         height: `${virtualTotalSize()}px`,
         width: "100%",

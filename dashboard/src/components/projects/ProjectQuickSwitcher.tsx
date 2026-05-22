@@ -279,14 +279,12 @@ export function ProjectQuickSwitcher(): JSX.Element {
               value={query()}
               onInput={(e) => setQuery(e.currentTarget.value)}
               onKeyDown={onInputKey}
-              class="border-b border-[var(--border)] bg-transparent px-3 py-2 text-[13px] text-[var(--fg)] outline-none"
+              class="border-b border-[var(--border)] bg-transparent px-3 py-2 text-md text-[var(--fg)] outline-none"
             />
             <ul role="listbox" class="max-h-[50vh] min-h-[40px] overflow-y-auto">
               <Show
                 when={filteredRows().length > 0}
-                fallback={
-                  <li class="px-3 py-2 text-[11px] text-[var(--dim)]">No projects match.</li>
-                }
+                fallback={<li class="px-3 py-2 text-sm text-[var(--dim)]">No projects match.</li>}
               >
                 <For each={filteredRows()}>
                   {(row, index) => {
@@ -302,7 +300,7 @@ export function ProjectQuickSwitcher(): JSX.Element {
                           onClick={() => activate(row)}
                           onMouseEnter={() => setFocusIndex(index())}
                           class={
-                            "flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] " +
+                            "flex w-full items-center gap-2 px-3 py-1.5 text-left text-base " +
                             (focused()
                               ? "bg-[var(--surface-hover)] text-[var(--accent)]"
                               : "text-[var(--fg)] hover:bg-[var(--surface-hover)]")
@@ -318,9 +316,9 @@ export function ProjectQuickSwitcher(): JSX.Element {
                           />
                           <span class="truncate font-mono">{row.name}</span>
                           <Show when={row.branch}>
-                            <span class="truncate text-[10px] text-[var(--dim)]">{row.branch}</span>
+                            <span class="truncate text-xs text-[var(--dim)]">{row.branch}</span>
                           </Show>
-                          <span class="ml-auto truncate text-[10px] text-[var(--dim)]">
+                          <span class="ml-auto truncate text-xs text-[var(--dim)]">
                             {homeCollapsed(row.dir)}
                           </span>
                         </button>

@@ -71,14 +71,14 @@ export default function SettingsRoute() {
     >
       <header
         data-testid="settings-page-header"
-        class="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-strong)] px-4 py-3 text-[12px]"
+        class="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-strong)] px-4 py-3 text-base"
       >
         <SlidersHorizontal size={16} class="text-[var(--accent)]" aria-hidden="true" />
-        <h1 class="text-[13px] font-medium text-[var(--fg)]">Settings</h1>
+        <h1 class="text-md font-medium text-[var(--fg)]">Settings</h1>
         <span class="flex-1" />
         <A
           href="/v2"
-          class="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+          class="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-sm text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
         >
           ← Back to v2
         </A>
@@ -88,7 +88,7 @@ export default function SettingsRoute() {
         <nav
           aria-label="Settings sections"
           data-testid="settings-page-tabs"
-          class="flex w-44 shrink-0 flex-col gap-px border-r border-[var(--border)] bg-[var(--bg-weak)] p-2 text-[12px]"
+          class="flex w-44 shrink-0 flex-col gap-px border-r border-[var(--border)] bg-[var(--bg-weak)] p-2 text-base"
         >
           <For each={TABS}>
             {(spec) => {
@@ -168,8 +168,8 @@ function ThemePanel() {
                     : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--accent)]")
                 }
               >
-                <span class="text-[13px] font-medium text-[var(--fg)]">{t.label}</span>
-                <span class="text-[11px] text-[var(--dim)]">{t.hint}</span>
+                <span class="text-md font-medium text-[var(--fg)]">{t.label}</span>
+                <span class="text-sm text-[var(--dim)]">{t.hint}</span>
               </button>
             );
           }}
@@ -198,7 +198,7 @@ function TerminalPanel() {
             const next = Number.parseInt(e.currentTarget.value, 10);
             if (Number.isFinite(next)) setTerminal({ fontSize: next });
           }}
-          class="h-7 w-20 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-[12px] text-[var(--fg)] outline-none focus:border-[var(--accent)]"
+          class="h-7 w-20 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-base text-[var(--fg)] outline-none focus:border-[var(--accent)]"
         />
       </FieldRow>
       <FieldRow
@@ -211,7 +211,7 @@ function TerminalPanel() {
           data-testid="settings-terminal-font-family"
           value={settings().terminal.fontFamily}
           onInput={(e) => setTerminal({ fontFamily: e.currentTarget.value })}
-          class="h-7 w-72 max-w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 font-mono text-[11px] text-[var(--fg)] outline-none focus:border-[var(--accent)]"
+          class="h-7 w-72 max-w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 font-mono text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]"
         />
       </FieldRow>
       <FieldRow label="Scrollback" hint="Lines kept in each buffer. Takes effect on new sessions.">
@@ -226,7 +226,7 @@ function TerminalPanel() {
             const next = Number.parseInt(e.currentTarget.value, 10);
             if (Number.isFinite(next)) setTerminal({ scrollback: next });
           }}
-          class="h-7 w-28 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-[12px] text-[var(--fg)] outline-none focus:border-[var(--accent)]"
+          class="h-7 w-28 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-base text-[var(--fg)] outline-none focus:border-[var(--accent)]"
         />
       </FieldRow>
       <FieldRow label="Cursor blink" hint="Whether the terminal cursor blinks when idle.">
@@ -249,7 +249,7 @@ function TerminalPanel() {
               setTerminal({ renderer: next });
             }
           }}
-          class="h-7 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-[12px] text-[var(--fg)] outline-none focus:border-[var(--accent)]"
+          class="h-7 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-base text-[var(--fg)] outline-none focus:border-[var(--accent)]"
         >
           <option value="auto">Auto</option>
           <option value="webgl">WebGL</option>
@@ -354,7 +354,7 @@ function GeneralPanel() {
               setGeneral({ defaultProjectTab: next as (typeof PROJECT_TABS)[number] });
             }
           }}
-          class="h-7 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-[12px] text-[var(--fg)] outline-none focus:border-[var(--accent)]"
+          class="h-7 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-base text-[var(--fg)] outline-none focus:border-[var(--accent)]"
         >
           <For each={PROJECT_TABS}>{(v) => <option value={v}>{v}</option>}</For>
         </select>
@@ -368,7 +368,7 @@ function GeneralPanel() {
           data-testid="settings-general-base-directory"
           value={settings().general.addProjectBaseDirectory}
           onInput={(e) => setGeneral({ addProjectBaseDirectory: e.currentTarget.value })}
-          class="h-7 w-72 max-w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-[12px] text-[var(--fg)] outline-none focus:border-[var(--accent)]"
+          class="h-7 w-72 max-w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-base text-[var(--fg)] outline-none focus:border-[var(--accent)]"
         />
       </FieldRow>
       <FieldRow label="Show notifications" hint="Browser notifications on milestone events.">
@@ -400,8 +400,8 @@ function KeybindsPanel() {
       title="Keybinds"
       description="Override shortcuts. Empty = use the default. Reset returns to factory."
     >
-      <table class="w-full text-[12px]">
-        <thead class="text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]">
+      <table class="w-full text-base">
+        <thead class="text-xs uppercase tracking-[0.08em] text-[var(--dim)]">
           <tr>
             <th class="border-b border-[var(--border)] pb-1.5 pr-3 text-left">Action</th>
             <th class="border-b border-[var(--border)] pb-1.5 pr-3 text-left">Default</th>
@@ -424,7 +424,7 @@ function KeybindsPanel() {
                       placeholder={bind.defaultKey}
                       value={override()}
                       onInput={(e) => setKeybindOverride(bind.id, e.currentTarget.value.trim())}
-                      class="h-7 w-28 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 font-mono text-[12px] text-[var(--fg)] outline-none focus:border-[var(--accent)]"
+                      class="h-7 w-28 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 font-mono text-base text-[var(--fg)] outline-none focus:border-[var(--accent)]"
                     />
                   </td>
                   <td class="py-2 pr-3">
@@ -433,7 +433,7 @@ function KeybindsPanel() {
                       data-testid={`settings-keybind-reset-${bind.id}`}
                       onClick={() => resetKeybind(bind.id)}
                       disabled={!override()}
-                      class="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+                      class="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-sm text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Reset
                     </button>
@@ -450,7 +450,7 @@ function KeybindsPanel() {
         onClick={() => {
           for (const bind of KEYBIND_DEFAULTS) resetKeybind(bind.id);
         }}
-        class="self-start rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+        class="self-start rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-sm text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
       >
         Reset all
       </button>
@@ -466,8 +466,8 @@ function PanelShell(props: { title: string; description: string; children: JSX.E
   return (
     <article class="flex max-w-3xl flex-col gap-4">
       <header>
-        <h2 class="text-[14px] font-medium text-[var(--fg)]">{props.title}</h2>
-        <p class="mt-0.5 text-[11px] text-[var(--dim)]">{props.description}</p>
+        <h2 class="text-lg font-medium text-[var(--fg)]">{props.title}</h2>
+        <p class="mt-0.5 text-sm text-[var(--dim)]">{props.description}</p>
       </header>
       <div class="flex flex-col gap-3">{props.children}</div>
     </article>
@@ -478,8 +478,8 @@ function FieldRow(props: { label: string; hint?: string; children: JSX.Element }
   return (
     <label class="flex flex-wrap items-start justify-between gap-3 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
       <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span class="text-[12px] text-[var(--fg)]">{props.label}</span>
-        {props.hint && <span class="text-[10px] text-[var(--dim)]">{props.hint}</span>}
+        <span class="text-base text-[var(--fg)]">{props.label}</span>
+        {props.hint && <span class="text-xs text-[var(--dim)]">{props.hint}</span>}
       </span>
       <span class="flex items-center">{props.children}</span>
     </label>

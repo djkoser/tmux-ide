@@ -203,9 +203,9 @@ function ProjectSidebar(props: { projectName: string; view: ViewId; onView: (v: 
   return (
     <nav
       data-testid="v2-project-sidebar"
-      class="flex h-full min-h-0 flex-col overflow-y-auto py-2 text-[12px]"
+      class="flex h-full min-h-0 flex-col overflow-y-auto py-2 text-base"
     >
-      <div class="mb-1 px-3 text-[10px] uppercase tracking-wider text-[var(--dim)]">project</div>
+      <div class="mb-1 px-3 text-xs uppercase tracking-wider text-[var(--dim)]">project</div>
       <div class="mb-3 flex items-center gap-2 px-2 py-1 text-[var(--accent)]">
         <span aria-hidden="true" class="w-4 text-center">
           ●
@@ -213,7 +213,7 @@ function ProjectSidebar(props: { projectName: string; view: ViewId; onView: (v: 
         <span class="truncate font-medium">{props.projectName}</span>
       </div>
 
-      <div class="mb-1 mt-1 border-t border-[var(--border-weak)] px-3 pt-2 text-[10px] uppercase tracking-wider text-[var(--dim)]">
+      <div class="mb-1 mt-1 border-t border-[var(--border-weak)] px-3 pt-2 text-xs uppercase tracking-wider text-[var(--dim)]">
         views
       </div>
       {VIEWS.map((v) => {
@@ -225,7 +225,7 @@ function ProjectSidebar(props: { projectName: string; view: ViewId; onView: (v: 
             data-active={isActive() ? "true" : undefined}
             onClick={() => props.onView(v.id)}
             class={
-              "flex w-full items-center gap-2 px-2 py-1 text-left text-[12px] transition-colors " +
+              "flex w-full items-center gap-2 px-2 py-1 text-left text-base transition-colors " +
               (isActive()
                 ? "bg-[var(--surface-hover)] text-[var(--accent)]"
                 : "text-[var(--fg)] hover:bg-[var(--surface-hover)]")

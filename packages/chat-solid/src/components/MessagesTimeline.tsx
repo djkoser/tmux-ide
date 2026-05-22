@@ -197,7 +197,7 @@ export function MessagesTimeline(props: {
           fallback={
             <div
               data-testid="messages-timeline-empty"
-              class="flex min-h-0 flex-1 items-center justify-center text-[13px] text-[var(--fg-muted,var(--dim))]"
+              class="flex min-h-0 flex-1 items-center justify-center text-md text-[var(--fg-muted,var(--dim))]"
             >
               Send a message to start this chat.
             </div>
@@ -326,7 +326,7 @@ function TimelineRow(props: TimelineRowProps): JSX.Element {
           aria-label={dividerLabel()}
         >
           <span aria-hidden="true" class="h-px flex-1 bg-[var(--border-weak,var(--border))]" />
-          <span class="shrink-0 rounded-full border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-[var(--fg-muted,var(--dim))]">
+          <span class="shrink-0 rounded-full border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1 text-xs uppercase tracking-[0.14em] text-[var(--fg-muted,var(--dim))]">
             {dividerLabel()}
           </span>
           <span aria-hidden="true" class="h-px flex-1 bg-[var(--border-weak,var(--border))]" />
@@ -392,7 +392,7 @@ function WorkGroupRow(props: { entries: ReadonlyArray<WorkLogEntry> }): JSX.Elem
       data-kind="work"
       class="group/work mb-3 rounded-md border border-[var(--border-weak,var(--border))] bg-[var(--bg-weak,var(--bg))] px-3 py-2"
     >
-      <header class="flex items-center gap-2 text-[11px] uppercase tracking-[0.08em] text-[var(--fg-muted,var(--fg-secondary))]">
+      <header class="flex items-center gap-2 text-sm uppercase tracking-[0.08em] text-[var(--fg-muted,var(--fg-secondary))]">
         <span aria-hidden="true">▾</span>
         <span data-testid="work-group-summary">
           Worked on {props.entries.length} step{props.entries.length === 1 ? "" : "s"}
@@ -414,7 +414,7 @@ function WorkGroupRow(props: { entries: ReadonlyArray<WorkLogEntry> }): JSX.Elem
           </span>
         </Show>
       </header>
-      <ul class="mt-1.5 flex flex-col gap-0.5 text-[12px] leading-relaxed text-[var(--fg-secondary)]">
+      <ul class="mt-1.5 flex flex-col gap-0.5 text-base leading-relaxed text-[var(--fg-secondary)]">
         <For each={visible()}>
           {(entry) => {
             const badge = () => (entry.status ? WORK_STATUS_BADGE[entry.status] : null);
@@ -429,7 +429,7 @@ function WorkGroupRow(props: { entries: ReadonlyArray<WorkLogEntry> }): JSX.Elem
               >
                 <span
                   aria-hidden="true"
-                  class="w-3.5 shrink-0 text-center text-[10px]"
+                  class="w-3.5 shrink-0 text-center text-xs"
                   classList={{
                     "text-[var(--accent)]": entry.status === "in_progress",
                   }}
@@ -456,7 +456,7 @@ function WorkGroupRow(props: { entries: ReadonlyArray<WorkLogEntry> }): JSX.Elem
             <button
               type="button"
               data-testid="work-group-expand"
-              class="cursor-pointer rounded-sm text-[11px] text-[var(--accent)] hover:underline"
+              class="cursor-pointer rounded-sm text-sm text-[var(--accent)] hover:underline"
               onClick={() => setExpanded(true)}
             >
               +{overflow()} more
@@ -560,7 +560,7 @@ function UserRow(props: {
                     type="button"
                     data-testid="message-revert-from-here"
                     data-revert-count={props.revertTurnCount ?? 0}
-                    class="cursor-pointer rounded-sm border border-[var(--border-weak,var(--border))] px-1.5 py-0.5 text-[10px] text-[var(--fg-secondary)] opacity-0 transition-opacity hover:border-[var(--accent)] hover:text-[var(--accent)] group-hover/user:opacity-100"
+                    class="cursor-pointer rounded-sm border border-[var(--border-weak,var(--border))] px-1.5 py-0.5 text-xs text-[var(--fg-secondary)] opacity-0 transition-opacity hover:border-[var(--accent)] hover:text-[var(--accent)] group-hover/user:opacity-100"
                     onClick={() => setRevertConfirming(true)}
                     title={`Revert ${props.revertTurnCount} turn${props.revertTurnCount === 1 ? "" : "s"} from here`}
                   >
@@ -570,7 +570,7 @@ function UserRow(props: {
               >
                 <span
                   data-testid="message-revert-from-here-confirm"
-                  class="inline-flex items-center gap-1 rounded-sm border border-[var(--red,#c33)] bg-[var(--red,#c33)]/10 px-1.5 py-0.5 text-[10px] text-[var(--red,#c33)]"
+                  class="inline-flex items-center gap-1 rounded-sm border border-[var(--red,#c33)] bg-[var(--red,#c33)]/10 px-1.5 py-0.5 text-xs text-[var(--red,#c33)]"
                   role="group"
                   aria-label={`Confirm revert of ${props.revertTurnCount} turn${props.revertTurnCount === 1 ? "" : "s"}`}
                 >
@@ -580,7 +580,7 @@ function UserRow(props: {
                   <button
                     type="button"
                     data-testid="message-revert-from-here-yes"
-                    class="cursor-pointer rounded-sm border-0 bg-transparent px-1 text-[10px] font-semibold text-[var(--red,#c33)] hover:underline"
+                    class="cursor-pointer rounded-sm border-0 bg-transparent px-1 text-xs font-semibold text-[var(--red,#c33)] hover:underline"
                     onClick={() => {
                       props.onRevertFromMessage?.(props.message.id);
                       setRevertConfirming(false);
@@ -591,7 +591,7 @@ function UserRow(props: {
                   <button
                     type="button"
                     data-testid="message-revert-from-here-no"
-                    class="cursor-pointer rounded-sm border-0 bg-transparent px-1 text-[10px] text-[var(--fg-secondary)] hover:underline"
+                    class="cursor-pointer rounded-sm border-0 bg-transparent px-1 text-xs text-[var(--fg-secondary)] hover:underline"
                     onClick={() => setRevertConfirming(false)}
                   >
                     No
@@ -603,7 +603,7 @@ function UserRow(props: {
               <button
                 type="button"
                 data-testid="message-edit"
-                class="cursor-pointer rounded-sm border border-[var(--border-weak,var(--border))] px-1.5 py-0.5 text-[10px] text-[var(--fg-secondary)] opacity-0 transition-opacity hover:border-[var(--accent)] hover:text-[var(--accent)] group-hover/user:opacity-100"
+                class="cursor-pointer rounded-sm border border-[var(--border-weak,var(--border))] px-1.5 py-0.5 text-xs text-[var(--fg-secondary)] opacity-0 transition-opacity hover:border-[var(--accent)] hover:text-[var(--accent)] group-hover/user:opacity-100"
                 onClick={beginEdit}
                 title="Edit this message and regenerate"
               >
@@ -617,7 +617,7 @@ function UserRow(props: {
       <Show
         when={editing()}
         fallback={
-          <div class="min-w-0 text-[13px] leading-relaxed text-[var(--fg)]">
+          <div class="min-w-0 text-md leading-relaxed text-[var(--fg)]">
             <For each={props.message.content}>
               {(block, index) => (
                 <UserContentBlockView
@@ -641,7 +641,7 @@ function UserRow(props: {
         <div data-testid="message-edit-form" class="min-w-0">
           <textarea
             data-testid="message-edit-input"
-            class="w-full resize-y rounded-sm border border-[var(--accent)] bg-[var(--bg)] px-2 py-1.5 text-[13px] leading-relaxed text-[var(--fg)] outline-none"
+            class="w-full resize-y rounded-sm border border-[var(--accent)] bg-[var(--bg)] px-2 py-1.5 text-md leading-relaxed text-[var(--fg)] outline-none"
             rows={Math.min(12, Math.max(2, draft().split("\n").length))}
             value={draft()}
             autofocus
@@ -658,11 +658,11 @@ function UserRow(props: {
             }}
           />
           <div class="mt-1.5 flex items-center justify-end gap-1.5">
-            <span class="mr-auto text-[10px] text-[var(--dim)]">⌘↵ to save · Esc to cancel</span>
+            <span class="mr-auto text-xs text-[var(--dim)]">⌘↵ to save · Esc to cancel</span>
             <button
               type="button"
               data-testid="message-edit-cancel"
-              class="cursor-pointer rounded-sm border border-[var(--border-weak,var(--border))] px-2 py-0.5 text-[10px] text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+              class="cursor-pointer rounded-sm border border-[var(--border-weak,var(--border))] px-2 py-0.5 text-xs text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
               onClick={() => setEditing(false)}
             >
               Cancel
@@ -670,7 +670,7 @@ function UserRow(props: {
             <button
               type="button"
               data-testid="message-edit-save"
-              class="cursor-pointer rounded-sm bg-[var(--accent)] px-2 py-0.5 text-[10px] text-[var(--bg)] transition-opacity hover:opacity-90"
+              class="cursor-pointer rounded-sm bg-[var(--accent)] px-2 py-0.5 text-xs text-[var(--bg)] transition-opacity hover:opacity-90"
               onClick={commitEdit}
             >
               Save &amp; regenerate
@@ -752,7 +752,7 @@ function AssistantRow(props: {
       <Show when={hasText()}>
         <div class="min-w-0">
           <MarkdownBody
-            class="chat-solid-markdown chat-markdown text-[13px] leading-relaxed text-[var(--fg)]"
+            class="chat-solid-markdown chat-markdown text-md leading-relaxed text-[var(--fg)]"
             html={renderedText()}
             onClick={(event) => handleFileLinkClick(event, props.cwd?.(), props.onOpenFile)}
           />
@@ -771,11 +771,11 @@ function AssistantRow(props: {
           data-testid="message-thought"
           class="mt-2 rounded-md border border-[var(--border)] bg-[var(--bg-weak)]"
         >
-          <summary class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-[11px] uppercase tracking-[0.08em] text-[var(--fg-muted,var(--fg-secondary))]">
+          <summary class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm uppercase tracking-[0.08em] text-[var(--fg-muted,var(--fg-secondary))]">
             <span aria-hidden="true">▸</span>
             <span>Thought</span>
           </summary>
-          <div class="border-t border-[var(--border)] px-3 py-2 text-[12px] leading-relaxed text-[var(--fg-secondary)] whitespace-pre-wrap break-words">
+          <div class="border-t border-[var(--border)] px-3 py-2 text-base leading-relaxed text-[var(--fg-secondary)] whitespace-pre-wrap break-words">
             {props.message.thoughtText}
           </div>
         </details>
@@ -790,7 +790,7 @@ function AssistantRow(props: {
           data-testid="assistant-changed-files"
           class="mt-2 rounded-md border border-[var(--border-weak,var(--border))] bg-[var(--bg-weak,var(--bg))] p-2.5"
         >
-          <header class="mb-1.5 flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-[var(--fg-muted,var(--fg-secondary))]">
+          <header class="mb-1.5 flex items-center gap-2 text-xs uppercase tracking-[0.12em] text-[var(--fg-muted,var(--fg-secondary))]">
             <span>Changed files ({turnChangedFiles().length})</span>
             <Show when={hasNonZeroStat(turnDiffStat())}>
               <span aria-hidden="true">·</span>
@@ -805,7 +805,7 @@ function AssistantRow(props: {
       </Show>
 
       <Show when={!hasText() && !hasThought() && !hasTools() && !props.message.streaming}>
-        <span data-testid="message-empty" class="text-[12px] text-[var(--fg-muted,var(--dim))]">
+        <span data-testid="message-empty" class="text-base text-[var(--fg-muted,var(--dim))]">
           No assistant output.
         </span>
       </Show>
@@ -837,12 +837,9 @@ function ToolCallsCluster(props: {
         data-testid="tool-calls-toggle"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open()}
-        class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-[var(--fg-muted,var(--fg-secondary))] transition-colors hover:bg-[var(--surface-hover,var(--bg-strong))]"
+        class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-[var(--fg-muted,var(--fg-secondary))] transition-colors hover:bg-[var(--surface-hover,var(--bg-strong))]"
       >
-        <span
-          aria-hidden="true"
-          class="inline-block w-3 text-[10px] text-[var(--fg-muted,var(--dim))]"
-        >
+        <span aria-hidden="true" class="inline-block w-3 text-xs text-[var(--fg-muted,var(--dim))]">
           {open() ? "▾" : "▸"}
         </span>
         <span class="font-medium text-[var(--fg)]">Tool calls ({summary().count})</span>
@@ -879,7 +876,7 @@ function WorkingDots(): JSX.Element {
   return (
     <div
       data-testid="message-working"
-      class="flex items-center gap-1.5 pt-1 text-[11px] text-[var(--fg-muted,var(--dim))]"
+      class="flex items-center gap-1.5 pt-1 text-sm text-[var(--fg-muted,var(--dim))]"
     >
       <span class="h-1 w-1 rounded-full bg-[var(--fg-muted,var(--dim))] animate-pulse" />
       <span class="h-1 w-1 rounded-full bg-[var(--fg-muted,var(--dim))] animate-pulse [animation-delay:200ms]" />
@@ -909,7 +906,7 @@ function UserContentBlockView(props: {
         fallback={
           <p
             data-testid="user-image-block-missing"
-            class="text-[12px] text-[var(--fg-muted,var(--dim))]"
+            class="text-base text-[var(--fg-muted,var(--dim))]"
           >
             (image attachment unavailable)
           </p>
@@ -942,7 +939,7 @@ function UserContentBlockView(props: {
   const renderedText = createMemo(() => renderMarkdown(block.text, { cwd: props.cwd?.() }));
   return (
     <MarkdownBody
-      class="chat-solid-markdown chat-markdown text-[13px] leading-relaxed text-[var(--fg)]"
+      class="chat-solid-markdown chat-markdown text-md leading-relaxed text-[var(--fg)]"
       html={renderedText()}
       onClick={(event) => handleFileLinkClick(event, props.cwd?.(), props.onOpenFile)}
     />

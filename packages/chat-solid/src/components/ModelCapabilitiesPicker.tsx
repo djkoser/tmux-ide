@@ -71,13 +71,13 @@ export function ModelCapabilitiesPicker(props: ModelCapabilitiesPickerProps) {
       <div data-testid="model-capabilities-picker" class="flex items-center gap-1.5">
         <Show when={efforts().length > 0}>
           <label
-            class="flex items-center gap-1 rounded-md border border-border-weak bg-surface px-1.5 py-0.5 text-[11px] text-dim"
+            class="flex items-center gap-1 rounded-md border border-border-weak bg-surface px-1.5 py-0.5 text-sm text-dim"
             title="Reasoning effort"
           >
             <span aria-hidden="true">⚡</span>
             <select
               data-testid="reasoning-effort-select"
-              class="border-0 bg-transparent text-[11px] text-fg outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              class="border-0 bg-transparent text-sm text-fg outline-none disabled:cursor-not-allowed disabled:opacity-50"
               value={effortValue()}
               disabled={isDisabled()}
               onChange={(event) => props.onChange("reasoningEffort", event.currentTarget.value)}
@@ -90,7 +90,7 @@ export function ModelCapabilitiesPicker(props: ModelCapabilitiesPickerProps) {
         </Show>
         <Show when={supportsFastMode()}>
           <label
-            class="flex items-center gap-1 rounded-md border border-border-weak bg-surface px-1.5 py-0.5 text-[11px] text-dim"
+            class="flex items-center gap-1 rounded-md border border-border-weak bg-surface px-1.5 py-0.5 text-sm text-dim"
             title="Fast mode (lower latency)"
           >
             <input

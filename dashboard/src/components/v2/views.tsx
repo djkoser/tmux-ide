@@ -277,8 +277,8 @@ export function PlanBodyView(props: {
       <Show when={props.plan}>
         {(meta) => (
           <header class="sticky top-0 z-10 flex items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-strong,var(--bg))] px-8 py-3">
-            <h1 class="text-[13px] font-medium text-[var(--fg)]">{meta().title}</h1>
-            <span class="rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]">
+            <h1 class="text-md font-medium text-[var(--fg)]">{meta().title}</h1>
+            <span class="rounded-full border border-[var(--border)] px-2 py-0.5 text-xs uppercase tracking-[0.08em] text-[var(--dim)]">
               {meta().status}
             </span>
             <span class="flex-1" />
@@ -286,7 +286,7 @@ export function PlanBodyView(props: {
               {(err) => (
                 <span
                   data-testid="plan-save-error"
-                  class="truncate text-[11px] text-[var(--red,#cc6666)]"
+                  class="truncate text-sm text-[var(--red,#cc6666)]"
                   title={err()}
                 >
                   {err()}
@@ -294,7 +294,7 @@ export function PlanBodyView(props: {
               )}
             </Show>
             <Show when={savedRecently()}>
-              <span data-testid="plan-saved-toast" class="text-[11px] text-[var(--accent)]">
+              <span data-testid="plan-saved-toast" class="text-sm text-[var(--accent)]">
                 Saved
               </span>
             </Show>
@@ -306,7 +306,7 @@ export function PlanBodyView(props: {
                   data-testid="plan-edit-button"
                   disabled={!props.controller.canEdit()}
                   onClick={() => props.controller.beginEdit()}
-                  class="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+                  class="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-sm text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
                   title="Edit plan (⌘E)"
                 >
                   <Pencil class="h-3 w-3" aria-hidden="true" />
@@ -318,7 +318,7 @@ export function PlanBodyView(props: {
                 type="button"
                 data-testid="plan-edit-cancel"
                 onClick={() => props.controller.cancelEdit()}
-                class="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                class="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-sm text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
                 title="Cancel (Esc)"
               >
                 Cancel
@@ -328,7 +328,7 @@ export function PlanBodyView(props: {
                 data-testid="plan-edit-save"
                 disabled={props.controller.saving()}
                 onClick={() => void props.controller.saveEdit()}
-                class="rounded-md border border-[var(--accent)] bg-[var(--accent)] px-2 py-1 text-[11px] text-[var(--bg)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                class="rounded-md border border-[var(--accent)] bg-[var(--accent)] px-2 py-1 text-sm text-[var(--bg)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                 title="Save (⌘S)"
               >
                 {props.controller.saving() ? "Saving…" : "Save"}
@@ -340,14 +340,14 @@ export function PlanBodyView(props: {
       <Show when={props.controller.editing() && props.controller.remoteUpdateAvailable()}>
         <div
           data-testid="plan-remote-update-banner"
-          class="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--surface-active,var(--bg-strong))] px-8 py-2 text-[11px] text-[var(--fg-secondary)]"
+          class="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--surface-active,var(--bg-strong))] px-8 py-2 text-sm text-[var(--fg-secondary)]"
         >
           <span class="flex-1">Remote update available — your local edit is unsaved.</span>
           <button
             type="button"
             data-testid="plan-remote-discard"
             onClick={() => props.controller.discardLocal()}
-            class="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            class="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-sm hover:border-[var(--accent)] hover:text-[var(--accent)]"
           >
             Discard local
           </button>
@@ -360,7 +360,7 @@ export function PlanBodyView(props: {
             <Show
               when={html()}
               fallback={
-                <div class="flex h-40 items-center justify-center text-[12px] text-[var(--dim)]">
+                <div class="flex h-40 items-center justify-center text-base text-[var(--dim)]">
                   Rendering plan…
                 </div>
               }
@@ -382,7 +382,7 @@ export function PlanBodyView(props: {
           value={props.controller.draft()}
           onInput={(e) => props.controller.setDraft(e.currentTarget.value)}
           onKeyDown={onTextareaKeyDown}
-          class="min-h-0 flex-1 resize-none border-0 bg-[var(--bg)] px-8 py-6 font-mono text-[12px] leading-[1.55] text-[var(--fg)] outline-none focus:outline-none"
+          class="min-h-0 flex-1 resize-none border-0 bg-[var(--bg)] px-8 py-6 font-mono text-base leading-[1.55] text-[var(--fg)] outline-none focus:outline-none"
         />
       </Show>
     </div>
@@ -608,7 +608,7 @@ export function PlansSurfaceView(props: ProjectProps): JSX.Element {
         <Show
           when={selected()}
           fallback={
-            <div class="flex h-full items-center justify-center p-6 text-[12px] text-[var(--dim)]">
+            <div class="flex h-full items-center justify-center p-6 text-base text-[var(--dim)]">
               Select a plan from the rail to view it here.
             </div>
           }

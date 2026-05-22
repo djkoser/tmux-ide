@@ -83,7 +83,7 @@ export function ProviderStatusBanner(props: ProviderStatusBannerProps) {
       <div
         data-testid="provider-status-banner"
         data-provider-kind={activeProvider()?.kind ?? ""}
-        class="mx-auto flex w-full max-w-3xl items-start gap-2 border-b border-[var(--border)] bg-[color-mix(in_oklab,var(--red)_8%,transparent)] px-4 py-2 text-[12px]"
+        class="mx-auto flex w-full max-w-3xl items-start gap-2 border-b border-[var(--border)] bg-[color-mix(in_oklab,var(--red)_8%,transparent)] px-4 py-2 text-base"
       >
         <span
           aria-hidden="true"
@@ -96,7 +96,7 @@ export function ProviderStatusBanner(props: ProviderStatusBannerProps) {
           </div>
           <Show when={activeProvider()?.error || activeProvider()?.description}>
             <div
-              class="mt-0.5 truncate text-[11px] text-[var(--fg-secondary)]"
+              class="mt-0.5 truncate text-sm text-[var(--fg-secondary)]"
               title={activeProvider()?.error ?? activeProvider()?.description}
             >
               {activeProvider()?.error ?? activeProvider()?.description}
@@ -104,9 +104,7 @@ export function ProviderStatusBanner(props: ProviderStatusBannerProps) {
           </Show>
           <Show when={altAvailableProviders().length > 0 && props.onSwitch}>
             <div class="mt-1.5 flex flex-wrap items-center gap-1">
-              <span class="text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]">
-                Switch to
-              </span>
+              <span class="text-xs uppercase tracking-[0.08em] text-[var(--dim)]">Switch to</span>
               <For each={altAvailableProviders()}>
                 {(p) => (
                   <button
@@ -121,7 +119,7 @@ export function ProviderStatusBanner(props: ProviderStatusBannerProps) {
                       else if (k === "gemini") next = { kind: "gemini" };
                       if (next) props.onSwitch?.(next);
                     }}
-                    class="inline-flex h-5 cursor-pointer items-center rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 text-[10px] text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                    class="inline-flex h-5 cursor-pointer items-center rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 text-xs text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
                   >
                     {p.name || p.kind}
                   </button>
@@ -134,7 +132,7 @@ export function ProviderStatusBanner(props: ProviderStatusBannerProps) {
           type="button"
           data-testid="provider-status-banner-retry"
           onClick={() => providersControls.refetch()}
-          class="h-6 cursor-pointer rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-[11px] text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+          class="h-6 cursor-pointer rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-sm text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
         >
           Retry
         </button>

@@ -177,18 +177,18 @@ export function CommitDialog(props: CommitDialogProps) {
       >
         <div
           data-testid="commit-dialog"
-          class="flex w-[min(560px,92vw)] max-h-[85vh] flex-col rounded-md border border-[var(--border)] bg-[var(--bg)] text-[12px] text-[var(--fg)] shadow-2xl"
+          class="flex w-[min(560px,92vw)] max-h-[85vh] flex-col rounded-md border border-[var(--border)] bg-[var(--bg)] text-base text-[var(--fg)] shadow-2xl"
         >
           <header class="flex items-center gap-2 border-b border-[var(--border-weak,var(--border))] px-3 py-2">
-            <span class="text-[10px] uppercase tracking-wider text-[var(--dim)]">Commit</span>
-            <span class="ml-auto text-[10px] text-[var(--dim)] tabular-nums">
+            <span class="text-xs uppercase tracking-wider text-[var(--dim)]">Commit</span>
+            <span class="ml-auto text-xs text-[var(--dim)] tabular-nums">
               {selected().size}/{rows().length}
             </span>
           </header>
 
           <div class="flex min-h-0 flex-1 flex-col gap-2 px-3 py-2">
             <label class="flex flex-col gap-1">
-              <span class="text-[10px] uppercase tracking-wider text-[var(--dim)]">Message</span>
+              <span class="text-xs uppercase tracking-wider text-[var(--dim)]">Message</span>
               <textarea
                 data-testid="commit-dialog-message"
                 value={message()}
@@ -196,12 +196,12 @@ export function CommitDialog(props: CommitDialogProps) {
                 rows={4}
                 placeholder="Describe the change…"
                 disabled={busy()}
-                class="resize-y rounded border border-[var(--border)] bg-[var(--bg-weak,var(--bg))] px-2 py-1 font-mono text-[12px] text-[var(--fg)]"
+                class="resize-y rounded border border-[var(--border)] bg-[var(--bg-weak,var(--bg))] px-2 py-1 font-mono text-base text-[var(--fg)]"
               />
             </label>
 
             <div class="flex min-h-0 flex-1 flex-col gap-1">
-              <span class="text-[10px] uppercase tracking-wider text-[var(--dim)]">Files</span>
+              <span class="text-xs uppercase tracking-wider text-[var(--dim)]">Files</span>
               <div
                 ref={setFilesEl}
                 data-testid="commit-dialog-files"
@@ -247,7 +247,7 @@ export function CommitDialog(props: CommitDialogProps) {
                               disabled={busy()}
                               onChange={() => toggle(row().path)}
                             />
-                            <span class="w-12 text-[10px] uppercase text-[var(--dim)]">
+                            <span class="w-12 text-xs uppercase text-[var(--dim)]">
                               {row().status}
                             </span>
                             <span class="flex-1 truncate font-mono" title={row().path}>

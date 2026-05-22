@@ -180,20 +180,17 @@ export function ComposerPendingUserInputPanel(
           >
             <div class="flex items-center gap-2">
               <Show when={prompt().questions.length > 1}>
-                <span class="inline-flex h-5 items-center rounded-md bg-surface px-1.5 text-[10px] font-medium tabular-nums text-fg-secondary">
+                <span class="inline-flex h-5 items-center rounded-md bg-surface px-1.5 text-xs font-medium tabular-nums text-fg-secondary">
                   {props.questionIndex() + 1}/{prompt().questions.length}
                 </span>
               </Show>
-              <span class="text-[11px] font-semibold uppercase tracking-[0.2em] text-dim">
+              <span class="text-sm font-semibold uppercase tracking-[0.2em] text-dim">
                 {question().header}
               </span>
             </div>
-            <p class="mt-1.5 text-[13px] text-fg">{question().question}</p>
+            <p class="mt-1.5 text-md text-fg">{question().question}</p>
             <Show when={question().multiSelect}>
-              <p
-                data-testid="composer-pending-user-input-multi-hint"
-                class="mt-1 text-[11px] text-dim"
-              >
+              <p data-testid="composer-pending-user-input-multi-hint" class="mt-1 text-sm text-dim">
                 Select one or more options.
               </p>
             </Show>
@@ -225,7 +222,7 @@ export function ComposerPendingUserInputPanel(
                           <kbd
                             data-testid="composer-pending-user-input-shortcut"
                             class={
-                              "flex size-5 shrink-0 items-center justify-center rounded text-[11px] font-medium tabular-nums " +
+                              "flex size-5 shrink-0 items-center justify-center rounded text-sm font-medium tabular-nums " +
                               (isSelected() ? "bg-accent/20 text-accent" : "bg-surface text-dim")
                             }
                           >
@@ -234,9 +231,9 @@ export function ComposerPendingUserInputPanel(
                         )}
                       </Show>
                       <div class="min-w-0 flex-1">
-                        <span class="text-[13px] font-medium">{option.label}</span>
+                        <span class="text-md font-medium">{option.label}</span>
                         <Show when={option.description && option.description !== option.label}>
-                          <span class="ml-2 text-[11px] text-dim">{option.description}</span>
+                          <span class="ml-2 text-sm text-dim">{option.description}</span>
                         </Show>
                       </div>
                       <Show when={isSelected()}>

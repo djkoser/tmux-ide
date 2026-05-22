@@ -363,7 +363,7 @@ function StepTabs(props: StepTabsProps) {
 function SetupCard(props: { title: string; children: JSX.Element }) {
   return (
     <section class="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
-      <h2 class="mb-3 text-[10px] uppercase tracking-[0.14em] text-[var(--dim)]">{props.title}</h2>
+      <h2 class="mb-3 text-xs uppercase tracking-[0.14em] text-[var(--dim)]">{props.title}</h2>
       {props.children}
     </section>
   );
@@ -382,7 +382,7 @@ function SetupInput(props: {
 }) {
   return (
     <label class="block">
-      <span class="mb-1 block text-[11px] text-[var(--dim)]">{props.label}</span>
+      <span class="mb-1 block text-sm text-[var(--dim)]">{props.label}</span>
       <input
         type="text"
         spellcheck={false}
@@ -451,9 +451,7 @@ function DetectPanel(props: DetectPanelProps) {
         data-testid="setup-detect-dir"
       />
       <div class="mt-3 flex items-center justify-between gap-3">
-        <span class="text-[11px] text-[var(--dim)]">
-          {props.inspectLoading ? "Inspecting..." : ""}
-        </span>
+        <span class="text-sm text-[var(--dim)]">{props.inspectLoading ? "Inspecting..." : ""}</span>
         <SetupButton
           onClick={props.onDetect}
           disabled={!props.dir.trim() || props.inspectLoading}
@@ -531,10 +529,10 @@ function LayoutPanel(props: {
               >
                 <div class="flex items-center justify-between gap-3">
                   <span class="text-sm font-medium text-[var(--fg)]">{layout.label}</span>
-                  <span class="text-[11px] text-[var(--dim)]">{layout.agents} agents</span>
+                  <span class="text-sm text-[var(--dim)]">{layout.agents} agents</span>
                 </div>
-                <p class="mt-1 text-[11px] text-[var(--dim)]">{layout.description}</p>
-                <pre class="mt-2 overflow-x-auto font-mono text-[10px] leading-tight text-[var(--fg-secondary)]">
+                <p class="mt-1 text-sm text-[var(--dim)]">{layout.description}</p>
+                <pre class="mt-2 overflow-x-auto font-mono text-xs leading-tight text-[var(--fg-secondary)]">
                   {layout.diagram.join("\n")}
                 </pre>
               </button>

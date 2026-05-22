@@ -145,8 +145,8 @@ export function PlansPanelView(props: PlansPanelViewProps) {
         width: "100%",
         "background-color": "var(--bg)",
         color: "var(--fg)",
-        "font-family": "var(--font-family-mono, var(--font-mono))",
-        "font-size": "12px",
+        "font-family": "var(--font-mono)",
+        "font-size": "var(--text-base)",
       }}
     >
       <Show when={plan()}>
@@ -162,7 +162,7 @@ export function PlansPanelView(props: PlansPanelViewProps) {
               "border-bottom": "1px solid var(--border)",
               padding: "0 12px",
               "background-color": "var(--bg-strong)",
-              "font-size": "11px",
+              "font-size": "var(--text-sm)",
             }}
           >
             <span
@@ -182,7 +182,7 @@ export function PlansPanelView(props: PlansPanelViewProps) {
               style={{
                 "border-radius": "9999px",
                 padding: "1px 6px",
-                "font-size": "10px",
+                "font-size": "var(--text-xs)",
                 background: STATUS_PILL_BG[p().status] ?? "var(--surface)",
                 color: STATUS_PILL_FG[p().status] ?? "var(--fg-secondary)",
               }}
@@ -200,7 +200,7 @@ export function PlansPanelView(props: PlansPanelViewProps) {
                   border: "none",
                   color: "var(--green)",
                   cursor: "pointer",
-                  "font-size": "11px",
+                  "font-size": "var(--text-sm)",
                   "font-family": "inherit",
                   padding: "0",
                 }}
@@ -218,7 +218,7 @@ export function PlansPanelView(props: PlansPanelViewProps) {
                   border: "none",
                   color: "var(--dim)",
                   cursor: "pointer",
-                  "font-size": "11px",
+                  "font-size": "var(--text-sm)",
                   "font-family": "inherit",
                   padding: "0",
                 }}
@@ -248,7 +248,7 @@ export function PlansPanelView(props: PlansPanelViewProps) {
                   border: "none",
                   color: "var(--red, var(--accent))",
                   cursor: "pointer",
-                  "font-size": "11px",
+                  "font-size": "var(--text-sm)",
                   "font-family": "inherit",
                   padding: "0",
                 }}
@@ -283,7 +283,7 @@ export function PlansPanelView(props: PlansPanelViewProps) {
                 "justify-content": "center",
                 height: "100%",
                 color: "var(--dim)",
-                "font-size": "12px",
+                "font-size": "var(--text-base)",
               }}
             >
               Select a plan to view

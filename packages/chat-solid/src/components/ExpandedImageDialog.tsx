@@ -128,7 +128,7 @@ export function ExpandedImageDialog(props: ExpandedImageDialogProps) {
                 data-testid="expanded-image-dialog-close"
                 aria-label="Close image preview"
                 onClick={() => props.onClose()}
-                class="absolute right-2 top-2 z-30 inline-flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-strong)]/80 text-[14px] text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                class="absolute right-2 top-2 z-30 inline-flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-strong)]/80 text-lg text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
               >
                 ×
               </button>
@@ -144,7 +144,7 @@ export function ExpandedImageDialog(props: ExpandedImageDialogProps) {
                     />
                     <p
                       data-testid="expanded-image-dialog-caption"
-                      class="mt-2 max-w-[92vw] truncate text-center text-[12px] text-[var(--fg-secondary)]"
+                      class="mt-2 max-w-[92vw] truncate text-center text-base text-[var(--fg-secondary)]"
                     >
                       <span>{currentItem().name}</span>
                       <Show when={currentItem().sizeLabel}>

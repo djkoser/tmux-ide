@@ -172,16 +172,16 @@ export function SymbolPicker(props: SymbolPickerProps): JSX.Element {
               value={query()}
               onInput={(e) => setQuery(e.currentTarget.value)}
               onKeyDown={onInputKey}
-              class="border-b border-[var(--border)] bg-transparent px-3 py-2 text-[13px] text-[var(--fg)] outline-none"
+              class="border-b border-[var(--border)] bg-transparent px-3 py-2 text-md text-[var(--fg)] outline-none"
             />
             <Show when={error()}>
-              <div class="px-3 py-1 text-[11px] text-[var(--red,#cc6666)]">{error()}</div>
+              <div class="px-3 py-1 text-sm text-[var(--red,#cc6666)]">{error()}</div>
             </Show>
             <ul class="max-h-[50vh] min-h-[40px] overflow-y-auto">
               <Show
                 when={results().length > 0}
                 fallback={
-                  <li class="px-3 py-2 text-[11px] text-[var(--dim)]">
+                  <li class="px-3 py-2 text-sm text-[var(--dim)]">
                     {loading() ? "Searching…" : "No symbols match."}
                   </li>
                 }
@@ -197,7 +197,7 @@ export function SymbolPicker(props: SymbolPickerProps): JSX.Element {
                           data-focused={focused() ? "true" : undefined}
                           onClick={() => void activate(symbol)}
                           class={
-                            "flex w-full items-center gap-2 px-3 py-1 text-left text-[12px] " +
+                            "flex w-full items-center gap-2 px-3 py-1 text-left text-base " +
                             (focused()
                               ? "bg-[var(--surface-hover)] text-[var(--accent)]"
                               : "text-[var(--fg)] hover:bg-[var(--surface-hover)]")
@@ -205,17 +205,17 @@ export function SymbolPicker(props: SymbolPickerProps): JSX.Element {
                         >
                           <span
                             aria-hidden="true"
-                            class="w-4 shrink-0 text-center font-mono text-[10px] text-[var(--dim)]"
+                            class="w-4 shrink-0 text-center font-mono text-xs text-[var(--dim)]"
                           >
                             {symbolGlyph(symbol.kind)}
                           </span>
                           <span class="truncate font-mono">{symbol.name}</span>
                           <Show when={symbol.containerName}>
-                            <span class="truncate text-[10px] text-[var(--dim)]">
+                            <span class="truncate text-xs text-[var(--dim)]">
                               {symbol.containerName}
                             </span>
                           </Show>
-                          <span class="ml-auto truncate text-[10px] text-[var(--dim)]">
+                          <span class="ml-auto truncate text-xs text-[var(--dim)]">
                             {symbol.location.uri.split("/").pop() ?? ""}
                           </span>
                         </button>

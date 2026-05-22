@@ -422,19 +422,19 @@ export function FilesSurface(props: FilesSurfaceProps): JSX.Element {
     <div data-testid="v2-files-surface" class="flex h-full min-h-0 w-full flex-row">
       <aside
         data-testid="v2-files-explorer"
-        class="flex w-64 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg-strong)] text-[12px]"
+        class="flex w-64 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg-strong)] text-base"
       >
-        <div class="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--border)] px-3 text-[10px] uppercase tracking-wider text-[var(--dim)]">
+        <div class="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--border)] px-3 text-xs uppercase tracking-wider text-[var(--dim)]">
           Files
         </div>
         <Show
           when={!rootLoading()}
-          fallback={<div class="px-3 py-2 text-[11px] text-[var(--dim)]">loading…</div>}
+          fallback={<div class="px-3 py-2 text-sm text-[var(--dim)]">loading…</div>}
         >
           <Show
             when={!rootError()}
             fallback={
-              <div class="px-3 py-2 text-[11px] text-[var(--red-foreground,var(--red))]">
+              <div class="px-3 py-2 text-sm text-[var(--red-foreground,var(--red))]">
                 {rootError()}
               </div>
             }
@@ -442,7 +442,7 @@ export function FilesSurface(props: FilesSurfaceProps): JSX.Element {
             <Show
               when={flatRows().length > 0}
               fallback={
-                <div data-testid="v2-files-empty" class="px-3 py-2 text-[11px] text-[var(--dim)]">
+                <div data-testid="v2-files-empty" class="px-3 py-2 text-sm text-[var(--dim)]">
                   No files
                 </div>
               }
@@ -487,7 +487,7 @@ export function FilesSurface(props: FilesSurfaceProps): JSX.Element {
             fallback={
               <div
                 data-testid="v2-files-empty-preview"
-                class="flex h-full items-center justify-center text-[11px] text-[var(--dim)]"
+                class="flex h-full items-center justify-center text-sm text-[var(--dim)]"
               >
                 Pick a file from the rail to preview it.
               </div>
@@ -516,7 +516,7 @@ function RecoveryBanner(props: {
   return (
     <div
       data-testid="v2-files-recovery-banner"
-      class="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--surface-active)] px-3 py-2 text-[11px] text-[var(--fg)]"
+      class="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--surface-active)] px-3 py-2 text-sm text-[var(--fg)]"
     >
       <span class="text-[var(--accent)]">●</span>
       <span class="font-mono">
@@ -527,13 +527,13 @@ function RecoveryBanner(props: {
       <For each={props.snapshots}>
         {(snap) => (
           <div class="inline-flex items-center gap-1">
-            <span class="truncate font-mono text-[10px] text-[var(--dim)]">{snap.filePath}</span>
+            <span class="truncate font-mono text-xs text-[var(--dim)]">{snap.filePath}</span>
             <button
               type="button"
               data-testid="v2-files-recovery-restore"
               data-buffer-uri={snap.bufferUri}
               onClick={() => props.onRestore(snap)}
-              class="h-5 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 text-[10px] text-[var(--accent)] hover:bg-[var(--surface-hover)]"
+              class="h-5 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 text-xs text-[var(--accent)] hover:bg-[var(--surface-hover)]"
             >
               Restore
             </button>
@@ -542,7 +542,7 @@ function RecoveryBanner(props: {
               data-testid="v2-files-recovery-discard"
               data-buffer-uri={snap.bufferUri}
               onClick={() => props.onDiscard(snap)}
-              class="h-5 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 text-[10px] text-[var(--dim)] hover:bg-[var(--surface-hover)]"
+              class="h-5 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 text-xs text-[var(--dim)] hover:bg-[var(--surface-hover)]"
             >
               Discard
             </button>
@@ -553,7 +553,7 @@ function RecoveryBanner(props: {
         type="button"
         data-testid="v2-files-recovery-dismiss-all"
         onClick={() => props.onDismissAll()}
-        class="h-5 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 text-[10px] text-[var(--dim)] hover:bg-[var(--surface-hover)]"
+        class="h-5 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 text-xs text-[var(--dim)] hover:bg-[var(--surface-hover)]"
       >
         Dismiss all
       </button>
@@ -608,7 +608,7 @@ function PreviewBody(props: {
             <div
               data-testid="v2-files-buffer-loading"
               data-buffer-status={buf().status}
-              class="flex h-full items-center justify-center text-[11px] text-[var(--dim)]"
+              class="flex h-full items-center justify-center text-sm text-[var(--dim)]"
             >
               <Show
                 when={buf().status === "loading"}
@@ -674,7 +674,7 @@ function ExternalChangeBanner(props: {
   return (
     <div
       data-testid="v2-files-external-change-banner"
-      class="flex shrink-0 items-center gap-2 border-b border-[var(--yellow,var(--accent))] bg-[var(--surface)] px-3 py-2 text-[11px] text-[var(--fg)]"
+      class="flex shrink-0 items-center gap-2 border-b border-[var(--yellow,var(--accent))] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--fg)]"
     >
       <span aria-hidden="true" class="text-[var(--yellow,var(--accent))]">
         ⚠
@@ -687,7 +687,7 @@ function ExternalChangeBanner(props: {
         type="button"
         data-testid="v2-files-external-change-accept"
         onClick={() => props.onAccept()}
-        class="h-5 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 text-[10px] text-[var(--accent)] hover:bg-[var(--surface-hover)]"
+        class="h-5 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 text-xs text-[var(--accent)] hover:bg-[var(--surface-hover)]"
       >
         Reload from disk
       </button>
@@ -695,7 +695,7 @@ function ExternalChangeBanner(props: {
         type="button"
         data-testid="v2-files-external-change-dismiss"
         onClick={() => props.onDismiss()}
-        class="h-5 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 text-[10px] text-[var(--dim)] hover:bg-[var(--surface-hover)]"
+        class="h-5 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 text-xs text-[var(--dim)] hover:bg-[var(--surface-hover)]"
       >
         Keep my edits
       </button>
@@ -896,7 +896,7 @@ function FileRailRow(props: {
           }}
           onFocus={() => props.onFocusRow(props.index)}
           class={
-            "flex h-6 w-full items-center gap-1 px-1 text-left text-[12px] outline-none " +
+            "flex h-6 w-full items-center gap-1 px-1 text-left text-base outline-none " +
             (isActive()
               ? "bg-[var(--surface-active)] text-[var(--accent)]"
               : "text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--fg)]") +
@@ -930,7 +930,7 @@ function FileRailRow(props: {
         }}
         onFocus={() => props.onFocusRow(props.index)}
         class={
-          "flex h-6 w-full items-center gap-1 px-1 text-left text-[12px] outline-none text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--fg)]" +
+          "flex h-6 w-full items-center gap-1 px-1 text-left text-base outline-none text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--fg)]" +
           (props.focused ? " ring-1 ring-inset ring-[var(--accent)]" : "")
         }
         style={{ "padding-left": indent() }}
@@ -943,7 +943,7 @@ function FileRailRow(props: {
         </Show>
         <span class={"truncate " + (statusClass() ?? "")}>{node().name}</span>
         <Show when={props.row.loading}>
-          <span class="ml-1 text-[10px] text-[var(--dim)]">…</span>
+          <span class="ml-1 text-xs text-[var(--dim)]">…</span>
         </Show>
       </button>
     </Show>

@@ -46,7 +46,7 @@ export function DiffToolbar(props: DiffToolbarProps): JSX.Element {
     <div
       data-testid="v2-diff-toolbar"
       data-diff-file={props.file}
-      class="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-3 text-[12px]"
+      class="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-3 text-base"
     >
       <Icon class="h-3 w-3 shrink-0 opacity-70" aria-hidden="true" />
       <span class="min-w-0 flex-1 truncate font-mono">
@@ -58,7 +58,7 @@ export function DiffToolbar(props: DiffToolbarProps): JSX.Element {
       <Show when={props.badge}>
         <span
           data-testid="v2-diff-toolbar-badge"
-          class="rounded border border-[var(--border)] bg-[var(--bg-strong)] px-1.5 py-0 text-[10px] uppercase tracking-wider text-[var(--dim)]"
+          class="rounded border border-[var(--border)] bg-[var(--bg-strong)] px-1.5 py-0 text-xs uppercase tracking-wider text-[var(--dim)]"
         >
           {props.badge}
         </span>
@@ -85,7 +85,7 @@ export function LargeDiffGuard(props: LargeDiffGuardProps): JSX.Element {
     <div
       data-testid="v2-diff-large-guard"
       data-diff-file={props.file}
-      class="flex flex-col items-center justify-center gap-3 px-4 py-8 text-[12px] text-[var(--fg-secondary)]"
+      class="flex flex-col items-center justify-center gap-3 px-4 py-8 text-base text-[var(--fg-secondary)]"
     >
       <div class="text-center">
         <div class="font-mono">{props.file}</div>
@@ -100,7 +100,7 @@ export function LargeDiffGuard(props: LargeDiffGuardProps): JSX.Element {
         type="button"
         data-testid="v2-diff-large-load-anyway"
         onClick={() => props.onLoadAnyway()}
-        class="h-6 rounded border border-[var(--border)] bg-[var(--surface)] px-2 text-[11px] text-[var(--fg)] hover:bg-[var(--surface-hover)]"
+        class="h-6 rounded border border-[var(--border)] bg-[var(--surface)] px-2 text-sm text-[var(--fg)] hover:bg-[var(--surface-hover)]"
       >
         Load anyway
       </button>

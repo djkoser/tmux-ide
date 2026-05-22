@@ -127,7 +127,7 @@ export function ImageRenderer(props: ImageRendererProps): JSX.Element {
           >
             <ZoomOut class="h-3.5 w-3.5" />
           </button>
-          <span class="px-1 text-[10px] tabular-nums">{Math.round(zoom() * 100)}%</span>
+          <span class="px-1 text-xs tabular-nums">{Math.round(zoom() * 100)}%</span>
           <button
             type="button"
             data-testid="editor-image-zoom-in"
@@ -166,9 +166,9 @@ export function ImageRenderer(props: ImageRendererProps): JSX.Element {
           fallback={
             <Show
               when={!dataUrl.loading}
-              fallback={<span class="text-[11px] text-[var(--dim)]">loading…</span>}
+              fallback={<span class="text-sm text-[var(--dim)]">loading…</span>}
             >
-              <span class="text-[11px] text-[var(--red-foreground,var(--red))]">
+              <span class="text-sm text-[var(--red-foreground,var(--red))]">
                 Failed to load image
               </span>
             </Show>

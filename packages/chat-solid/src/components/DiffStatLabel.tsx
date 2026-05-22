@@ -29,7 +29,7 @@ export function DiffStatLabel(props: DiffStatLabelProps): JSX.Element {
       data-testid="diff-stat-label"
       data-additions={props.additions}
       data-deletions={props.deletions}
-      class={`inline-flex items-center font-mono text-[10px] tabular-nums ${props.class ?? ""}`}
+      class={`inline-flex items-center font-mono text-xs tabular-nums ${props.class ?? ""}`}
     >
       <Show when={props.showParentheses}>
         <span class="text-[var(--dim)]" aria-hidden="true">

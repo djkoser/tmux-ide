@@ -146,7 +146,7 @@ function ProjectAvatar(props: { name: string; active: boolean }) {
   return (
     <span
       class={
-        "flex h-7 w-7 items-center justify-center rounded-md text-[11px] font-semibold transition-colors " +
+        "flex h-7 w-7 items-center justify-center rounded-md text-sm font-semibold transition-colors " +
         (props.active
           ? "bg-[var(--accent)] text-[var(--bg)]"
           : "bg-[var(--bg-weak)] text-[var(--fg)] group-hover:bg-[var(--surface-hover)]")

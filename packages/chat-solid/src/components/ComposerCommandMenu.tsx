@@ -43,7 +43,7 @@ export function ComposerCommandMenu(props: ComposerCommandMenuProps) {
   return (
     <Show when={props.open()}>
       <div
-        class="absolute bottom-[calc(100%+0.5rem)] left-0 z-30 overflow-hidden rounded-md border border-border bg-surface-elevated text-[12px] shadow-2xl"
+        class="absolute bottom-[calc(100%+0.5rem)] left-0 z-30 overflow-hidden rounded-md border border-border bg-surface-elevated text-base shadow-2xl"
         style={{ width: `${width()}px` }}
         role="listbox"
         aria-label="Slash commands"
@@ -69,7 +69,7 @@ export function ComposerCommandMenu(props: ComposerCommandMenuProps) {
                   <div class="truncate">{highlightedName(result)}</div>
                   <Show when={result.command.description}>
                     {(description) => (
-                      <div class="mt-0.5 truncate text-[11px] text-dim">{description()}</div>
+                      <div class="mt-0.5 truncate text-sm text-dim">{description()}</div>
                     )}
                   </Show>
                 </button>
@@ -77,7 +77,7 @@ export function ComposerCommandMenu(props: ComposerCommandMenuProps) {
             </For>
           </div>
         </Show>
-        <div class="border-t border-border-weak px-3 py-1.5 text-[11px] text-dim">
+        <div class="border-t border-border-weak px-3 py-1.5 text-sm text-dim">
           ↑↓ navigate · Enter select · Esc close
         </div>
       </div>

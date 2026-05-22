@@ -147,7 +147,7 @@ export function InlineImagePreview(props: InlineImagePreviewProps) {
         fallback={
           <div
             data-testid="inline-image-preview-placeholder"
-            class="flex h-[120px] min-w-[160px] items-center justify-center text-[10px] text-[var(--dim)]"
+            class="flex h-[120px] min-w-[160px] items-center justify-center text-xs text-[var(--dim)]"
             aria-hidden="true"
           >
             ◧
@@ -164,7 +164,7 @@ export function InlineImagePreview(props: InlineImagePreviewProps) {
       </Show>
       <span
         aria-hidden="true"
-        class="pointer-events-none absolute right-1.5 top-1.5 inline-flex h-5 items-center rounded-full border border-[var(--border)] bg-[var(--bg-strong)]/85 px-1.5 text-[10px] text-[var(--fg-secondary)] opacity-0 transition-opacity group-hover/img:opacity-100"
+        class="pointer-events-none absolute right-1.5 top-1.5 inline-flex h-5 items-center rounded-full border border-[var(--border)] bg-[var(--bg-strong)]/85 px-1.5 text-xs text-[var(--fg-secondary)] opacity-0 transition-opacity group-hover/img:opacity-100"
       >
         ⛶ expand
       </span>

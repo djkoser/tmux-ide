@@ -128,7 +128,7 @@ export function MarkdownRenderer(props: MarkdownRendererProps) {
         fallback={
           <pre
             data-testid="editor-markdown-source"
-            class="whitespace-pre-wrap break-words px-8 py-8 font-mono text-[12px] text-[var(--fg)]"
+            class="whitespace-pre-wrap break-words px-8 py-8 font-mono text-base text-[var(--fg)]"
           >
             {source()}
           </pre>

@@ -124,13 +124,13 @@ export function MergeConflictPanel(props: MergeConflictPanelProps) {
       data-resolved-conflicts={resolved()}
       class="flex h-full min-h-0 w-full flex-col bg-[var(--bg)] text-[var(--fg)]"
     >
-      <header class="flex shrink-0 items-center gap-2 border-b border-[var(--yellow,var(--accent))] bg-[var(--surface)] px-3 py-2 text-[12px]">
+      <header class="flex shrink-0 items-center gap-2 border-b border-[var(--yellow,var(--accent))] bg-[var(--surface)] px-3 py-2 text-base">
         <AlertTriangle aria-hidden="true" class="h-4 w-4 text-[var(--yellow,var(--accent))]" />
         <span>Merge conflict — </span>
         <FileText aria-hidden="true" class="h-3 w-3 opacity-60" />
         <span class="font-mono">{props.buffer.filePath}</span>
         <span class="flex-1" />
-        <span data-testid="v2-merge-status" class="font-mono text-[11px] text-[var(--dim)]">
+        <span data-testid="v2-merge-status" class="font-mono text-sm text-[var(--dim)]">
           <span class="text-[var(--accent)]">{resolved()}</span>
           <span class="opacity-50"> / </span>
           <span>{totalConflicts()}</span>
@@ -141,7 +141,7 @@ export function MergeConflictPanel(props: MergeConflictPanelProps) {
           data-testid="v2-merge-bulk-external"
           onClick={() => bulkPick("external")}
           disabled={allResolved()}
-          class="h-5 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 text-[10px] text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+          class="h-5 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 text-xs text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
           title="Apply external for every remaining conflict"
         >
           Apply all external
@@ -151,7 +151,7 @@ export function MergeConflictPanel(props: MergeConflictPanelProps) {
           data-testid="v2-merge-bulk-local"
           onClick={() => bulkPick("local")}
           disabled={allResolved()}
-          class="h-5 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 text-[10px] text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+          class="h-5 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 text-xs text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
           title="Keep local for every remaining conflict"
         >
           Keep all local
@@ -173,7 +173,7 @@ export function MergeConflictPanel(props: MergeConflictPanelProps) {
 
       <footer
         data-testid="v2-merge-actions"
-        class="flex shrink-0 items-center gap-2 border-t border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[11px]"
+        class="flex shrink-0 items-center gap-2 border-t border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
       >
         <span class="text-[var(--dim)]">
           {allResolved()
@@ -185,7 +185,7 @@ export function MergeConflictPanel(props: MergeConflictPanelProps) {
           type="button"
           data-testid="v2-merge-use-external"
           onClick={() => acceptExternalChange(props.buffer.bufferUri)}
-          class="h-6 rounded border border-[var(--border)] bg-[var(--surface)] px-2 text-[11px] text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)]"
+          class="h-6 rounded border border-[var(--border)] bg-[var(--surface)] px-2 text-sm text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)]"
           title="Drop every local edit and use the external version"
         >
           Use external
@@ -194,7 +194,7 @@ export function MergeConflictPanel(props: MergeConflictPanelProps) {
           type="button"
           data-testid="v2-merge-use-mine"
           onClick={() => dismissExternalChange(props.buffer.bufferUri)}
-          class="h-6 rounded border border-[var(--border)] bg-[var(--surface)] px-2 text-[11px] text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)]"
+          class="h-6 rounded border border-[var(--border)] bg-[var(--surface)] px-2 text-sm text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)]"
           title="Keep every local edit; next save will overwrite the disk change"
         >
           Use mine
@@ -219,7 +219,7 @@ function HunkRow(props: {
       data-resolved={props.hunk.kind !== "conflict" || props.choice !== null ? "true" : undefined}
       class="border-b border-[var(--border)]"
     >
-      <header class="flex shrink-0 items-center gap-2 bg-[var(--bg-strong)] px-3 py-1 text-[10px] uppercase tracking-wide text-[var(--dim)]">
+      <header class="flex shrink-0 items-center gap-2 bg-[var(--bg-strong)] px-3 py-1 text-xs uppercase tracking-wide text-[var(--dim)]">
         <span class="font-mono">line {props.hunk.baseStartLine}</span>
         <span aria-hidden="true">·</span>
         <HunkKindLabel kind={props.hunk.kind} />
@@ -256,7 +256,7 @@ function ChoiceButtons(props: {
   onReset: () => void;
 }) {
   const baseClass =
-    "inline-flex h-5 items-center gap-1 rounded border px-1.5 text-[10px] transition-colors";
+    "inline-flex h-5 items-center gap-1 rounded border px-1.5 text-xs transition-colors";
   const off = `${baseClass} border-[var(--border)] bg-[var(--surface)] text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)]`;
   const on = `${baseClass} border-[var(--accent)] bg-[var(--surface-active)] text-[var(--accent)]`;
   return (
@@ -317,7 +317,7 @@ function NonConflictBody(props: { hunk: MergeHunk }) {
   return (
     <pre
       data-testid="v2-merge-hunk-body"
-      class="m-0 max-h-32 overflow-y-auto px-3 py-1 font-mono text-[11px] text-[var(--fg-secondary)]"
+      class="m-0 max-h-32 overflow-y-auto px-3 py-1 font-mono text-sm text-[var(--fg-secondary)]"
     >
       {preview().slice(0, 6).join("\n") +
         (preview().length > 6 ? `\n…(${preview().length - 6} more)` : "")}
@@ -353,7 +353,7 @@ function ConflictBody(props: { hunk: MergeHunk; choice: ConflictChoice | null })
         fallback={
           <div
             data-testid="v2-merge-hunk-preview-empty"
-            class="bg-[var(--bg)] px-3 py-1 text-[10px] italic text-[var(--dim)]"
+            class="bg-[var(--bg)] px-3 py-1 text-xs italic text-[var(--dim)]"
           >
             Pick a resolution to see the merged preview.
           </div>
@@ -361,7 +361,7 @@ function ConflictBody(props: { hunk: MergeHunk; choice: ConflictChoice | null })
       >
         <pre
           data-testid="v2-merge-hunk-preview"
-          class="m-0 max-h-40 overflow-y-auto bg-[var(--bg)] px-3 py-1 font-mono text-[11px] text-[var(--fg)]"
+          class="m-0 max-h-40 overflow-y-auto bg-[var(--bg)] px-3 py-1 font-mono text-sm text-[var(--fg)]"
         >
           {previewLines().join("\n")}
         </pre>
@@ -386,7 +386,7 @@ function SidePane(props: { label: string; tone: "external" | "local"; lines: str
       </div>
       <pre
         data-testid={`v2-merge-side-${props.tone}-body`}
-        class="m-0 max-h-32 flex-1 overflow-y-auto px-3 pb-1 font-mono text-[11px] text-[var(--fg)]"
+        class="m-0 max-h-32 flex-1 overflow-y-auto px-3 pb-1 font-mono text-sm text-[var(--fg)]"
       >
         {props.lines.length === 0 ? "(empty)" : props.lines.join("\n")}
       </pre>

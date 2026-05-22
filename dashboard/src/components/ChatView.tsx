@@ -403,13 +403,13 @@ export function ChatView(props: ChatViewProps) {
     <div class="flex h-full min-h-0 w-full min-w-0 flex-1">
       <aside class="flex h-full w-60 min-w-[15rem] flex-shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)]">
         <div class="flex h-10 flex-shrink-0 items-center justify-between gap-2 border-b border-[var(--border)] px-3">
-          <span class="text-[12px] font-medium text-[var(--fg)]">Chats</span>
+          <span class="text-base font-medium text-[var(--fg)]">Chats</span>
           <button
             type="button"
             data-testid="v2-chat-new"
             disabled={creating() || loading()}
             onClick={() => void createThread()}
-            class="rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-0.5 text-[11px] text-[var(--fg)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+            class="rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-0.5 text-sm text-[var(--fg)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
             title="New chat"
           >
             {creating() ? "…" : "+ New"}
@@ -419,7 +419,7 @@ export function ChatView(props: ChatViewProps) {
           <Show
             when={sorted().length > 0}
             fallback={
-              <div class="px-3 py-4 text-[11px] leading-relaxed text-[var(--dim)]">
+              <div class="px-3 py-4 text-sm leading-relaxed text-[var(--dim)]">
                 {loading() ? "Loading…" : "No chats yet."}
               </div>
             }
@@ -448,15 +448,15 @@ export function ChatView(props: ChatViewProps) {
                           onClick={() => selectThread(row.id)}
                           ondblclick={() => beginRename(row)}
                         >
-                          <span class="block truncate text-[12px]">{row.title}</span>
-                          <span class="mt-0.5 block text-[10px] text-[var(--dim)]">
+                          <span class="block truncate text-base">{row.title}</span>
+                          <span class="mt-0.5 block text-xs text-[var(--dim)]">
                             {formatRelative(row.updatedAt)}
                           </span>
                         </button>
                       }
                     >
                       <input
-                        class="w-full rounded border border-[var(--accent)] bg-[var(--bg)] px-1 py-0.5 text-[12px] text-[var(--fg)] outline-none"
+                        class="w-full rounded border border-[var(--accent)] bg-[var(--bg)] px-1 py-0.5 text-base text-[var(--fg)] outline-none"
                         value={renameDraft()}
                         onInput={(e) => setRenameDraft(e.currentTarget.value)}
                         onBlur={() => void commitRename(row.id)}
@@ -479,18 +479,18 @@ export function ChatView(props: ChatViewProps) {
                           when={!isConfirming()}
                           fallback={
                             <>
-                              <span class="text-[10px] text-[var(--dim)]">Delete?</span>
+                              <span class="text-xs text-[var(--dim)]">Delete?</span>
                               <button
                                 type="button"
                                 data-testid="v2-chat-thread-delete-confirm"
-                                class="text-[10px] text-[var(--red)] hover:underline"
+                                class="text-xs text-[var(--red)] hover:underline"
                                 onClick={() => void deleteThread(row.id)}
                               >
                                 Yes
                               </button>
                               <button
                                 type="button"
-                                class="text-[10px] text-[var(--dim)] hover:underline"
+                                class="text-xs text-[var(--dim)] hover:underline"
                                 onClick={() => setConfirmDeleteId(null)}
                               >
                                 No
@@ -501,7 +501,7 @@ export function ChatView(props: ChatViewProps) {
                           <button
                             type="button"
                             data-testid="v2-chat-thread-rename"
-                            class="text-[10px] text-[var(--dim)] hover:text-[var(--accent)]"
+                            class="text-xs text-[var(--dim)] hover:text-[var(--accent)]"
                             onClick={() => beginRename(row)}
                           >
                             Rename
@@ -509,7 +509,7 @@ export function ChatView(props: ChatViewProps) {
                           <button
                             type="button"
                             data-testid="v2-chat-thread-delete"
-                            class="text-[10px] text-[var(--dim)] hover:text-[var(--red)]"
+                            class="text-xs text-[var(--dim)] hover:text-[var(--red)]"
                             onClick={() => {
                               setConfirmDeleteId(row.id);
                               setRenamingId(null);
@@ -530,7 +530,7 @@ export function ChatView(props: ChatViewProps) {
 
       <div class="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col">
         <Show when={loading() && !error()}>
-          <div class="flex h-full min-h-0 items-center justify-center text-[13px] text-[var(--fg-secondary)]">
+          <div class="flex h-full min-h-0 items-center justify-center text-md text-[var(--fg-secondary)]">
             Loading chat…
           </div>
         </Show>
@@ -541,10 +541,10 @@ export function ChatView(props: ChatViewProps) {
               data-chat-error-kind={e().kind}
               class="flex h-full min-h-0 flex-col items-center justify-center gap-3 p-6 text-center text-[var(--fg-secondary)]"
             >
-              <div class="text-[13px] font-medium text-[var(--fg)]">
+              <div class="text-md font-medium text-[var(--fg)]">
                 {e().kind === "offline" ? "Couldn't reach the daemon" : "Couldn't load chat"}
               </div>
-              <div class="max-w-md text-[12px] leading-relaxed">
+              <div class="max-w-md text-base leading-relaxed">
                 {e().kind === "offline"
                   ? "The chat surface needs the tmux-ide daemon running. Start it with tmux-ide command-center, then retry."
                   : "The daemon answered with an error. Retry to try again."}
@@ -554,11 +554,11 @@ export function ChatView(props: ChatViewProps) {
                 data-testid="v2-chat-retry"
                 disabled={attempting()}
                 onClick={() => void init()}
-                class="mt-1 rounded border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] text-[var(--fg)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+                class="mt-1 rounded border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-sm text-[var(--fg)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {attempting() ? "Retrying…" : "Try again"}
               </button>
-              <details class="text-[10px] text-[var(--dim)]">
+              <details class="text-xs text-[var(--dim)]">
                 <summary class="cursor-pointer">technical detail</summary>
                 <code class="mt-1 block whitespace-pre-wrap font-mono">{e().detail}</code>
               </details>
@@ -571,7 +571,7 @@ export function ChatView(props: ChatViewProps) {
             class="flex h-full min-h-0 flex-col items-center justify-center gap-3 p-6 text-center"
           >
             <div class="text-[15px] font-medium text-[var(--fg)]">Pick a thread to continue</div>
-            <div class="max-w-sm text-[12px] leading-relaxed text-[var(--fg-secondary)]">
+            <div class="max-w-sm text-base leading-relaxed text-[var(--fg-secondary)]">
               Select an existing chat from the rail, or start a new one to get going.
             </div>
             <button
@@ -579,7 +579,7 @@ export function ChatView(props: ChatViewProps) {
               data-testid="v2-chat-empty-new"
               disabled={creating()}
               onClick={() => void createThread()}
-              class="mt-1 rounded border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[12px] text-[var(--fg)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+              class="mt-1 rounded border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-base text-[var(--fg)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {creating() ? "Creating…" : "New chat"}
             </button>

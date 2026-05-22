@@ -30,6 +30,25 @@
     "Berkeley Mono", ui-monospace, SFMono-Regular, "JetBrains Mono", "IBM Plex Mono", "Menlo",
     "Consolas", monospace;
 
+  /* Type scale — IDE-tight, Berkeley Mono-anchored. Overrides Tailwind's
+     defaults (12/14/16/18) so `text-xs`/`text-sm`/`text-base`/`text-lg`
+     resolve to 10/11/12/14. Consumers using inline `style` should reference
+     these as `var(--text-sm)` etc. — never raw pixels. */
+  --text-xs: 10px;
+  --text-xs--line-height: 14px;
+  --text-sm: 11px;
+  --text-sm--line-height: 15px;
+  --text-base: 12px;
+  --text-base--line-height: 16px;
+  --text-md: 13px;
+  --text-md--line-height: 18px;
+  --text-lg: 14px;
+  --text-lg--line-height: 19px;
+  --text-xl: 16px;
+  --text-xl--line-height: 22px;
+  --text-2xl: 18px;
+  --text-2xl--line-height: 24px;
+
   /* Radius scale — 7 stops, anchored on 0.625rem = 10px. */
   --radius: 0.625rem;
   --radius-sm: calc(var(--radius) - 4px); /* 6px  — inline chips, code */
@@ -806,7 +825,7 @@ body {
   padding: 0.1rem 0.35rem;
   color: var(--fg);
   font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: var(--text-base);
 }
 
 .chat-markdown pre {
@@ -823,7 +842,7 @@ body {
   border: none;
   background: transparent;
   padding: 0;
-  font-size: 0.75rem;
+  font-size: var(--text-base);
 }
 
 .chat-markdown table {
@@ -933,8 +952,8 @@ body {
 .milkdown-wrap .milkdown {
   background: var(--bg) !important;
   color: var(--fg) !important;
-  font-family: "IBM Plex Mono", ui-monospace, monospace !important;
-  font-size: 13px !important;
+  font-family: var(--font-mono) !important;
+  font-size: var(--text-lg) !important;
   line-height: 1.5 !important;
 }
 .milkdown-wrap .milkdown .editor {

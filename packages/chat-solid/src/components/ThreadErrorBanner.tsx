@@ -37,7 +37,7 @@ export function ThreadErrorBanner(props: ThreadErrorBannerProps) {
         <div
           data-testid="thread-error-banner"
           data-error-code={err().code ?? ""}
-          class="mx-auto flex w-full max-w-3xl flex-col gap-1 border-b border-[var(--border)] bg-[color-mix(in_oklab,var(--red)_8%,transparent)] px-4 py-2 text-[12px]"
+          class="mx-auto flex w-full max-w-3xl flex-col gap-1 border-b border-[var(--border)] bg-[color-mix(in_oklab,var(--red)_8%,transparent)] px-4 py-2 text-base"
         >
           <div class="flex items-start gap-2">
             <span
@@ -58,7 +58,7 @@ export function ThreadErrorBanner(props: ThreadErrorBannerProps) {
                 data-testid="thread-error-banner-toggle"
                 aria-expanded={expanded()}
                 onClick={() => setExpanded((v) => !v)}
-                class="h-6 cursor-pointer rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-[11px] text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                class="h-6 cursor-pointer rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-sm text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
               >
                 {expanded() ? "Hide" : "Details"}
               </button>
@@ -78,7 +78,7 @@ export function ThreadErrorBanner(props: ThreadErrorBannerProps) {
           <Show when={expanded() && err().stack}>
             <pre
               data-testid="thread-error-banner-stack"
-              class="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded border border-[var(--border)] bg-[var(--bg-strong)] px-2 py-1 text-[11px] leading-relaxed text-[var(--fg-secondary)]"
+              class="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded border border-[var(--border)] bg-[var(--bg-strong)] px-2 py-1 text-sm leading-relaxed text-[var(--fg-secondary)]"
             >
               {err().stack}
             </pre>

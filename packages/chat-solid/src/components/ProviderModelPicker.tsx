@@ -245,13 +245,13 @@ export function ProviderModelPicker(props: ProviderModelPickerProps) {
         aria-expanded={open()}
         disabled={isDisabled()}
         onClick={toggle}
-        class="inline-flex h-7 max-w-48 cursor-pointer items-center gap-1.5 truncate rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-[12px] text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+        class="inline-flex h-7 max-w-48 cursor-pointer items-center gap-1.5 truncate rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-base text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
       >
         <span aria-hidden="true" class="text-[var(--accent)]">
           {glyphFor(activeKind())}
         </span>
         <span class="truncate">{triggerLabel()}</span>
-        <span aria-hidden="true" class="text-[10px] opacity-60">
+        <span aria-hidden="true" class="text-xs opacity-60">
           ▾
         </span>
       </button>
@@ -281,7 +281,7 @@ export function ProviderModelPicker(props: ProviderModelPickerProps) {
             onSelect={handleSelect}
             onToggleFavorite={handleToggleFavorite}
           />
-          <div class="border-t border-[var(--border-weak,var(--border))] px-3 py-1.5 text-[10px] uppercase tracking-[0.08em] text-[var(--dim)]">
+          <div class="border-t border-[var(--border-weak,var(--border))] px-3 py-1.5 text-xs uppercase tracking-[0.08em] text-[var(--dim)]">
             Search · ↩ select · Esc close
           </div>
         </div>

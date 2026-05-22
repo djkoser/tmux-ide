@@ -109,7 +109,7 @@ function CollapsedStackCap(props: { count: Accessor<number> | number }) {
   return (
     <div
       data-testid="composer-banner-stack-cap"
-      class="rounded-md border border-border/45 bg-card/25 px-3 py-1 text-[11px] text-muted-foreground"
+      class="rounded-md border border-border/45 bg-card/25 px-3 py-1 text-sm text-muted-foreground"
     >
       +{n()} more banner{n() === 1 ? "" : "s"}
     </div>

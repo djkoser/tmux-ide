@@ -32,7 +32,7 @@ export interface ComposerPendingApprovalActionsProps {
 }
 
 const BTN =
-  "inline-flex h-8 items-center rounded-md border px-3 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex h-8 items-center rounded-md border px-3 text-base font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50";
 
 const VARIANTS = {
   cancel: `${BTN} border-transparent text-fg-secondary hover:text-fg`,

@@ -74,20 +74,20 @@ const RUNTIME_OPTIONS: ReadonlyArray<RuntimeModeOption> = [
 ];
 
 const SECTION_BUTTON =
-  "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-transparent bg-transparent px-2 text-[11px] font-medium text-fg-secondary transition-colors hover:bg-[var(--surface-hover,var(--surface))] hover:text-fg disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-transparent bg-transparent px-2 text-sm font-medium text-fg-secondary transition-colors hover:bg-[var(--surface-hover,var(--surface))] hover:text-fg disabled:cursor-not-allowed disabled:opacity-50";
 
 const SECTION_BUTTON_ACTIVE = "bg-[var(--surface-active,var(--surface))] text-fg";
 
 const SEPARATOR_CLASS = "mx-0.5 hidden h-3.5 w-px bg-border-weak sm:block";
 
 const SELECT_TRIGGER =
-  "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-transparent bg-transparent px-2 text-[11px] font-medium text-fg-secondary transition-colors hover:bg-[var(--surface-hover,var(--surface))] hover:text-fg";
+  "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-transparent bg-transparent px-2 text-sm font-medium text-fg-secondary transition-colors hover:bg-[var(--surface-hover,var(--surface))] hover:text-fg";
 
 const SELECT_POPUP =
   "absolute left-0 bottom-[calc(100%+0.25rem)] z-30 min-w-56 overflow-hidden rounded-md border border-border bg-[var(--surface-elevated,var(--bg-strong))] shadow-2xl";
 
 const SELECT_ITEM =
-  "flex w-full cursor-pointer items-start gap-2 rounded-sm border-0 bg-transparent px-2 py-1.5 text-left text-[12px] text-fg hover:bg-[var(--surface-hover,var(--surface))]";
+  "flex w-full cursor-pointer items-start gap-2 rounded-sm border-0 bg-transparent px-2 py-1.5 text-left text-base text-fg hover:bg-[var(--surface-hover,var(--surface))]";
 
 export function ComposerFooterStrip(props: ComposerFooterStripProps): JSX.Element {
   const [runtimeOpen, setRuntimeOpen] = createSignal(false);
@@ -145,7 +145,7 @@ export function ComposerFooterStrip(props: ComposerFooterStripProps): JSX.Elemen
                   : "Default mode — click to enter plan mode"
               }
             >
-              <span aria-hidden="true" class="text-[12px]">
+              <span aria-hidden="true" class="text-base">
                 {isPlan() ? "✎" : "⌁"}
               </span>
               <span class="hidden sm:inline">{isPlan() ? "Plan" : "Build"}</span>
@@ -168,7 +168,7 @@ export function ComposerFooterStrip(props: ComposerFooterStripProps): JSX.Elemen
           class={SELECT_TRIGGER}
           onClick={() => setRuntimeOpen((value) => !value)}
         >
-          <span aria-hidden="true" class="text-[12px]">
+          <span aria-hidden="true" class="text-base">
             {activeRuntime().glyph}
           </span>
           <span>{activeRuntime().label}</span>
@@ -204,8 +204,8 @@ export function ComposerFooterStrip(props: ComposerFooterStripProps): JSX.Elemen
                     {option.glyph}
                   </span>
                   <div class="min-w-0 flex-1">
-                    <div class="text-[12px] font-medium text-fg">{option.label}</div>
-                    <div class="text-[11px] leading-snug text-dim">{option.hint}</div>
+                    <div class="text-base font-medium text-fg">{option.label}</div>
+                    <div class="text-sm leading-snug text-dim">{option.hint}</div>
                   </div>
                 </button>
               )}
@@ -228,7 +228,7 @@ export function ComposerFooterStrip(props: ComposerFooterStripProps): JSX.Elemen
               : `Show ${props.planSidebarLabel().toLowerCase()} sidebar`
           }
         >
-          <span aria-hidden="true" class="text-[12px]">
+          <span aria-hidden="true" class="text-base">
             ☰
           </span>
           <span class="hidden sm:inline">{props.planSidebarLabel()}</span>

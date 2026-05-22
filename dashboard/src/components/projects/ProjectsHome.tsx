@@ -182,9 +182,9 @@ export function ProjectsHome(): JSX.Element {
       <header class="flex items-center justify-between border-b border-[var(--border)] px-6 py-4">
         <div class="flex items-baseline gap-3">
           <h1 class="text-[15px] font-medium">tmux-ide</h1>
-          <span class="text-[11px] text-[var(--dim)]">
+          <span class="text-sm text-[var(--dim)]">
             Press{" "}
-            <kbd class="rounded border border-[var(--border)] px-1 py-0.5 font-mono text-[10px]">
+            <kbd class="rounded border border-[var(--border)] px-1 py-0.5 font-mono text-xs">
               ⌘P
             </kbd>{" "}
             to switch projects
@@ -193,7 +193,7 @@ export function ProjectsHome(): JSX.Element {
         <div class="flex items-center gap-2">
           <A
             href="/v2/widgets"
-            class="rounded border border-[var(--border)] px-3 py-1 text-[12px] text-[var(--fg)] hover:bg-[var(--surface-hover)]"
+            class="rounded border border-[var(--border)] px-3 py-1 text-base text-[var(--fg)] hover:bg-[var(--surface-hover)]"
             data-testid="projects-home-widgets-link"
           >
             Widgets gallery
@@ -205,13 +205,13 @@ export function ProjectsHome(): JSX.Element {
               setAddOpen((v) => !v);
               setAddError(null);
             }}
-            class="rounded border border-[var(--border)] px-3 py-1 text-[12px] text-[var(--fg)] hover:bg-[var(--surface-hover)]"
+            class="rounded border border-[var(--border)] px-3 py-1 text-base text-[var(--fg)] hover:bg-[var(--surface-hover)]"
           >
             Add existing folder
           </button>
           <A
             href="/v2/setup"
-            class="rounded bg-[var(--accent)] px-3 py-1 text-[12px] font-medium text-[var(--accent-fg,var(--bg))] hover:opacity-90"
+            class="rounded bg-[var(--accent)] px-3 py-1 text-base font-medium text-[var(--accent-fg,var(--bg))] hover:opacity-90"
             data-testid="projects-home-new"
           >
             + New project
@@ -227,7 +227,7 @@ export function ProjectsHome(): JSX.Element {
             void addExisting();
           }}
         >
-          <label class="text-[11px] text-[var(--dim)]" for="projects-home-add-dir">
+          <label class="text-sm text-[var(--dim)]" for="projects-home-add-dir">
             Folder path
           </label>
           <input
@@ -238,13 +238,13 @@ export function ProjectsHome(): JSX.Element {
             placeholder="/absolute/path/to/project"
             value={addDir()}
             onInput={(e) => setAddDir(e.currentTarget.value)}
-            class="min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 font-mono text-[12px] text-[var(--fg)] outline-none"
+            class="min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 font-mono text-base text-[var(--fg)] outline-none"
           />
           <button
             type="submit"
             data-testid="projects-home-add-submit"
             disabled={addBusy()}
-            class="rounded bg-[var(--accent)] px-3 py-1 text-[12px] font-medium text-[var(--accent-fg,var(--bg))] disabled:opacity-50"
+            class="rounded bg-[var(--accent)] px-3 py-1 text-base font-medium text-[var(--accent-fg,var(--bg))] disabled:opacity-50"
           >
             {addBusy() ? "Adding…" : "Register"}
           </button>
@@ -255,12 +255,12 @@ export function ProjectsHome(): JSX.Element {
               setAddDir("");
               setAddError(null);
             }}
-            class="rounded px-2 py-1 text-[11px] text-[var(--dim)] hover:text-[var(--fg)]"
+            class="rounded px-2 py-1 text-sm text-[var(--dim)] hover:text-[var(--fg)]"
           >
             Cancel
           </button>
           <Show when={addError()}>
-            <span class="text-[11px] text-[var(--red,#cc6666)]" role="alert">
+            <span class="text-sm text-[var(--red,#cc6666)]" role="alert">
               {addError()}
             </span>
           </Show>
@@ -271,14 +271,14 @@ export function ProjectsHome(): JSX.Element {
         <section class="flex flex-col gap-3" aria-labelledby="recent-heading">
           <h2
             id="recent-heading"
-            class="text-[10px] font-medium uppercase tracking-wider text-[var(--dim)]"
+            class="text-xs font-medium uppercase tracking-wider text-[var(--dim)]"
           >
             Recently active
           </h2>
           <Show
             when={recentRows().length > 0}
             fallback={
-              <div class="rounded border border-dashed border-[var(--border)] px-3 py-4 text-[12px] text-[var(--dim)]">
+              <div class="rounded border border-dashed border-[var(--border)] px-3 py-4 text-base text-[var(--dim)]">
                 No recent projects yet. Open one from the list to see it here.
               </div>
             }
@@ -301,13 +301,13 @@ export function ProjectsHome(): JSX.Element {
                             (row.running ? "bg-[var(--green,#7cb342)]" : "bg-[var(--dim)]/40")
                           }
                         />
-                        <span class="truncate font-medium text-[13px]">{row.name}</span>
+                        <span class="truncate font-medium text-md">{row.name}</span>
                       </div>
-                      <span class="truncate text-[11px] text-[var(--dim)]">
+                      <span class="truncate text-sm text-[var(--dim)]">
                         {homeCollapsed(row.dir)}
                       </span>
                       <Show when={row.branch}>
-                        <span class="text-[10px] text-[var(--dim)]">{row.branch}</span>
+                        <span class="text-xs text-[var(--dim)]">{row.branch}</span>
                       </Show>
                     </button>
                   </li>
@@ -321,20 +321,20 @@ export function ProjectsHome(): JSX.Element {
           <div class="flex items-baseline justify-between">
             <h2
               id="all-heading"
-              class="text-[10px] font-medium uppercase tracking-wider text-[var(--dim)]"
+              class="text-xs font-medium uppercase tracking-wider text-[var(--dim)]"
             >
               All projects
             </h2>
-            <span class="text-[10px] text-[var(--dim)]">{allRows().length} total</span>
+            <span class="text-xs text-[var(--dim)]">{allRows().length} total</span>
           </div>
           <Show
             when={allRows().length > 0}
             fallback={
-              <div class="rounded border border-dashed border-[var(--border)] px-6 py-12 text-center text-[12px] text-[var(--dim)]">
+              <div class="rounded border border-dashed border-[var(--border)] px-6 py-12 text-center text-base text-[var(--dim)]">
                 <p class="mb-3">No projects registered yet.</p>
                 <A
                   href="/v2/setup"
-                  class="inline-block rounded bg-[var(--accent)] px-3 py-1 text-[12px] font-medium text-[var(--accent-fg,var(--bg))]"
+                  class="inline-block rounded bg-[var(--accent)] px-3 py-1 text-base font-medium text-[var(--accent-fg,var(--bg))]"
                 >
                   Create your first project
                 </A>
@@ -361,13 +361,13 @@ export function ProjectsHome(): JSX.Element {
                       class="flex min-w-0 flex-1 flex-col text-left"
                       onClick={() => open(row.name)}
                     >
-                      <span class="truncate font-mono text-[12px]">{row.name}</span>
-                      <span class="truncate text-[10px] text-[var(--dim)]">
+                      <span class="truncate font-mono text-base">{row.name}</span>
+                      <span class="truncate text-xs text-[var(--dim)]">
                         {homeCollapsed(row.dir)}
                       </span>
                     </button>
                     <Show when={row.branch}>
-                      <span class="hidden truncate text-[10px] text-[var(--dim)] sm:inline">
+                      <span class="hidden truncate text-xs text-[var(--dim)] sm:inline">
                         {row.branch}
                       </span>
                     </Show>
@@ -382,7 +382,7 @@ export function ProjectsHome(): JSX.Element {
                               e.stopPropagation();
                               setPendingDelete(row.name);
                             }}
-                            class="rounded px-2 py-0.5 text-[10px] text-[var(--dim)] hover:bg-[var(--surface-hover)] hover:text-[var(--fg)]"
+                            class="rounded px-2 py-0.5 text-xs text-[var(--dim)] hover:bg-[var(--surface-hover)] hover:text-[var(--fg)]"
                             aria-label={`Remove ${row.name} from registry`}
                           >
                             Remove
@@ -397,7 +397,7 @@ export function ProjectsHome(): JSX.Element {
                               e.stopPropagation();
                               void remove(row.name);
                             }}
-                            class="rounded bg-[var(--red,#cc6666)]/15 px-2 py-0.5 text-[10px] text-[var(--red,#cc6666)] hover:bg-[var(--red,#cc6666)]/25"
+                            class="rounded bg-[var(--red,#cc6666)]/15 px-2 py-0.5 text-xs text-[var(--red,#cc6666)] hover:bg-[var(--red,#cc6666)]/25"
                           >
                             Confirm
                           </button>
@@ -407,7 +407,7 @@ export function ProjectsHome(): JSX.Element {
                               e.stopPropagation();
                               setPendingDelete(null);
                             }}
-                            class="rounded px-2 py-0.5 text-[10px] text-[var(--dim)] hover:bg-[var(--surface-hover)]"
+                            class="rounded px-2 py-0.5 text-xs text-[var(--dim)] hover:bg-[var(--surface-hover)]"
                           >
                             Cancel
                           </button>
@@ -418,7 +418,7 @@ export function ProjectsHome(): JSX.Element {
                       type="button"
                       data-testid={`projects-home-open-${row.name}`}
                       onClick={() => open(row.name)}
-                      class="rounded border border-[var(--border)] px-2 py-0.5 text-[10px] text-[var(--fg)] hover:bg-[var(--surface-hover)]"
+                      class="rounded border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--fg)] hover:bg-[var(--surface-hover)]"
                     >
                       Open
                     </button>

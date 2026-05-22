@@ -200,7 +200,7 @@ export function ChatHeader(props: ChatHeaderProps) {
         when={editing()}
         fallback={
           <button
-            class="min-w-0 flex-1 cursor-text truncate border-0 bg-transparent text-left text-[13px] text-fg outline-none hover:text-accent"
+            class="min-w-0 flex-1 cursor-text truncate border-0 bg-transparent text-left text-md text-fg outline-none hover:text-accent"
             type="button"
             onClick={beginEdit}
             title="Rename chat"
@@ -210,7 +210,7 @@ export function ChatHeader(props: ChatHeaderProps) {
         }
       >
         <input
-          class="min-w-0 flex-1 truncate border-0 bg-transparent text-[13px] text-fg outline-none"
+          class="min-w-0 flex-1 truncate border-0 bg-transparent text-md text-fg outline-none"
           value={draft()}
           onInput={(event) => setDraft(event.currentTarget.value)}
           onBlur={() => void commit()}
@@ -245,21 +245,21 @@ export function ChatHeader(props: ChatHeaderProps) {
       </Show>
       <Show when={props.sessionName()}>
         {(session) => (
-          <span class="inline-flex items-center rounded-md border border-border-weak px-1.5 py-0.5 text-[11px] text-dim">
+          <span class="inline-flex items-center rounded-md border border-border-weak px-1.5 py-0.5 text-sm text-dim">
             {session()}
           </span>
         )}
       </Show>
       <Show when={props.stopReason()}>
         {(reason) => (
-          <span class="inline-flex items-center rounded-md border border-border-weak px-1.5 py-0.5 text-[11px] text-dim">
+          <span class="inline-flex items-center rounded-md border border-border-weak px-1.5 py-0.5 text-sm text-dim">
             {reason().replaceAll("_", " ")}
           </span>
         )}
       </Show>
       <Show when={props.inflight()}>
         <button
-          class="h-7 cursor-pointer rounded-md border border-border bg-surface px-2 text-[12px] text-fg-secondary hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-45"
+          class="h-7 cursor-pointer rounded-md border border-border bg-surface px-2 text-base text-fg-secondary hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-45"
           type="button"
           onClick={props.onCancel}
         >
@@ -270,7 +270,7 @@ export function ChatHeader(props: ChatHeaderProps) {
         {(onDelete) => (
           <button
             data-testid="chat-header-delete"
-            class="h-7 cursor-pointer rounded-md border border-border bg-surface px-2 text-[12px] text-fg-secondary hover:border-red/60 hover:text-red"
+            class="h-7 cursor-pointer rounded-md border border-border bg-surface px-2 text-base text-fg-secondary hover:border-red/60 hover:text-red"
             type="button"
             onClick={onDelete()}
             title="Delete this thread"
@@ -284,7 +284,7 @@ export function ChatHeader(props: ChatHeaderProps) {
         {(onClose) => (
           <button
             data-testid="chat-header-close"
-            class="h-7 cursor-pointer rounded-md border border-border bg-surface px-2 text-[12px] text-fg-secondary hover:border-accent hover:text-accent"
+            class="h-7 cursor-pointer rounded-md border border-border bg-surface px-2 text-base text-fg-secondary hover:border-accent hover:text-accent"
             type="button"
             onClick={onClose()}
           >

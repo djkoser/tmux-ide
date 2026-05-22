@@ -42,19 +42,19 @@ export function DiffsView(props: DiffsViewProps) {
   return (
     <div
       data-testid="v2-diffs-view"
-      class="flex h-full min-h-0 flex-col bg-[var(--bg)] text-[12px] text-[var(--fg)]"
+      class="flex h-full min-h-0 flex-col bg-[var(--bg)] text-base text-[var(--fg)]"
     >
       <CheckRunsRail sessionName={props.projectName} ref={status()?.currentBranch ?? null} />
       <header class="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-strong)] px-3 py-2">
         <GitBranch aria-hidden="true" size={12} class="text-[var(--dim)]" />
-        <span data-testid="diffs-view-branch" class="font-mono text-[11px]">
+        <span data-testid="diffs-view-branch" class="font-mono text-sm">
           {status()?.currentBranch ?? "—"}
         </span>
         <Show when={(status()?.ahead ?? 0) > 0}>
-          <span class="text-[10px] tabular-nums text-[var(--dim)]">↑{status()?.ahead}</span>
+          <span class="text-xs tabular-nums text-[var(--dim)]">↑{status()?.ahead}</span>
         </Show>
         <Show when={(status()?.behind ?? 0) > 0}>
-          <span class="text-[10px] tabular-nums text-[var(--dim)]">↓{status()?.behind}</span>
+          <span class="text-xs tabular-nums text-[var(--dim)]">↓{status()?.behind}</span>
         </Show>
         <span class="ml-auto flex items-center gap-2">
           <button
@@ -91,7 +91,7 @@ export function DiffsView(props: DiffsViewProps) {
       <Show when={lastCommit() || lastPrUrl()}>
         <footer
           data-testid="diffs-view-toast"
-          class="flex flex-col gap-1 border-t border-[var(--border-weak,var(--border))] px-3 py-1 text-[10px] text-[var(--accent)]"
+          class="flex flex-col gap-1 border-t border-[var(--border-weak,var(--border))] px-3 py-1 text-xs text-[var(--accent)]"
         >
           <Show when={lastCommit()}>
             <span>

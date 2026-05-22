@@ -46,7 +46,7 @@ export function StatusBar(props: StatusBarProps) {
     <footer
       data-testid="v2-status-bar"
       style={{ height: "24px" }}
-      class="flex shrink-0 items-center gap-3 border-t border-[var(--border)] bg-[var(--bg-strong)] px-3 text-[11px] text-[var(--fg-muted,var(--fg-secondary))]"
+      class="flex shrink-0 items-center gap-3 border-t border-[var(--border)] bg-[var(--bg-strong)] px-3 text-sm text-[var(--fg-muted,var(--fg-secondary))]"
     >
       <button
         type="button"
@@ -63,10 +63,10 @@ export function StatusBar(props: StatusBarProps) {
           </span>
         </Show>
         <Show when={ahead() > 0}>
-          <span class="text-[10px] tabular-nums">↑{ahead()}</span>
+          <span class="text-xs tabular-nums">↑{ahead()}</span>
         </Show>
         <Show when={behind() > 0}>
-          <span class="text-[10px] tabular-nums">↓{behind()}</span>
+          <span class="text-xs tabular-nums">↓{behind()}</span>
         </Show>
       </button>
       <BranchPicker

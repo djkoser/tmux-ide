@@ -94,7 +94,7 @@ export default function WidgetRoute(): JSX.Element {
       data-widget-name={widgetName()}
       class="flex h-screen flex-col bg-[var(--bg)] text-[var(--fg)]"
     >
-      <header class="flex h-7 shrink-0 items-center border-b border-[var(--border)] bg-[var(--bg-strong)] px-3 text-[11px] tabular-nums">
+      <header class="flex h-7 shrink-0 items-center border-b border-[var(--border)] bg-[var(--bg-strong)] px-3 text-sm tabular-nums">
         <A
           href="/v2"
           class="mr-2 inline-flex items-center gap-1 text-[var(--dim)] hover:text-[var(--fg)]"
@@ -137,8 +137,8 @@ export default function WidgetRoute(): JSX.Element {
                 class="flex h-full items-center justify-center px-6 text-center text-[var(--red-foreground,var(--red))]"
               >
                 <div>
-                  <div class="mb-2 text-[12px] uppercase tracking-wider">widget unavailable</div>
-                  <div class="text-[11px] text-[var(--dim)]">{s.message}</div>
+                  <div class="mb-2 text-base uppercase tracking-wider">widget unavailable</div>
+                  <div class="text-sm text-[var(--dim)]">{s.message}</div>
                 </div>
               </div>
             );

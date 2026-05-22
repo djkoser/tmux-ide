@@ -158,8 +158,8 @@ export function InspectorView(props: InspectorViewProps) {
         "background-color": "var(--bg-weak, var(--bg))",
         "border-left": "1px solid var(--border)",
         color: "var(--fg)",
-        "font-family": "var(--font-family-mono, var(--font-mono))",
-        "font-size": "12px",
+        "font-family": "var(--font-mono)",
+        "font-size": "var(--text-base)",
       }}
     >
       {/* Header */}
@@ -174,7 +174,7 @@ export function InspectorView(props: InspectorViewProps) {
           padding: "0 8px",
           "border-bottom": "1px solid var(--border)",
           "background-color": "var(--bg-strong, var(--bg))",
-          "font-size": "11px",
+          "font-size": "var(--text-sm)",
         }}
       >
         <button
@@ -188,7 +188,7 @@ export function InspectorView(props: InspectorViewProps) {
             color: "var(--dim)",
             cursor: "pointer",
             "font-family": "inherit",
-            "font-size": "11px",
+            "font-size": "var(--text-sm)",
             padding: "0",
             width: "16px",
             "text-align": "center",
@@ -202,7 +202,7 @@ export function InspectorView(props: InspectorViewProps) {
             "text-transform": "uppercase",
             "letter-spacing": "0.08em",
             color: "var(--fg-secondary, var(--fg))",
-            "font-size": "10px",
+            "font-size": "var(--text-xs)",
           }}
         >
           Inspector
@@ -213,7 +213,7 @@ export function InspectorView(props: InspectorViewProps) {
             style={{
               "border-radius": "9999px",
               padding: "0 6px",
-              "font-size": "10px",
+              "font-size": "var(--text-xs)",
               background: "var(--surface)",
               color: "var(--accent)",
             }}
@@ -227,7 +227,7 @@ export function InspectorView(props: InspectorViewProps) {
           style={{
             "font-variant-numeric": "tabular-nums",
             color: "var(--dim)",
-            "font-size": "10px",
+            "font-size": "var(--text-xs)",
           }}
           title={`${scopedCount()} events in scope`}
         >
@@ -260,7 +260,7 @@ export function InspectorView(props: InspectorViewProps) {
               "align-items": "center",
               "justify-content": "center",
               color: "var(--dim)",
-              "font-size": "11px",
+              "font-size": "var(--text-sm)",
             }}
           >
             collapsed
@@ -284,7 +284,7 @@ export function InspectorView(props: InspectorViewProps) {
                   padding: "16px",
                   "text-align": "center",
                   color: "var(--dim)",
-                  "font-size": "11px",
+                  "font-size": "var(--text-sm)",
                 }}
               >
                 no events in scope
@@ -318,7 +318,7 @@ export function InspectorView(props: InspectorViewProps) {
           padding: "0 12px",
           "border-top": "1px solid var(--border)",
           "background-color": "var(--bg-strong, var(--bg))",
-          "font-size": "11px",
+          "font-size": "var(--text-sm)",
           "text-transform": "uppercase",
           "letter-spacing": "0.05em",
         }}
@@ -342,7 +342,7 @@ export function InspectorView(props: InspectorViewProps) {
                   color: active() ? "var(--accent)" : "var(--dim)",
                   cursor: "pointer",
                   "font-family": "inherit",
-                  "font-size": "11px",
+                  "font-size": "var(--text-sm)",
                   "text-transform": "uppercase",
                   "letter-spacing": "0.05em",
                   padding: "0 8px",

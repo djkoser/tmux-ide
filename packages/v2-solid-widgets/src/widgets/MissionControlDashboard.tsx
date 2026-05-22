@@ -229,8 +229,8 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
         width: "100%",
         "background-color": "var(--bg)",
         color: "var(--fg)",
-        "font-family": "var(--font-family-mono, var(--font-mono))",
-        "font-size": "12px",
+        "font-family": "var(--font-mono)",
+        "font-size": "var(--text-base)",
         "overflow-y": "auto",
       }}
     >
@@ -262,7 +262,7 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                       "border-radius": "4px",
                       background: "var(--surface)",
                       padding: "4px 8px",
-                      "font-size": "11px",
+                      "font-size": "var(--text-sm)",
                       color: "var(--fg-secondary)",
                     }}
                   >
@@ -313,7 +313,7 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                     "border-radius": "4px",
                     background: "var(--surface)",
                     padding: "4px 8px",
-                    "font-size": "11px",
+                    "font-size": "var(--text-sm)",
                     color: "var(--fg-secondary)",
                   }}
                 >
@@ -360,7 +360,7 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                     <span
                       data-mission-status={m().status}
                       style={{
-                        "font-size": "10px",
+                        "font-size": "var(--text-xs)",
                         "text-transform": "uppercase",
                         "letter-spacing": "0.05em",
                         padding: "2px 8px",
@@ -373,7 +373,9 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                     </span>
                   </Show>
                   <Show when={m().branch}>
-                    <span style={{ color: "var(--dim)", "font-size": "11px" }}>⎇ {m().branch}</span>
+                    <span style={{ color: "var(--dim)", "font-size": "var(--text-sm)" }}>
+                      ⎇ {m().branch}
+                    </span>
                   </Show>
                 </div>
                 <Show when={m().description}>
@@ -381,7 +383,7 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                     style={{
                       margin: "0",
                       color: "var(--fg-secondary)",
-                      "font-size": "12px",
+                      "font-size": "var(--text-base)",
                       "line-height": "1.5",
                       "white-space": "pre-wrap",
                     }}
@@ -496,14 +498,16 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                                   <span style={{ "font-weight": "500", color: "var(--fg)" }}>
                                     {m().title}
                                   </span>
-                                  <span style={{ color: "var(--dim)", "font-size": "11px" }}>
+                                  <span
+                                    style={{ color: "var(--dim)", "font-size": "var(--text-sm)" }}
+                                  >
                                     {m().status}
                                   </span>
                                   <span
                                     style={{
                                       "margin-left": "auto",
                                       color: "var(--dim)",
-                                      "font-size": "11px",
+                                      "font-size": "var(--text-sm)",
                                       "font-variant-numeric": "tabular-nums",
                                     }}
                                   >
@@ -557,7 +561,7 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                                             border: "none",
                                             color: "var(--fg-secondary)",
                                             "font-family": "inherit",
-                                            "font-size": "11px",
+                                            "font-size": "var(--text-sm)",
                                             cursor: "pointer",
                                             "text-align": "left",
                                             "border-radius": "3px",
@@ -698,7 +702,7 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                                   <span
                                     style={{
                                       "margin-left": "auto",
-                                      "font-size": "10px",
+                                      "font-size": "var(--text-xs)",
                                       color: "var(--dim)",
                                       "font-variant-numeric": "tabular-nums",
                                     }}
@@ -711,7 +715,7 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                                   fallback={
                                     <span
                                       style={{
-                                        "font-size": "11px",
+                                        "font-size": "var(--text-sm)",
                                         color: "var(--dim)",
                                         "font-style": "italic",
                                       }}
@@ -722,7 +726,7 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                                 >
                                   <span
                                     style={{
-                                      "font-size": "11px",
+                                      "font-size": "var(--text-sm)",
                                       color: "var(--fg-secondary)",
                                       overflow: "hidden",
                                       "text-overflow": "ellipsis",
@@ -765,7 +769,7 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                           color: "var(--accent)",
                           cursor: "pointer",
                           "font-family": "inherit",
-                          "font-size": "11px",
+                          "font-size": "var(--text-sm)",
                           "text-decoration": "underline",
                         }}
                       >
@@ -812,7 +816,7 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                                 gap: "8px",
                                 padding: "4px 12px",
                                 "border-bottom": "1px solid var(--border-weak, var(--border))",
-                                "font-size": "11px",
+                                "font-size": "var(--text-sm)",
                                 "box-sizing": "border-box",
                               }}
                             >
@@ -831,7 +835,7 @@ export function MissionControlDashboardView(props: MissionControlDashboardViewPr
                                   "border-radius": "3px",
                                   background: "color-mix(in srgb, var(--bg) 80%, var(--accent))",
                                   color: "var(--accent)",
-                                  "font-size": "10px",
+                                  "font-size": "var(--text-xs)",
                                   "text-transform": "uppercase",
                                   "letter-spacing": "0.05em",
                                 }}
@@ -882,7 +886,7 @@ function Kpi(props: { label: string; value: string; hint?: string }) {
     >
       <div
         style={{
-          "font-size": "10px",
+          "font-size": "var(--text-xs)",
           "text-transform": "uppercase",
           "letter-spacing": "0.05em",
           color: "var(--dim)",
@@ -902,7 +906,7 @@ function Kpi(props: { label: string; value: string; hint?: string }) {
         {props.value}
       </div>
       <Show when={props.hint}>
-        <div style={{ "font-size": "10px", color: "var(--dim)", "margin-top": "2px" }}>
+        <div style={{ "font-size": "var(--text-xs)", color: "var(--dim)", "margin-top": "2px" }}>
           {props.hint}
         </div>
       </Show>
@@ -914,7 +918,7 @@ function SectionLabel(props: { children: string; inline?: boolean }) {
   return (
     <div
       style={{
-        "font-size": "10px",
+        "font-size": "var(--text-xs)",
         "text-transform": "uppercase",
         "letter-spacing": "0.08em",
         color: "var(--dim)",

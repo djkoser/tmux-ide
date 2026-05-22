@@ -37,7 +37,7 @@ export function TerminalSearchOverlay(props: TerminalSearchOverlayProps) {
     <Show when={props.handle.open()}>
       <div
         data-testid="terminal-search-overlay"
-        class="absolute right-2 top-2 z-20 flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--bg-strong)] px-2 py-1 text-[11px] shadow-md"
+        class="absolute right-2 top-2 z-20 flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--bg-strong)] px-2 py-1 text-sm shadow-md"
         onKeyDown={(e) => {
           if (e.key === "Escape") {
             e.preventDefault();
@@ -62,7 +62,7 @@ export function TerminalSearchOverlay(props: TerminalSearchOverlayProps) {
         />
         <span
           data-testid="terminal-search-counter"
-          class="min-w-12 text-center text-[10px] tabular-nums text-[var(--dim)]"
+          class="min-w-12 text-center text-xs tabular-nums text-[var(--dim)]"
         >
           <Show
             when={props.handle.query() && props.handle.matches().length > 0}

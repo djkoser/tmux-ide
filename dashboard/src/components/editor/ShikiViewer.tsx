@@ -60,12 +60,12 @@ export function ShikiViewer(props: ShikiViewerProps): JSX.Element {
     <div
       data-testid="editor-shiki-viewer"
       data-file-path={props.filePath}
-      class="relative h-full overflow-auto bg-[var(--bg)] text-[12px] leading-[1.5]"
+      class="relative h-full overflow-auto bg-[var(--bg)] text-base leading-[1.5]"
     >
       <Show when={error()}>
         <div
           data-testid="editor-shiki-error"
-          class="border-b border-[var(--border)] bg-[var(--bg-strong)] px-3 py-1 text-[10px] text-[var(--red-foreground,var(--red))]"
+          class="border-b border-[var(--border)] bg-[var(--bg-strong)] px-3 py-1 text-xs text-[var(--red-foreground,var(--red))]"
         >
           {error()}
         </div>

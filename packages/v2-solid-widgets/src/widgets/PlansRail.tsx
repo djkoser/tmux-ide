@@ -200,8 +200,8 @@ export function PlansRailView(props: PlansRailViewProps) {
         width: "100%",
         "background-color": "var(--bg-weak)",
         color: "var(--fg)",
-        "font-family": "var(--font-family-mono, var(--font-mono))",
-        "font-size": "12px",
+        "font-family": "var(--font-mono)",
+        "font-size": "var(--text-base)",
       }}
     >
       {/* Header — label, count, search, sort */}
@@ -218,7 +218,7 @@ export function PlansRailView(props: PlansRailViewProps) {
             "align-items": "center",
             gap: "8px",
             "margin-bottom": "8px",
-            "font-size": "11px",
+            "font-size": "var(--text-sm)",
             color: "var(--dim)",
           }}
         >
@@ -241,7 +241,7 @@ export function PlansRailView(props: PlansRailViewProps) {
             border: "1px solid var(--border)",
             "background-color": "var(--bg-strong)",
             padding: "0 8px",
-            "font-size": "12px",
+            "font-size": "var(--text-base)",
             color: "var(--fg)",
             outline: "none",
           }}
@@ -258,7 +258,7 @@ export function PlansRailView(props: PlansRailViewProps) {
             border: "1px solid var(--border)",
             "background-color": "var(--bg-strong)",
             padding: "0 8px",
-            "font-size": "12px",
+            "font-size": "var(--text-base)",
             color: "var(--fg-secondary)",
             outline: "none",
           }}
@@ -289,10 +289,10 @@ export function PlansRailView(props: PlansRailViewProps) {
             color: "var(--dim)",
           }}
         >
-          <div style={{ color: "var(--fg-secondary)", "font-size": "12px" }}>
+          <div style={{ color: "var(--fg-secondary)", "font-size": "var(--text-base)" }}>
             Couldn't reach the daemon
           </div>
-          <div style={{ "font-size": "10px" }}>
+          <div style={{ "font-size": "var(--text-xs)" }}>
             The plans rail will refresh automatically once the connection is back.
           </div>
         </div>
@@ -349,7 +349,7 @@ export function PlansRailView(props: PlansRailViewProps) {
                               width: "100%",
                               padding: "0 12px",
                               "text-align": "left",
-                              "font-size": "10px",
+                              "font-size": "var(--text-xs)",
                               "text-transform": "uppercase",
                               "letter-spacing": "0.08em",
                               color: "var(--dim)",
@@ -435,7 +435,7 @@ export function PlansRailView(props: PlansRailViewProps) {
                                   overflow: "hidden",
                                   "text-overflow": "ellipsis",
                                   "white-space": "nowrap",
-                                  "font-size": "12px",
+                                  "font-size": "var(--text-base)",
                                   color: "var(--fg)",
                                 }}
                               >
@@ -446,7 +446,7 @@ export function PlansRailView(props: PlansRailViewProps) {
                                   "flex-shrink": "0",
                                   "border-radius": "9999px",
                                   padding: "1px 6px",
-                                  "font-size": "10px",
+                                  "font-size": "var(--text-xs)",
                                   background: STATUS_PILL_BG[plan.status],
                                   color: STATUS_PILL_FG[plan.status],
                                 }}
@@ -461,7 +461,7 @@ export function PlansRailView(props: PlansRailViewProps) {
                                 "min-width": "0",
                                 "align-items": "center",
                                 gap: "6px",
-                                "font-size": "10px",
+                                "font-size": "var(--text-xs)",
                                 color: "var(--dimmer)",
                               }}
                             >
@@ -533,7 +533,7 @@ export function PlansRailView(props: PlansRailViewProps) {
             "border-radius": "6px",
             border: "1px solid var(--border)",
             "background-color": "var(--bg-strong)",
-            "font-size": "11px",
+            "font-size": "var(--text-sm)",
             color: "var(--fg-secondary)",
             cursor: "pointer",
             "font-family": "inherit",

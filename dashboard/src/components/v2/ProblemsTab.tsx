@@ -117,14 +117,14 @@ export function ProblemsTab(): JSX.Element {
   return (
     <div
       data-testid="v2-problems-tab"
-      class="flex h-full min-h-0 w-full flex-col overflow-hidden bg-[var(--bg)] text-[12px]"
+      class="flex h-full min-h-0 w-full flex-col overflow-hidden bg-[var(--bg)] text-base"
     >
       <Show
         when={flat().length > 0}
         fallback={
           <div
             data-testid="v2-problems-empty"
-            class="flex flex-1 items-center justify-center text-[11px] text-[var(--dim)]"
+            class="flex flex-1 items-center justify-center text-sm text-[var(--dim)]"
           >
             No problems detected in open files.
           </div>
@@ -188,7 +188,7 @@ export function ProblemsTab(): JSX.Element {
                       </span>
                       <div class="min-w-0 flex-1">
                         <div class="truncate text-[var(--fg)]">{row().diagnostic.message}</div>
-                        <div class="truncate text-[10px] text-[var(--dim)]">
+                        <div class="truncate text-xs text-[var(--dim)]">
                           <span class="font-mono">{row().filePath}</span>
                           <span>
                             {" "}

@@ -79,10 +79,10 @@ function preventPointerFocus(event: PointerEvent): void {
 }
 
 const BUTTON_BASE =
-  "inline-flex items-center justify-center rounded-full border border-border bg-surface px-3 text-[12px] font-medium text-fg-secondary transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-45";
+  "inline-flex items-center justify-center rounded-full border border-border bg-surface px-3 text-base font-medium text-fg-secondary transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-45";
 
 const BUTTON_PRIMARY =
-  "inline-flex items-center justify-center rounded-full border border-transparent bg-accent px-4 text-[12px] font-medium text-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30";
+  "inline-flex items-center justify-center rounded-full border border-transparent bg-accent px-4 text-base font-medium text-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30";
 
 const BUTTON_ICON_SM =
   "inline-flex h-7 w-7 items-center justify-center rounded-full border border-border bg-surface text-fg-secondary transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-45";
@@ -196,7 +196,7 @@ export function ComposerPrimaryActions(props: ComposerPrimaryActionsProps): JSX.
                       <button
                         type="submit"
                         data-testid="composer-implement-submit"
-                        class="inline-flex h-8 items-center rounded-l-full rounded-r-none border border-transparent bg-accent px-4 text-[12px] font-medium text-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
+                        class="inline-flex h-8 items-center rounded-l-full rounded-r-none border border-transparent bg-accent px-4 text-base font-medium text-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
                         {...pointerHandler()}
                         disabled={
                           props.isSendBusy() ||

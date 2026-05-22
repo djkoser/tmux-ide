@@ -91,8 +91,8 @@ export function ChangedFilesTree(props: ChangedFilesTreeProps) {
           class="flex w-full items-center justify-between border-0 bg-transparent p-0 text-left"
           onClick={() => setOpen((value) => !value)}
         >
-          <span class="text-[12px] font-medium text-fg">Changed files</span>
-          <span class="text-[11px] text-dim">
+          <span class="text-base font-medium text-fg">Changed files</span>
+          <span class="text-sm text-dim">
             {writeCount()} written
             <Show when={readCount() > 0}> - {readCount()} read</Show> {open() ? "v" : ">"}
           </span>
@@ -129,7 +129,7 @@ export function ChangedFilesTree(props: ChangedFilesTreeProps) {
                         }}
                       >
                         <Show when={entry()!.kind === "dir"}>
-                          <div class="px-1 py-0.5 text-[11px] text-dim">
+                          <div class="px-1 py-0.5 text-sm text-dim">
                             {(entry()! as Extract<TreeEntry, { kind: "dir" }>).dir}/
                           </div>
                         </Show>
@@ -143,7 +143,7 @@ export function ChangedFilesTree(props: ChangedFilesTreeProps) {
                                   <button
                                     type="button"
                                     data-testid="changed-files-tree-row"
-                                    class={`flex min-w-0 flex-1 items-center justify-between rounded border-0 bg-transparent px-2 py-1 text-left text-[12px] hover:bg-surface-hover ${
+                                    class={`flex min-w-0 flex-1 items-center justify-between rounded border-0 bg-transparent px-2 py-1 text-left text-base hover:bg-surface-hover ${
                                       file().kind === "read" ? "text-dim" : "text-fg-secondary"
                                     }`}
                                     onClick={() => {
@@ -155,7 +155,7 @@ export function ChangedFilesTree(props: ChangedFilesTreeProps) {
                                     }}
                                   >
                                     <span class="min-w-0 truncate">{basename(file().path)}</span>
-                                    <span class="ml-2 flex-shrink-0 text-[11px]">
+                                    <span class="ml-2 flex-shrink-0 text-sm">
                                       <Show
                                         when={file().kind === "write"}
                                         fallback={<span class="text-dim">read</span>}
@@ -180,7 +180,7 @@ export function ChangedFilesTree(props: ChangedFilesTreeProps) {
                                       type="button"
                                       data-testid="changed-files-tree-expand"
                                       aria-label={`Toggle inline diff for ${basename(file().path)}`}
-                                      class="flex shrink-0 items-center justify-center px-1.5 text-[10px] text-dim opacity-0 transition-opacity hover:text-accent group-hover/file:opacity-100"
+                                      class="flex shrink-0 items-center justify-center px-1.5 text-xs text-dim opacity-0 transition-opacity hover:text-accent group-hover/file:opacity-100"
                                       onClick={(event) => {
                                         event.stopPropagation();
                                         togglePath(file().path);
@@ -195,7 +195,7 @@ export function ChangedFilesTree(props: ChangedFilesTreeProps) {
                                     <Show
                                       when={file().edits.length > 0}
                                       fallback={
-                                        <div class="p-2 text-[12px] text-dim">
+                                        <div class="p-2 text-base text-dim">
                                           No diff content captured.
                                         </div>
                                       }
@@ -203,10 +203,10 @@ export function ChangedFilesTree(props: ChangedFilesTreeProps) {
                                       <For each={file().edits}>
                                         {(edit, index) => (
                                           <div class="border-b border-border-weak last:border-b-0">
-                                            <div class="px-2 py-1 text-[11px] text-dim">
+                                            <div class="px-2 py-1 text-sm text-dim">
                                               {edit.toolCallId} - {edit.createdAt}
                                             </div>
-                                            <pre class="m-0 overflow-auto whitespace-pre-wrap px-2 pb-2 text-[11px] leading-relaxed text-fg-secondary">
+                                            <pre class="m-0 overflow-auto whitespace-pre-wrap px-2 pb-2 text-sm leading-relaxed text-fg-secondary">
                                               {formatDiff(edit.oldText, edit.newText)}
                                             </pre>
                                             <Show when={index() < file().edits.length - 1}>

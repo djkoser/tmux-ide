@@ -255,8 +255,8 @@ export function ActivityView(props: ActivityViewProps) {
         width: "100%",
         "background-color": "var(--bg)",
         color: "var(--fg)",
-        "font-family": "var(--font-family-mono, var(--font-mono))",
-        "font-size": "12px",
+        "font-family": "var(--font-mono)",
+        "font-size": "var(--text-base)",
       }}
     >
       <div
@@ -343,7 +343,7 @@ export function ActivityView(props: ActivityViewProps) {
               padding: "0 12px",
               color: "var(--fg)",
               "font-family": "inherit",
-              "font-size": "12px",
+              "font-size": "var(--text-base)",
               outline: "none",
             }}
           />
@@ -359,7 +359,7 @@ export function ActivityView(props: ActivityViewProps) {
               border: `1px solid ${live() ? "var(--green)" : "var(--border-weak, var(--border))"}`,
               background: live() ? pillTint("var(--green)") : "var(--bg-strong, var(--surface))",
               color: live() ? "var(--green)" : "var(--dim)",
-              "font-size": "11px",
+              "font-size": "var(--text-sm)",
               "text-transform": "uppercase",
               "letter-spacing": "0.08em",
               "font-family": "inherit",
@@ -387,7 +387,7 @@ export function ActivityView(props: ActivityViewProps) {
                       ? "var(--surface-active, var(--surface))"
                       : "var(--bg-strong, var(--surface))",
                     color: active() ? "var(--accent)" : meta.color,
-                    "font-size": "11px",
+                    "font-size": "var(--text-sm)",
                     "font-family": "inherit",
                     cursor: "pointer",
                   }}
@@ -409,7 +409,7 @@ export function ActivityView(props: ActivityViewProps) {
                 border: "1px solid var(--border-weak, var(--border))",
                 background: "transparent",
                 color: "var(--dim)",
-                "font-size": "11px",
+                "font-size": "var(--text-sm)",
                 "font-family": "inherit",
                 cursor: "pointer",
               }}
@@ -438,7 +438,7 @@ export function ActivityView(props: ActivityViewProps) {
             <div style={{ "margin-bottom": "4px", color: "var(--fg-secondary, var(--fg))" }}>
               No activity yet
             </div>
-            <div style={{ "font-size": "11px" }}>
+            <div style={{ "font-size": "var(--text-sm)" }}>
               New dispatches, completions, retries, and errors will appear here.
             </div>
           </div>
@@ -509,7 +509,7 @@ function TimelineRow(props: TimelineRowProps) {
               "justify-content": "space-between",
               background: "var(--bg)",
               padding: "8px 0 4px",
-              "font-size": "10px",
+              "font-size": "var(--text-xs)",
               "text-transform": "uppercase",
               "letter-spacing": "0.08em",
               color: "var(--dim)",
@@ -585,7 +585,7 @@ function EventRow(props: { event: ActivityEvent; isFirstInGroup: boolean }) {
                       "border-radius": "9999px",
                       background: pillTint(meta.color),
                       color: meta.color,
-                      "font-size": "10px",
+                      "font-size": "var(--text-xs)",
                       "text-transform": "uppercase",
                       "letter-spacing": "0.05em",
                     }}
@@ -597,7 +597,7 @@ function EventRow(props: { event: ActivityEvent; isFirstInGroup: boolean }) {
                       overflow: "hidden",
                       "text-overflow": "ellipsis",
                       "white-space": "nowrap",
-                      "font-size": "12px",
+                      "font-size": "var(--text-base)",
                       color: "var(--fg)",
                     }}
                   >
@@ -612,7 +612,7 @@ function EventRow(props: { event: ActivityEvent; isFirstInGroup: boolean }) {
                       "align-items": "center",
                       gap: "8px",
                       "min-width": "0",
-                      "font-size": "10px",
+                      "font-size": "var(--text-xs)",
                       color: "var(--dim)",
                     }}
                   >
@@ -646,7 +646,7 @@ function EventRow(props: { event: ActivityEvent; isFirstInGroup: boolean }) {
                 title={fullTimestamp(event)}
                 style={{
                   "text-align": "right",
-                  "font-size": "11px",
+                  "font-size": "var(--text-sm)",
                   "font-variant-numeric": "tabular-nums",
                   color: "var(--dim)",
                 }}
@@ -687,7 +687,7 @@ function KpiButton(props: {
     >
       <div
         style={{
-          "font-size": "10px",
+          "font-size": "var(--text-xs)",
           "text-transform": "uppercase",
           "letter-spacing": "0.05em",
           color: "var(--dim)",

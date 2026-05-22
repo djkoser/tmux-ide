@@ -65,7 +65,7 @@ export function ProviderInstanceIcon(props: ProviderInstanceIconProps): JSX.Elem
         when={glyph()}
         fallback={
           <span
-            class={`text-[10px] font-semibold leading-none ${props.iconClass ?? ""}`}
+            class={`text-xs font-semibold leading-none ${props.iconClass ?? ""}`}
             aria-hidden="true"
           >
             {providerInstanceInitials(props.displayName)}
@@ -73,7 +73,7 @@ export function ProviderInstanceIcon(props: ProviderInstanceIconProps): JSX.Elem
         }
       >
         {(g) => (
-          <span class={`text-[13px] leading-none ${props.iconClass ?? ""}`} aria-hidden="true">
+          <span class={`text-md leading-none ${props.iconClass ?? ""}`} aria-hidden="true">
             {g()}
           </span>
         )}

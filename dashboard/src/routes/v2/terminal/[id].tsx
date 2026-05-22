@@ -18,7 +18,7 @@ export default function TerminalRoute() {
       data-testid="v2-terminal-route"
       class="flex h-screen flex-col bg-[var(--bg)] text-[var(--fg)]"
     >
-      <header class="flex h-7 shrink-0 items-center border-b border-[var(--border)] bg-[var(--bg-strong)] px-3 text-[11px] tabular-nums">
+      <header class="flex h-7 shrink-0 items-center border-b border-[var(--border)] bg-[var(--bg-strong)] px-3 text-sm tabular-nums">
         <A
           href="/v2"
           class="mr-2 inline-flex items-center gap-1 text-[var(--dim)] hover:text-[var(--fg)]"
@@ -43,7 +43,7 @@ export default function TerminalRoute() {
         <Terminal id={id()} showHeader={false} />
       </main>
 
-      <footer class="flex h-6 shrink-0 items-center border-t border-[var(--border)] bg-[var(--bg-strong)] px-3 text-[10px] tabular-nums text-[var(--dim)]">
+      <footer class="flex h-6 shrink-0 items-center border-t border-[var(--border)] bg-[var(--bg-strong)] px-3 text-xs tabular-nums text-[var(--dim)]">
         <span class="text-[var(--accent)]">terminal</span>
         <span class="mx-2 opacity-30">│</span>
         <span>{id()}</span>

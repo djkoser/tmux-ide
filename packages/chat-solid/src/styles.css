@@ -86,8 +86,8 @@
 }
 
 .chat-solid-markdown code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
   background: var(--bg);
   border: 1px solid var(--border-weak);
   border-radius: 4px;
@@ -107,7 +107,7 @@
   background: transparent;
   border: 0;
   padding: 0;
-  font-size: 12px;
+  font-size: var(--text-base);
   line-height: 1.5;
 }
 
@@ -120,15 +120,15 @@
 }
 
 .chat-solid-markdown h1 {
-  font-size: 16px;
+  font-size: var(--text-xl);
 }
 
 .chat-solid-markdown h2 {
-  font-size: 14px;
+  font-size: var(--text-lg);
 }
 
 .chat-solid-markdown h3 {
-  font-size: 13px;
+  font-size: var(--text-base);
 }
 
 .chat-solid-markdown a {
@@ -150,8 +150,8 @@
   border-radius: 4px;
   background: var(--surface);
   color: var(--accent);
-  font-family: var(--font-family-mono, var(--font-mono));
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
   vertical-align: baseline;
   text-decoration: none;
   cursor: pointer;
@@ -160,7 +160,7 @@
 .chat-solid-markdown a.chat-file-link::before {
   content: "▤";
   color: var(--dim);
-  font-size: 10px;
+  font-size: var(--text-xs);
 }
 
 .chat-solid-markdown a.chat-file-link:hover {
@@ -179,7 +179,7 @@
 .chat-solid-markdown table {
   border-collapse: collapse;
   margin: 8px 0;
-  font-size: 12px;
+  font-size: var(--text-base);
 }
 
 .chat-solid-markdown th,

@@ -72,11 +72,11 @@ export function CheckRunsRail(props: CheckRunsRailProps) {
                 ? "passed"
                 : "neutral"
         }
-        class="flex items-center gap-2 overflow-x-auto border-b border-[var(--border)] bg-[var(--bg-strong)] px-3 py-1 text-[11px]"
+        class="flex items-center gap-2 overflow-x-auto border-b border-[var(--border)] bg-[var(--bg-strong)] px-3 py-1 text-sm"
       >
         <span
           data-testid="check-runs-summary"
-          class="inline-flex items-center gap-2 whitespace-nowrap text-[10px] uppercase tracking-wider text-[var(--dim)]"
+          class="inline-flex items-center gap-2 whitespace-nowrap text-xs uppercase tracking-wider text-[var(--dim)]"
           title={
             summary()
               ? `total ${summary()!.total} · passed ${summary()!.passed} · failed ${summary()!.failed} · pending ${summary()!.pending}`

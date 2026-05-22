@@ -135,7 +135,7 @@ export function TabStrip(props: TabStripProps) {
         ref={stripEl}
         data-testid="editor-tab-strip"
         role="tablist"
-        class="flex h-7 shrink-0 items-center overflow-x-auto border-b border-[var(--border)] bg-[var(--bg-strong)] text-[12px]"
+        class="flex h-7 shrink-0 items-center overflow-x-auto border-b border-[var(--border)] bg-[var(--bg-strong)] text-base"
       >
         <For each={bufferState.order}>
           {(uri) => {
@@ -163,7 +163,7 @@ export function TabStrip(props: TabStripProps) {
                     onDragEnd={onDragEnd}
                     onDblClick={() => pinBuffer(uri)}
                     class={
-                      "group relative flex h-7 shrink-0 items-center gap-1.5 border-r border-[var(--border)] px-3 text-[12px] " +
+                      "group relative flex h-7 shrink-0 items-center gap-1.5 border-r border-[var(--border)] px-3 text-base " +
                       (active()
                         ? "bg-[var(--bg)] text-[var(--fg)]"
                         : "text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)]") +
@@ -174,7 +174,7 @@ export function TabStrip(props: TabStripProps) {
                       type="button"
                       data-testid="editor-tab-pick"
                       onClick={() => setActiveBuffer(uri)}
-                      class="inline-flex items-center gap-1 bg-transparent text-left text-[12px] text-inherit"
+                      class="inline-flex items-center gap-1 bg-transparent text-left text-base text-inherit"
                     >
                       <Show when={b().dirty}>
                         <span
@@ -195,13 +195,13 @@ export function TabStrip(props: TabStripProps) {
                         {basename(b().filePath)}
                       </span>
                       <Show when={b().status === "loading"}>
-                        <span class="text-[10px] text-[var(--dim)]">loading…</span>
+                        <span class="text-xs text-[var(--dim)]">loading…</span>
                       </Show>
                       <Show when={b().status === "error"}>
-                        <span class="text-[10px] text-[var(--red-foreground,var(--red))]">!</span>
+                        <span class="text-xs text-[var(--red-foreground,var(--red))]">!</span>
                       </Show>
                       <Show when={b().saving}>
-                        <span class="text-[10px] text-[var(--dim)]">saving…</span>
+                        <span class="text-xs text-[var(--dim)]">saving…</span>
                       </Show>
                     </button>
                     <button

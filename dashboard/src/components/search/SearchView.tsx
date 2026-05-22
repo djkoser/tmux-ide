@@ -448,7 +448,7 @@ export function SearchView(props: SearchViewProps): JSX.Element {
       data-testid="search-view"
       class="flex h-full min-h-0 w-full flex-col bg-[var(--bg)] text-[var(--fg)]"
     >
-      <header class="flex items-center justify-between border-b border-[var(--border)] bg-[var(--bg-strong)] px-3 py-2 text-[11px] uppercase tracking-wide text-[var(--dim)]">
+      <header class="flex items-center justify-between border-b border-[var(--border)] bg-[var(--bg-strong)] px-3 py-2 text-sm uppercase tracking-wide text-[var(--dim)]">
         <span class="font-medium text-[var(--fg)]">Search</span>
         <span>Cmd+Shift+F</span>
       </header>
@@ -474,7 +474,7 @@ export function SearchView(props: SearchViewProps): JSX.Element {
               queueMicrotask(() => setHistoryOpen(false))
             }
             placeholder="Search workspace…"
-            class="h-8 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] pl-7 pr-2 text-[12px] text-[var(--fg)] outline-none focus:border-[var(--accent)]"
+            class="h-8 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] pl-7 pr-2 text-base text-[var(--fg)] outline-none focus:border-[var(--accent)]"
             spellcheck={false}
             autocomplete="off"
           />
@@ -485,7 +485,7 @@ export function SearchView(props: SearchViewProps): JSX.Element {
               aria-label="Recent searches"
               class="absolute left-0 right-0 top-9 z-20 rounded-md border border-[var(--border)] bg-[var(--surface)] py-1 shadow-2xl"
             >
-              <div class="flex items-center gap-1 px-2 py-1 text-[10px] uppercase tracking-wider text-[var(--dim)]">
+              <div class="flex items-center gap-1 px-2 py-1 text-xs uppercase tracking-wider text-[var(--dim)]">
                 <History size={11} />
                 <span>Recent</span>
               </div>
@@ -502,7 +502,7 @@ export function SearchView(props: SearchViewProps): JSX.Element {
                       setHistoryOpen(false);
                       void service.run();
                     }}
-                    class="flex w-full items-center gap-2 px-3 py-1 text-left text-[12px] text-[var(--fg-secondary)] hover:bg-[var(--surface-hover,var(--bg-strong))] hover:text-[var(--fg)]"
+                    class="flex w-full items-center gap-2 px-3 py-1 text-left text-base text-[var(--fg-secondary)] hover:bg-[var(--surface-hover,var(--bg-strong))] hover:text-[var(--fg)]"
                   >
                     <SearchIcon size={11} class="opacity-50" />
                     <span class="truncate">{entry}</span>
@@ -526,7 +526,7 @@ export function SearchView(props: SearchViewProps): JSX.Element {
                 service.setReplaceWith((event.currentTarget as HTMLInputElement).value)
               }
               placeholder="Replace with…"
-              class="h-8 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] pl-7 pr-2 text-[12px] text-[var(--fg)] outline-none focus:border-[var(--accent)]"
+              class="h-8 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] pl-7 pr-2 text-base text-[var(--fg)] outline-none focus:border-[var(--accent)]"
               spellcheck={false}
               autocomplete="off"
             />
@@ -573,12 +573,10 @@ export function SearchView(props: SearchViewProps): JSX.Element {
           />
           <div class="ml-auto flex items-center gap-1">
             <Show when={service.state.status === "running"}>
-              <span class="text-[10px] uppercase tracking-wider text-[var(--accent)]">
-                searching…
-              </span>
+              <span class="text-xs uppercase tracking-wider text-[var(--accent)]">searching…</span>
             </Show>
             <Show when={service.state.status === "cancelled"}>
-              <span class="text-[10px] uppercase tracking-wider text-[var(--dim)]">cancelled</span>
+              <span class="text-xs uppercase tracking-wider text-[var(--dim)]">cancelled</span>
             </Show>
           </div>
         </div>
@@ -604,7 +602,7 @@ export function SearchView(props: SearchViewProps): JSX.Element {
           <button
             type="button"
             data-testid="replace-across-files"
-            class="self-end rounded-md border border-[var(--accent)] bg-[var(--accent)] px-2 py-1 text-[11px] font-medium text-[var(--bg)] hover:opacity-90"
+            class="self-end rounded-md border border-[var(--accent)] bg-[var(--accent)] px-2 py-1 text-sm font-medium text-[var(--bg)] hover:opacity-90"
             disabled={service.replaceWith().length === 0}
             onClick={() => setConfirmAcrossFiles(true)}
           >
@@ -617,7 +615,7 @@ export function SearchView(props: SearchViewProps): JSX.Element {
         {(summary) => (
           <div
             data-testid="search-summary"
-            class="border-b border-[var(--border)] px-3 py-1 text-[11px] text-[var(--dim)]"
+            class="border-b border-[var(--border)] px-3 py-1 text-sm text-[var(--dim)]"
           >
             <span data-testid="summary-matches">{summary().matches}</span> results in
             <span class="mx-1" data-testid="summary-files">
@@ -625,7 +623,7 @@ export function SearchView(props: SearchViewProps): JSX.Element {
             </span>
             files · <span data-testid="summary-elapsed">{summary().elapsedMs}ms</span>
             <Show when={summary().truncated}>
-              <span class="ml-2 rounded bg-[var(--bg-strong)] px-1 py-0.5 text-[10px] uppercase text-[var(--accent)]">
+              <span class="ml-2 rounded bg-[var(--bg-strong)] px-1 py-0.5 text-xs uppercase text-[var(--accent)]">
                 truncated
               </span>
             </Show>
@@ -636,7 +634,7 @@ export function SearchView(props: SearchViewProps): JSX.Element {
       <Show when={service.state.error}>
         <div
           data-testid="search-error"
-          class="border-b border-[var(--red)] bg-[var(--bg-strong)] px-3 py-1 text-[11px] text-[var(--red)]"
+          class="border-b border-[var(--red)] bg-[var(--bg-strong)] px-3 py-1 text-sm text-[var(--red)]"
         >
           {service.state.error}
         </div>
@@ -646,7 +644,7 @@ export function SearchView(props: SearchViewProps): JSX.Element {
         {(result) => (
           <div
             data-testid="replace-summary"
-            class="border-b border-[var(--green)] bg-[var(--bg-strong)] px-3 py-1 text-[11px] text-[var(--green)]"
+            class="border-b border-[var(--green)] bg-[var(--bg-strong)] px-3 py-1 text-sm text-[var(--green)]"
           >
             Replaced {result().matchesReplaced} matches in {result().filesUpdated} files
             <Show when={result().skipped.length > 0}>
@@ -662,7 +660,7 @@ export function SearchView(props: SearchViewProps): JSX.Element {
       <Show when={replaceError()}>
         <div
           data-testid="replace-error"
-          class="border-b border-[var(--red)] bg-[var(--bg-strong)] px-3 py-1 text-[11px] text-[var(--red)]"
+          class="border-b border-[var(--red)] bg-[var(--bg-strong)] px-3 py-1 text-sm text-[var(--red)]"
         >
           {replaceError()}
         </div>
@@ -727,7 +725,7 @@ export function SearchView(props: SearchViewProps): JSX.Element {
         >
           <div
             data-testid="search-empty"
-            class="flex h-full items-center justify-center text-[12px] text-[var(--dim)]"
+            class="flex h-full items-center justify-center text-base text-[var(--dim)]"
           >
             No matches
           </div>
@@ -824,7 +822,7 @@ function FileHeaderRow(props: FileHeaderRowProps): JSX.Element {
       data-path={props.path}
       class="border-b border-[var(--border-weak,var(--border))]"
     >
-      <div class="group flex w-full items-center gap-1 bg-[var(--bg-weak)] px-2 py-1 text-[11px] text-[var(--fg-secondary)]">
+      <div class="group flex w-full items-center gap-1 bg-[var(--bg-weak)] px-2 py-1 text-sm text-[var(--fg-secondary)]">
         <button
           type="button"
           data-testid="search-file-toggle"
@@ -833,7 +831,7 @@ function FileHeaderRow(props: FileHeaderRowProps): JSX.Element {
         >
           {props.file.expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           <span class="truncate font-mono">{props.path}</span>
-          <span class="ml-1 text-[10px] text-[var(--dim)]">
+          <span class="ml-1 text-xs text-[var(--dim)]">
             ({matchCount()} {matchCount() === 1 ? "match" : "matches"})
           </span>
         </button>
@@ -846,7 +844,7 @@ function FileHeaderRow(props: FileHeaderRowProps): JSX.Element {
               e.stopPropagation();
               props.onReplace();
             }}
-            class="rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-[var(--accent)] hover:bg-[var(--surface-hover,var(--bg-strong))] disabled:cursor-not-allowed disabled:opacity-50"
+            class="rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5 text-xs uppercase tracking-wider text-[var(--accent)] hover:bg-[var(--surface-hover,var(--bg-strong))] disabled:cursor-not-allowed disabled:opacity-50"
           >
             Replace
           </button>
@@ -866,7 +864,7 @@ function ContextLineRow(props: ContextLineRowProps): JSX.Element {
   return (
     <button
       type="button"
-      class="block w-full bg-[var(--bg)] px-3 py-0.5 text-left font-mono text-[12px] leading-relaxed text-[var(--dim)] hover:bg-[var(--surface-hover,var(--bg-strong))]"
+      class="block w-full bg-[var(--bg)] px-3 py-0.5 text-left font-mono text-base leading-relaxed text-[var(--dim)] hover:bg-[var(--surface-hover,var(--bg-strong))]"
       onClick={() => props.onClick()}
     >
       <span class="mr-3 inline-block w-8 text-right tabular-nums">{props.line}</span>
@@ -893,7 +891,7 @@ function MatchRowView(props: MatchRowViewProps): JSX.Element {
       data-line={props.match.line}
       data-match-id={props.matchId}
       aria-current={props.isActive ? "true" : undefined}
-      class={`block w-full bg-[var(--bg)] px-3 py-0.5 text-left font-mono text-[12px] leading-relaxed hover:bg-[var(--surface-hover,var(--bg-strong))] ${
+      class={`block w-full bg-[var(--bg)] px-3 py-0.5 text-left font-mono text-base leading-relaxed hover:bg-[var(--surface-hover,var(--bg-strong))] ${
         props.isActive
           ? "bg-[color-mix(in_oklab,var(--accent)_18%,transparent)] outline outline-1 outline-[var(--accent)]"
           : ""
@@ -970,13 +968,13 @@ interface FilterInputProps {
 function FilterInput(props: FilterInputProps): JSX.Element {
   return (
     <label class="flex min-w-0 flex-1 flex-col gap-0.5">
-      <span class="text-[10px] uppercase tracking-wider text-[var(--dim)]">{props.label}</span>
+      <span class="text-xs uppercase tracking-wider text-[var(--dim)]">{props.label}</span>
       <input
         data-testid={props.testId}
         value={props.value}
         onInput={(event) => props.onInput((event.currentTarget as HTMLInputElement).value)}
         placeholder={props.placeholder}
-        class="h-7 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-[11px] text-[var(--fg)] outline-none focus:border-[var(--accent)]"
+        class="h-7 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]"
         spellcheck={false}
         autocomplete="off"
       />
@@ -1020,17 +1018,17 @@ function ConfirmReplaceDialog(props: ConfirmReplaceDialogProps): JSX.Element {
       >
         <h2
           id="confirm-replace-title"
-          class="m-0 text-[14px] font-semibold leading-tight text-[var(--fg)]"
+          class="m-0 text-lg font-semibold leading-tight text-[var(--fg)]"
         >
           Replace across files
         </h2>
-        <p class="mt-2 text-[12px] text-[var(--fg-secondary)]">
+        <p class="mt-2 text-base text-[var(--fg-secondary)]">
           About to replace <span class="font-mono">{props.totalMatches}</span> matches across{" "}
           <span class="font-mono">{props.fileCount}</span> files. This is destructive — commit your
           working tree first if you want easy revert (a non-committed file can still be restored via{" "}
           <code class="font-mono">git checkout -- .</code> if you don't reload).
         </p>
-        <p class="mt-1 text-[12px] text-[var(--fg-secondary)]">
+        <p class="mt-1 text-base text-[var(--fg-secondary)]">
           Files modified since the last search snapshot will be skipped.
         </p>
         <div class="mt-4 flex justify-end gap-2">
@@ -1038,7 +1036,7 @@ function ConfirmReplaceDialog(props: ConfirmReplaceDialogProps): JSX.Element {
             type="button"
             data-testid="confirm-replace-cancel"
             onClick={() => props.onCancel()}
-            class="rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[12px] text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            class="rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-base text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
           >
             Cancel
           </button>
@@ -1047,7 +1045,7 @@ function ConfirmReplaceDialog(props: ConfirmReplaceDialogProps): JSX.Element {
             type="button"
             data-testid="confirm-replace-confirm"
             onClick={() => props.onConfirm()}
-            class="rounded-md border border-[var(--accent)] bg-[var(--accent)] px-3 py-1 text-[12px] font-medium text-[var(--bg)] hover:opacity-90"
+            class="rounded-md border border-[var(--accent)] bg-[var(--accent)] px-3 py-1 text-base font-medium text-[var(--bg)] hover:opacity-90"
           >
             Replace
           </button>

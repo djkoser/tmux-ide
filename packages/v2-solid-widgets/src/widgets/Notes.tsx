@@ -80,8 +80,8 @@ export function NotesView(props: NotesViewProps) {
     >
       <div class="flex items-center justify-between border-b border-[var(--border)] px-3 py-2">
         <div class="flex items-center gap-3">
-          <span class="text-[12px] font-medium">Notes</span>
-          <span data-testid="notes-status" class="text-[11px] text-[var(--dim)]">
+          <span class="text-base font-medium">Notes</span>
+          <span data-testid="notes-status" class="text-sm text-[var(--dim)]">
             <Show
               when={dirty()}
               fallback={<>Last saved {formatRelative(props.options().updatedAt)}</>}
@@ -90,12 +90,12 @@ export function NotesView(props: NotesViewProps) {
             </Show>
           </span>
           <Show when={externalChanged()}>
-            <span class="rounded bg-[var(--yellow,#d4a017)]/15 px-2 py-0.5 text-[10px] text-[var(--yellow,#d4a017)]">
+            <span class="rounded bg-[var(--yellow,#d4a017)]/15 px-2 py-0.5 text-xs text-[var(--yellow,#d4a017)]">
               External change pending
             </span>
           </Show>
           <Show when={props.options().error}>
-            <span class="text-[11px] text-[var(--red,#cc6666)]" role="alert">
+            <span class="text-sm text-[var(--red,#cc6666)]" role="alert">
               {props.options().error}
             </span>
           </Show>
@@ -105,7 +105,7 @@ export function NotesView(props: NotesViewProps) {
           data-testid="notes-save"
           onClick={() => save()}
           disabled={props.options().saving || !dirty()}
-          class="rounded bg-[var(--accent)] px-3 py-1 text-[11px] font-medium text-[var(--accent-fg,var(--bg))] disabled:opacity-40"
+          class="rounded bg-[var(--accent)] px-3 py-1 text-sm font-medium text-[var(--accent-fg,var(--bg))] disabled:opacity-40"
         >
           {props.options().saving ? "Saving…" : "Save"}
         </button>
@@ -113,7 +113,7 @@ export function NotesView(props: NotesViewProps) {
       <textarea
         data-testid="notes-textarea"
         spellcheck={false}
-        class="min-h-0 flex-1 resize-none bg-transparent p-3 font-mono text-[12px] leading-[1.5] text-[var(--fg)] outline-none"
+        class="min-h-0 flex-1 resize-none bg-transparent p-3 font-mono text-base leading-[1.5] text-[var(--fg)] outline-none"
         placeholder="# Project notes&#10;&#10;Jot anything down. Stored as .tmux-ide/notes.md in the project directory."
         value={draft()}
         onInput={(e) => {
