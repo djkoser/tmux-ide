@@ -5,10 +5,7 @@ name: Release
 # version. Replaces the older `publish.yml` which raced this workflow
 # on the same tag-push trigger (G22-P3 housekeeping).
 #
-# Scope: npm only. Desktop / Electron release artifacts are tracked
-# under app-electron/ and intentionally not produced here — re-add a
-# separate workflow if/when we promote the desktop bundle past
-# tier-2 (see docs/goal-22-distribution.md §4).
+# Scope: npm only — the terminal-first CLI/daemon. No desktop bundle.
 
 on:
   push:
@@ -80,9 +77,6 @@ jobs:
         run: |
           mv src/integration.test.ts src/integration.test.ts.skip 2>/dev/null || true
           pnpm run check
-
-      - name: Build dashboard
-        run: pnpm --filter @tmux-ide/dashboard build
 
       - name: Build daemon
         # Compile packages/daemon/src → packages/daemon/dist so the

@@ -27325,7 +27325,7 @@ var require_package = __commonJS({
   "package.json"(exports, module) {
     module.exports = {
       name: "tmux-ide",
-      version: "2.5.0",
+      version: "2.6.0",
       description: "Turn any project into a tmux-powered terminal IDE with a simple ide.yml",
       type: "module",
       bin: {
@@ -27336,21 +27336,18 @@ var require_package = __commonJS({
         "scripts",
         "skill",
         "templates",
-        "dashboard/dist"
+        "packages/daemon/dist"
       ],
       scripts: {
         build: "pnpm build:cli",
         "build:cli": "node scripts/build-cli.mjs",
-        "build:dashboard": "cd dashboard && pnpm build",
-        prepublishOnly: "pnpm build:cli && pnpm check && pnpm --filter @tmux-ide/dashboard build && node scripts/prepublish-check.mjs",
+        prepublishOnly: "pnpm build:cli && pnpm check && node scripts/prepublish-check.mjs",
         typecheck: 'echo "root typecheck deferred to per-package turbo run"',
         dev: "node bin/cli.js",
-        test: "vitest run",
-        "test:unit": "vitest run",
-        "test:chat-e2e": "pnpm --filter @tmux-ide/daemon exec vitest run src/chat/__tests__/chat-pipeline.e2e.test.ts",
-        lint: "eslint bin scripts packages/contracts/src packages/tmux-bridge/src packages/daemon/src packages/v2-solid-widgets/src packages/chat-solid/src && pnpm run check:silo-mounts",
-        "lint:workspace": "turbo run lint && pnpm run check:silo-mounts",
-        "check:silo-mounts": "bash scripts/check-silo-mounts.sh",
+        test: "vitest run --dir src src/cli.test.ts",
+        "test:unit": "vitest run --dir src src/cli.test.ts",
+        lint: "eslint bin scripts packages/contracts/src packages/tmux-bridge/src packages/daemon/src",
+        "lint:workspace": "turbo run lint",
         format: "prettier --write .",
         "format:check": "prettier --check .",
         "build:workspace": "turbo run build",
@@ -27360,8 +27357,6 @@ var require_package = __commonJS({
         "check:native-deps": "node packages/daemon/scripts/check-native-deps.mjs",
         check: "pnpm run lint:workspace && pnpm run format:check && pnpm run typecheck:workspace && vitest run --dir src src/cli.test.ts && pnpm run docs:build && pnpm run pack:check && pnpm run check:native-deps",
         postinstall: "node scripts/postinstall.js",
-        "test:dashboard": "cd dashboard && pnpm test",
-        "test:e2e": "playwright test",
         docs: "turbo run dev --filter=@tmux-ide/docs"
       },
       keywords: [
@@ -27428,7 +27423,8 @@ var require_package = __commonJS({
         globals: "^17.4.0",
         prettier: "^3.8.1",
         turbo: "^2.3.3",
-        typescript: "^5.9.3"
+        typescript: "^5.9.3",
+        vitest: "^4.1.0"
       }
     };
   }

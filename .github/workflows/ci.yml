@@ -52,44 +52,6 @@ jobs:
       - name: Validate package contents
         run: pnpm pack:check
 
-  dashboard:
-    name: Dashboard build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build CLI (dashboard may depend on dist/)
-        run: pnpm build
-
-      - name: Build dashboard (Vite SPA)
-        working-directory: dashboard
-        run: pnpm build
-
-      - name: Run dashboard tests
-        run: cd dashboard && pnpm test
-
-  # E2E job removed: every spec in e2e/ is in playwright.config.ts
-  # testIgnore (parked since the G16 Solid cutover), so the job collected
-  # zero tests and only spent CI minutes booting a webServer that nothing
-  # exercised. smoke.yml owns the live smoke gate; restore this job when
-  # specs are ported back to the Solid surface.
-
   coverage:
     name: Vitest coverage (per package)
     runs-on: ubuntu-latest
@@ -123,18 +85,6 @@ jobs:
         working-directory: packages/daemon
         run: pnpm exec vitest run --coverage
 
-      - name: Coverage — chat-solid
-        working-directory: packages/chat-solid
-        run: pnpm exec vitest run --coverage
-
-      - name: Coverage — v2-solid-widgets
-        working-directory: packages/v2-solid-widgets
-        run: pnpm exec vitest run --coverage
-
-      - name: Coverage — dashboard
-        working-directory: dashboard
-        run: pnpm exec vitest run --coverage
-
       - name: Summarize coverage for PR
         if: always()
         run: node scripts/coverage-summary.mjs >> "$GITHUB_STEP_SUMMARY"
@@ -146,9 +96,6 @@ jobs:
           name: coverage-html
           path: |
             packages/daemon/coverage
-            packages/chat-solid/coverage
-            packages/v2-solid-widgets/coverage
-            dashboard/coverage
           if-no-files-found: ignore
           retention-days: 14
 
