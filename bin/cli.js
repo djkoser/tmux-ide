@@ -336,6 +336,18 @@ function sendLiteral(targetPane, text) {
   runTmux(["send-keys", "-t", targetPane, "-l", "--", text], { stdio: "inherit" });
   runTmux(["send-keys", "-t", targetPane, "Enter"], { stdio: "inherit" });
 }
+function capturePane(targetPane, options = {}) {
+  const args = ["capture-pane", "-t", targetPane, "-p", "-J"];
+  if (typeof options.scrollback === "number") {
+    args.push("-S", `-${options.scrollback}`);
+  } else if (typeof options.lines === "number") {
+    args.push("-S", `-${options.lines}`);
+  }
+  return runTmux(args, { encoding: "utf-8" }).replace(/\n+$/, "");
+}
+function captureRecent(targetPane, lines = 50) {
+  return capturePane(targetPane, { lines });
+}
 function selectPane(targetPane) {
   runTmux(["select-pane", "-t", targetPane], { stdio: "inherit" });
 }
@@ -3074,9 +3086,9 @@ function getDefaultWorkspaceRegistry() {
   return _default;
 }
 function defaultListSessions() {
-  const { execFileSync: execFileSync7 } = __require("node:child_process");
+  const { execFileSync: execFileSync8 } = __require("node:child_process");
   try {
-    const raw = execFileSync7("tmux", ["list-sessions", "-F", "#{session_name}"], {
+    const raw = execFileSync8("tmux", ["list-sessions", "-F", "#{session_name}"], {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"]
     });
@@ -7711,6 +7723,474 @@ var require_package = __commonJS({
   }
 });
 
+// packages/daemon/src/tui/detect/manifest.ts
+function resolveRegion(snapshot, region) {
+  switch (region) {
+    case "text":
+      return snapshot.text;
+    case "title":
+      return snapshot.title ?? "";
+    case "bottom":
+    default:
+      return snapshot.bottomNonEmpty.join("\n");
+  }
+}
+function safeRegex(source, caseInsensitive) {
+  try {
+    return new RegExp(source, caseInsensitive ? "i" : "");
+  } catch {
+    return void 0;
+  }
+}
+function matchMatcher(snapshot, matcher) {
+  const haystack = resolveRegion(snapshot, matcher.region ?? "bottom");
+  if (matcher.contains !== void 0) {
+    if (matcher.caseInsensitive) {
+      return haystack.toLowerCase().includes(matcher.contains.toLowerCase());
+    }
+    return haystack.includes(matcher.contains);
+  }
+  if (matcher.regex !== void 0) {
+    const re = safeRegex(matcher.regex, matcher.caseInsensitive);
+    return re ? re.test(haystack) : false;
+  }
+  return false;
+}
+function matchRule(snapshot, rule) {
+  const hasAll = rule.all !== void 0 && rule.all.length > 0;
+  const hasAny = rule.any !== void 0 && rule.any.length > 0;
+  if (!hasAll && !hasAny) return false;
+  if (hasAll && !rule.all.every((m) => matchMatcher(snapshot, m))) return false;
+  if (hasAny && !rule.any.some((m) => matchMatcher(snapshot, m))) return false;
+  return true;
+}
+function evaluateManifest(snapshot, manifest) {
+  for (const state of PRECEDENCE) {
+    const rule = manifest.states[state];
+    if (rule && matchRule(snapshot, rule)) {
+      const matcher = firstMatchingMatcher(snapshot, rule);
+      return matcher ? { state, matched: { state, matcher } } : { state };
+    }
+  }
+  return { state: null };
+}
+function firstMatchingMatcher(snapshot, rule) {
+  const matchers = [...rule.all ?? [], ...rule.any ?? []];
+  return matchers.find((m) => matchMatcher(snapshot, m));
+}
+function pickManifest(command2, manifests) {
+  const cmd = command2.trim().toLowerCase();
+  if (cmd.length === 0) return void 0;
+  const exact = manifests.find((m) => m.commands.some((c) => c.toLowerCase() === cmd));
+  if (exact) return exact;
+  return manifests.find(
+    (m) => m.commands.some((c) => {
+      const name = c.toLowerCase();
+      return cmd.includes(name) || name.includes(cmd);
+    })
+  );
+}
+var PRECEDENCE;
+var init_manifest = __esm({
+  "packages/daemon/src/tui/detect/manifest.ts"() {
+    "use strict";
+    PRECEDENCE = ["blocked", "working", "done"];
+  }
+});
+
+// packages/daemon/src/tui/detect/manifests.ts
+var BRAILLE_SPINNER, CLAUDE, CODEX, SHELL, BUNDLED_MANIFESTS;
+var init_manifests = __esm({
+  "packages/daemon/src/tui/detect/manifests.ts"() {
+    "use strict";
+    BRAILLE_SPINNER = "[\u280B\u2819\u2839\u2838\u283C\u2834\u2826\u2827\u2807\u280F]";
+    CLAUDE = {
+      id: "claude",
+      commands: ["claude"],
+      states: {
+        // Approval / confirmation prompts — Claude is waiting on the user.
+        blocked: {
+          any: [
+            { region: "bottom", contains: "Do you want" },
+            { region: "bottom", contains: "\u276F 1." },
+            { region: "bottom", contains: "(y/n)", caseInsensitive: true },
+            { region: "bottom", contains: "Yes, and" }
+          ]
+        },
+        // Streaming / thinking indicators.
+        working: {
+          any: [
+            { region: "bottom", contains: "esc to interrupt", caseInsensitive: true },
+            { region: "bottom", contains: "Thinking" },
+            { region: "bottom", contains: "Cerebrating" },
+            { region: "bottom", regex: BRAILLE_SPINNER },
+            { region: "title", regex: BRAILLE_SPINNER }
+          ]
+        }
+        // done: intentionally omitted — inferred by the classifier's seen-tracking.
+      }
+    };
+    CODEX = {
+      id: "codex",
+      commands: ["codex"],
+      states: {
+        blocked: {
+          any: [
+            { region: "bottom", contains: "Do you want" },
+            { region: "bottom", contains: "Allow command", caseInsensitive: true },
+            { region: "bottom", contains: "approve", caseInsensitive: true },
+            { region: "bottom", contains: "(y/n)", caseInsensitive: true }
+          ]
+        },
+        working: {
+          any: [
+            { region: "bottom", contains: "esc to interrupt", caseInsensitive: true },
+            { region: "bottom", contains: "Working", caseInsensitive: true },
+            { region: "bottom", contains: "Running", caseInsensitive: true },
+            { region: "bottom", regex: BRAILLE_SPINNER },
+            { region: "title", regex: BRAILLE_SPINNER }
+          ]
+        }
+      }
+    };
+    SHELL = {
+      id: "shell",
+      commands: ["bash", "zsh", "sh", "fish", "nu"],
+      states: {
+        // Catch-all: a raw shell is almost always idle. We only flag an explicit
+        // interactive confirmation as blocked; "working" is unreliable to read
+        // from a shell snapshot, so it stays absent (idle by default).
+        blocked: {
+          any: [
+            { region: "bottom", contains: "[y/n]", caseInsensitive: true },
+            { region: "bottom", contains: "(yes/no)", caseInsensitive: true }
+          ]
+        }
+      }
+    };
+    BUNDLED_MANIFESTS = [CLAUDE, CODEX, SHELL];
+  }
+});
+
+// packages/daemon/src/tui/detect/classify.ts
+var classify_exports = {};
+__export(classify_exports, {
+  classifyInstant: () => classifyInstant,
+  classifyPaneCommand: () => classifyPaneCommand,
+  createStatusTracker: () => createStatusTracker
+});
+function classifyInstant(snapshot, manifest) {
+  if (!manifest) return "unknown";
+  const { state } = evaluateManifest(snapshot, manifest);
+  switch (state) {
+    case "blocked":
+      return "blocked";
+    case "working":
+      return "working";
+    // "done" (instantaneous) and null both fall through to idle.
+    default:
+      return "idle";
+  }
+}
+function classifyPaneCommand(snapshot, command2, manifests = BUNDLED_MANIFESTS) {
+  return classifyInstant(snapshot, pickManifest(command2, manifests));
+}
+function createStatusTracker() {
+  const states = /* @__PURE__ */ new Map();
+  function get(paneId) {
+    let s = states.get(paneId);
+    if (!s) {
+      s = { wasWorking: false, doneUnseen: false };
+      states.set(paneId, s);
+    }
+    return s;
+  }
+  return {
+    update(paneId, instant, opts) {
+      const seen = opts?.seen === true;
+      const s = get(paneId);
+      switch (instant) {
+        case "working":
+          s.doneUnseen = false;
+          s.wasWorking = true;
+          return "working";
+        case "blocked":
+          s.doneUnseen = false;
+          s.wasWorking = false;
+          return "blocked";
+        case "idle": {
+          if (s.wasWorking) s.doneUnseen = true;
+          s.wasWorking = false;
+          if (seen) {
+            s.doneUnseen = false;
+            return "idle";
+          }
+          return s.doneUnseen ? "done" : "idle";
+        }
+        case "unknown":
+        default:
+          s.wasWorking = false;
+          if (seen) s.doneUnseen = false;
+          return "unknown";
+      }
+    },
+    markSeen(paneId) {
+      const s = states.get(paneId);
+      if (s) s.doneUnseen = false;
+    },
+    forget(paneId) {
+      states.delete(paneId);
+    }
+  };
+}
+var init_classify = __esm({
+  "packages/daemon/src/tui/detect/classify.ts"() {
+    "use strict";
+    init_manifest();
+    init_manifests();
+  }
+});
+
+// packages/daemon/src/tui/detect/snapshot.ts
+function stripAnsi(input) {
+  return input.replace(ANSI, "");
+}
+function parseSnapshot(raw, opts = {}) {
+  const lines = opts.lines ?? DEFAULT_LINES;
+  const text = stripAnsi(raw ?? "");
+  const nonEmpty = text.split("\n").map((line) => line.replace(/\s+$/, "")).filter((line) => line.length > 0);
+  const bottomNonEmpty = lines > 0 ? nonEmpty.slice(-lines) : [];
+  return { bottomNonEmpty, text, raw: raw ?? "" };
+}
+function readPaneSnapshot(target, opts = {}) {
+  const lines = opts.lines ?? DEFAULT_LINES;
+  try {
+    const raw = captureRecent(target, lines);
+    return parseSnapshot(raw, { lines });
+  } catch {
+    return { bottomNonEmpty: [], text: "", raw: "" };
+  }
+}
+var ANSI, DEFAULT_LINES;
+var init_snapshot = __esm({
+  "packages/daemon/src/tui/detect/snapshot.ts"() {
+    "use strict";
+    init_src();
+    ANSI = /[][[\]()#;?]*(?:(?:(?:(?:;[-a-zA-Z\d/#&.:=?%@~_]+)*|[a-zA-Z\d]+(?:;[-a-zA-Z\d/#&.:=?%@~_]*)*)?)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]))/g;
+    DEFAULT_LINES = 20;
+  }
+});
+
+// packages/daemon/src/tui/team/sessions.ts
+var sessions_exports = {};
+__export(sessions_exports, {
+  listTeamSessions: () => listTeamSessions,
+  rollupStatus: () => rollupStatus
+});
+import { execFileSync as execFileSync6 } from "node:child_process";
+function tmux3(args) {
+  try {
+    return execFileSync6("tmux", args, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+  } catch {
+    return "";
+  }
+}
+function listTeamSessions(tracker, opts = {}) {
+  const raw = tmux3([
+    "list-sessions",
+    "-F",
+    "#{session_name}	#{session_attached}	#{session_windows}"
+  ]);
+  if (!raw) return [];
+  const panesBySession = collectPanes();
+  return raw.split("\n").filter(Boolean).map((line) => {
+    const [name = "", attached = "", windows = "0"] = line.split("	");
+    const panes = panesBySession.get(name) ?? [];
+    const seen = opts.viewed === name;
+    const statuses = panes.map((pane) => {
+      const manifest = pickManifest(pane.cmd, BUNDLED_MANIFESTS);
+      const instant = manifest ? classifyInstant({ ...readPaneSnapshot(pane.id), title: pane.title }, manifest) : "unknown";
+      return tracker.update(pane.id, instant, { seen });
+    });
+    return {
+      name,
+      attached: attached === "1",
+      windows: Number(windows) || 0,
+      panes: panes.length,
+      status: rollupStatus(statuses)
+    };
+  });
+}
+function collectPanes() {
+  const raw = tmux3([
+    "list-panes",
+    "-a",
+    "-F",
+    "#{session_name}	#{pane_id}	#{pane_current_command}	#{pane_title}"
+  ]);
+  const bySession = /* @__PURE__ */ new Map();
+  for (const line of raw.split("\n").filter(Boolean)) {
+    const [session = "", id = "", cmd = "", title = ""] = line.split("	");
+    if (!session) continue;
+    const list = bySession.get(session) ?? [];
+    list.push({ id, cmd, title });
+    bySession.set(session, list);
+  }
+  return bySession;
+}
+function rollupStatus(statuses) {
+  if (statuses.length === 0) return "idle";
+  const present = new Set(statuses);
+  for (const status2 of SEVERITY) {
+    if (present.has(status2)) return status2;
+  }
+  return "unknown";
+}
+var SEVERITY;
+var init_sessions2 = __esm({
+  "packages/daemon/src/tui/team/sessions.ts"() {
+    "use strict";
+    init_classify();
+    init_manifest();
+    init_manifests();
+    init_snapshot();
+    SEVERITY = ["blocked", "working", "done", "idle", "unknown"];
+  }
+});
+
+// packages/daemon/src/tui/team/projects.ts
+var projects_exports = {};
+__export(projects_exports, {
+  groupSessions: () => groupSessions,
+  listTeamProjects: () => listTeamProjects
+});
+function normalizeDir(dir) {
+  if (dir.length > 1 && dir.endsWith("/")) return dir.slice(0, -1);
+  return dir;
+}
+function isInside(cwd, dir) {
+  const base = normalizeDir(dir);
+  const path2 = normalizeDir(cwd);
+  if (path2 === base) return true;
+  return path2.startsWith(base === "/" ? "/" : `${base}/`);
+}
+function groupSessions(projects, sessions, sessionCwd) {
+  const buckets = /* @__PURE__ */ new Map();
+  for (const p of projects) buckets.set(p.name, []);
+  const matched = /* @__PURE__ */ new Set();
+  const byName = new Map(projects.map((p) => [p.name, p]));
+  for (const session of sessions) {
+    if (byName.has(session.name)) {
+      buckets.get(session.name).push(session);
+      matched.add(session);
+    }
+  }
+  for (const session of sessions) {
+    if (matched.has(session)) continue;
+    const cwd = sessionCwd(session.name);
+    if (!cwd) continue;
+    let best;
+    for (const p of projects) {
+      if (!isInside(cwd, p.dir)) continue;
+      if (!best || normalizeDir(p.dir).length > normalizeDir(best.dir).length) best = p;
+    }
+    if (best) {
+      buckets.get(best.name).push(session);
+      matched.add(session);
+    }
+  }
+  const registered = projects.slice().sort((a, b) => a.name.localeCompare(b.name)).map((p) => {
+    const own = buckets.get(p.name) ?? [];
+    return {
+      name: p.name,
+      dir: p.dir,
+      hasIdeYml: p.hasIdeYml ?? false,
+      gitBranch: p.gitBranch ?? null,
+      registered: true,
+      running: own.length > 0,
+      status: rollupStatus(own.map((s) => s.status)),
+      sessions: own
+    };
+  });
+  const adhoc = sessions.filter((s) => !matched.has(s)).map((s) => ({
+    name: s.name,
+    dir: sessionCwd(s.name) ?? null,
+    hasIdeYml: false,
+    gitBranch: null,
+    registered: false,
+    running: true,
+    status: rollupStatus([s.status]),
+    sessions: [s]
+  }));
+  return [...registered, ...adhoc];
+}
+function listTeamProjects(tracker, opts = {}) {
+  let projects;
+  try {
+    projects = listProjects();
+  } catch {
+    projects = [];
+  }
+  let sessions;
+  try {
+    sessions = listTeamSessions(tracker, opts);
+  } catch {
+    sessions = [];
+  }
+  const cwd = (name) => {
+    try {
+      return getSessionCwd(name);
+    } catch {
+      return null;
+    }
+  };
+  return groupSessions(projects, sessions, cwd);
+}
+var init_projects = __esm({
+  "packages/daemon/src/tui/team/projects.ts"() {
+    "use strict";
+    init_src();
+    init_project_registry();
+    init_sessions2();
+  }
+});
+
+// packages/daemon/src/tui/team/report.ts
+var report_exports = {};
+__export(report_exports, {
+  findSessionStatus: () => findSessionStatus,
+  toFleetJson: () => toFleetJson
+});
+function toFleetJson(projects) {
+  return {
+    projects: projects.map((p) => ({
+      name: p.name,
+      dir: p.dir,
+      registered: p.registered,
+      running: p.running,
+      status: p.status,
+      sessions: p.sessions.map((s) => ({
+        name: s.name,
+        status: s.status,
+        panes: s.panes,
+        attached: s.attached
+      }))
+    }))
+  };
+}
+function findSessionStatus(sessions, name) {
+  const match = sessions.find((s) => s.name === name);
+  return match ? match.status : null;
+}
+var init_report = __esm({
+  "packages/daemon/src/tui/team/report.ts"() {
+    "use strict";
+  }
+});
+
 // packages/daemon/src/command-center/index.ts
 var command_center_exports = {};
 __export(command_center_exports, {
@@ -7814,7 +8294,7 @@ var init_server2 = __esm({
 init_launch();
 import { parseArgs } from "node:util";
 import { resolve as resolve20, dirname as dirname10 } from "node:path";
-import { execFileSync as execFileSync6 } from "node:child_process";
+import { execFileSync as execFileSync7 } from "node:child_process";
 import { existsSync as existsSync18 } from "node:fs";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -8385,7 +8865,10 @@ var { positionals, values } = parseArgs({
     wizard: { type: "boolean" },
     // send command flags
     to: { type: "string" },
-    "no-enter": { type: "boolean" }
+    "no-enter": { type: "boolean" },
+    // wait command flags
+    status: { type: "string" },
+    timeout: { type: "string" }
   }
 });
 var knownCommands = /* @__PURE__ */ new Set([
@@ -8405,6 +8888,7 @@ var knownCommands = /* @__PURE__ */ new Set([
   "send",
   "settings",
   "team",
+  "wait",
   "command-center",
   "server",
   "help"
@@ -8444,7 +8928,9 @@ ${bold("Usage:")}
   ${cyan("tmux-ide stop")}               ${dim("Kill the current IDE session")}
   ${cyan("tmux-ide restart")}            ${dim("Stop and relaunch the IDE session")}
   ${cyan("tmux-ide attach")}             ${dim("Reattach to a running session")}
-  ${cyan("tmux-ide team")}               ${dim("TUI over all tmux sessions (jump / attach / kill)")}
+  ${cyan("tmux-ide team")} [--json]      ${dim("TUI over all tmux sessions (--json prints fleet state)")}
+  ${cyan("tmux-ide wait agent-status")} <session> --status <s> [--timeout <ms>]
+                              ${dim("Block until a session reaches a status (exit 0 match / 1 timeout)")}
   ${cyan("tmux-ide ls")}                 ${dim("List all tmux sessions")}
   ${cyan("tmux-ide status")} [--json]    ${dim("Show session status")}
   ${cyan("tmux-ide inspect")} [--json]   ${dim("Show effective config and runtime state")}
@@ -8481,7 +8967,7 @@ function execBunWidget(scriptPath, args, commandLabel) {
   const widgetMissing = !existsSync18(scriptPath);
   let bunMissing = false;
   try {
-    execFileSync6("bun", ["--version"], { stdio: "ignore" });
+    execFileSync7("bun", ["--version"], { stdio: "ignore" });
   } catch {
     bunMissing = true;
   }
@@ -8498,7 +8984,7 @@ Run it from a cloned tmux-ide checkout with bun installed.`,
       { code: "USAGE", exitCode: 1 }
     );
   }
-  execFileSync6("bun", [scriptPath, ...args], { stdio: "inherit" });
+  execFileSync7("bun", [scriptPath, ...args], { stdio: "inherit" });
 }
 try {
   switch (command) {
@@ -8602,9 +9088,56 @@ try {
       break;
     }
     case "team": {
+      if (json) {
+        const { createStatusTracker: createStatusTracker2 } = await Promise.resolve().then(() => (init_classify(), classify_exports));
+        const { listTeamProjects: listTeamProjects2 } = await Promise.resolve().then(() => (init_projects(), projects_exports));
+        const { toFleetJson: toFleetJson2 } = await Promise.resolve().then(() => (init_report(), report_exports));
+        console.log(
+          JSON.stringify(toFleetJson2(listTeamProjects2(createStatusTracker2())), null, 2)
+        );
+        break;
+      }
       const scriptPath = resolve20(__dirname4, "../packages/daemon/src/tui/team/index.tsx");
       execBunWidget(scriptPath, [], "team");
       break;
+    }
+    case "wait": {
+      const { createStatusTracker: createStatusTracker2 } = await Promise.resolve().then(() => (init_classify(), classify_exports));
+      const { listTeamSessions: listTeamSessions2 } = await Promise.resolve().then(() => (init_sessions2(), sessions_exports));
+      const { findSessionStatus: findSessionStatus2 } = await Promise.resolve().then(() => (init_report(), report_exports));
+      const VALID = /* @__PURE__ */ new Set(["blocked", "working", "done", "idle", "unknown"]);
+      const sub = positionals[1];
+      const sessionName = positionals[2];
+      const want = values.status;
+      if (sub !== "agent-status" || !sessionName || typeof want !== "string" || !VALID.has(want)) {
+        console.error(
+          "Usage: tmux-ide wait agent-status <session> --status <blocked|working|done|idle|unknown> [--timeout <ms>]"
+        );
+        process.exit(1);
+      }
+      const timeout = Number(values.timeout ?? "60000");
+      const started = Date.now();
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const tracker = createStatusTracker2();
+      while (true) {
+        const sessions = listTeamSessions2(tracker);
+        const status2 = findSessionStatus2(sessions, sessionName);
+        if (status2 === want) {
+          if (json) {
+            console.log(JSON.stringify({ session: sessionName, status: status2, ok: true }));
+          } else {
+            console.log(`${sessionName} reached status: ${status2}`);
+          }
+          process.exit(0);
+        }
+        if (Date.now() - started >= timeout) {
+          console.error(
+            `Timed out after ${timeout}ms waiting for ${sessionName} to reach status "${want}" (last: ${status2 ?? "absent"})`
+          );
+          process.exit(1);
+        }
+        await sleep(750);
+      }
     }
     case "command-center": {
       const { startCommandCenter: startCommandCenter2 } = await Promise.resolve().then(() => (init_command_center(), command_center_exports));
@@ -8616,7 +9149,7 @@ try {
         const scriptPath = resolve20(__dirname4, "../packages/daemon/src/server/standalone.ts");
         const serverArgs = ["--experimental-strip-types", scriptPath];
         if (values.port) serverArgs.push("--port", values.port);
-        execFileSync6("node", serverArgs, { stdio: "inherit" });
+        execFileSync7("node", serverArgs, { stdio: "inherit" });
       } else {
         const { start: start2 } = await Promise.resolve().then(() => (init_server2(), server_exports2));
         await start2(values.port ? parseInt(values.port, 10) : void 0);

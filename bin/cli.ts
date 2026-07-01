@@ -48,6 +48,9 @@ const { positionals, values } = parseArgs({
     // send command flags
     to: { type: "string" },
     "no-enter": { type: "boolean" },
+    // wait command flags
+    status: { type: "string" },
+    timeout: { type: "string" },
   },
 });
 
@@ -68,6 +71,7 @@ const knownCommands = new Set([
   "send",
   "settings",
   "team",
+  "wait",
   "command-center",
   "server",
   "help",
@@ -114,7 +118,9 @@ ${bold("Usage:")}
   ${cyan("tmux-ide stop")}               ${dim("Kill the current IDE session")}
   ${cyan("tmux-ide restart")}            ${dim("Stop and relaunch the IDE session")}
   ${cyan("tmux-ide attach")}             ${dim("Reattach to a running session")}
-  ${cyan("tmux-ide team")}               ${dim("TUI over all tmux sessions (jump / attach / kill)")}
+  ${cyan("tmux-ide team")} [--json]      ${dim("TUI over all tmux sessions (--json prints fleet state)")}
+  ${cyan("tmux-ide wait agent-status")} <session> --status <s> [--timeout <ms>]
+                              ${dim("Block until a session reaches a status (exit 0 match / 1 timeout)")}
   ${cyan("tmux-ide ls")}                 ${dim("List all tmux sessions")}
   ${cyan("tmux-ide status")} [--json]    ${dim("Show session status")}
   ${cyan("tmux-ide inspect")} [--json]   ${dim("Show effective config and runtime state")}
@@ -295,9 +301,70 @@ try {
     }
 
     case "team": {
+      // `--json` is the scriptable control surface: print the fleet state and
+      // exit without spawning the (bun/OpenTUI) TUI. Dynamic imports keep the
+      // interactive path free of the data-layer modules until it's needed.
+      if (json) {
+        const { createStatusTracker } = await import(
+          "../packages/daemon/src/tui/detect/classify.ts"
+        );
+        const { listTeamProjects } = await import("../packages/daemon/src/tui/team/projects.ts");
+        const { toFleetJson } = await import("../packages/daemon/src/tui/team/report.ts");
+        console.log(
+          JSON.stringify(toFleetJson(listTeamProjects(createStatusTracker())), null, 2),
+        );
+        break;
+      }
       const scriptPath = resolve(__dirname, "../packages/daemon/src/tui/team/index.tsx");
       execBunWidget(scriptPath, [], "team");
       break;
+    }
+
+    case "wait": {
+      const { createStatusTracker } = await import(
+        "../packages/daemon/src/tui/detect/classify.ts"
+      );
+      const { listTeamSessions } = await import("../packages/daemon/src/tui/team/sessions.ts");
+      const { findSessionStatus } = await import("../packages/daemon/src/tui/team/report.ts");
+
+      const VALID = new Set(["blocked", "working", "done", "idle", "unknown"]);
+      const sub = positionals[1];
+      const sessionName = positionals[2];
+      const want = values.status;
+
+      if (sub !== "agent-status" || !sessionName || typeof want !== "string" || !VALID.has(want)) {
+        console.error(
+          "Usage: tmux-ide wait agent-status <session> --status <blocked|working|done|idle|unknown> [--timeout <ms>]",
+        );
+        process.exit(1);
+      }
+
+      const timeout = Number(values.timeout ?? "60000");
+      const started = Date.now();
+      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      // One tracker persists across polls so the working→idle `done` transition
+      // can be observed (it's inherently cross-tick).
+      const tracker = createStatusTracker();
+
+      while (true) {
+        const sessions = listTeamSessions(tracker);
+        const status = findSessionStatus(sessions, sessionName!);
+        if (status === want) {
+          if (json) {
+            console.log(JSON.stringify({ session: sessionName, status, ok: true }));
+          } else {
+            console.log(`${sessionName} reached status: ${status}`);
+          }
+          process.exit(0);
+        }
+        if (Date.now() - started >= timeout) {
+          console.error(
+            `Timed out after ${timeout}ms waiting for ${sessionName} to reach status "${want}" (last: ${status ?? "absent"})`,
+          );
+          process.exit(1);
+        }
+        await sleep(750);
+      }
     }
 
     case "command-center": {

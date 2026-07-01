@@ -17,6 +17,7 @@ import {
   hasSession,
   killSession,
   runTmux,
+  setSessionEnvironment,
   splitPane,
 } from "@tmux-ide/tmux-bridge";
 import { createTheme } from "../../widgets/lib/theme.ts";
@@ -240,6 +241,10 @@ render(() => {
     }
     try {
       createDetachedSession(project.name, project.dir);
+      // Flag cockpit-created sessions so agents inside can detect tmux-ide.
+      try {
+        setSessionEnvironment(project.name, "TMUX_IDE", "1");
+      } catch {}
       setMessage(`launched ${project.name}`);
     } catch (e) {
       setMessage(String((e as { message?: string })?.message ?? e));
@@ -398,6 +403,10 @@ render(() => {
       }
       try {
         createDetachedSession(name, newSessionDir());
+        // Flag cockpit-created sessions so agents inside can detect tmux-ide.
+        try {
+          setSessionEnvironment(name, "TMUX_IDE", "1");
+        } catch {}
         setMessage(`created ${name}`);
       } catch (e) {
         setMessage(String((e as { message?: string })?.message ?? e));
