@@ -7624,7 +7624,7 @@ var init_config = __esm({
 
 // packages/daemon/src/tui/team/host.ts
 function switcherPaneCommand(repoRoot, switcherScript, userCwd) {
-  return `cd ${shellEscape(repoRoot)} && TMUX_IDE_CWD=${shellEscape(userCwd)} bun ${shellEscape(switcherScript)}`;
+  return `cd ${shellEscape(repoRoot)} && TMUX_IDE_CWD=${shellEscape(userCwd)} TMUX_IDE_MAIN_PANE=${shellEscape(MAIN_PANE)} bun ${shellEscape(switcherScript)}`;
 }
 function hostLayoutCommands(opts) {
   const { session, repoRoot, switcherScript, userCwd, switcherWidth } = opts;
@@ -7662,7 +7662,7 @@ function launchHostShell(opts) {
   }
   attachSession(HOST_SESSION);
 }
-var HOST_SESSION, DEFAULT_SWITCHER_WIDTH;
+var HOST_SESSION, SWITCHER_PANE, MAIN_PANE, DEFAULT_SWITCHER_WIDTH;
 var init_host = __esm({
   "packages/daemon/src/tui/team/host.ts"() {
     "use strict";
@@ -7670,6 +7670,8 @@ var init_host = __esm({
     init_shell();
     init_errors2();
     HOST_SESSION = "_tmux-ide";
+    SWITCHER_PANE = `${HOST_SESSION}:0.0`;
+    MAIN_PANE = `${HOST_SESSION}:0.1`;
     DEFAULT_SWITCHER_WIDTH = 34;
   }
 });

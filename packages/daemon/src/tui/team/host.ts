@@ -21,6 +21,14 @@ import { IdeError } from "../../lib/errors.ts";
  */
 export const HOST_SESSION = "_tmux-ide";
 
+/**
+ * The two panes of the host layout, addressed by index within the session's
+ * first window (matching tmux's default base indices). The switcher runs in
+ * pane 0; pane 1 is the live main area the switcher drives.
+ */
+export const SWITCHER_PANE = `${HOST_SESSION}:0.0`;
+export const MAIN_PANE = `${HOST_SESSION}:0.1`;
+
 /** Default width, in columns, of the switcher pane. */
 const DEFAULT_SWITCHER_WIDTH = 34;
 
@@ -30,14 +38,39 @@ const DEFAULT_SWITCHER_WIDTH = 34;
  * The switcher is a bun `.tsx` that needs the repo-root `bunfig.toml` preload,
  * so it must be spawned FROM the repo root; the user's real invocation dir is
  * forwarded via `TMUX_IDE_CWD` so in-widget prompts still default to where the
- * user actually is. All three paths are shell-escaped.
+ * user actually is. `TMUX_IDE_MAIN_PANE` tells the switcher which pane to drive
+ * — its presence is also how the switcher knows it's running in host mode (vs.
+ * standalone). All paths are shell-escaped.
  */
 export function switcherPaneCommand(
   repoRoot: string,
   switcherScript: string,
   userCwd: string,
 ): string {
-  return `cd ${shellEscape(repoRoot)} && TMUX_IDE_CWD=${shellEscape(userCwd)} bun ${shellEscape(switcherScript)}`;
+  return `cd ${shellEscape(repoRoot)} && TMUX_IDE_CWD=${shellEscape(userCwd)} TMUX_IDE_MAIN_PANE=${shellEscape(MAIN_PANE)} bun ${shellEscape(switcherScript)}`;
+}
+
+/**
+ * tmux argv to make the MAIN pane show `target` LIVE via a nested `tmux attach`.
+ *
+ * `respawn-pane -k` kills whatever the main pane is running and starts a fresh
+ * command in it: `TMUX= tmux attach -t <target>`. The `TMUX=` prefix clears the
+ * inherited `$TMUX` so tmux allows the nested attach instead of refusing with
+ * "sessions should be nested with care". `-c <dir>` sets the pane's working
+ * directory so a later detach lands in a sensible place.
+ *
+ * PURE (returns argv) so the incantation can be asserted without shelling out.
+ */
+export function mainRespawnCommand(mainPane: string, target: string, dir: string): string[] {
+  return [
+    "respawn-pane",
+    "-k",
+    "-t",
+    mainPane,
+    "-c",
+    dir,
+    `TMUX= tmux attach -t ${shellEscape(target)}`,
+  ];
 }
 
 /**

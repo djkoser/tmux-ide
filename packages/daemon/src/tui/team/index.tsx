@@ -24,6 +24,7 @@ import {
   splitPane,
 } from "@tmux-ide/tmux-bridge";
 import { createTheme } from "../../widgets/lib/theme.ts";
+import { mainRespawnCommand } from "./host.ts";
 import { previewLines } from "./preview.ts";
 import { type TeamSession } from "./sessions.ts";
 import { listTeamProjects, type TeamProject } from "./projects.ts";
@@ -89,6 +90,12 @@ render(() => {
   // with cwd set to the repo root (for the bun JSX preload), so it forwards the
   // real cwd via env; fall back to process.cwd() when run directly.
   const invokeCwd = process.env.TMUX_IDE_CWD ?? process.cwd();
+  // Host mode: when the switcher runs inside the `_tmux-ide` host shell, the
+  // host exports the MAIN pane's target here. Its presence flips selecting a
+  // session from "suspend + attach in place" (standalone) to "drive the live
+  // main pane" — the switcher stays put in pane 0 and only pane 1 changes.
+  const mainPane = process.env.TMUX_IDE_MAIN_PANE ?? null;
+  const hostMode = mainPane !== null;
   const statusColor: Record<AgentStatus, RGBA> = {
     blocked: RGBA.fromInts(240, 90, 90, 255), // red
     working: RGBA.fromInts(240, 200, 90, 255), // amber
@@ -240,13 +247,65 @@ render(() => {
   }
 
   /**
-   * Launch a project. When it has an `ide.yml`, run the full `tmux-ide` launch
-   * (builds the layout and attaches) — this blocks until the user detaches, so
-   * we refresh and stay in the cockpit rather than exit. Otherwise spin up a
-   * bare detached session so it appears in place.
+   * HOST MODE: drive the live main pane (pane 1) to show `sessionName` via a
+   * nested `tmux attach`. Never suspends this renderer — the switcher stays put
+   * in pane 0. On failure (e.g. the session vanished) surface it on the status
+   * line rather than blanking the main pane.
+   */
+  function showInMain(sessionName: string, dir: string) {
+    try {
+      runTmux(mainRespawnCommand(mainPane!, sessionName, dir));
+    } catch (e) {
+      setMessage(String((e as { message?: string })?.message ?? e));
+    }
+  }
+
+  /**
+   * HOST MODE launch: bring a stopped project up WITHOUT taking over the
+   * switcher pane, then show it live in the main pane. An `ide.yml` project is
+   * built detached (`launch(..., { attach: false })`) so its full layout comes
+   * up in the background; a plain project just needs a bare detached session.
+   */
+  function launchProjectInHost(project: TeamProject) {
+    const dir = project.dir!;
+    if (project.hasIdeYml) {
+      import("../../launch.ts")
+        .then(({ launch }) => launch(dir, { attach: false }))
+        .then(() => {
+          showInMain(project.name, dir);
+          refresh(project.name);
+        })
+        .catch((e) => setMessage(String((e as { message?: string })?.message ?? e)));
+      return;
+    }
+    try {
+      createDetachedSession(project.name, dir);
+      // Flag cockpit-created sessions so agents inside can detect tmux-ide.
+      try {
+        setSessionEnvironment(project.name, "TMUX_IDE", "1");
+      } catch {}
+      showInMain(project.name, dir);
+      setMessage(`launched ${project.name}`);
+    } catch (e) {
+      setMessage(String((e as { message?: string })?.message ?? e));
+    }
+    refresh(project.name);
+  }
+
+  /**
+   * Launch a project. In host mode, bring it up detached and show it live in
+   * the main pane (`launchProjectInHost`). In standalone mode: when it has an
+   * `ide.yml`, run the full `tmux-ide` launch (builds the layout and attaches) —
+   * this blocks until the user detaches, so we refresh and stay in the cockpit
+   * rather than exit. Otherwise spin up a bare detached session so it appears in
+   * place.
    */
   function launchProject(project: TeamProject) {
     if (!project.dir) return;
+    if (hostMode) {
+      launchProjectInHost(project);
+      return;
+    }
     if (project.hasIdeYml) {
       withSuspendedTerminal(() => {
         try {
@@ -302,7 +361,14 @@ render(() => {
     if (isDoubleClick(lastSessionClick, index, now)) {
       lastSessionClick = null;
       const sess = activeProj()?.sessions[index];
-      if (sess) attachSessionName(sess.name);
+      if (sess) {
+        if (hostMode) {
+          showInMain(sess.name, activeProj()?.dir ?? invokeCwd);
+          refresh(sess.name);
+        } else {
+          attachSessionName(sess.name);
+        }
+      }
       return;
     }
     lastSessionClick = { index, at: now };
@@ -318,14 +384,23 @@ render(() => {
     setActiveSession(0);
   }
 
-  /** Enter: attach the active project's active session when running, else launch it. */
+  /**
+   * Enter on the active project: when it's running, either drive the main pane
+   * (host mode) or suspend + attach in place (standalone); when stopped, launch
+   * it. Host mode never suspends the renderer — the switcher stays in pane 0.
+   */
   function enter() {
     const proj = activeProj();
     if (!proj) return;
     if (proj.running) {
       const sess = activeSess() ?? proj.sessions[0];
       if (sess) {
-        attachSessionName(sess.name);
+        if (hostMode) {
+          showInMain(sess.name, proj.dir ?? invokeCwd);
+          refresh(sess.name);
+        } else {
+          attachSessionName(sess.name);
+        }
         return;
       }
     }
