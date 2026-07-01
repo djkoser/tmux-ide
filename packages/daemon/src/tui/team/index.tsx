@@ -1,11 +1,13 @@
 /**
  * The team TUI — a cockpit over every tmux session.
  *
- * A two-level PROJECT view: every registered project is listed (including
- * ones with no running session = "stopped"), with its live tmux sessions
- * nested underneath. Unregistered live sessions surface as ad-hoc project
- * rows so nothing is hidden. Runs under bun (JSX via the @opentui/solid
- * preload) and is spawned by `tmux-ide team`.
+ * An app shell: a persistent left SIDEBAR lists every registered project
+ * (including ones with no running session = "stopped"), and a MAIN pane shows
+ * the selected ("active") project's detail — its live tmux sessions plus a
+ * read-only preview of the active session's pane. Unregistered live sessions
+ * surface as ad-hoc project rows in the sidebar so nothing is hidden. Runs
+ * under bun (JSX via the @opentui/solid preload) and is spawned by
+ * `tmux-ide team`.
  */
 import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
@@ -29,6 +31,7 @@ import { registerProject, unregisterProject } from "../../lib/project-registry.t
 import { createStatusTracker, type AgentStatus } from "../detect/classify.ts";
 import { nextInput, suggestSessionName } from "./input.ts";
 import { fuzzyFilter } from "./fuzzy.ts";
+import { clampIndex, wrapIndex } from "./nav.ts";
 import { ACTION_ORDER, loadKeymap, resolveAction } from "./keymap.ts";
 import { isDoubleClick, type ClickRecord } from "./mouse.ts";
 
@@ -46,6 +49,10 @@ function parseThemeArg(raw: string | undefined): Record<string, string> | undefi
 }
 const themeConfig = parseThemeArg(argv.theme);
 
+// Fixed sidebar width in columns — narrow enough to leave the detail pane room
+// on an 80-col terminal, wide enough for a project name + session count.
+const SIDEBAR_WIDTH = 34;
+
 function toRGBA(c: { r: number; g: number; b: number; a: number }): RGBA {
   return RGBA.fromInts(c.r, c.g, c.b, c.a);
 }
@@ -61,26 +68,9 @@ const STATUS: Record<AgentStatus, { glyph: string; label: string }> = {
 /** Which inline text prompt is open (they all submit an action). */
 type PromptKind = "register" | "newSession" | "rename";
 
-/** A flattened navigable row — a project header or one of its sessions. */
-type Row =
-  | { kind: "project"; project: TeamProject }
-  | { kind: "session"; project: TeamProject; session: TeamSession };
-
-/** Flatten the project tree into the navigable row list. */
-function toRows(projects: TeamProject[]): Row[] {
-  const rows: Row[] = [];
-  for (const project of projects) {
-    rows.push({ kind: "project", project });
-    for (const session of project.sessions) {
-      rows.push({ kind: "session", project, session });
-    }
-  }
-  return rows;
-}
-
-/** Searchable label for a row: project name, or "<project> / <session>". */
-function rowLabel(row: Row): string {
-  return row.kind === "project" ? row.project.name : `${row.project.name} / ${row.session.name}`;
+/** Searchable label for the sidebar fuzzy filter — the project name. */
+function projectName(project: TeamProject): string {
+  return project.name;
 }
 
 /** Prefix shown on the inline prompt line for each prompt kind. */
@@ -116,7 +106,11 @@ render(() => {
   const renderer = useRenderer();
 
   const [projects, setProjects] = createSignal<TeamProject[]>(listTeamProjects(tracker));
-  const [selected, setSelected] = createSignal(0);
+  // The two shell cursors: the active PROJECT (index into the visible project
+  // list — filtered while filtering, else all) and the active SESSION (index
+  // into the active project's sessions, default 0).
+  const [activeProject, setActiveProject] = createSignal(0);
+  const [activeSession, setActiveSession] = createSignal(0);
   // Whether the `?` keybindings overlay is showing.
   const [helpOpen, setHelpOpen] = createSignal(false);
   // The single inline text prompt (register dir / new session / rename). null =
@@ -130,28 +124,35 @@ render(() => {
   const [confirm, setConfirm] = createSignal<{ message: string; onYes: () => void } | null>(null);
   // Transient status line (errors / confirmations); lingers until next action.
   const [message, setMessage] = createSignal("");
-  // Quick-jump fuzzy filter (`/`): narrows the visible rows as you type.
+  // Quick-jump fuzzy filter (`/`): narrows the visible SIDEBAR projects as you type.
   const [filterMode, setFilterMode] = createSignal(false);
   const [filterQuery, setFilterQuery] = createSignal("");
-  // Live preview of the selected session's active pane (read-only mirror).
+  // Live preview of the active session's active pane (read-only mirror).
   const dimensions = useTerminalDimensions();
   const [preview, setPreview] = createSignal<string[]>([]);
   const [previewTitle, setPreviewTitle] = createSignal("");
 
-  const rows = () => toRows(projects());
-  // Rows narrowed by the fuzzy filter — derived so it recomputes on every
-  // refresh from the latest `rows()` rather than snapshotting.
-  const filteredRows = () => fuzzyFilter(filterQuery(), rows(), rowLabel).map((m) => m.item);
-  // What the list actually renders / navigates: filtered while filtering, else all.
-  const visibleRows = () => (filterMode() ? filteredRows() : rows());
+  /** The sidebar's project list: fuzzy-filtered while filtering, else all. */
+  const visibleProjects = () =>
+    filterMode()
+      ? fuzzyFilter(filterQuery(), projects(), projectName).map((m) => m.item)
+      : projects();
+
+  /** The active project (into the visible list), or undefined when empty. */
+  const activeProj = (): TeamProject | undefined => visibleProjects()[activeProject()];
+  /** The active session within the active project, or undefined when none. */
+  const activeSess = (): TeamSession | undefined => activeProj()?.sessions[activeSession()];
 
   function refresh(viewed?: string) {
     const next = listTeamProjects(tracker, viewed ? { viewed } : {});
     setProjects(next);
-    const count = filterMode()
-      ? fuzzyFilter(filterQuery(), toRows(next), rowLabel).length
-      : toRows(next).length;
-    setSelected((s) => Math.max(0, Math.min(s, count - 1)));
+    // Clamp both cursors against the freshly-loaded lists so neither dangles.
+    const vis = filterMode()
+      ? fuzzyFilter(filterQuery(), next, projectName).map((m) => m.item)
+      : next;
+    const pi = clampIndex(activeProject(), vis.length);
+    setActiveProject(pi);
+    setActiveSession((s) => clampIndex(s, vis[pi]?.sessions.length ?? 0));
   }
 
   onMount(() => {
@@ -159,22 +160,21 @@ render(() => {
     onCleanup(() => clearInterval(timer));
   });
 
-  function current(): Row | undefined {
-    return visibleRows()[selected()];
+  /** Select a project by its index in the visible list, resetting the session cursor. */
+  function selectProject(index: number) {
+    setActiveProject(index);
+    setActiveSession(0);
   }
 
   /** Which tmux session (if any) the preview should mirror for the selection. */
   function previewTarget(): string | null {
-    const row = current();
-    if (!row) return null;
-    if (row.kind === "session") return row.session.name;
-    if (row.project.running && row.project.sessions.length > 0) {
-      return row.project.sessions[0]!.name;
-    }
-    return null;
+    const proj = activeProj();
+    if (!proj) return null;
+    const sess = activeSess() ?? (proj.running ? proj.sessions[0] : undefined);
+    return sess?.name ?? null;
   }
 
-  /** Capture the selected session's active pane and shape it to the preview box. */
+  /** Capture the active session's active pane and shape it to the preview box. */
   function updatePreview() {
     const target = previewTarget();
     if (!target) {
@@ -183,8 +183,8 @@ render(() => {
       return;
     }
     const dims = dimensions();
-    const budget = Math.max(5, dims.height - 6);
-    const width = Math.max(20, Math.floor(dims.width * 0.55) - 4);
+    const budget = Math.max(5, dims.height - 10);
+    const width = Math.max(20, dims.width - SIDEBAR_WIDTH - 6);
     try {
       const raw = capturePane(target, { lines: budget });
       setPreview(previewLines(raw, budget, width));
@@ -194,8 +194,8 @@ render(() => {
     }
   }
 
-  // Keep the preview live: reruns on selection, filter state, terminal resize,
-  // and the 2s refresh (which replaces the projects() array each tick).
+  // Keep the preview live: reruns on the active project/session, filter state,
+  // terminal resize, and the 2s refresh (which replaces projects() each tick).
   createEffect(updatePreview);
 
   /**
@@ -271,89 +271,103 @@ render(() => {
     refresh();
   }
 
-  // Last mouse click, tracked so a second click on the same row within the
-  // double-click window activates it (mirrors keyboard Enter). A closure var —
-  // it needs no reactivity, it only feeds the next click.
-  let lastClick: ClickRecord | null = null;
+  // Last click on a project / session row, tracked so a second click on the
+  // same row within the double-click window activates it (mirrors Enter). Plain
+  // closure vars — they need no reactivity, they only feed the next click.
+  let lastProjectClick: ClickRecord | null = null;
+  let lastSessionClick: ClickRecord | null = null;
 
   /**
-   * A row's mousedown: select it, and on a same-row double-click within the
-   * window, activate it via `enter()` (attach / launch). Keyboard and mouse
-   * share the one `selected()` signal, so the preview updates either way.
+   * A sidebar project row's mousedown: select it, and on a same-row
+   * double-click within the window, activate it via `enter()` (attach / launch).
    */
-  function clickRow(index: number) {
+  function clickProject(index: number) {
     const now = Date.now();
-    setSelected(index);
-    if (isDoubleClick(lastClick, index, now)) {
-      lastClick = null;
+    selectProject(index);
+    if (isDoubleClick(lastProjectClick, index, now)) {
+      lastProjectClick = null;
       enter();
       return;
     }
-    lastClick = { index, at: now };
-  }
-
-  /** Wheel over the list moves the selection one row, wrapping like the arrows. */
-  function scrollSelection(evt: MouseEvent) {
-    const dir = evt.scroll?.direction;
-    if (dir !== "up" && dir !== "down") return;
-    const n = visibleRows().length;
-    if (n === 0) return;
-    setSelected((s) => (dir === "up" ? (s - 1 + n) % n : (s + 1) % n));
-  }
-
-  /** Enter: attach on a session row; launch (or attach-first) on a project row. */
-  function enter() {
-    const row = current();
-    if (!row) return;
-    if (row.kind === "session") {
-      attachSessionName(row.session.name);
-      return;
-    }
-    const project = row.project;
-    // A running project attaches its first session — nicer than re-launching.
-    if (project.running && project.sessions.length > 0) {
-      attachSessionName(project.sessions[0].name);
-      return;
-    }
-    launchProject(project);
+    lastProjectClick = { index, at: now };
   }
 
   /**
-   * Kill only the tmux SESSION(s) of a row; the registry entry is untouched.
-   * Takes the row explicitly so a confirm can capture it and stay correct if
-   * the selection shifts under the 2s refresh before the user answers.
+   * A main-pane session row's mousedown: make it the active session, and on a
+   * same-row double-click attach it.
    */
-  function killRow(row: Row) {
-    if (row.kind === "session") {
-      killSession(row.session.name);
-    } else if (row.project.running) {
-      for (const s of row.project.sessions) killSession(s.name);
-    } else {
+  function clickSession(index: number) {
+    const now = Date.now();
+    setActiveSession(index);
+    if (isDoubleClick(lastSessionClick, index, now)) {
+      lastSessionClick = null;
+      const sess = activeProj()?.sessions[index];
+      if (sess) attachSessionName(sess.name);
       return;
     }
-    refresh();
+    lastSessionClick = { index, at: now };
   }
 
-  /** Gate a kill behind a y/n confirm on the status line. */
+  /** Wheel over the sidebar moves the project selection, wrapping like the arrows. */
+  function scrollProjects(evt: MouseEvent) {
+    const dir = evt.scroll?.direction;
+    if (dir !== "up" && dir !== "down") return;
+    const n = visibleProjects().length;
+    if (n === 0) return;
+    setActiveProject((p) => wrapIndex(p, dir === "up" ? -1 : 1, n));
+    setActiveSession(0);
+  }
+
+  /** Enter: attach the active project's active session when running, else launch it. */
+  function enter() {
+    const proj = activeProj();
+    if (!proj) return;
+    if (proj.running) {
+      const sess = activeSess() ?? proj.sessions[0];
+      if (sess) {
+        attachSessionName(sess.name);
+        return;
+      }
+    }
+    launchProject(proj);
+  }
+
+  /** Gate a kill behind a y/n confirm: the active session, or a running project's sessions. */
   function requestKill() {
-    const row = current();
-    if (!row) return;
-    const killable = row.kind === "session" || row.project.running;
-    if (!killable) return;
-    const name = row.kind === "session" ? row.session.name : row.project.name;
-    setMessage("");
-    setConfirm({ message: `kill ${name}? (y/n)`, onYes: () => killRow(row) });
+    const proj = activeProj();
+    if (!proj) return;
+    const sess = activeSess();
+    if (sess) {
+      setMessage("");
+      setConfirm({
+        message: `kill ${sess.name}? (y/n)`,
+        onYes: () => {
+          killSession(sess.name);
+          refresh();
+        },
+      });
+      return;
+    }
+    // No session cursor (empty project) but running — kill all its sessions.
+    if (proj.running) {
+      setMessage("");
+      setConfirm({
+        message: `kill ${proj.name}? (y/n)`,
+        onYes: () => {
+          for (const s of proj.sessions) killSession(s.name);
+          refresh();
+        },
+      });
+    }
   }
 
-  /** Unregister a stopped, registered project — never orphan a live session. */
+  /** Unregister the active project when it's registered and stopped — never orphan a live session. */
   function unregister() {
-    const row = current();
-    if (!row || row.kind !== "project") return;
-    const project = row.project;
-    if (!project.registered || project.running) return;
+    const proj = activeProj();
+    if (!proj || !proj.registered || proj.running) return;
     try {
-      unregisterProject(project.name);
-      setMessage(`unregistered ${project.name}`);
+      unregisterProject(proj.name);
+      setMessage(`unregistered ${proj.name}`);
     } catch (e) {
       setMessage(String((e as { message?: string })?.message ?? e));
     }
@@ -366,17 +380,17 @@ render(() => {
     setPrompt({ kind: "register", value: invokeCwd });
   }
 
-  /** Open the new-session prompt, seeded with a unique name for the selection. */
+  /** Open the new-session prompt in the active project's dir, seeded with a unique name. */
   function openNewSession() {
-    const row = current();
-    const base = row ? row.project.name : "session";
-    const dir = (row ? row.project.dir : null) ?? invokeCwd;
+    const proj = activeProj();
+    const base = proj ? proj.name : "session";
+    const dir = (proj ? proj.dir : null) ?? invokeCwd;
     setNewSessionDir(dir);
     setMessage("");
     setPrompt({ kind: "newSession", value: suggestSessionName(base, hasSession) });
   }
 
-  /** Open the rename prompt when the selection resolves to a live session. */
+  /** Open the rename prompt when the active session resolves to a live session. */
   function openRename() {
     const target = previewTarget();
     if (!target) return;
@@ -385,11 +399,11 @@ render(() => {
     setPrompt({ kind: "rename", value: target });
   }
 
-  /** Split the selected live session's active pane (right, 50%). */
+  /** Split the active session's active pane (right, 50%). */
   function splitSelected() {
     const target = previewTarget();
     if (!target) return;
-    const dir = current()?.project.dir ?? invokeCwd;
+    const dir = activeProj()?.dir ?? invokeCwd;
     try {
       splitPane(target, "horizontal", dir, 50);
       setMessage(`split ${target}`);
@@ -478,33 +492,43 @@ render(() => {
       return;
     }
 
-    // Filter prompt intercepts navigation while open.
+    // Filter prompt intercepts navigation while open — it narrows the sidebar.
     if (filterMode()) {
       if (evt.name === "escape") {
         setFilterMode(false);
         setFilterQuery("");
-        setSelected(0);
+        setActiveProject(0);
+        setActiveSession(0);
         return;
       }
       if (evt.name === "return") {
+        // Act on the filtered active project, then drop the filter and re-anchor
+        // the cursor onto that same project in the full list.
+        const proj = activeProj();
         enter();
         setFilterMode(false);
         setFilterQuery("");
+        const idx = proj ? projects().findIndex((p) => p.name === proj.name) : -1;
+        setActiveProject(idx >= 0 ? idx : 0);
+        setActiveSession(0);
         return;
       }
-      const fn = filteredRows().length;
+      const fn = visibleProjects().length;
       if (evt.name === "up" || evt.name === "k") {
-        if (fn > 0) setSelected((s) => (s - 1 + fn) % fn);
+        if (fn > 0) setActiveProject((s) => wrapIndex(s, -1, fn));
+        setActiveSession(0);
         return;
       }
       if (evt.name === "down" || evt.name === "j") {
-        if (fn > 0) setSelected((s) => (s + 1) % fn);
+        if (fn > 0) setActiveProject((s) => wrapIndex(s, 1, fn));
+        setActiveSession(0);
         return;
       }
       const next = nextInput(filterQuery(), evt);
       if (next !== null) {
         setFilterQuery(next);
-        setSelected(0);
+        setActiveProject(0);
+        setActiveSession(0);
       }
       return;
     }
@@ -522,24 +546,30 @@ render(() => {
       process.exit(0);
     }
 
-    const n = visibleRows().length;
+    const n = visibleProjects().length;
     // The rename default is Shift+R; single-char keys arrive lowercase with
     // shift as a modifier (per the @opentui convention), so map it explicitly.
     const keyName = evt.name === "r" && evt.shift ? "R" : evt.name;
     const action = resolveAction(keymap, keyName);
     switch (action) {
       case "up":
-        if (n > 0) setSelected((s) => (s - 1 + n) % n);
+        if (n > 0) {
+          setActiveProject((s) => wrapIndex(s, -1, n));
+          setActiveSession(0);
+        }
         break;
       case "down":
-        if (n > 0) setSelected((s) => (s + 1) % n);
+        if (n > 0) {
+          setActiveProject((s) => wrapIndex(s, 1, n));
+          setActiveSession(0);
+        }
         break;
       case "enter":
         enter();
         break;
       case "launch": {
-        const row = current();
-        if (row && row.kind === "project") launchProject(row.project);
+        const proj = activeProj();
+        if (proj) launchProject(proj);
         break;
       }
       case "new":
@@ -564,7 +594,8 @@ render(() => {
         setMessage("");
         setFilterQuery("");
         setFilterMode(true);
-        setSelected(0);
+        setActiveProject(0);
+        setActiveSession(0);
         break;
       case "refresh":
         refresh();
@@ -590,104 +621,69 @@ render(() => {
         <text fg={toRGBA(theme.fgMuted)}>{`${projects().length} projects`}</text>
       </box>
 
-      {/* middle: keybindings overlay, or the list (left) + live preview (right) */}
+      {/* inline text prompt (register dir / new session / rename) — full width */}
+      <Show when={prompt()}>
+        <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
+          <text fg={toRGBA(theme.accent)}>{promptLabel(prompt()!.kind)}</text>
+          <text fg={toRGBA(theme.fg)}>{prompt()!.value}</text>
+          <text fg={toRGBA(theme.fgMuted)}>_</text>
+        </box>
+      </Show>
+
+      {/* fuzzy-filter prompt (sidebar) — full width */}
+      <Show when={filterMode()}>
+        <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
+          <text fg={toRGBA(theme.accent)}>/</text>
+          <text fg={toRGBA(theme.fg)}>{filterQuery()}</text>
+          <text fg={toRGBA(theme.fgMuted)}>_</text>
+          <box flexGrow={1} />
+          <text fg={toRGBA(theme.fgMuted)}>
+            {`${visibleProjects().length}/${projects().length}`}
+          </text>
+        </box>
+      </Show>
+
+      {/* middle: keybindings overlay, or the sidebar (left) + main detail (right) */}
       <Show
         when={helpOpen()}
         fallback={
           <box flexDirection="row" flexGrow={1}>
-        <box flexDirection="column" width="45%">
-          {/* inline text prompt (register dir / new session / rename) */}
-          <Show when={prompt()}>
-            <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
-              <text fg={toRGBA(theme.accent)}>{promptLabel(prompt()!.kind)}</text>
-              <text fg={toRGBA(theme.fg)}>{prompt()!.value}</text>
-              <text fg={toRGBA(theme.fgMuted)}>_</text>
-            </box>
-          </Show>
-
-          {/* fuzzy-filter prompt */}
-          <Show when={filterMode()}>
-            <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
-              <text fg={toRGBA(theme.accent)}>/</text>
-              <text fg={toRGBA(theme.fg)}>{filterQuery()}</text>
-              <text fg={toRGBA(theme.fgMuted)}>_</text>
-              <box flexGrow={1} />
-              <text fg={toRGBA(theme.fgMuted)}>{`${filteredRows().length}/${rows().length}`}</text>
-            </box>
-          </Show>
-
-          {/* list */}
-          <box
-            flexDirection="column"
-            flexGrow={1}
-            paddingLeft={1}
-            paddingRight={1}
-            paddingTop={1}
-            onMouseScroll={scrollSelection}
-          >
-            <Show
-              when={visibleRows().length > 0}
-              fallback={
-                <text fg={toRGBA(theme.fgMuted)}>
-                  No projects or sessions. Register a project or start a tmux session to see it
-                  here.
-                </text>
-              }
+            {/* SIDEBAR — the project list */}
+            <box
+              flexDirection="column"
+              width={SIDEBAR_WIDTH}
+              paddingLeft={1}
+              paddingRight={1}
+              paddingTop={1}
+              onMouseScroll={scrollProjects}
             >
-              <For each={visibleRows()}>
-                {(row, i) => {
-                  const isSel = () => i() === selected();
-                  return (
-                    <Show
-                      when={row.kind === "project"}
-                      fallback={
-                        /* session row — indented under its project */
+              <text fg={toRGBA(theme.fgMuted)} attributes={TextAttributes.BOLD}>
+                PROJECTS
+              </text>
+              <box flexDirection="column" paddingTop={1}>
+                <Show
+                  when={visibleProjects().length > 0}
+                  fallback={
+                    <text fg={toRGBA(theme.fgMuted)}>
+                      {filterMode() ? "no match" : "no projects — a to add"}
+                    </text>
+                  }
+                >
+                  <For each={visibleProjects()}>
+                    {(project, i) => {
+                      const isActive = () => i() === activeProject();
+                      const running = project.running;
+                      return (
                         <box
-                          flexDirection="row"
-                          gap={1}
-                          paddingLeft={3}
+                          flexDirection="column"
+                          paddingLeft={1}
                           paddingRight={1}
-                          backgroundColor={isSel() ? toRGBA(theme.border) : undefined}
-                          onMouseDown={() => clickRow(i())}
+                          backgroundColor={isActive() ? toRGBA(theme.border) : undefined}
+                          onMouseDown={() => clickProject(i())}
                         >
-                          <text fg={isSel() ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}>
-                            {isSel() ? "▸" : " "}
-                          </text>
-                          <text fg={statusColor[(row as { session: TeamSession }).session.status]}>
-                            {STATUS[(row as { session: TeamSession }).session.status].glyph}
-                          </text>
-                          <text fg={toRGBA(theme.fg)}>
-                            {(row as { session: TeamSession }).session.name.padEnd(22).slice(0, 22)}
-                          </text>
-                          <text fg={toRGBA(theme.fgMuted)}>
-                            {STATUS[(row as { session: TeamSession }).session.status].label.padEnd(
-                              8,
-                            )}
-                          </text>
-                          <text fg={toRGBA(theme.fgMuted)}>
-                            {`${(row as { session: TeamSession }).session.panes}p`}
-                          </text>
-                          <text fg={toRGBA(theme.fgMuted)}>
-                            {(row as { session: TeamSession }).session.attached ? "· attached" : ""}
-                          </text>
-                        </box>
-                      }
-                    >
-                      {/* project header row */}
-                      {(() => {
-                        const project = (row as { project: TeamProject }).project;
-                        const running = project.running;
-                        return (
-                          <box
-                            flexDirection="row"
-                            gap={1}
-                            paddingLeft={1}
-                            paddingRight={1}
-                            backgroundColor={isSel() ? toRGBA(theme.border) : undefined}
-                            onMouseDown={() => clickRow(i())}
-                          >
-                            <text fg={isSel() ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}>
-                              {isSel() ? "▸" : " "}
+                          <box flexDirection="row" gap={1}>
+                            <text fg={isActive() ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}>
+                              {isActive() ? "▸" : " "}
                             </text>
                             <text
                               fg={running ? statusColor[project.status] : toRGBA(theme.fgMuted)}
@@ -695,57 +691,115 @@ render(() => {
                               {running ? STATUS[project.status].glyph : "○"}
                             </text>
                             <text
-                              fg={running ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}
-                              attributes={running ? TextAttributes.BOLD : 0}
+                              fg={
+                                isActive()
+                                  ? toRGBA(theme.accent)
+                                  : running
+                                    ? toRGBA(theme.fg)
+                                    : toRGBA(theme.fgMuted)
+                              }
+                              attributes={isActive() ? TextAttributes.BOLD : 0}
                             >
-                              {project.name.padEnd(22).slice(0, 22)}
-                            </text>
-                            <text fg={toRGBA(theme.fgMuted)}>{running ? "" : "○ stopped"}</text>
-                            <text fg={toRGBA(theme.fgMuted)}>{project.gitBranch ?? ""}</text>
-                            <text fg={toRGBA(theme.fgMuted)}>
-                              {project.hasIdeYml ? "ide.yml" : ""}
+                              {project.name.padEnd(18).slice(0, 18)}
                             </text>
                             <box flexGrow={1} />
                             <text fg={toRGBA(theme.fgMuted)}>
-                              {`${project.sessions.length} ${
-                                project.sessions.length === 1 ? "session" : "sessions"
-                              }`}
+                              {running ? `${project.sessions.length}` : "○ stopped"}
+                            </text>
+                          </box>
+                          <Show when={project.gitBranch}>
+                            <box flexDirection="row" paddingLeft={2}>
+                              <text fg={toRGBA(theme.fgMuted)}>{project.gitBranch ?? ""}</text>
+                            </box>
+                          </Show>
+                        </box>
+                      );
+                    }}
+                  </For>
+                </Show>
+              </box>
+            </box>
+
+            {/* vertical separator */}
+            <box width={1} backgroundColor={toRGBA(theme.border)} />
+
+            {/* MAIN — the active project's detail: sessions + live preview */}
+            <box flexDirection="column" flexGrow={1} paddingLeft={1} paddingTop={1}>
+              <Show
+                when={activeProj()}
+                fallback={<text fg={toRGBA(theme.fgMuted)}>no project selected</text>}
+              >
+                {/* header: name · dir · branch · ide.yml */}
+                <box flexDirection="row" gap={1} paddingRight={1}>
+                  <text fg={toRGBA(theme.accent)} attributes={TextAttributes.BOLD}>
+                    {activeProj()!.name}
+                  </text>
+                  <text fg={toRGBA(theme.fgMuted)}>{activeProj()!.dir ?? ""}</text>
+                  <text fg={toRGBA(theme.fgMuted)}>{activeProj()!.gitBranch ?? ""}</text>
+                  <Show when={activeProj()!.hasIdeYml}>
+                    <text fg={toRGBA(theme.fgMuted)}>ide.yml</text>
+                  </Show>
+                </box>
+
+                {/* sessions sub-list */}
+                <box flexDirection="column" paddingTop={1}>
+                  <Show
+                    when={(activeProj()?.sessions ?? []).length > 0}
+                    fallback={
+                      <text fg={toRGBA(theme.fgMuted)}>no sessions — l to launch</text>
+                    }
+                  >
+                    <For each={activeProj()?.sessions ?? []}>
+                      {(session, i) => {
+                        const isActive = () => i() === activeSession();
+                        return (
+                          <box
+                            flexDirection="row"
+                            gap={1}
+                            paddingLeft={1}
+                            paddingRight={1}
+                            backgroundColor={isActive() ? toRGBA(theme.border) : undefined}
+                            onMouseDown={() => clickSession(i())}
+                          >
+                            <text fg={isActive() ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}>
+                              {isActive() ? "▸" : " "}
+                            </text>
+                            <text fg={statusColor[session.status]}>
+                              {STATUS[session.status].glyph}
+                            </text>
+                            <text fg={toRGBA(theme.fg)}>
+                              {session.name.padEnd(22).slice(0, 22)}
+                            </text>
+                            <text fg={toRGBA(theme.fgMuted)}>
+                              {STATUS[session.status].label.padEnd(8)}
+                            </text>
+                            <text fg={toRGBA(theme.fgMuted)}>{`${session.panes}p`}</text>
+                            <text fg={toRGBA(theme.fgMuted)}>
+                              {session.attached ? "· attached" : ""}
                             </text>
                           </box>
                         );
-                      })()}
-                    </Show>
-                  );
-                }}
-              </For>
-            </Show>
-          </box>
+                      }}
+                    </For>
+                  </Show>
+                </box>
 
-          {/* transient status line — a pending confirm takes precedence */}
-          <Show when={confirm() || message().length > 0}>
-            <box paddingLeft={1} paddingRight={1}>
-              <text fg={confirm() ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}>
-                {confirm() ? confirm()!.message : message()}
-              </text>
+                {/* live preview of the active session's active pane */}
+                <box flexDirection="column" flexGrow={1} paddingTop={1}>
+                  <Show
+                    when={previewTitle().length > 0}
+                    fallback={<text fg={toRGBA(theme.fgMuted)}>no live session</text>}
+                  >
+                    <text fg={toRGBA(theme.accent)}>{previewTitle()}</text>
+                  </Show>
+                  <box flexDirection="column" flexGrow={1} paddingTop={1}>
+                    <For each={preview()}>
+                      {(line) => <text fg={toRGBA(theme.fgMuted)}>{line}</text>}
+                    </For>
+                  </box>
+                </box>
+              </Show>
             </box>
-          </Show>
-        </box>
-
-        {/* vertical separator */}
-        <box width={1} backgroundColor={toRGBA(theme.border)} />
-
-        {/* live preview of the selected session's active pane */}
-        <box flexDirection="column" flexGrow={1} paddingLeft={1} paddingTop={1}>
-          <Show
-            when={previewTitle().length > 0}
-            fallback={<text fg={toRGBA(theme.fgMuted)}>no live session</text>}
-          >
-            <text fg={toRGBA(theme.accent)}>{previewTitle()}</text>
-          </Show>
-          <box flexDirection="column" flexGrow={1} paddingTop={1}>
-            <For each={preview()}>{(line) => <text fg={toRGBA(theme.fgMuted)}>{line}</text>}</For>
-          </box>
-        </box>
           </box>
         }
       >
@@ -783,9 +837,19 @@ render(() => {
         </box>
       </Show>
 
+      {/* transient status line — a pending confirm takes precedence */}
+      <Show when={confirm() || message().length > 0}>
+        <box paddingLeft={1} paddingRight={1}>
+          <text fg={confirm() ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}>
+            {confirm() ? confirm()!.message : message()}
+          </text>
+        </box>
+      </Show>
+
       {/* footer */}
       <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={2}>
-        <text fg={toRGBA(theme.fgMuted)}>↵ launch/attach</text>
+        <text fg={toRGBA(theme.fgMuted)}>↑↓ project</text>
+        <text fg={toRGBA(theme.fgMuted)}>↵ attach/launch</text>
         <text fg={toRGBA(theme.fgMuted)}>n new</text>
         <text fg={toRGBA(theme.fgMuted)}>R rename</text>
         <text fg={toRGBA(theme.fgMuted)}>s split</text>
@@ -794,7 +858,6 @@ render(() => {
         <text fg={toRGBA(theme.fgMuted)}>d unreg</text>
         <text fg={toRGBA(theme.fgMuted)}>x kill</text>
         <text fg={toRGBA(theme.fgMuted)}>/ filter</text>
-        <text fg={toRGBA(theme.fgMuted)}>r refresh</text>
         <text fg={toRGBA(theme.fgMuted)}>? help</text>
         <text fg={toRGBA(theme.fgMuted)}>q quit</text>
       </box>
