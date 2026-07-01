@@ -3,6 +3,8 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  adoptableSessionNames,
+  adoptOptionCommands,
   buildStatusline,
   isInternalName,
   popupBindCommand,
@@ -11,7 +13,9 @@ import {
   statusClickBindCommand,
   statusClickUnbindCommand,
   STATUS_CLICK_KEY,
+  unadoptOptionCommands,
 } from "./statusline.ts";
+import { ADOPTED_OPTION, STATUS_OPTION } from "./updater.ts";
 import type { TeamProject } from "../team/projects.ts";
 import type { TeamSession } from "../team/sessions.ts";
 
@@ -128,6 +132,64 @@ describe("isInternalName", () => {
     expect(isInternalName("_scratch")).toBe(true);
     expect(isInternalName("web")).toBe(false);
     expect(isInternalName("api-2")).toBe(false);
+  });
+});
+
+describe("adoptOptionCommands", () => {
+  const cmds = adoptOptionCommands("web");
+
+  it("points status-format[1] at the pre-computed var (a bare #{…} read, no spawn)", () => {
+    const fmt = cmds.find((c) => c[3] === "status-format[1]");
+    expect(fmt).toEqual([
+      "set-option",
+      "-t",
+      "web",
+      "status-format[1]",
+      `#[align=left]#{${STATUS_OPTION}}`,
+    ]);
+    // no `#()` shell-out — the old per-tick spawn is gone
+    expect(cmds.some((c) => c.some((a) => a.includes("#(")))).toBe(false);
+  });
+
+  it("sets the adopted marker so the updater can enumerate the session", () => {
+    expect(cmds).toContainEqual(["set-option", "-t", "web", ADOPTED_OPTION, "1"]);
+  });
+
+  it("enables the second status row and mouse mode per-session", () => {
+    expect(cmds).toContainEqual(["set-option", "-t", "web", "status", "2"]);
+    expect(cmds).toContainEqual(["set-option", "-t", "web", "mouse", "on"]);
+    // every command is per-session (`-t web`), never global
+    expect(cmds.every((c) => c.includes("-t") && c.includes("web"))).toBe(true);
+  });
+});
+
+describe("unadoptOptionCommands", () => {
+  const cmds = unadoptOptionCommands("web");
+
+  it("unsets the marker and the status var", () => {
+    expect(cmds).toContainEqual(["set-option", "-u", "-t", "web", ADOPTED_OPTION]);
+    expect(cmds).toContainEqual(["set-option", "-u", "-t", "web", STATUS_OPTION]);
+  });
+
+  it("reverts the status row + mouse to inherited", () => {
+    expect(cmds).toContainEqual(["set-option", "-u", "-t", "web", "status"]);
+    expect(cmds).toContainEqual(["set-option", "-u", "-t", "web", "status-format[1]"]);
+    expect(cmds).toContainEqual(["set-option", "-u", "-t", "web", "mouse"]);
+    // all unsets (`-u`), all per-session
+    expect(cmds.every((c) => c.includes("-u") && c[3] === "web")).toBe(true);
+  });
+});
+
+describe("adoptableSessionNames", () => {
+  it("keeps non-internal sessions and drops `_`-prefixed plumbing", () => {
+    expect(adoptableSessionNames(["web", "_tmux-ide-chrome", "api", "_scratch"])).toEqual([
+      "web",
+      "api",
+    ]);
+  });
+
+  it("ignores blank lines", () => {
+    expect(adoptableSessionNames(["web", "", "api"])).toEqual(["web", "api"]);
   });
 });
 

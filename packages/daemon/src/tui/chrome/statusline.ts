@@ -3,11 +3,12 @@
  *
  * Instead of wrapping or re-rendering tmux, tmux-ide renders itself INTO
  * tmux's own status line: `adoptSession` gives a session a second status row
- * whose content comes from `tmux-ide statusline` (invoked by tmux via `#()`
- * every `status-interval`). The row lists every project/session with a live
- * agent-state glyph and persists no matter which pane has focus — tmux draws
- * the chrome, so there's no nesting and the user's real sessions stay
- * untouched otherwise.
+ * whose content is a pre-rendered `@tmux_ide_status` user option that a single
+ * background updater ({@link ./updater.ts}) keeps fresh — the bar reads a bare
+ * `#{@tmux_ide_status}`, so tmux spawns nothing per tick. The row lists every
+ * project/session with a live agent-state glyph and persists no matter which
+ * pane has focus — tmux draws the chrome, so there's no nesting and the user's
+ * real sessions stay untouched otherwise.
  *
  * `buildStatusline` is pure (tested); the io wrappers are thin.
  */
@@ -15,6 +16,14 @@ import { runTmux } from "@tmux-ide/tmux-bridge";
 import type { AgentStatus } from "../detect/classify.ts";
 import type { TeamProject } from "../team/projects.ts";
 import { cheatsheetBindCommand, cheatsheetUnbindCommand } from "./cheatsheet.ts";
+import {
+  ADOPTED_OPTION,
+  listAdoptedSessions,
+  seedSessionStatus,
+  startUpdaterIfNeeded,
+  STATUS_OPTION,
+  stopUpdater,
+} from "./updater.ts";
 
 /** tmux style markup per status — chrome-row colors for the state glyphs. */
 const STATUS_STYLE: Record<AgentStatus, string> = {
@@ -40,6 +49,14 @@ const GLYPH: Record<AgentStatus, string> = {
  */
 export function isInternalName(name: string): boolean {
   return name.startsWith("_");
+}
+
+/**
+ * PURE — the session names `adopt --all` should adopt: every live session that
+ * isn't internal (`_`-prefixed plumbing like the updater/scratch sessions).
+ */
+export function adoptableSessionNames(names: string[]): string[] {
+  return names.filter((name) => name.length > 0 && !isInternalName(name));
 }
 
 /**
@@ -222,39 +239,76 @@ export function statusClickUnbindCommand(): string[] {
 }
 
 /**
- * Adopt a session: add the chrome row (status line 2) that shells out to
- * `tmux-ide statusline` every 2s, and bind the popup key so `M-p` opens the
- * floating switcher from anywhere in the session. Status options are set
- * per-session (`-t`) so only adopted sessions change; the key bind is
- * server-wide (tmux has no per-session bind). `unadoptSession` reverses both.
+ * Adopt a session: add the chrome row (status line 2) that renders the
+ * pre-computed `@tmux_ide_status` var (a bare `#{…}` read — tmux spawns
+ * nothing per tick; a single background updater keeps the var fresh), bind the
+ * popup key so `M-p` opens the floating switcher from anywhere in the session,
+ * mark the session adopted, seed its bar immediately, and make sure the updater
+ * loop is running. Status/marker options are set per-session (`-t`) so only
+ * adopted sessions change; the key binds are server-wide (tmux has no
+ * per-session bind). `unadoptSession` reverses all of it.
+ *
+ * The var form is plain `#{@tmux_ide_status}` (not `#{E:…}`): styles (`#[…]`)
+ * are parsed at draw time, so the stored markup renders its colors directly and
+ * the `E:` re-expansion buys nothing but a double-`#` hazard (verified live on
+ * tmux 3.6 — both forms render identically, so the simpler one wins).
  */
-export function adoptSession(
-  session: string,
-  statuslineCmd = "tmux-ide statusline",
-  switcherCmd = "tmux-ide switcher",
-): void {
-  const format = `#[align=left]#(${statuslineCmd} --active '#{session_name}')`;
-  runTmux(["set-option", "-t", session, "status", "2"]);
-  runTmux(["set-option", "-t", session, "status-interval", "2"]);
-  runTmux(["set-option", "-t", session, "status-format[1]", format]);
-  // Status-line clicks need mouse mode ON for this session. NOTE: this also
-  // changes scroll behavior for the session (the wheel enters copy-mode /
-  // scrolls the pane history instead of the terminal's native scrollback).
-  // Per-session (`-t`) so only adopted sessions are affected.
-  runTmux(["set-option", "-t", session, "mouse", "on"]);
+/**
+ * PURE — the per-session `set-option` argv adopt applies: the second status row
+ * (which renders the pre-computed `@tmux_ide_status` var — a bare `#{…}` read,
+ * no per-tick spawn), mouse mode for status clicks, and the adopted marker the
+ * updater enumerates by. All `-t <session>` so only adopted sessions change.
+ */
+export function adoptOptionCommands(session: string): string[][] {
+  const format = `#[align=left]#{${STATUS_OPTION}}`;
+  return [
+    ["set-option", "-t", session, "status", "2"],
+    ["set-option", "-t", session, "status-interval", "2"],
+    ["set-option", "-t", session, "status-format[1]", format],
+    // Status-line clicks need mouse mode ON. NOTE: this also changes scroll
+    // behavior (the wheel enters copy-mode / scrolls pane history instead of the
+    // terminal's native scrollback). Per-session (`-t`) so only adopted change.
+    ["set-option", "-t", session, "mouse", "on"],
+    // Marker the updater enumerates by (readable in list-sessions -F formats).
+    ["set-option", "-t", session, ADOPTED_OPTION, "1"],
+  ];
+}
+
+/**
+ * PURE — the per-session `set-option -u` argv unadopt applies: revert the status
+ * row/mouse to inherited, and drop the adopted marker + status var.
+ */
+export function unadoptOptionCommands(session: string): string[][] {
+  return [
+    ["set-option", "-u", "-t", session, "status"],
+    ["set-option", "-u", "-t", session, "status-interval"],
+    ["set-option", "-u", "-t", session, "status-format[1]"],
+    ["set-option", "-u", "-t", session, "mouse"],
+    ["set-option", "-u", "-t", session, ADOPTED_OPTION],
+    ["set-option", "-u", "-t", session, STATUS_OPTION],
+  ];
+}
+
+export function adoptSession(session: string, switcherCmd = "tmux-ide switcher"): void {
+  for (const argv of adoptOptionCommands(session)) runTmux(argv);
   // Server-wide binds, idempotent (re-binding the same key just overwrites it):
   // the M-p popup, the M-k cheat sheet, and the status-bar click router.
   runTmux(popupBindCommand(switcherCmd));
   runTmux(cheatsheetBindCommand());
   runTmux(statusClickBindCommand(switcherCmd));
+  // Seed the bar now so it's never blank, then make sure the loop that keeps it
+  // fresh is up.
+  seedSessionStatus(session);
+  startUpdaterIfNeeded();
 }
 
-/** Remove the chrome row from a session (revert to inherited options). */
+/**
+ * Remove the chrome row from a session (revert to inherited options), drop the
+ * adopted marker + status var, and stop the background updater when this was the
+ * LAST adopted session.
+ */
 export function unadoptSession(session: string): void {
-  runTmux(["set-option", "-u", "-t", session, "status"]);
-  runTmux(["set-option", "-u", "-t", session, "status-interval"]);
-  runTmux(["set-option", "-u", "-t", session, "status-format[1]"]);
-  runTmux(["set-option", "-u", "-t", session, "mouse"]);
+  for (const argv of unadoptOptionCommands(session)) runTmux(argv);
   // KNOWN SIMPLIFICATION: the popup key AND the status-click router are
   // SERVER-wide binds, so unadopting one session removes them for ALL adopted
   // sessions. Acceptable for now — best-effort so a missing bind (already
@@ -274,4 +328,6 @@ export function unadoptSession(session: string): void {
   } catch {
     // no such key bound — nothing to undo
   }
+  // The updater only needs to run while something is adopted.
+  if (listAdoptedSessions().length === 0) stopUpdater();
 }

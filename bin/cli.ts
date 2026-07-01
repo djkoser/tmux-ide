@@ -23,7 +23,6 @@ import { detect } from "../packages/daemon/src/detect.ts";
 import { config } from "../packages/daemon/src/config.ts";
 import { restart } from "../packages/daemon/src/restart.ts";
 import { send } from "../packages/daemon/src/send.ts";
-import { launchHostShell } from "../packages/daemon/src/tui/team/host.ts";
 import { IdeError } from "../packages/daemon/src/lib/errors.ts";
 import { printCommandError } from "../packages/daemon/src/lib/output.ts";
 
@@ -55,6 +54,8 @@ const { positionals, values } = parseArgs({
     timeout: { type: "string" },
     // force the team cockpit instead of launching a project
     team: { type: "boolean" },
+    // adopt every live (non-internal) session at once
+    all: { type: "boolean" },
     // statusline: the session whose bar is being rendered
     active: { type: "string" },
     // switcher: the tmux client the popup was invoked on (see `switcher` case)
@@ -84,6 +85,7 @@ const knownCommands = new Set([
   "statusline",
   "adopt",
   "unadopt",
+  "chrome-updater",
   "cheatsheet",
   "command-center",
   "server",
@@ -136,6 +138,7 @@ ${bold("Usage:")}
   ${cyan("tmux-ide wait agent-status")} <session> --status <s> [--timeout <ms>]
                               ${dim("Block until a session reaches a status (exit 0 match / 1 timeout)")}
   ${cyan("tmux-ide adopt")} <session>    ${dim("Add the live tmux-ide status bar to a session")}
+  ${cyan("tmux-ide adopt --all")}        ${dim("Adopt every live (non-internal) session")}
   ${cyan("tmux-ide unadopt")} <session>  ${dim("Remove the status bar")}
   ${cyan("tmux-ide cheatsheet")}         ${dim("Print the key cheat sheet (⌥k / [ ? keys ] popup)")}
   ${cyan("tmux-ide ls")}                 ${dim("List all tmux sessions")}
@@ -233,16 +236,11 @@ async function printFleetJson(): Promise<void> {
 
 const teamScriptPath = resolve(__dirname, "../packages/daemon/src/tui/team/index.tsx");
 
-// `tmux-ide team` HOSTS tmux: it opens a dedicated `[ switcher | main ]`
-// session with the OpenTUI switcher on the left. Guard bun/widget availability
-// just like a bun widget (the switcher pane runs bun), then create-or-attach.
-function launchTeamHost(): void {
-  assertBunWidgetAvailable(teamScriptPath, "team");
-  launchHostShell({
-    repoRoot: resolve(__dirname, ".."),
-    switcherScript: teamScriptPath,
-    userCwd: process.cwd(),
-  });
+// `tmux-ide team` runs the standalone full-screen cockpit (the OpenTUI app owns
+// the whole terminal). The floating switcher popup (M-p on adopted sessions)
+// supersedes the old nested `[ switcher | main ]` host shell.
+function launchTeamCockpit(): void {
+  execBunWidget(teamScriptPath, [], "team");
 }
 
 try {
@@ -256,7 +254,7 @@ try {
           await printFleetJson();
           break;
         }
-        launchTeamHost();
+        launchTeamCockpit();
         break;
       }
       await launch(startTargetDir, { json });
@@ -382,7 +380,7 @@ try {
         await printFleetJson();
         break;
       }
-      launchTeamHost();
+      launchTeamCockpit();
       break;
     }
 
@@ -459,10 +457,28 @@ try {
     }
 
     case "adopt": {
-      const { adoptSession } = await import("../packages/daemon/src/tui/chrome/statusline.ts");
+      const { adoptSession, adoptableSessionNames } =
+        await import("../packages/daemon/src/tui/chrome/statusline.ts");
+      if (values.all) {
+        // Adopt every live session that isn't internal (`_`-prefixed plumbing).
+        const raw = execFileSync("tmux", ["list-sessions", "-F", "#{session_name}"], {
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+        }).trim();
+        const targets = raw ? adoptableSessionNames(raw.split("\n")) : [];
+        if (targets.length === 0) {
+          console.log("no adoptable sessions");
+          break;
+        }
+        for (const name of targets) {
+          adoptSession(name);
+          console.log(`adopted ${name}`);
+        }
+        break;
+      }
       const target = positionals[1];
       if (!target) {
-        console.error("Usage: tmux-ide adopt <session>");
+        console.error("Usage: tmux-ide adopt <session> | tmux-ide adopt --all");
         process.exit(1);
       }
       adoptSession(target);
@@ -479,6 +495,20 @@ try {
       }
       unadoptSession(target);
       console.log(`unadopted ${target}`);
+      break;
+    }
+
+    case "chrome-updater": {
+      // The background loop that keeps every adopted session's status var fresh.
+      // Hosted in the hidden `_tmux-ide-chrome` tmux session (started on adopt);
+      // blocks forever. Never let a boot error crash it — a dead updater just
+      // means stale bars, not broken sessions.
+      try {
+        const { runUpdaterLoop } = await import("../packages/daemon/src/tui/chrome/updater.ts");
+        runUpdaterLoop();
+      } catch {
+        process.exit(0);
+      }
       break;
     }
 

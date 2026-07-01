@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { isListableSession, rollupStatus } from "./sessions.ts";
-import { HOST_SESSION } from "./host.ts";
 
 describe("rollupStatus", () => {
   it("blocked wins over everything else", () => {
@@ -29,11 +28,13 @@ describe("rollupStatus", () => {
 });
 
 describe("isListableSession", () => {
-  it("hides the host session from the switcher", () => {
-    expect(isListableSession(HOST_SESSION)).toBe(false);
+  it("hides `_`-prefixed internal sessions from the switcher", () => {
+    expect(isListableSession("_tmux-ide-chrome")).toBe(false);
+    expect(isListableSession("_scratch")).toBe(false);
+    expect(isListableSession("_")).toBe(false);
   });
 
-  it("keeps every other session", () => {
+  it("keeps every non-internal session", () => {
     expect(isListableSession("my-project")).toBe(true);
     expect(isListableSession("tmux-ide")).toBe(true);
   });

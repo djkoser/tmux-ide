@@ -163,6 +163,21 @@ function loadLaunchConfig(dir: string): IdeConfig {
   return config;
 }
 
+/**
+ * Best-effort: adopt the session into the native chrome (status bar + switcher
+ * popup + the shared background updater). A chrome failure must NEVER break
+ * launch, so it's fully swallowed; the import is dynamic to keep the hot path
+ * clean and the data-layer graph out of the common launch flow.
+ */
+async function bestEffortAdopt(session: string): Promise<void> {
+  try {
+    const { adoptSession } = await import("./tui/chrome/statusline.ts");
+    adoptSession(session);
+  } catch {
+    // chrome is optional — never let it block the session
+  }
+}
+
 function runBeforeHook(command: string | undefined, dir: string): void {
   if (!command) return;
 
@@ -206,6 +221,8 @@ export async function launch(
       console.log(`Session "${session}" is already running. Attaching...`);
     }
 
+    // Keep the chrome in place across re-launches (idempotent).
+    await bestEffortAdopt(session);
     if (attach) {
       attachSession(session);
     }
@@ -298,6 +315,9 @@ export async function launch(
   } catch {
     // Non-fatal — the daemon may still be coming up.
   }
+
+  // Adopt into the native chrome so the new session shows the tmux-ide bar.
+  await bestEffortAdopt(session);
 
   // Attach
   if (attach) {

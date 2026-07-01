@@ -1,0 +1,208 @@
+/**
+ * The chrome status-bar updater — ONE background loop that keeps every adopted
+ * session's status var fresh.
+ *
+ * WHY a single updater (vs. the old per-session `#()`): the first chrome
+ * pointed each adopted session's `status-format[1]` at
+ * `#(tmux-ide statusline …)`, which tmux re-ran every `status-interval` — a
+ * full node boot + fleet scan PER adopted session PER tick (~0.35s each). And
+ * because each `#()` invocation was stateless it could never produce the
+ * cross-tick `done` status (working→idle needs history).
+ *
+ * This module computes the fleet ONCE per tick behind a PERSISTENT
+ * {@link createStatusTracker} (so working→idle surfaces as `done`), then writes
+ * a per-session `@tmux_ide_status` user option for each adopted session
+ * (per-session so each keeps its own active-highlight). `adoptSession` points
+ * `status-format[1]` at a bare `#{@tmux_ide_status}` read — near-free, no spawn.
+ *
+ * The loop is HOSTED IN TMUX: `adoptSession` spins up a hidden `_tmux-ide-chrome`
+ * session running `tmux-ide chrome-updater`, and unadopting the last session
+ * kills it. `runUpdaterTick` is factored to take injected io so it's unit-tested
+ * without a live tmux; `adoptedSessionsFrom` is a pure parser.
+ */
+import { hasSession, isProcessAlive, runTmux } from "@tmux-ide/tmux-bridge";
+import { createStatusTracker } from "../detect/classify.ts";
+import { listTeamProjects, type TeamProject } from "../team/projects.ts";
+import { buildStatusline } from "./statusline.ts";
+
+/** Per-session user option holding the pre-rendered status-bar string. */
+export const STATUS_OPTION = "@tmux_ide_status";
+/** Per-session marker option set on adopt so the updater can enumerate adopted sessions. */
+export const ADOPTED_OPTION = "@tmux_ide_adopted";
+/** The hidden internal session that hosts the updater loop. */
+export const UPDATER_SESSION = "_tmux-ide-chrome";
+/** Server option holding the running updater's pid (a lightweight single-owner guard). */
+export const UPDATER_PID_OPTION = "@tmux_ide_updater_pid";
+/** How often the loop recomputes the fleet and rewrites each bar. */
+export const TICK_MS = 2000;
+
+/**
+ * PURE — parse `list-sessions -F '#{session_name}\t#{@tmux_ide_adopted}'` output
+ * into the list of adopted session names. A session is adopted when its marker
+ * field is exactly `"1"` (sessions without the option render an empty field —
+ * verified on tmux 3.6, where user options ARE readable in list-sessions
+ * formats).
+ */
+export function adoptedSessionsFrom(lines: string[]): string[] {
+  const out: string[] = [];
+  for (const line of lines) {
+    const [name = "", flag = ""] = line.split("\t");
+    if (name && flag === "1") out.push(name);
+  }
+  return out;
+}
+
+/** Enumerate adopted sessions from the live tmux server. Never throws. */
+export function listAdoptedSessions(): string[] {
+  try {
+    const raw = runTmux(["list-sessions", "-F", `#{session_name}\t#{${ADOPTED_OPTION}}`])
+      .toString()
+      .trim();
+    return raw ? adoptedSessionsFrom(raw.split("\n")) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Write a session's pre-rendered status var. */
+function writeSessionStatus(session: string, value: string): void {
+  runTmux(["set-option", "-t", session, STATUS_OPTION, value]);
+}
+
+/** The io a single tick needs — injectable so the orchestration is unit-tested. */
+export interface UpdaterTickDeps {
+  listAdopted: () => string[];
+  computeProjects: () => TeamProject[];
+  writeStatus: (session: string, value: string) => void;
+}
+
+/**
+ * One tick: if any session is adopted, compute the fleet ONCE and write each
+ * adopted session its own {@link buildStatusline} (its name flagged active so
+ * the per-session highlight is correct). PURE given its deps — no tmux, no
+ * fleet scan when nothing is adopted.
+ */
+export function runUpdaterTick(deps: UpdaterTickDeps): void {
+  const adopted = deps.listAdopted();
+  if (adopted.length === 0) return;
+  const projects = deps.computeProjects();
+  for (const session of adopted) {
+    deps.writeStatus(session, buildStatusline(projects, session));
+  }
+}
+
+/**
+ * Seed a single session's status var NOW (a one-off fleet scan). Called by
+ * `adoptSession` so a freshly-adopted bar is never blank while it waits for the
+ * background loop's next tick. Best-effort — a failure just defers to the loop.
+ */
+export function seedSessionStatus(session: string): void {
+  try {
+    const projects = listTeamProjects(createStatusTracker());
+    writeSessionStatus(session, buildStatusline(projects, session));
+  } catch {
+    // leave it to the updater's next tick
+  }
+}
+
+/** Whether the updater session is already up. */
+export function updaterRunning(): boolean {
+  try {
+    return hasSession(UPDATER_SESSION);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Ensure the background updater is running: if the `_tmux-ide-chrome` session
+ * isn't up, start it detached running `tmux-ide chrome-updater`. `exec` replaces
+ * the shell so the pane IS the loop; killing the session stops it. `_`-internal
+ * so it's hidden from the bar/switcher. Best-effort — a chrome failure must
+ * never break adopt/launch.
+ */
+export function startUpdaterIfNeeded(): void {
+  try {
+    if (updaterRunning()) return;
+    runTmux(["new-session", "-d", "-s", UPDATER_SESSION, "exec tmux-ide chrome-updater"]);
+  } catch {
+    // best-effort — the bar still works via the last-written var
+  }
+}
+
+/** Kill the updater session (called when the last adopted session is unadopted). */
+export function stopUpdater(): void {
+  try {
+    if (updaterRunning()) runTmux(["kill-session", "-t", UPDATER_SESSION]);
+  } catch {
+    // already gone — nothing to stop
+  }
+}
+
+/** Read the pid the current updater owner recorded, or null when unset/garbage. */
+function readUpdaterPid(): number | null {
+  try {
+    const raw = runTmux(["show-option", "-s", "-v", UPDATER_PID_OPTION]).toString().trim();
+    const pid = Number(raw);
+    return raw && Number.isInteger(pid) ? pid : null;
+  } catch {
+    // option never set (unset server user-options error out) — no owner
+    return null;
+  }
+}
+
+/**
+ * Claim single-ownership of the loop. Returns false when another LIVE updater
+ * already holds the pid option (so a stray manual `chrome-updater` exits
+ * cleanly instead of double-writing). A dead/stale pid is reclaimed.
+ */
+function claimUpdater(): boolean {
+  const existing = readUpdaterPid();
+  if (existing !== null && existing !== process.pid && isProcessAlive(existing)) return false;
+  try {
+    runTmux(["set-option", "-s", UPDATER_PID_OPTION, String(process.pid)]);
+  } catch {
+    // if we can't record the pid, still run — the session-level guard suffices
+  }
+  return true;
+}
+
+/** Release ownership on shutdown (only if we still hold it). */
+function releaseUpdater(): void {
+  try {
+    if (readUpdaterPid() === process.pid) runTmux(["set-option", "-s", "-u", UPDATER_PID_OPTION]);
+  } catch {
+    // best-effort
+  }
+}
+
+/**
+ * Run the updater loop forever (the body of `tmux-ide chrome-updater`). Claims
+ * single-ownership, then rewrites every adopted session's bar immediately and
+ * every {@link TICK_MS} thereafter behind ONE persistent tracker (so `done`
+ * transitions surface). Blocks — the interval keeps the event loop alive.
+ */
+export function runUpdaterLoop(): void {
+  if (!claimUpdater()) return;
+  const tracker = createStatusTracker();
+  const tick = () => {
+    try {
+      runUpdaterTick({
+        listAdopted: listAdoptedSessions,
+        computeProjects: () => listTeamProjects(tracker),
+        writeStatus: writeSessionStatus,
+      });
+    } catch {
+      // never let one bad tick kill the loop
+    }
+  };
+  tick();
+  const timer = setInterval(tick, TICK_MS);
+  const shutdown = () => {
+    clearInterval(timer);
+    releaseUpdater();
+    process.exit(0);
+  };
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
+}

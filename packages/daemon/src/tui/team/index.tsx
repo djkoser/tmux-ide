@@ -24,7 +24,7 @@ import {
   splitPane,
 } from "@tmux-ide/tmux-bridge";
 import { createTheme } from "../../widgets/lib/theme.ts";
-import { mainRespawnCommand } from "./host.ts";
+import { adoptSession } from "../chrome/statusline.ts";
 import { previewLines } from "./preview.ts";
 import { type TeamSession } from "./sessions.ts";
 import { listTeamProjects, type TeamProject } from "./projects.ts";
@@ -109,20 +109,6 @@ render(() => {
   // with cwd set to the repo root (for the bun JSX preload), so it forwards the
   // real cwd via env; fall back to process.cwd() when run directly.
   const invokeCwd = process.env.TMUX_IDE_CWD ?? process.cwd();
-  // Host mode: when the switcher runs inside the `_tmux-ide` host shell, the
-  // host exports the MAIN pane's target here. Its presence flips selecting a
-  // session from "suspend + attach in place" (standalone) to "drive the live
-  // main pane" — the switcher stays put in pane 0 and only pane 1 changes.
-  const mainPane = process.env.TMUX_IDE_MAIN_PANE ?? null;
-  const hostMode = mainPane !== null;
-  // Socket discipline in host mode: the switcher runs inside a host-socket pane,
-  // so its inherited `$TMUX` points at the HOST server (`-L tmux-ide`). But it
-  // must LIST and manage the user's PROJECTS, which live on the DEFAULT socket.
-  // Clearing `$TMUX` makes every tmux-bridge query (listTeamProjects,
-  // getSessionCwd, createDetachedSession, …) hit the default server — without
-  // this the cockpit would list the host server's own sessions. Host CONTROL
-  // commands stay correct regardless: they carry an explicit `-L tmux-ide`.
-  if (hostMode) delete process.env.TMUX;
   // Picker mode: the switcher runs inside a tmux `display-popup` (bound to M-p
   // on adopted sessions). `TMUX_IDE_PICKER_CLIENT`'s PRESENCE flips picker mode
   // on; its VALUE is an optional explicit client name. When empty we resolve
@@ -141,8 +127,8 @@ render(() => {
       pickerClientEnv && pickerClientEnv.length > 0 ? pickerClientEnv : resolvePopupClient();
     delete process.env.TMUX;
   }
-  // Both compact modes (host + picker) render the single-column switcher.
-  const compactMode = hostMode || pickerMode;
+  // Picker mode renders the compact single-column switcher (the popup layout).
+  const compactMode = pickerMode;
   const statusColor: Record<AgentStatus, RGBA> = {
     blocked: RGBA.fromInts(240, 90, 90, 255), // red
     working: RGBA.fromInts(240, 200, 90, 255), // amber
@@ -230,9 +216,9 @@ render(() => {
 
   /** Capture the active session's active pane and shape it to the preview box. */
   function updatePreview() {
-    // The compact layouts (host + picker) have no preview box — host has the
-    // live MAIN pane, picker is a transient popup — so skip the capture-pane
-    // work entirely (it runs on every selection and every 2s refresh).
+    // The compact picker layout has no preview box (it's a transient popup), so
+    // skip the capture-pane work entirely (it runs on every selection and every
+    // 2s refresh).
     if (compactMode) return;
     const target = previewTarget();
     if (!target) {
@@ -298,49 +284,16 @@ render(() => {
   }
 
   /**
-   * HOST MODE: drive the live main pane (pane 1) to show `sessionName` via a
-   * nested `tmux attach`. Never suspends this renderer — the switcher stays put
-   * in pane 0. On failure (e.g. the session vanished) surface it on the status
-   * line rather than blanking the main pane.
+   * Best-effort: adopt a cockpit-created session into the native chrome (status
+   * bar + switcher popup + shared updater). Chrome is optional — a failure here
+   * must never block session creation.
    */
-  function showInMain(sessionName: string, dir: string) {
+  function bestEffortAdopt(session: string) {
     try {
-      runTmux(mainRespawnCommand(mainPane!, sessionName, dir));
-    } catch (e) {
-      setMessage(String((e as { message?: string })?.message ?? e));
+      adoptSession(session);
+    } catch {
+      // chrome is optional
     }
-  }
-
-  /**
-   * HOST MODE launch: bring a stopped project up WITHOUT taking over the
-   * switcher pane, then show it live in the main pane. An `ide.yml` project is
-   * built detached (`launch(..., { attach: false })`) so its full layout comes
-   * up in the background; a plain project just needs a bare detached session.
-   */
-  function launchProjectInHost(project: TeamProject) {
-    const dir = project.dir!;
-    if (project.hasIdeYml) {
-      import("../../launch.ts")
-        .then(({ launch }) => launch(dir, { attach: false }))
-        .then(() => {
-          showInMain(project.name, dir);
-          refresh(project.name);
-        })
-        .catch((e) => setMessage(String((e as { message?: string })?.message ?? e)));
-      return;
-    }
-    try {
-      createDetachedSession(project.name, dir);
-      // Flag cockpit-created sessions so agents inside can detect tmux-ide.
-      try {
-        setSessionEnvironment(project.name, "TMUX_IDE", "1");
-      } catch {}
-      showInMain(project.name, dir);
-      setMessage(`launched ${project.name}`);
-    } catch (e) {
-      setMessage(String((e as { message?: string })?.message ?? e));
-    }
-    refresh(project.name);
   }
 
   /**
@@ -367,7 +320,8 @@ render(() => {
    * PICKER MODE: bring a stopped project up detached, then switch to it and
    * exit. An `ide.yml` project gets its full layout via `launch(dir, { attach:
    * false })`; a plain project just needs a bare detached session. Mirrors
-   * `launchProjectInHost` but ends in `pickerSwitch` (no main pane to drive).
+   * ends in `pickerSwitch` (no main pane to drive). An `ide.yml` launch adopts
+   * itself; a bare detached session is adopted here.
    */
   function pickerLaunchAndSwitch(project: TeamProject) {
     if (!project.dir) return;
@@ -384,6 +338,7 @@ render(() => {
       try {
         setSessionEnvironment(project.name, "TMUX_IDE", "1");
       } catch {}
+      bestEffortAdopt(project.name);
     } catch (e) {
       setMessage(String((e as { message?: string })?.message ?? e));
       return;
@@ -410,19 +365,13 @@ render(() => {
   }
 
   /**
-   * Launch a project. In host mode, bring it up detached and show it live in
-   * the main pane (`launchProjectInHost`). In standalone mode: when it has an
-   * `ide.yml`, run the full `tmux-ide` launch (builds the layout and attaches) —
-   * this blocks until the user detaches, so we refresh and stay in the cockpit
-   * rather than exit. Otherwise spin up a bare detached session so it appears in
-   * place.
+   * Launch a project (standalone cockpit). When it has an `ide.yml`, run the
+   * full `tmux-ide` launch (builds the layout and attaches) — this blocks until
+   * the user detaches, so we refresh and stay in the cockpit rather than exit.
+   * Otherwise spin up a bare detached session so it appears in place.
    */
   function launchProject(project: TeamProject) {
     if (!project.dir) return;
-    if (hostMode) {
-      launchProjectInHost(project);
-      return;
-    }
     if (project.hasIdeYml) {
       withSuspendedTerminal(() => {
         try {
@@ -440,6 +389,7 @@ render(() => {
       try {
         setSessionEnvironment(project.name, "TMUX_IDE", "1");
       } catch {}
+      bestEffortAdopt(project.name);
       setMessage(`launched ${project.name}`);
     } catch (e) {
       setMessage(String((e as { message?: string })?.message ?? e));
@@ -481,9 +431,6 @@ render(() => {
       if (sess) {
         if (pickerMode) {
           pickerSwitch(sess.name);
-        } else if (hostMode) {
-          showInMain(sess.name, activeProj()?.dir ?? invokeCwd);
-          refresh(sess.name);
         } else {
           attachSessionName(sess.name);
         }
@@ -504,9 +451,8 @@ render(() => {
   }
 
   /**
-   * Enter on the active project: when it's running, either drive the main pane
-   * (host mode) or suspend + attach in place (standalone); when stopped, launch
-   * it. Host mode never suspends the renderer — the switcher stays in pane 0.
+   * Enter on the active project: when it's running, suspend + attach in place;
+   * when stopped, launch it. In picker mode this instead switch-clients + exits.
    */
   function enter() {
     if (pickerMode) {
@@ -518,12 +464,7 @@ render(() => {
     if (proj.running) {
       const sess = activeSess() ?? proj.sessions[0];
       if (sess) {
-        if (hostMode) {
-          showInMain(sess.name, proj.dir ?? invokeCwd);
-          refresh(sess.name);
-        } else {
-          attachSessionName(sess.name);
-        }
+        attachSessionName(sess.name);
         return;
       }
     }
@@ -638,6 +579,7 @@ render(() => {
         try {
           setSessionEnvironment(name, "TMUX_IDE", "1");
         } catch {}
+        bestEffortAdopt(name);
         setMessage(`created ${name}`);
       } catch (e) {
         setMessage(String((e as { message?: string })?.message ?? e));
@@ -896,12 +838,12 @@ render(() => {
   }
 
   /**
-   * HOST MODE layout — a compact single-column switcher. The live session is a
-   * separate MAIN tmux pane, so this ~34-col pane is just the project/session
-   * list + live status; no sidebar/preview split (the preview would only
-   * duplicate the main pane). The active project's sessions expand inline so
-   * the user can pick one to drive the main pane; other projects collapse to
-   * their row to save vertical space.
+   * PICKER layout — a compact single-column switcher for the `display-popup`
+   * (bound to M-p on adopted sessions). This narrow popup is just the
+   * project/session list + live status; no sidebar/preview split. The active
+   * project's sessions expand inline so the user can pick one to switch to;
+   * other projects collapse to their row to save vertical space. Picking ends
+   * in a `switch-client` + close.
    */
   function CompactSwitcher() {
     return (
@@ -1023,26 +965,14 @@ render(() => {
 
         {statusRow()}
 
-        {/* compact footer — shortened labels to fit ~34 cols. Picker mode ends
-            in a switch-client + close, so it advertises that instead. */}
-        <Show
-          when={pickerMode}
-          fallback={
-            <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
-              <text fg={toRGBA(theme.fgMuted)}>↵ open</text>
-              <text fg={toRGBA(theme.fgMuted)}>n new</text>
-              <text fg={toRGBA(theme.fgMuted)}>/ find</text>
-              <text fg={toRGBA(theme.fgMuted)}>? help</text>
-            </box>
-          }
-        >
-          <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
-            <text fg={toRGBA(theme.fgMuted)}>↵ switch</text>
-            <text fg={toRGBA(theme.fgMuted)}>l launch</text>
-            <text fg={toRGBA(theme.fgMuted)}>/ find</text>
-            <text fg={toRGBA(theme.fgMuted)}>esc close</text>
-          </box>
-        </Show>
+        {/* compact footer — shortened labels to fit ~34 cols. The picker ends in
+            a switch-client + close, so it advertises that. */}
+        <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
+          <text fg={toRGBA(theme.fgMuted)}>↵ switch</text>
+          <text fg={toRGBA(theme.fgMuted)}>l launch</text>
+          <text fg={toRGBA(theme.fgMuted)}>/ find</text>
+          <text fg={toRGBA(theme.fgMuted)}>esc close</text>
+        </box>
       </box>
     );
   }
