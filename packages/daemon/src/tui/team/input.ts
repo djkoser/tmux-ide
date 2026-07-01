@@ -19,3 +19,16 @@ export function nextInput(prev: string, evt: InputKey): string | null {
   if (evt.name.length === 1 && !evt.ctrl && !evt.alt && !evt.meta) return prev + evt.name;
   return null;
 }
+
+/**
+ * Suggest a tmux session name based on `base`, appending a numeric suffix
+ * (`-2`, `-3`, …) until `exists` reports the name free. Used by the team TUI's
+ * new-session prompt to avoid colliding with a live session.
+ */
+export function suggestSessionName(base: string, exists: (name: string) => boolean): string {
+  if (!exists(base)) return base;
+  for (let n = 2; ; n++) {
+    const candidate = `${base}-${n}`;
+    if (!exists(candidate)) return candidate;
+  }
+}

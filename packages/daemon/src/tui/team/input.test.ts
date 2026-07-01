@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextInput } from "./input.ts";
+import { nextInput, suggestSessionName } from "./input.ts";
 
 describe("nextInput", () => {
   it("appends a printable char", () => {
@@ -21,5 +21,20 @@ describe("nextInput", () => {
     expect(nextInput("ab", { name: "return" })).toBeNull();
     expect(nextInput("ab", { name: "escape" })).toBeNull();
     expect(nextInput("ab", { name: "up" })).toBeNull();
+  });
+});
+
+describe("suggestSessionName", () => {
+  it("returns the base when it's free", () => {
+    expect(suggestSessionName("web", () => false)).toBe("web");
+  });
+
+  it("appends -2 on a single collision", () => {
+    expect(suggestSessionName("web", (n) => n === "web")).toBe("web-2");
+  });
+
+  it("skips past a run of taken suffixes", () => {
+    const taken = new Set(["web", "web-2", "web-3"]);
+    expect(suggestSessionName("web", (n) => taken.has(n))).toBe("web-4");
   });
 });
