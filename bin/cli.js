@@ -8167,7 +8167,9 @@ function isInside(cwd, dir) {
   if (path2 === base) return true;
   return path2.startsWith(base === "/" ? "/" : `${base}/`);
 }
-function groupSessions(projects, sessions, sessionCwd) {
+function groupSessions(projectsIn, sessionsIn, sessionCwd) {
+  const projects = projectsIn.filter((p) => !p.name.startsWith("_"));
+  const sessions = sessionsIn.filter((s) => !s.name.startsWith("_"));
   const buckets = /* @__PURE__ */ new Map();
   for (const p of projects) buckets.set(p.name, []);
   const matched = /* @__PURE__ */ new Set();
@@ -8285,25 +8287,38 @@ var init_report = __esm({
 var statusline_exports = {};
 __export(statusline_exports, {
   POPUP_KEY: () => POPUP_KEY,
+  STATUS_CLICK_KEY: () => STATUS_CLICK_KEY,
   adoptSession: () => adoptSession,
   buildStatusline: () => buildStatusline,
+  isInternalName: () => isInternalName,
   popupBindCommand: () => popupBindCommand,
   popupUnbindCommand: () => popupUnbindCommand,
+  statusClickBindCommand: () => statusClickBindCommand,
+  statusClickUnbindCommand: () => statusClickUnbindCommand,
   unadoptSession: () => unadoptSession
 });
+function isInternalName(name) {
+  return name.startsWith("_");
+}
 function buildStatusline(projects, active2, maxItems = 12) {
+  const visible = projects.filter((p) => !isInternalName(p.name));
   const segments = [];
-  for (const project of projects.slice(0, maxItems)) {
+  for (const project of visible.slice(0, maxItems)) {
     const isActive = active2 !== null && (project.name === active2 || project.sessions.some((s) => s.name === active2));
     const glyph = project.running ? `${STATUS_STYLE[project.status]}${GLYPH[project.status]}#[default]` : "#[fg=colour240]\u25CB#[default]";
     const name = isActive ? `#[fg=colour231,bold,underscore]${project.name}#[default]` : project.running ? `#[fg=colour250]${project.name}#[default]` : `#[fg=colour240]${project.name}#[default]`;
-    segments.push(`${glyph} ${name}`);
+    const label = `${glyph} ${name}`;
+    const session = project.sessions[0]?.name;
+    segments.push(
+      project.running && session ? `#[range=user|sw${session}]${label}#[norange]` : label
+    );
   }
-  if (projects.length > maxItems) {
-    segments.push(`#[fg=colour240]+${projects.length - maxItems}#[default]`);
+  if (visible.length > maxItems) {
+    segments.push(`#[fg=colour240]+${visible.length - maxItems}#[default]`);
   }
   const body = segments.join("  ");
-  return `#[fg=colour75,bold] tmux-ide #[default] ${body}`;
+  const trigger = `#[range=user|switcher]#[fg=colour75,bold][ \u29C9 switch \u2325p ]#[default]#[norange]`;
+  return `#[fg=colour75,bold] tmux-ide #[default] ${body}#[align=right]${trigger} `;
 }
 function popupBindCommand(switcherCmd = "tmux-ide switcher") {
   return [
@@ -8322,23 +8337,51 @@ function popupBindCommand(switcherCmd = "tmux-ide switcher") {
 function popupUnbindCommand() {
   return ["unbind-key", "-n", POPUP_KEY];
 }
+function statusClickBindCommand(switcherCmd = "tmux-ide switcher") {
+  const popup = `display-popup -E -w 80% -h 60% "${switcherCmd}"`;
+  const switchClient = `run-shell "tmux switch-client -c '#{client_name}' -t '#{s/^sw//:mouse_status_range}'"`;
+  const swBranch = `if-shell -F "#{m:sw*,#{mouse_status_range}}" "${switchClient.replace(
+    /"/g,
+    '\\"'
+  )}" "select-window -t ="`;
+  return [
+    "bind-key",
+    "-n",
+    STATUS_CLICK_KEY,
+    "if-shell",
+    "-F",
+    "#{==:#{mouse_status_range},switcher}",
+    popup,
+    swBranch
+  ];
+}
+function statusClickUnbindCommand() {
+  return ["unbind-key", "-n", STATUS_CLICK_KEY];
+}
 function adoptSession(session, statuslineCmd = "tmux-ide statusline", switcherCmd = "tmux-ide switcher") {
   const format = `#[align=left]#(${statuslineCmd} --active '#{session_name}')`;
   runTmux(["set-option", "-t", session, "status", "2"]);
   runTmux(["set-option", "-t", session, "status-interval", "2"]);
   runTmux(["set-option", "-t", session, "status-format[1]", format]);
+  runTmux(["set-option", "-t", session, "mouse", "on"]);
   runTmux(popupBindCommand(switcherCmd));
+  runTmux(statusClickBindCommand(switcherCmd));
 }
 function unadoptSession(session) {
   runTmux(["set-option", "-u", "-t", session, "status"]);
   runTmux(["set-option", "-u", "-t", session, "status-interval"]);
   runTmux(["set-option", "-u", "-t", session, "status-format[1]"]);
+  runTmux(["set-option", "-u", "-t", session, "mouse"]);
   try {
     runTmux(popupUnbindCommand());
   } catch {
   }
+  try {
+    runTmux(statusClickUnbindCommand());
+  } catch {
+  }
 }
-var STATUS_STYLE, GLYPH, POPUP_KEY;
+var STATUS_STYLE, GLYPH, POPUP_KEY, STATUS_CLICK_KEY;
 var init_statusline = __esm({
   "packages/daemon/src/tui/chrome/statusline.ts"() {
     "use strict";
@@ -8358,6 +8401,7 @@ var init_statusline = __esm({
       unknown: "\xB7"
     };
     POPUP_KEY = "M-p";
+    STATUS_CLICK_KEY = "MouseDown1Status";
   }
 });
 

@@ -2,7 +2,16 @@
  * Unit tests for the pure status-bar builder.
  */
 import { describe, expect, it } from "vitest";
-import { buildStatusline, popupBindCommand, popupUnbindCommand, POPUP_KEY } from "./statusline.ts";
+import {
+  buildStatusline,
+  isInternalName,
+  popupBindCommand,
+  popupUnbindCommand,
+  POPUP_KEY,
+  statusClickBindCommand,
+  statusClickUnbindCommand,
+  STATUS_CLICK_KEY,
+} from "./statusline.ts";
 import type { TeamProject } from "../team/projects.ts";
 import type { TeamSession } from "../team/sessions.ts";
 
@@ -66,6 +75,94 @@ describe("buildStatusline", () => {
   it("renders the brand alone for an empty fleet", () => {
     const bar = buildStatusline([], null);
     expect(bar).toContain("tmux-ide");
+  });
+
+  it("hides internal `_`-prefixed projects and their sessions", () => {
+    const bar = buildStatusline(
+      [
+        project("_tmux-ide"),
+        project("_scratch", { sessions: [session("_scratch", "idle")] }),
+        project("web"),
+      ],
+      null,
+    );
+    expect(bar).toContain("web");
+    expect(bar).not.toContain("_tmux-ide");
+    expect(bar).not.toContain("_scratch");
+  });
+
+  it("wraps each running project in a session-keyed click range", () => {
+    const bar = buildStatusline(
+      [project("web", { sessions: [session("web-dev", "idle")] })],
+      null,
+    );
+    expect(bar).toContain("#[range=user|swweb-dev]");
+    expect(bar).toContain("#[norange]");
+  });
+
+  it("does NOT range a stopped project (no session to switch to)", () => {
+    const bar = buildStatusline([project("api", { running: false, sessions: [] })], null);
+    // no project range for `api`; the only sw-range in the bar is the trigger
+    expect(bar).not.toContain("range=user|swapi");
+    expect(bar.match(/range=user\|sw/g)).toHaveLength(1); // just the switcher trigger
+  });
+
+  it("ends with a right-aligned switcher trigger button carrying the ⌥p hint", () => {
+    const bar = buildStatusline([project("web")], null);
+    expect(bar).toContain("#[range=user|switcher]");
+    expect(bar).toContain("⧉ switch ⌥p");
+    expect(bar).toContain("#[align=right]");
+    // the trigger's range sits after the project ranges (right side of the row)
+    expect(bar.indexOf("range=user|switcher")).toBeGreaterThan(bar.indexOf("range=user|sw"));
+  });
+});
+
+describe("isInternalName", () => {
+  it("treats `_`-prefixed names as internal", () => {
+    expect(isInternalName("_tmux-ide")).toBe(true);
+    expect(isInternalName("_scratch")).toBe(true);
+    expect(isInternalName("web")).toBe(false);
+    expect(isInternalName("api-2")).toBe(false);
+  });
+});
+
+describe("statusClickBindCommand", () => {
+  it("binds MouseDown1Status in the root table via if-shell", () => {
+    const cmd = statusClickBindCommand();
+    expect(cmd.slice(0, 5)).toEqual(["bind-key", "-n", STATUS_CLICK_KEY, "if-shell", "-F"]);
+    expect(STATUS_CLICK_KEY).toBe("MouseDown1Status");
+  });
+
+  it("dispatches the `switcher` range to the same display-popup as M-p", () => {
+    const cmd = statusClickBindCommand();
+    // top-level condition matches the trigger range
+    expect(cmd).toContain("#{==:#{mouse_status_range},switcher}");
+    // the then-branch is the popup command
+    expect(cmd.some((a) => a.includes(`display-popup -E -w 80% -h 60% "tmux-ide switcher"`))).toBe(
+      true,
+    );
+  });
+
+  it("dispatches `sw*` ranges to a run-shell switch-client with the extracted name", () => {
+    const elseBranch = statusClickBindCommand().at(-1)!;
+    expect(elseBranch).toContain("#{m:sw*,#{mouse_status_range}}");
+    expect(elseBranch).toContain("run-shell");
+    expect(elseBranch).toContain("switch-client -c '#{client_name}'");
+    // session name extracted with the colon-free s/// (a `:` in the pattern breaks it)
+    expect(elseBranch).toContain("#{s/^sw//:mouse_status_range}");
+    // clicks that aren't ours fall back to tmux's default window select
+    expect(elseBranch).toContain("select-window -t =");
+  });
+
+  it("passes a custom switcher command into the popup branch", () => {
+    const cmd = statusClickBindCommand("bun run switcher");
+    expect(cmd.some((a) => a.includes(`"bun run switcher"`))).toBe(true);
+  });
+});
+
+describe("statusClickUnbindCommand", () => {
+  it("unbinds MouseDown1Status from the root table", () => {
+    expect(statusClickUnbindCommand()).toEqual(["unbind-key", "-n", STATUS_CLICK_KEY]);
   });
 });
 

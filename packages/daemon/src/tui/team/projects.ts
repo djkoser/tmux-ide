@@ -70,10 +70,17 @@ function isInside(cwd: string, dir: string): boolean {
  * PURE: takes a `sessionCwd` resolver so tests can supply a fake map.
  */
 export function groupSessions(
-  projects: ProjectInput[],
-  sessions: TeamSession[],
+  projectsIn: ProjectInput[],
+  sessionsIn: TeamSession[],
   sessionCwd: (name: string) => string | null,
 ): TeamProject[] {
+  // Hide INTERNAL plumbing from the whole team model (bar + switcher): the
+  // host shell (`_tmux-ide`) and any `_`-prefixed scratch session/project.
+  // Mirrors `isInternalName` in ../chrome/statusline.ts (kept inline to avoid a
+  // dependency cycle — statusline.ts imports TeamProject from here).
+  const projects = projectsIn.filter((p) => !p.name.startsWith("_"));
+  const sessions = sessionsIn.filter((s) => !s.name.startsWith("_"));
+
   const buckets = new Map<string, TeamSession[]>();
   for (const p of projects) buckets.set(p.name, []);
 

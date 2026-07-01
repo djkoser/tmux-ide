@@ -33,6 +33,15 @@ const GLYPH: Record<AgentStatus, string> = {
 };
 
 /**
+ * Whether a name is INTERNAL — the host shell (`_tmux-ide`) and any
+ * `_`-prefixed scratch/plumbing session. Internal names are hidden from both
+ * the status bar and the switcher: they're infrastructure, not projects.
+ */
+export function isInternalName(name: string): boolean {
+  return name.startsWith("_");
+}
+
+/**
  * Build the status-bar string with tmux `#[...]` markup.
  *
  * One segment per entry: running projects show their rolled-up status glyph;
@@ -40,14 +49,25 @@ const GLYPH: Record<AgentStatus, string> = {
  * segment is highlighted (bold + underscore) so you can see where you are.
  * `maxItems` caps the segment count (tmux clips overflow anyway; capping
  * keeps the useful part visible).
+ *
+ * Interactivity (tmux status-line mouse ranges — see {@link statusClickBindCommand}):
+ *   - Each RUNNING project is wrapped in a `#[range=user|sw<session>]…#[norange]`
+ *     range keyed by its first live session, so a click switches to it. The
+ *     prefix is a bare `sw` (NO colon): a `:` inside the `#{s/^sw//:…}` used to
+ *     extract the session name is swallowed by tmux's modifier parser (verified
+ *     live — the extraction yields ""). Stopped projects stay un-ranged (they'd
+ *     need a launch flow to click — out of scope).
+ *   - A right-aligned `switcher` TRIGGER button ends the row so the popup is
+ *     discoverable from the footer, not just via the M-p key.
  */
 export function buildStatusline(
   projects: TeamProject[],
   active: string | null,
   maxItems = 12,
 ): string {
+  const visible = projects.filter((p) => !isInternalName(p.name));
   const segments: string[] = [];
-  for (const project of projects.slice(0, maxItems)) {
+  for (const project of visible.slice(0, maxItems)) {
     const isActive =
       active !== null &&
       (project.name === active || project.sessions.some((s) => s.name === active));
@@ -59,13 +79,22 @@ export function buildStatusline(
       : project.running
         ? `#[fg=colour250]${project.name}#[default]`
         : `#[fg=colour240]${project.name}#[default]`;
-    segments.push(`${glyph} ${name}`);
+    const label = `${glyph} ${name}`;
+    // Only running projects are clickable — wrap them in a session-keyed range.
+    const session = project.sessions[0]?.name;
+    segments.push(
+      project.running && session
+        ? `#[range=user|sw${session}]${label}#[norange]`
+        : label,
+    );
   }
-  if (projects.length > maxItems) {
-    segments.push(`#[fg=colour240]+${projects.length - maxItems}#[default]`);
+  if (visible.length > maxItems) {
+    segments.push(`#[fg=colour240]+${visible.length - maxItems}#[default]`);
   }
   const body = segments.join("  ");
-  return `#[fg=colour75,bold] tmux-ide #[default] ${body}`;
+  // A button-like, right-aligned trigger that opens the switcher popup.
+  const trigger = `#[range=user|switcher]#[fg=colour75,bold][ ⧉ switch ⌥p ]#[default]#[norange]`;
+  return `#[fg=colour75,bold] tmux-ide #[default] ${body}#[align=right]${trigger} `;
 }
 
 /**
@@ -114,6 +143,66 @@ export function popupUnbindCommand(): string[] {
 }
 
 /**
+ * The root-table mouse key that routes clicks on the status bar. tmux fires
+ * this for a click landing on a NAMED range in any status line (our chrome
+ * row's `user|…` ranges), exposing the range name via `#{mouse_status_range}`.
+ */
+export const STATUS_CLICK_KEY = "MouseDown1Status";
+
+/**
+ * PURE — the tmux argv that binds status-bar clicks (server-wide, root table).
+ *
+ * Dispatch is on `#{mouse_status_range}` (the `#[range=user|<name>]` under the
+ * click, surfaced as `<name>`):
+ *   - `switcher`      → the SAME `display-popup` the M-p key runs.
+ *   - `sw<session>`   → switch the clicking client to `<session>`.
+ *   - anything else   → tmux's default `select-window -t =` (window-list clicks
+ *                       on the primary status line keep working).
+ *
+ * WHY run-shell for the switch (verified live on tmux 3.6):
+ *   - A `switch-client -t <target>` target is NOT format-expanded — passing
+ *     `-t "#{…}"` fails with `can't find session: #{…}`. So the session name
+ *     can't be handed to `switch-client` as a format directly.
+ *   - `run-shell` DOES expand `#{…}` in its command, so it re-invokes
+ *     `tmux switch-client` with the name already extracted via
+ *     `#{s/^sw//:mouse_status_range}` and the clicking client from
+ *     `#{client_name}`.
+ *
+ * The popup branch stays tmux-native (identical to {@link popupBindCommand}),
+ * so it behaves exactly like M-p.
+ *
+ * SERVER-wide bind — tmux has no per-session key table — so this replaces the
+ * global `MouseDown1Status` for every client (same caveat as the M-p popup key;
+ * see {@link unadoptSession}). Idempotent: re-binding overwrites.
+ */
+export function statusClickBindCommand(switcherCmd = "tmux-ide switcher"): string[] {
+  const popup = `display-popup -E -w 80% -h 60% "${switcherCmd}"`;
+  // run-shell re-enters tmux with the name/client already format-expanded.
+  const switchClient = `run-shell "tmux switch-client -c '#{client_name}' -t '#{s/^sw//:mouse_status_range}'"`;
+  // The switch command is nested as a double-quoted arg to the inner if-shell,
+  // so its own double quotes are backslash-escaped for tmux's parser.
+  const swBranch = `if-shell -F "#{m:sw*,#{mouse_status_range}}" "${switchClient.replace(
+    /"/g,
+    '\\"',
+  )}" "select-window -t ="`;
+  return [
+    "bind-key",
+    "-n",
+    STATUS_CLICK_KEY,
+    "if-shell",
+    "-F",
+    "#{==:#{mouse_status_range},switcher}",
+    popup,
+    swBranch,
+  ];
+}
+
+/** PURE — the tmux argv that removes the status-click binding. */
+export function statusClickUnbindCommand(): string[] {
+  return ["unbind-key", "-n", STATUS_CLICK_KEY];
+}
+
+/**
  * Adopt a session: add the chrome row (status line 2) that shells out to
  * `tmux-ide statusline` every 2s, and bind the popup key so `M-p` opens the
  * floating switcher from anywhere in the session. Status options are set
@@ -129,8 +218,15 @@ export function adoptSession(
   runTmux(["set-option", "-t", session, "status", "2"]);
   runTmux(["set-option", "-t", session, "status-interval", "2"]);
   runTmux(["set-option", "-t", session, "status-format[1]", format]);
-  // Server-wide, idempotent (re-binding the same key just overwrites it).
+  // Status-line clicks need mouse mode ON for this session. NOTE: this also
+  // changes scroll behavior for the session (the wheel enters copy-mode /
+  // scrolls the pane history instead of the terminal's native scrollback).
+  // Per-session (`-t`) so only adopted sessions are affected.
+  runTmux(["set-option", "-t", session, "mouse", "on"]);
+  // Server-wide binds, idempotent (re-binding the same key just overwrites it):
+  // the M-p popup and the status-bar click router.
   runTmux(popupBindCommand(switcherCmd));
+  runTmux(statusClickBindCommand(switcherCmd));
 }
 
 /** Remove the chrome row from a session (revert to inherited options). */
@@ -138,11 +234,18 @@ export function unadoptSession(session: string): void {
   runTmux(["set-option", "-u", "-t", session, "status"]);
   runTmux(["set-option", "-u", "-t", session, "status-interval"]);
   runTmux(["set-option", "-u", "-t", session, "status-format[1]"]);
-  // KNOWN SIMPLIFICATION: the popup key is a SERVER-wide bind, so unadopting
-  // one session removes `M-p` for ALL adopted sessions. Acceptable for now —
-  // best-effort so a missing bind (already unadopted) doesn't throw.
+  runTmux(["set-option", "-u", "-t", session, "mouse"]);
+  // KNOWN SIMPLIFICATION: the popup key AND the status-click router are
+  // SERVER-wide binds, so unadopting one session removes them for ALL adopted
+  // sessions. Acceptable for now — best-effort so a missing bind (already
+  // unadopted) doesn't throw.
   try {
     runTmux(popupUnbindCommand());
+  } catch {
+    // no such key bound — nothing to undo
+  }
+  try {
+    runTmux(statusClickUnbindCommand());
   } catch {
     // no such key bound — nothing to undo
   }

@@ -51,6 +51,23 @@ describe("groupSessions", () => {
     expect(web.sessions.map((s) => s.name)).toEqual(["scratch"]);
   });
 
+  it("hides `_`-prefixed internal projects and scratch sessions", () => {
+    const projects: ProjectInput[] = [
+      { name: "web", dir: "/repos/web" },
+      { name: "_tmux-ide", dir: "/repos/host" },
+    ];
+    const result = groupSessions(
+      projects,
+      [session("web"), session("_bar-x"), session("_tmux-ide")],
+      cwdMap({ "_bar-x": "/tmp/scratch" }),
+    );
+
+    const names = result.map((p) => p.name);
+    expect(names).toContain("web");
+    expect(names).not.toContain("_tmux-ide");
+    expect(names).not.toContain("_bar-x");
+  });
+
   it("turns an unmatched live session into an ad-hoc project", () => {
     const result = groupSessions([], [session("loose", "blocked")], cwdMap({ loose: "/tmp/x" }));
 
