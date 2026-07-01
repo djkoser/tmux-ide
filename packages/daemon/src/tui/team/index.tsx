@@ -191,6 +191,10 @@ render(() => {
 
   /** Capture the active session's active pane and shape it to the preview box. */
   function updatePreview() {
+    // Host mode has no preview box — the live MAIN pane already shows the
+    // session — so skip the capture-pane work entirely (it runs on every
+    // selection and every 2s refresh).
+    if (hostMode) return;
     const target = previewTarget();
     if (!target) {
       setPreview([]);
@@ -694,17 +698,46 @@ render(() => {
     }
   });
 
-  return (
-    <box flexDirection="column" flexGrow={1} backgroundColor={toRGBA(theme.bg)}>
-      {/* header */}
-      <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
-        <text fg={toRGBA(theme.accent)}>tmux-ide</text>
-        <text fg={toRGBA(theme.fgMuted)}>· team</text>
-        <box flexGrow={1} />
-        <text fg={toRGBA(theme.fgMuted)}>{`${projects().length} projects`}</text>
+  // The keybindings help overlay — shared by both layouts. Replaces the middle
+  // body while `?` is open.
+  function helpOverlay() {
+    return (
+      <box flexDirection="column" flexGrow={1} alignItems="center" paddingTop={2}>
+        <box
+          flexDirection="column"
+          border
+          borderColor={toRGBA(theme.accent)}
+          backgroundColor={toRGBA(theme.selected)}
+          paddingLeft={2}
+          paddingRight={2}
+          paddingTop={1}
+          paddingBottom={1}
+        >
+          <text fg={toRGBA(theme.accent)} attributes={TextAttributes.BOLD}>
+            keybindings
+          </text>
+          <box flexDirection="column" paddingTop={1}>
+            <For each={ACTION_ORDER}>
+              {(action) => (
+                <box flexDirection="row" gap={1}>
+                  <text fg={toRGBA(theme.accent)}>{keymap[action].keys.join("/").padEnd(10)}</text>
+                  <text fg={toRGBA(theme.fg)}>{keymap[action].description}</text>
+                </box>
+              )}
+            </For>
+          </box>
+          <box paddingTop={1}>
+            <text fg={toRGBA(theme.fgMuted)}>esc / ? / q to close</text>
+          </box>
+        </box>
       </box>
+    );
+  }
 
-      {/* inline text prompt (register dir / new session / rename) — full width */}
+  // The inline text prompt (register / new session / rename) and the fuzzy
+  // filter line — both shared by the two layouts, both a single line each.
+  function promptRow() {
+    return (
       <Show when={prompt()}>
         <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
           <text fg={toRGBA(theme.accent)}>{promptLabel(prompt()!.kind)}</text>
@@ -712,215 +745,23 @@ render(() => {
           <text fg={toRGBA(theme.fgMuted)}>_</text>
         </box>
       </Show>
-
-      {/* fuzzy-filter prompt (sidebar) — full width */}
+    );
+  }
+  function filterRow() {
+    return (
       <Show when={filterMode()}>
         <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
           <text fg={toRGBA(theme.accent)}>/</text>
           <text fg={toRGBA(theme.fg)}>{filterQuery()}</text>
           <text fg={toRGBA(theme.fgMuted)}>_</text>
           <box flexGrow={1} />
-          <text fg={toRGBA(theme.fgMuted)}>
-            {`${visibleProjects().length}/${projects().length}`}
-          </text>
+          <text fg={toRGBA(theme.fgMuted)}>{`${visibleProjects().length}/${projects().length}`}</text>
         </box>
       </Show>
-
-      {/* middle: keybindings overlay, or the sidebar (left) + main detail (right) */}
-      <Show
-        when={helpOpen()}
-        fallback={
-          <box flexDirection="row" flexGrow={1}>
-            {/* SIDEBAR — the project list */}
-            <box
-              flexDirection="column"
-              width={SIDEBAR_WIDTH}
-              paddingLeft={1}
-              paddingRight={1}
-              paddingTop={1}
-              onMouseScroll={scrollProjects}
-            >
-              <text fg={toRGBA(theme.fgMuted)} attributes={TextAttributes.BOLD}>
-                PROJECTS
-              </text>
-              <box flexDirection="column" paddingTop={1}>
-                <Show
-                  when={visibleProjects().length > 0}
-                  fallback={
-                    <text fg={toRGBA(theme.fgMuted)}>
-                      {filterMode() ? "no match" : "no projects — a to add"}
-                    </text>
-                  }
-                >
-                  <For each={visibleProjects()}>
-                    {(project, i) => {
-                      const isActive = () => i() === activeProject();
-                      const running = project.running;
-                      return (
-                        <box
-                          flexDirection="column"
-                          paddingLeft={1}
-                          paddingRight={1}
-                          backgroundColor={isActive() ? toRGBA(theme.border) : undefined}
-                          onMouseDown={() => clickProject(i())}
-                        >
-                          <box flexDirection="row" gap={1}>
-                            <text fg={isActive() ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}>
-                              {isActive() ? "▸" : " "}
-                            </text>
-                            <text
-                              fg={running ? statusColor[project.status] : toRGBA(theme.fgMuted)}
-                            >
-                              {running ? STATUS[project.status].glyph : "○"}
-                            </text>
-                            <text
-                              fg={
-                                isActive()
-                                  ? toRGBA(theme.accent)
-                                  : running
-                                    ? toRGBA(theme.fg)
-                                    : toRGBA(theme.fgMuted)
-                              }
-                              attributes={isActive() ? TextAttributes.BOLD : 0}
-                            >
-                              {project.name.padEnd(18).slice(0, 18)}
-                            </text>
-                            <box flexGrow={1} />
-                            <text fg={toRGBA(theme.fgMuted)}>
-                              {running ? `${project.sessions.length}` : "○ stopped"}
-                            </text>
-                          </box>
-                          <Show when={project.gitBranch}>
-                            <box flexDirection="row" paddingLeft={2}>
-                              <text fg={toRGBA(theme.fgMuted)}>{project.gitBranch ?? ""}</text>
-                            </box>
-                          </Show>
-                        </box>
-                      );
-                    }}
-                  </For>
-                </Show>
-              </box>
-            </box>
-
-            {/* vertical separator */}
-            <box width={1} backgroundColor={toRGBA(theme.border)} />
-
-            {/* MAIN — the active project's detail: sessions + live preview */}
-            <box flexDirection="column" flexGrow={1} paddingLeft={1} paddingTop={1}>
-              <Show
-                when={activeProj()}
-                fallback={<text fg={toRGBA(theme.fgMuted)}>no project selected</text>}
-              >
-                {/* header: name · dir · branch · ide.yml */}
-                <box flexDirection="row" gap={1} paddingRight={1}>
-                  <text fg={toRGBA(theme.accent)} attributes={TextAttributes.BOLD}>
-                    {activeProj()!.name}
-                  </text>
-                  <text fg={toRGBA(theme.fgMuted)}>{activeProj()!.dir ?? ""}</text>
-                  <text fg={toRGBA(theme.fgMuted)}>{activeProj()!.gitBranch ?? ""}</text>
-                  <Show when={activeProj()!.hasIdeYml}>
-                    <text fg={toRGBA(theme.fgMuted)}>ide.yml</text>
-                  </Show>
-                </box>
-
-                {/* sessions sub-list */}
-                <box flexDirection="column" paddingTop={1}>
-                  <Show
-                    when={(activeProj()?.sessions ?? []).length > 0}
-                    fallback={
-                      <text fg={toRGBA(theme.fgMuted)}>no sessions — l to launch</text>
-                    }
-                  >
-                    <For each={activeProj()?.sessions ?? []}>
-                      {(session, i) => {
-                        const isActive = () => i() === activeSession();
-                        return (
-                          <box
-                            flexDirection="row"
-                            gap={1}
-                            paddingLeft={1}
-                            paddingRight={1}
-                            backgroundColor={isActive() ? toRGBA(theme.border) : undefined}
-                            onMouseDown={() => clickSession(i())}
-                          >
-                            <text fg={isActive() ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}>
-                              {isActive() ? "▸" : " "}
-                            </text>
-                            <text fg={statusColor[session.status]}>
-                              {STATUS[session.status].glyph}
-                            </text>
-                            <text fg={toRGBA(theme.fg)}>
-                              {session.name.padEnd(22).slice(0, 22)}
-                            </text>
-                            <text fg={toRGBA(theme.fgMuted)}>
-                              {STATUS[session.status].label.padEnd(8)}
-                            </text>
-                            <text fg={toRGBA(theme.fgMuted)}>{`${session.panes}p`}</text>
-                            <text fg={toRGBA(theme.fgMuted)}>
-                              {session.attached ? "· attached" : ""}
-                            </text>
-                          </box>
-                        );
-                      }}
-                    </For>
-                  </Show>
-                </box>
-
-                {/* live preview of the active session's active pane */}
-                <box flexDirection="column" flexGrow={1} paddingTop={1}>
-                  <Show
-                    when={previewTitle().length > 0}
-                    fallback={<text fg={toRGBA(theme.fgMuted)}>no live session</text>}
-                  >
-                    <text fg={toRGBA(theme.accent)}>{previewTitle()}</text>
-                  </Show>
-                  <box flexDirection="column" flexGrow={1} paddingTop={1}>
-                    <For each={preview()}>
-                      {(line) => <text fg={toRGBA(theme.fgMuted)}>{line}</text>}
-                    </For>
-                  </box>
-                </box>
-              </Show>
-            </box>
-          </box>
-        }
-      >
-        {/* keybindings help overlay — replaces the body while `?` is open */}
-        <box flexDirection="column" flexGrow={1} alignItems="center" paddingTop={2}>
-          <box
-            flexDirection="column"
-            border
-            borderColor={toRGBA(theme.accent)}
-            backgroundColor={toRGBA(theme.selected)}
-            paddingLeft={2}
-            paddingRight={2}
-            paddingTop={1}
-            paddingBottom={1}
-          >
-            <text fg={toRGBA(theme.accent)} attributes={TextAttributes.BOLD}>
-              keybindings
-            </text>
-            <box flexDirection="column" paddingTop={1}>
-              <For each={ACTION_ORDER}>
-                {(action) => (
-                  <box flexDirection="row" gap={1}>
-                    <text fg={toRGBA(theme.accent)}>
-                      {keymap[action].keys.join("/").padEnd(10)}
-                    </text>
-                    <text fg={toRGBA(theme.fg)}>{keymap[action].description}</text>
-                  </box>
-                )}
-              </For>
-            </box>
-            <box paddingTop={1}>
-              <text fg={toRGBA(theme.fgMuted)}>esc / ? / q to close</text>
-            </box>
-          </box>
-        </box>
-      </Show>
-
-      {/* transient status line — a pending confirm takes precedence */}
+    );
+  }
+  function statusRow() {
+    return (
       <Show when={confirm() || message().length > 0}>
         <box paddingLeft={1} paddingRight={1}>
           <text fg={confirm() ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}>
@@ -928,22 +769,351 @@ render(() => {
           </text>
         </box>
       </Show>
+    );
+  }
 
-      {/* footer */}
-      <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={2}>
-        <text fg={toRGBA(theme.fgMuted)}>↑↓ project</text>
-        <text fg={toRGBA(theme.fgMuted)}>↵ attach/launch</text>
-        <text fg={toRGBA(theme.fgMuted)}>n new</text>
-        <text fg={toRGBA(theme.fgMuted)}>R rename</text>
-        <text fg={toRGBA(theme.fgMuted)}>s split</text>
-        <text fg={toRGBA(theme.fgMuted)}>l launch</text>
-        <text fg={toRGBA(theme.fgMuted)}>a add</text>
-        <text fg={toRGBA(theme.fgMuted)}>d unreg</text>
-        <text fg={toRGBA(theme.fgMuted)}>x kill</text>
-        <text fg={toRGBA(theme.fgMuted)}>/ filter</text>
-        <text fg={toRGBA(theme.fgMuted)}>? help</text>
-        <text fg={toRGBA(theme.fgMuted)}>q quit</text>
+  /**
+   * HOST MODE layout — a compact single-column switcher. The live session is a
+   * separate MAIN tmux pane, so this ~34-col pane is just the project/session
+   * list + live status; no sidebar/preview split (the preview would only
+   * duplicate the main pane). The active project's sessions expand inline so
+   * the user can pick one to drive the main pane; other projects collapse to
+   * their row to save vertical space.
+   */
+  function CompactSwitcher() {
+    return (
+      <box flexDirection="column" flexGrow={1} backgroundColor={toRGBA(theme.bg)}>
+        {/* header — one tight line */}
+        <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
+          <text fg={toRGBA(theme.accent)}>tmux-ide</text>
+          <box flexGrow={1} />
+          <text fg={toRGBA(theme.fgMuted)}>{`${projects().length} projects`}</text>
+        </box>
+
+        {promptRow()}
+        {filterRow()}
+
+        {/* body: help overlay, or the single-column project/session list */}
+        <Show
+          when={helpOpen()}
+          fallback={
+            <box
+              flexDirection="column"
+              flexGrow={1}
+              paddingLeft={1}
+              paddingRight={1}
+              paddingTop={1}
+              onMouseScroll={scrollProjects}
+            >
+              <Show
+                when={visibleProjects().length > 0}
+                fallback={
+                  <text fg={toRGBA(theme.fgMuted)}>
+                    {filterMode() ? "no match" : "no projects — a to add"}
+                  </text>
+                }
+              >
+                <For each={visibleProjects()}>
+                  {(project, i) => {
+                    const isActive = () => i() === activeProject();
+                    const running = project.running;
+                    return (
+                      <box flexDirection="column">
+                        {/* project row */}
+                        <box
+                          flexDirection="row"
+                          gap={1}
+                          backgroundColor={isActive() ? toRGBA(theme.border) : undefined}
+                          onMouseDown={() => clickProject(i())}
+                        >
+                          <text fg={isActive() ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}>
+                            {isActive() ? "▸" : " "}
+                          </text>
+                          <text fg={running ? statusColor[project.status] : toRGBA(theme.fgMuted)}>
+                            {running ? STATUS[project.status].glyph : "○"}
+                          </text>
+                          <text
+                            fg={
+                              isActive()
+                                ? toRGBA(theme.accent)
+                                : running
+                                  ? toRGBA(theme.fg)
+                                  : toRGBA(theme.fgMuted)
+                            }
+                            attributes={isActive() ? TextAttributes.BOLD : 0}
+                          >
+                            {project.name}
+                          </text>
+                          <box flexGrow={1} />
+                          <text fg={toRGBA(theme.fgMuted)}>
+                            {running ? `${project.sessions.length}` : "○ stopped"}
+                          </text>
+                        </box>
+                        {/* git branch — dim indented line, when present */}
+                        <Show when={project.gitBranch}>
+                          <box flexDirection="row" paddingLeft={2}>
+                            <text fg={toRGBA(theme.fgMuted)}>{project.gitBranch ?? ""}</text>
+                          </box>
+                        </Show>
+                        {/* sessions — expanded only under the active project */}
+                        <Show when={isActive() && project.sessions.length > 0}>
+                          <For each={project.sessions}>
+                            {(session, si) => {
+                              const sActive = () => si() === activeSession();
+                              return (
+                                <box
+                                  flexDirection="row"
+                                  gap={1}
+                                  paddingLeft={2}
+                                  backgroundColor={sActive() ? toRGBA(theme.border) : undefined}
+                                  onMouseDown={() => clickSession(si())}
+                                >
+                                  <text
+                                    fg={sActive() ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}
+                                  >
+                                    {sActive() ? "▸" : " "}
+                                  </text>
+                                  <text fg={statusColor[session.status]}>
+                                    {STATUS[session.status].glyph}
+                                  </text>
+                                  <text fg={toRGBA(theme.fg)}>{session.name}</text>
+                                  <box flexGrow={1} />
+                                  <text fg={toRGBA(theme.fgMuted)}>{`${session.panes}p`}</text>
+                                  <text fg={toRGBA(theme.fgMuted)}>
+                                    {session.attached ? "·a" : ""}
+                                  </text>
+                                </box>
+                              );
+                            }}
+                          </For>
+                        </Show>
+                      </box>
+                    );
+                  }}
+                </For>
+              </Show>
+            </box>
+          }
+        >
+          {helpOverlay()}
+        </Show>
+
+        {statusRow()}
+
+        {/* compact footer — shortened labels to fit ~34 cols */}
+        <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
+          <text fg={toRGBA(theme.fgMuted)}>↵ open</text>
+          <text fg={toRGBA(theme.fgMuted)}>n new</text>
+          <text fg={toRGBA(theme.fgMuted)}>/ find</text>
+          <text fg={toRGBA(theme.fgMuted)}>? help</text>
+        </box>
       </box>
-    </box>
-  );
+    );
+  }
+
+  /**
+   * STANDALONE layout — the full two-column app: a persistent SIDEBAR project
+   * list plus a MAIN detail pane (active project's sessions + a live capture
+   * preview). Used when the switcher runs on its own (`bun index.tsx`), where
+   * it owns the whole terminal.
+   */
+  function FullApp() {
+    return (
+      <box flexDirection="column" flexGrow={1} backgroundColor={toRGBA(theme.bg)}>
+        {/* header */}
+        <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
+          <text fg={toRGBA(theme.accent)}>tmux-ide</text>
+          <text fg={toRGBA(theme.fgMuted)}>· team</text>
+          <box flexGrow={1} />
+          <text fg={toRGBA(theme.fgMuted)}>{`${projects().length} projects`}</text>
+        </box>
+
+        {promptRow()}
+        {filterRow()}
+
+        {/* middle: keybindings overlay, or the sidebar (left) + main detail (right) */}
+        <Show
+          when={helpOpen()}
+          fallback={
+            <box flexDirection="row" flexGrow={1}>
+              {/* SIDEBAR — the project list */}
+              <box
+                flexDirection="column"
+                width={SIDEBAR_WIDTH}
+                paddingLeft={1}
+                paddingRight={1}
+                paddingTop={1}
+                onMouseScroll={scrollProjects}
+              >
+                <text fg={toRGBA(theme.fgMuted)} attributes={TextAttributes.BOLD}>
+                  PROJECTS
+                </text>
+                <box flexDirection="column" paddingTop={1}>
+                  <Show
+                    when={visibleProjects().length > 0}
+                    fallback={
+                      <text fg={toRGBA(theme.fgMuted)}>
+                        {filterMode() ? "no match" : "no projects — a to add"}
+                      </text>
+                    }
+                  >
+                    <For each={visibleProjects()}>
+                      {(project, i) => {
+                        const isActive = () => i() === activeProject();
+                        const running = project.running;
+                        return (
+                          <box
+                            flexDirection="column"
+                            paddingLeft={1}
+                            paddingRight={1}
+                            backgroundColor={isActive() ? toRGBA(theme.border) : undefined}
+                            onMouseDown={() => clickProject(i())}
+                          >
+                            <box flexDirection="row" gap={1}>
+                              <text fg={isActive() ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}>
+                                {isActive() ? "▸" : " "}
+                              </text>
+                              <text
+                                fg={running ? statusColor[project.status] : toRGBA(theme.fgMuted)}
+                              >
+                                {running ? STATUS[project.status].glyph : "○"}
+                              </text>
+                              <text
+                                fg={
+                                  isActive()
+                                    ? toRGBA(theme.accent)
+                                    : running
+                                      ? toRGBA(theme.fg)
+                                      : toRGBA(theme.fgMuted)
+                                }
+                                attributes={isActive() ? TextAttributes.BOLD : 0}
+                              >
+                                {project.name.padEnd(18).slice(0, 18)}
+                              </text>
+                              <box flexGrow={1} />
+                              <text fg={toRGBA(theme.fgMuted)}>
+                                {running ? `${project.sessions.length}` : "○ stopped"}
+                              </text>
+                            </box>
+                            <Show when={project.gitBranch}>
+                              <box flexDirection="row" paddingLeft={2}>
+                                <text fg={toRGBA(theme.fgMuted)}>{project.gitBranch ?? ""}</text>
+                              </box>
+                            </Show>
+                          </box>
+                        );
+                      }}
+                    </For>
+                  </Show>
+                </box>
+              </box>
+
+              {/* vertical separator */}
+              <box width={1} backgroundColor={toRGBA(theme.border)} />
+
+              {/* MAIN — the active project's detail: sessions + live preview */}
+              <box flexDirection="column" flexGrow={1} paddingLeft={1} paddingTop={1}>
+                <Show
+                  when={activeProj()}
+                  fallback={<text fg={toRGBA(theme.fgMuted)}>no project selected</text>}
+                >
+                  {/* header: name · dir · branch · ide.yml */}
+                  <box flexDirection="row" gap={1} paddingRight={1}>
+                    <text fg={toRGBA(theme.accent)} attributes={TextAttributes.BOLD}>
+                      {activeProj()!.name}
+                    </text>
+                    <text fg={toRGBA(theme.fgMuted)}>{activeProj()!.dir ?? ""}</text>
+                    <text fg={toRGBA(theme.fgMuted)}>{activeProj()!.gitBranch ?? ""}</text>
+                    <Show when={activeProj()!.hasIdeYml}>
+                      <text fg={toRGBA(theme.fgMuted)}>ide.yml</text>
+                    </Show>
+                  </box>
+
+                  {/* sessions sub-list */}
+                  <box flexDirection="column" paddingTop={1}>
+                    <Show
+                      when={(activeProj()?.sessions ?? []).length > 0}
+                      fallback={<text fg={toRGBA(theme.fgMuted)}>no sessions — l to launch</text>}
+                    >
+                      <For each={activeProj()?.sessions ?? []}>
+                        {(session, i) => {
+                          const isActive = () => i() === activeSession();
+                          return (
+                            <box
+                              flexDirection="row"
+                              gap={1}
+                              paddingLeft={1}
+                              paddingRight={1}
+                              backgroundColor={isActive() ? toRGBA(theme.border) : undefined}
+                              onMouseDown={() => clickSession(i())}
+                            >
+                              <text
+                                fg={isActive() ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}
+                              >
+                                {isActive() ? "▸" : " "}
+                              </text>
+                              <text fg={statusColor[session.status]}>
+                                {STATUS[session.status].glyph}
+                              </text>
+                              <text fg={toRGBA(theme.fg)}>
+                                {session.name.padEnd(22).slice(0, 22)}
+                              </text>
+                              <text fg={toRGBA(theme.fgMuted)}>
+                                {STATUS[session.status].label.padEnd(8)}
+                              </text>
+                              <text fg={toRGBA(theme.fgMuted)}>{`${session.panes}p`}</text>
+                              <text fg={toRGBA(theme.fgMuted)}>
+                                {session.attached ? "· attached" : ""}
+                              </text>
+                            </box>
+                          );
+                        }}
+                      </For>
+                    </Show>
+                  </box>
+
+                  {/* live preview of the active session's active pane */}
+                  <box flexDirection="column" flexGrow={1} paddingTop={1}>
+                    <Show
+                      when={previewTitle().length > 0}
+                      fallback={<text fg={toRGBA(theme.fgMuted)}>no live session</text>}
+                    >
+                      <text fg={toRGBA(theme.accent)}>{previewTitle()}</text>
+                    </Show>
+                    <box flexDirection="column" flexGrow={1} paddingTop={1}>
+                      <For each={preview()}>
+                        {(line) => <text fg={toRGBA(theme.fgMuted)}>{line}</text>}
+                      </For>
+                    </box>
+                  </box>
+                </Show>
+              </box>
+            </box>
+          }
+        >
+          {helpOverlay()}
+        </Show>
+
+        {statusRow()}
+
+        {/* footer */}
+        <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={2}>
+          <text fg={toRGBA(theme.fgMuted)}>↑↓ project</text>
+          <text fg={toRGBA(theme.fgMuted)}>↵ attach/launch</text>
+          <text fg={toRGBA(theme.fgMuted)}>n new</text>
+          <text fg={toRGBA(theme.fgMuted)}>R rename</text>
+          <text fg={toRGBA(theme.fgMuted)}>s split</text>
+          <text fg={toRGBA(theme.fgMuted)}>l launch</text>
+          <text fg={toRGBA(theme.fgMuted)}>a add</text>
+          <text fg={toRGBA(theme.fgMuted)}>d unreg</text>
+          <text fg={toRGBA(theme.fgMuted)}>x kill</text>
+          <text fg={toRGBA(theme.fgMuted)}>/ filter</text>
+          <text fg={toRGBA(theme.fgMuted)}>? help</text>
+          <text fg={toRGBA(theme.fgMuted)}>q quit</text>
+        </box>
+      </box>
+    );
+  }
+
+  return hostMode ? <CompactSwitcher /> : <FullApp />;
 });
