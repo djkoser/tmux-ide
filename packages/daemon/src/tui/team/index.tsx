@@ -18,6 +18,7 @@ import { listTeamProjects, type TeamProject } from "./projects.ts";
 import { registerProject, unregisterProject } from "../../lib/project-registry.ts";
 import { createStatusTracker, type AgentStatus } from "../detect/classify.ts";
 import { nextInput } from "./input.ts";
+import { fuzzyFilter } from "./fuzzy.ts";
 
 function toRGBA(c: { r: number; g: number; b: number; a: number }): RGBA {
   return RGBA.fromInts(c.r, c.g, c.b, c.a);
@@ -48,6 +49,13 @@ function toRows(projects: TeamProject[]): Row[] {
   return rows;
 }
 
+/** Searchable label for a row: project name, or "<project> / <session>". */
+function rowLabel(row: Row): string {
+  return row.kind === "project"
+    ? row.project.name
+    : `${row.project.name} / ${row.session.name}`;
+}
+
 render(() => {
   const theme = createTheme();
   // One tracker persists across refreshes so the cross-tick `done` state
@@ -68,13 +76,23 @@ render(() => {
   const [registerInput, setRegisterInput] = createSignal(process.cwd());
   // Transient status line (errors / confirmations); lingers until next action.
   const [message, setMessage] = createSignal("");
+  // Quick-jump fuzzy filter (`/`): narrows the visible rows as you type.
+  const [filterMode, setFilterMode] = createSignal(false);
+  const [filterQuery, setFilterQuery] = createSignal("");
 
   const rows = () => toRows(projects());
+  // Rows narrowed by the fuzzy filter — derived so it recomputes on every
+  // refresh from the latest `rows()` rather than snapshotting.
+  const filteredRows = () => fuzzyFilter(filterQuery(), rows(), rowLabel).map((m) => m.item);
+  // What the list actually renders / navigates: filtered while filtering, else all.
+  const visibleRows = () => (filterMode() ? filteredRows() : rows());
 
   function refresh() {
     const next = listTeamProjects(tracker);
     setProjects(next);
-    const count = toRows(next).length;
+    const count = filterMode()
+      ? fuzzyFilter(filterQuery(), toRows(next), rowLabel).length
+      : toRows(next).length;
     setSelected((s) => Math.max(0, Math.min(s, count - 1)));
   }
 
@@ -84,7 +102,7 @@ render(() => {
   });
 
   function current(): Row | undefined {
-    return rows()[selected()];
+    return visibleRows()[selected()];
   }
 
   /** Attach the terminal to a session by name; returns after the user detaches. */
@@ -198,7 +216,38 @@ render(() => {
       return;
     }
 
-    const n = rows().length;
+    // Filter prompt intercepts navigation while open.
+    if (filterMode()) {
+      if (evt.name === "escape") {
+        setFilterMode(false);
+        setFilterQuery("");
+        setSelected(0);
+        return;
+      }
+      if (evt.name === "return") {
+        enter();
+        setFilterMode(false);
+        setFilterQuery("");
+        return;
+      }
+      const fn = filteredRows().length;
+      if (evt.name === "up" || evt.name === "k") {
+        if (fn > 0) setSelected((s) => (s - 1 + fn) % fn);
+        return;
+      }
+      if (evt.name === "down" || evt.name === "j") {
+        if (fn > 0) setSelected((s) => (s + 1) % fn);
+        return;
+      }
+      const next = nextInput(filterQuery(), evt);
+      if (next !== null) {
+        setFilterQuery(next);
+        setSelected(0);
+      }
+      return;
+    }
+
+    const n = visibleRows().length;
     if (evt.name === "q" || (evt.ctrl && evt.name === "c")) {
       process.exit(0);
     } else if (evt.name === "up" || evt.name === "k") {
@@ -214,6 +263,11 @@ render(() => {
       setMessage("");
       setRegisterInput(process.cwd());
       setRegisterMode(true);
+    } else if (evt.name === "/") {
+      setMessage("");
+      setFilterQuery("");
+      setFilterMode(true);
+      setSelected(0);
     } else if (evt.name === "d") {
       unregister();
     } else if (evt.name === "r") {
@@ -242,17 +296,28 @@ render(() => {
         </box>
       </Show>
 
+      {/* fuzzy-filter prompt */}
+      <Show when={filterMode()}>
+        <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
+          <text fg={toRGBA(theme.accent)}>/</text>
+          <text fg={toRGBA(theme.fg)}>{filterQuery()}</text>
+          <text fg={toRGBA(theme.fgMuted)}>_</text>
+          <box flexGrow={1} />
+          <text fg={toRGBA(theme.fgMuted)}>{`${filteredRows().length}/${rows().length}`}</text>
+        </box>
+      </Show>
+
       {/* list */}
       <box flexDirection="column" flexGrow={1} paddingLeft={1} paddingRight={1} paddingTop={1}>
         <Show
-          when={rows().length > 0}
+          when={visibleRows().length > 0}
           fallback={
             <text fg={toRGBA(theme.fgMuted)}>
               No projects or sessions. Register a project or start a tmux session to see it here.
             </text>
           }
         >
-          <For each={rows()}>
+          <For each={visibleRows()}>
             {(row, i) => {
               const isSel = () => i() === selected();
               return (
@@ -333,6 +398,7 @@ render(() => {
         <text fg={toRGBA(theme.fgMuted)}>↑↓ move</text>
         <text fg={toRGBA(theme.fgMuted)}>↵ launch/attach</text>
         <text fg={toRGBA(theme.fgMuted)}>l launch</text>
+        <text fg={toRGBA(theme.fgMuted)}>/ filter</text>
         <text fg={toRGBA(theme.fgMuted)}>a add</text>
         <text fg={toRGBA(theme.fgMuted)}>d unreg</text>
         <text fg={toRGBA(theme.fgMuted)}>x kill</text>
