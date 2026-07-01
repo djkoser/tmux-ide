@@ -8,11 +8,12 @@
  * preload) and is spawned by `tmux-ide team`.
  */
 import { execFileSync } from "node:child_process";
-import { render, useKeyboard } from "@opentui/solid";
+import { render, useKeyboard, useTerminalDimensions } from "@opentui/solid";
 import { RGBA, TextAttributes } from "@opentui/core";
-import { createSignal, onMount, onCleanup, For, Show } from "solid-js";
-import { createDetachedSession, killSession } from "@tmux-ide/tmux-bridge";
+import { createSignal, createEffect, onMount, onCleanup, For, Show } from "solid-js";
+import { capturePane, createDetachedSession, killSession } from "@tmux-ide/tmux-bridge";
 import { createTheme } from "../../widgets/lib/theme.ts";
+import { previewLines } from "./preview.ts";
 import { type TeamSession } from "./sessions.ts";
 import { listTeamProjects, type TeamProject } from "./projects.ts";
 import { registerProject, unregisterProject } from "../../lib/project-registry.ts";
@@ -51,9 +52,7 @@ function toRows(projects: TeamProject[]): Row[] {
 
 /** Searchable label for a row: project name, or "<project> / <session>". */
 function rowLabel(row: Row): string {
-  return row.kind === "project"
-    ? row.project.name
-    : `${row.project.name} / ${row.session.name}`;
+  return row.kind === "project" ? row.project.name : `${row.project.name} / ${row.session.name}`;
 }
 
 render(() => {
@@ -79,6 +78,10 @@ render(() => {
   // Quick-jump fuzzy filter (`/`): narrows the visible rows as you type.
   const [filterMode, setFilterMode] = createSignal(false);
   const [filterQuery, setFilterQuery] = createSignal("");
+  // Live preview of the selected session's active pane (read-only mirror).
+  const dimensions = useTerminalDimensions();
+  const [preview, setPreview] = createSignal<string[]>([]);
+  const [previewTitle, setPreviewTitle] = createSignal("");
 
   const rows = () => toRows(projects());
   // Rows narrowed by the fuzzy filter — derived so it recomputes on every
@@ -104,6 +107,41 @@ render(() => {
   function current(): Row | undefined {
     return visibleRows()[selected()];
   }
+
+  /** Which tmux session (if any) the preview should mirror for the selection. */
+  function previewTarget(): string | null {
+    const row = current();
+    if (!row) return null;
+    if (row.kind === "session") return row.session.name;
+    if (row.project.running && row.project.sessions.length > 0) {
+      return row.project.sessions[0]!.name;
+    }
+    return null;
+  }
+
+  /** Capture the selected session's active pane and shape it to the preview box. */
+  function updatePreview() {
+    const target = previewTarget();
+    if (!target) {
+      setPreview([]);
+      setPreviewTitle("");
+      return;
+    }
+    const dims = dimensions();
+    const budget = Math.max(5, dims.height - 6);
+    const width = Math.max(20, Math.floor(dims.width * 0.55) - 4);
+    try {
+      const raw = capturePane(target, { lines: budget });
+      setPreview(previewLines(raw, budget, width));
+      setPreviewTitle(target);
+    } catch {
+      setPreview([]);
+    }
+  }
+
+  // Keep the preview live: reruns on selection, filter state, terminal resize,
+  // and the 2s refresh (which replaces the projects() array each tick).
+  createEffect(updatePreview);
 
   /** Attach the terminal to a session by name; returns after the user detaches. */
   function attachSessionName(name: string) {
@@ -287,111 +325,149 @@ render(() => {
         <text fg={toRGBA(theme.fgMuted)}>{`${projects().length} projects`}</text>
       </box>
 
-      {/* register-dir prompt */}
-      <Show when={registerMode()}>
-        <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
-          <text fg={toRGBA(theme.accent)}>register dir:</text>
-          <text fg={toRGBA(theme.fg)}>{registerInput()}</text>
-          <text fg={toRGBA(theme.fgMuted)}>_</text>
-        </box>
-      </Show>
+      {/* middle: list (left) + live preview (right) */}
+      <box flexDirection="row" flexGrow={1}>
+        <box flexDirection="column" width="45%">
+          {/* register-dir prompt */}
+          <Show when={registerMode()}>
+            <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
+              <text fg={toRGBA(theme.accent)}>register dir:</text>
+              <text fg={toRGBA(theme.fg)}>{registerInput()}</text>
+              <text fg={toRGBA(theme.fgMuted)}>_</text>
+            </box>
+          </Show>
 
-      {/* fuzzy-filter prompt */}
-      <Show when={filterMode()}>
-        <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
-          <text fg={toRGBA(theme.accent)}>/</text>
-          <text fg={toRGBA(theme.fg)}>{filterQuery()}</text>
-          <text fg={toRGBA(theme.fgMuted)}>_</text>
-          <box flexGrow={1} />
-          <text fg={toRGBA(theme.fgMuted)}>{`${filteredRows().length}/${rows().length}`}</text>
-        </box>
-      </Show>
+          {/* fuzzy-filter prompt */}
+          <Show when={filterMode()}>
+            <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
+              <text fg={toRGBA(theme.accent)}>/</text>
+              <text fg={toRGBA(theme.fg)}>{filterQuery()}</text>
+              <text fg={toRGBA(theme.fgMuted)}>_</text>
+              <box flexGrow={1} />
+              <text fg={toRGBA(theme.fgMuted)}>{`${filteredRows().length}/${rows().length}`}</text>
+            </box>
+          </Show>
 
-      {/* list */}
-      <box flexDirection="column" flexGrow={1} paddingLeft={1} paddingRight={1} paddingTop={1}>
-        <Show
-          when={visibleRows().length > 0}
-          fallback={
-            <text fg={toRGBA(theme.fgMuted)}>
-              No projects or sessions. Register a project or start a tmux session to see it here.
-            </text>
-          }
-        >
-          <For each={visibleRows()}>
-            {(row, i) => {
-              const isSel = () => i() === selected();
-              return (
-                <Show
-                  when={row.kind === "project"}
-                  fallback={
-                    /* session row — indented under its project */
-                    <box flexDirection="row" gap={1} paddingLeft={3} paddingRight={1}
-                      backgroundColor={isSel() ? toRGBA(theme.border) : undefined}>
-                      <text fg={isSel() ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}>
-                        {isSel() ? "▸" : " "}
-                      </text>
-                      <text fg={statusColor[(row as { session: TeamSession }).session.status]}>
-                        {STATUS[(row as { session: TeamSession }).session.status].glyph}
-                      </text>
-                      <text fg={toRGBA(theme.fg)}>
-                        {(row as { session: TeamSession }).session.name.padEnd(22).slice(0, 22)}
-                      </text>
-                      <text fg={toRGBA(theme.fgMuted)}>
-                        {STATUS[(row as { session: TeamSession }).session.status].label.padEnd(8)}
-                      </text>
-                      <text fg={toRGBA(theme.fgMuted)}>
-                        {`${(row as { session: TeamSession }).session.panes}p`}
-                      </text>
-                      <text fg={toRGBA(theme.fgMuted)}>
-                        {(row as { session: TeamSession }).session.attached ? "· attached" : ""}
-                      </text>
-                    </box>
-                  }
-                >
-                  {/* project header row */}
-                  {(() => {
-                    const project = (row as { project: TeamProject }).project;
-                    const running = project.running;
-                    return (
-                      <box flexDirection="row" gap={1} paddingLeft={1} paddingRight={1}
-                        backgroundColor={isSel() ? toRGBA(theme.border) : undefined}>
-                        <text fg={isSel() ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}>
-                          {isSel() ? "▸" : " "}
-                        </text>
-                        <text fg={running ? statusColor[project.status] : toRGBA(theme.fgMuted)}>
-                          {running ? STATUS[project.status].glyph : "○"}
-                        </text>
-                        <text
-                          fg={running ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}
-                          attributes={running ? TextAttributes.BOLD : 0}
+          {/* list */}
+          <box flexDirection="column" flexGrow={1} paddingLeft={1} paddingRight={1} paddingTop={1}>
+            <Show
+              when={visibleRows().length > 0}
+              fallback={
+                <text fg={toRGBA(theme.fgMuted)}>
+                  No projects or sessions. Register a project or start a tmux session to see it
+                  here.
+                </text>
+              }
+            >
+              <For each={visibleRows()}>
+                {(row, i) => {
+                  const isSel = () => i() === selected();
+                  return (
+                    <Show
+                      when={row.kind === "project"}
+                      fallback={
+                        /* session row — indented under its project */
+                        <box
+                          flexDirection="row"
+                          gap={1}
+                          paddingLeft={3}
+                          paddingRight={1}
+                          backgroundColor={isSel() ? toRGBA(theme.border) : undefined}
                         >
-                          {project.name.padEnd(22).slice(0, 22)}
-                        </text>
-                        <text fg={toRGBA(theme.fgMuted)}>{running ? "" : "○ stopped"}</text>
-                        <text fg={toRGBA(theme.fgMuted)}>{project.gitBranch ?? ""}</text>
-                        <text fg={toRGBA(theme.fgMuted)}>{project.hasIdeYml ? "ide.yml" : ""}</text>
-                        <box flexGrow={1} />
-                        <text fg={toRGBA(theme.fgMuted)}>
-                          {`${project.sessions.length} ${
-                            project.sessions.length === 1 ? "session" : "sessions"
-                          }`}
-                        </text>
-                      </box>
-                    );
-                  })()}
-                </Show>
-              );
-            }}
-          </For>
-        </Show>
-      </box>
+                          <text fg={isSel() ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}>
+                            {isSel() ? "▸" : " "}
+                          </text>
+                          <text fg={statusColor[(row as { session: TeamSession }).session.status]}>
+                            {STATUS[(row as { session: TeamSession }).session.status].glyph}
+                          </text>
+                          <text fg={toRGBA(theme.fg)}>
+                            {(row as { session: TeamSession }).session.name.padEnd(22).slice(0, 22)}
+                          </text>
+                          <text fg={toRGBA(theme.fgMuted)}>
+                            {STATUS[(row as { session: TeamSession }).session.status].label.padEnd(
+                              8,
+                            )}
+                          </text>
+                          <text fg={toRGBA(theme.fgMuted)}>
+                            {`${(row as { session: TeamSession }).session.panes}p`}
+                          </text>
+                          <text fg={toRGBA(theme.fgMuted)}>
+                            {(row as { session: TeamSession }).session.attached ? "· attached" : ""}
+                          </text>
+                        </box>
+                      }
+                    >
+                      {/* project header row */}
+                      {(() => {
+                        const project = (row as { project: TeamProject }).project;
+                        const running = project.running;
+                        return (
+                          <box
+                            flexDirection="row"
+                            gap={1}
+                            paddingLeft={1}
+                            paddingRight={1}
+                            backgroundColor={isSel() ? toRGBA(theme.border) : undefined}
+                          >
+                            <text fg={isSel() ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}>
+                              {isSel() ? "▸" : " "}
+                            </text>
+                            <text
+                              fg={running ? statusColor[project.status] : toRGBA(theme.fgMuted)}
+                            >
+                              {running ? STATUS[project.status].glyph : "○"}
+                            </text>
+                            <text
+                              fg={running ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}
+                              attributes={running ? TextAttributes.BOLD : 0}
+                            >
+                              {project.name.padEnd(22).slice(0, 22)}
+                            </text>
+                            <text fg={toRGBA(theme.fgMuted)}>{running ? "" : "○ stopped"}</text>
+                            <text fg={toRGBA(theme.fgMuted)}>{project.gitBranch ?? ""}</text>
+                            <text fg={toRGBA(theme.fgMuted)}>
+                              {project.hasIdeYml ? "ide.yml" : ""}
+                            </text>
+                            <box flexGrow={1} />
+                            <text fg={toRGBA(theme.fgMuted)}>
+                              {`${project.sessions.length} ${
+                                project.sessions.length === 1 ? "session" : "sessions"
+                              }`}
+                            </text>
+                          </box>
+                        );
+                      })()}
+                    </Show>
+                  );
+                }}
+              </For>
+            </Show>
+          </box>
 
-      {/* transient status line */}
-      <Show when={message().length > 0}>
-        <box paddingLeft={1} paddingRight={1}>
-          <text fg={toRGBA(theme.fgMuted)}>{message()}</text>
+          {/* transient status line */}
+          <Show when={message().length > 0}>
+            <box paddingLeft={1} paddingRight={1}>
+              <text fg={toRGBA(theme.fgMuted)}>{message()}</text>
+            </box>
+          </Show>
         </box>
-      </Show>
+
+        {/* vertical separator */}
+        <box width={1} backgroundColor={toRGBA(theme.border)} />
+
+        {/* live preview of the selected session's active pane */}
+        <box flexDirection="column" flexGrow={1} paddingLeft={1} paddingTop={1}>
+          <Show
+            when={previewTitle().length > 0}
+            fallback={<text fg={toRGBA(theme.fgMuted)}>no live session</text>}
+          >
+            <text fg={toRGBA(theme.accent)}>{previewTitle()}</text>
+          </Show>
+          <box flexDirection="column" flexGrow={1} paddingTop={1}>
+            <For each={preview()}>{(line) => <text fg={toRGBA(theme.fgMuted)}>{line}</text>}</For>
+          </box>
+        </box>
+      </box>
 
       {/* footer */}
       <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={2}>
