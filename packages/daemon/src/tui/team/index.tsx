@@ -11,33 +11,39 @@ import { render, useKeyboard } from "@opentui/solid";
 import { RGBA } from "@opentui/core";
 import { createSignal, onMount, onCleanup, For, Show } from "solid-js";
 import { createTheme } from "../../widgets/lib/theme.ts";
-import { listTeamSessions, type TeamSession, type SessionStatus } from "./sessions.ts";
+import { listTeamSessions, type TeamSession } from "./sessions.ts";
+import { createStatusTracker, type AgentStatus } from "../detect/classify.ts";
 
 function toRGBA(c: { r: number; g: number; b: number; a: number }): RGBA {
   return RGBA.fromInts(c.r, c.g, c.b, c.a);
 }
 
-const STATUS: Record<SessionStatus, { glyph: string; label: string }> = {
+const STATUS: Record<AgentStatus, { glyph: string; label: string }> = {
+  blocked: { glyph: "●", label: "blocked" },
   working: { glyph: "●", label: "working" },
+  done: { glyph: "●", label: "done" },
   idle: { glyph: "●", label: "idle" },
-  empty: { glyph: "○", label: "empty" },
-  unknown: { glyph: "·", label: "—" },
+  unknown: { glyph: "·", label: "unknown" },
 };
 
 render(() => {
   const theme = createTheme();
-  const statusColor: Record<SessionStatus, RGBA> = {
+  // One tracker persists across refreshes so the cross-tick `done` state
+  // (working→idle without being viewed) can be inferred.
+  const tracker = createStatusTracker();
+  const statusColor: Record<AgentStatus, RGBA> = {
+    blocked: RGBA.fromInts(240, 90, 90, 255), // red
     working: RGBA.fromInts(240, 200, 90, 255), // amber
+    done: RGBA.fromInts(110, 170, 240, 255), // blue
     idle: RGBA.fromInts(120, 200, 130, 255), // green
-    empty: toRGBA(theme.fgMuted),
     unknown: toRGBA(theme.fgMuted),
   };
 
-  const [sessions, setSessions] = createSignal<TeamSession[]>(listTeamSessions());
+  const [sessions, setSessions] = createSignal<TeamSession[]>(listTeamSessions(tracker));
   const [selected, setSelected] = createSignal(0);
 
   function refresh() {
-    const next = listTeamSessions();
+    const next = listTeamSessions(tracker);
     setSessions(next);
     setSelected((s) => Math.max(0, Math.min(s, next.length - 1)));
   }
