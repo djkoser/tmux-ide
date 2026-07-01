@@ -55,6 +55,8 @@ const { positionals, values } = parseArgs({
     timeout: { type: "string" },
     // force the team cockpit instead of launching a project
     team: { type: "boolean" },
+    // statusline: the session whose bar is being rendered
+    active: { type: "string" },
   },
 });
 
@@ -76,6 +78,9 @@ const knownCommands = new Set([
   "settings",
   "team",
   "wait",
+  "statusline",
+  "adopt",
+  "unadopt",
   "command-center",
   "server",
   "help",
@@ -125,6 +130,8 @@ ${bold("Usage:")}
   ${cyan("tmux-ide team")} [--json]      ${dim("TUI over all tmux sessions (--json prints fleet state)")}
   ${cyan("tmux-ide wait agent-status")} <session> --status <s> [--timeout <ms>]
                               ${dim("Block until a session reaches a status (exit 0 match / 1 timeout)")}
+  ${cyan("tmux-ide adopt")} <session>    ${dim("Add the live tmux-ide status bar to a session")}
+  ${cyan("tmux-ide unadopt")} <session>  ${dim("Remove the status bar")}
   ${cyan("tmux-ide ls")}                 ${dim("List all tmux sessions")}
   ${cyan("tmux-ide status")} [--json]    ${dim("Show session status")}
   ${cyan("tmux-ide inspect")} [--json]   ${dim("Show effective config and runtime state")}
@@ -412,6 +419,49 @@ try {
         }
         await sleep(750);
       }
+    }
+
+    case "statusline": {
+      // Called by tmux via #() every status-interval — keep it lean and never
+      // let an error corrupt the bar (print a minimal brand instead).
+      try {
+        const { createStatusTracker } = await import(
+          "../packages/daemon/src/tui/detect/classify.ts"
+        );
+        const { listTeamProjects } = await import("../packages/daemon/src/tui/team/projects.ts");
+        const { buildStatusline } = await import(
+          "../packages/daemon/src/tui/chrome/statusline.ts"
+        );
+        const projects = listTeamProjects(createStatusTracker());
+        console.log(buildStatusline(projects, values.active ?? null));
+      } catch {
+        console.log("#[fg=colour75,bold] tmux-ide #[default]");
+      }
+      break;
+    }
+
+    case "adopt": {
+      const { adoptSession } = await import("../packages/daemon/src/tui/chrome/statusline.ts");
+      const target = positionals[1];
+      if (!target) {
+        console.error("Usage: tmux-ide adopt <session>");
+        process.exit(1);
+      }
+      adoptSession(target);
+      console.log(`adopted ${target} — chrome row active (unadopt to remove)`);
+      break;
+    }
+
+    case "unadopt": {
+      const { unadoptSession } = await import("../packages/daemon/src/tui/chrome/statusline.ts");
+      const target = positionals[1];
+      if (!target) {
+        console.error("Usage: tmux-ide unadopt <session>");
+        process.exit(1);
+      }
+      unadoptSession(target);
+      console.log(`unadopted ${target}`);
+      break;
     }
 
     case "command-center": {

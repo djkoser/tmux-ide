@@ -8281,6 +8281,60 @@ var init_report = __esm({
   }
 });
 
+// packages/daemon/src/tui/chrome/statusline.ts
+var statusline_exports = {};
+__export(statusline_exports, {
+  adoptSession: () => adoptSession,
+  buildStatusline: () => buildStatusline,
+  unadoptSession: () => unadoptSession
+});
+function buildStatusline(projects, active2, maxItems = 12) {
+  const segments = [];
+  for (const project of projects.slice(0, maxItems)) {
+    const isActive = active2 !== null && (project.name === active2 || project.sessions.some((s) => s.name === active2));
+    const glyph = project.running ? `${STATUS_STYLE[project.status]}${GLYPH[project.status]}#[default]` : "#[fg=colour240]\u25CB#[default]";
+    const name = isActive ? `#[fg=colour231,bold,underscore]${project.name}#[default]` : project.running ? `#[fg=colour250]${project.name}#[default]` : `#[fg=colour240]${project.name}#[default]`;
+    segments.push(`${glyph} ${name}`);
+  }
+  if (projects.length > maxItems) {
+    segments.push(`#[fg=colour240]+${projects.length - maxItems}#[default]`);
+  }
+  const body = segments.join("  ");
+  return `#[fg=colour75,bold] tmux-ide #[default] ${body}`;
+}
+function adoptSession(session, statuslineCmd = "tmux-ide statusline") {
+  const format = `#[align=left]#(${statuslineCmd} --active '#{session_name}')`;
+  runTmux(["set-option", "-t", session, "status", "2"]);
+  runTmux(["set-option", "-t", session, "status-interval", "2"]);
+  runTmux(["set-option", "-t", session, "status-format[1]", format]);
+}
+function unadoptSession(session) {
+  runTmux(["set-option", "-u", "-t", session, "status"]);
+  runTmux(["set-option", "-u", "-t", session, "status-interval"]);
+  runTmux(["set-option", "-u", "-t", session, "status-format[1]"]);
+}
+var STATUS_STYLE, GLYPH;
+var init_statusline = __esm({
+  "packages/daemon/src/tui/chrome/statusline.ts"() {
+    "use strict";
+    init_src();
+    STATUS_STYLE = {
+      blocked: "#[fg=colour203,bold]",
+      working: "#[fg=colour221]",
+      done: "#[fg=colour111]",
+      idle: "#[fg=colour114]",
+      unknown: "#[fg=colour244]"
+    };
+    GLYPH = {
+      blocked: "\u25CF",
+      working: "\u25CF",
+      done: "\u25CF",
+      idle: "\u25CF",
+      unknown: "\xB7"
+    };
+  }
+});
+
 // packages/daemon/src/command-center/index.ts
 var command_center_exports = {};
 __export(command_center_exports, {
@@ -8966,7 +9020,9 @@ var { positionals, values } = parseArgs({
     status: { type: "string" },
     timeout: { type: "string" },
     // force the team cockpit instead of launching a project
-    team: { type: "boolean" }
+    team: { type: "boolean" },
+    // statusline: the session whose bar is being rendered
+    active: { type: "string" }
   }
 });
 var knownCommands = /* @__PURE__ */ new Set([
@@ -8987,6 +9043,9 @@ var knownCommands = /* @__PURE__ */ new Set([
   "settings",
   "team",
   "wait",
+  "statusline",
+  "adopt",
+  "unadopt",
   "command-center",
   "server",
   "help"
@@ -9029,6 +9088,8 @@ ${bold("Usage:")}
   ${cyan("tmux-ide team")} [--json]      ${dim("TUI over all tmux sessions (--json prints fleet state)")}
   ${cyan("tmux-ide wait agent-status")} <session> --status <s> [--timeout <ms>]
                               ${dim("Block until a session reaches a status (exit 0 match / 1 timeout)")}
+  ${cyan("tmux-ide adopt")} <session>    ${dim("Add the live tmux-ide status bar to a session")}
+  ${cyan("tmux-ide unadopt")} <session>  ${dim("Remove the status bar")}
   ${cyan("tmux-ide ls")}                 ${dim("List all tmux sessions")}
   ${cyan("tmux-ide status")} [--json]    ${dim("Show session status")}
   ${cyan("tmux-ide inspect")} [--json]   ${dim("Show effective config and runtime state")}
@@ -9264,6 +9325,40 @@ try {
         }
         await sleep(750);
       }
+    }
+    case "statusline": {
+      try {
+        const { createStatusTracker: createStatusTracker2 } = await Promise.resolve().then(() => (init_classify(), classify_exports));
+        const { listTeamProjects: listTeamProjects2 } = await Promise.resolve().then(() => (init_projects(), projects_exports));
+        const { buildStatusline: buildStatusline2 } = await Promise.resolve().then(() => (init_statusline(), statusline_exports));
+        const projects = listTeamProjects2(createStatusTracker2());
+        console.log(buildStatusline2(projects, values.active ?? null));
+      } catch {
+        console.log("#[fg=colour75,bold] tmux-ide #[default]");
+      }
+      break;
+    }
+    case "adopt": {
+      const { adoptSession: adoptSession2 } = await Promise.resolve().then(() => (init_statusline(), statusline_exports));
+      const target = positionals[1];
+      if (!target) {
+        console.error("Usage: tmux-ide adopt <session>");
+        process.exit(1);
+      }
+      adoptSession2(target);
+      console.log(`adopted ${target} \u2014 chrome row active (unadopt to remove)`);
+      break;
+    }
+    case "unadopt": {
+      const { unadoptSession: unadoptSession2 } = await Promise.resolve().then(() => (init_statusline(), statusline_exports));
+      const target = positionals[1];
+      if (!target) {
+        console.error("Usage: tmux-ide unadopt <session>");
+        process.exit(1);
+      }
+      unadoptSession2(target);
+      console.log(`unadopted ${target}`);
+      break;
     }
     case "command-center": {
       const { startCommandCenter: startCommandCenter2 } = await Promise.resolve().then(() => (init_command_center(), command_center_exports));

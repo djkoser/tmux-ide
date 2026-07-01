@@ -13,6 +13,7 @@ export default defineConfig({
       "src/tui/detect/*.test.ts",
       "src/tui/team/*.test.ts",
       "src/tui/mirror/*.test.ts",
+      "src/tui/chrome/*.test.ts",
     ],
     coverage: {
       provider: "v8",
