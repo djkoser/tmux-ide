@@ -11,10 +11,13 @@ import { execFileSync } from "node:child_process";
 import { render, useKeyboard } from "@opentui/solid";
 import { RGBA, TextAttributes } from "@opentui/core";
 import { createSignal, onMount, onCleanup, For, Show } from "solid-js";
+import { createDetachedSession, killSession } from "@tmux-ide/tmux-bridge";
 import { createTheme } from "../../widgets/lib/theme.ts";
 import { type TeamSession } from "./sessions.ts";
 import { listTeamProjects, type TeamProject } from "./projects.ts";
+import { registerProject, unregisterProject } from "../../lib/project-registry.ts";
 import { createStatusTracker, type AgentStatus } from "../detect/classify.ts";
+import { nextInput } from "./input.ts";
 
 function toRGBA(c: { r: number; g: number; b: number; a: number }): RGBA {
   return RGBA.fromInts(c.r, c.g, c.b, c.a);
@@ -60,6 +63,11 @@ render(() => {
 
   const [projects, setProjects] = createSignal<TeamProject[]>(listTeamProjects(tracker));
   const [selected, setSelected] = createSignal(0);
+  // Inline "register a project dir" prompt.
+  const [registerMode, setRegisterMode] = createSignal(false);
+  const [registerInput, setRegisterInput] = createSignal(process.cwd());
+  // Transient status line (errors / confirmations); lingers until next action.
+  const [message, setMessage] = createSignal("");
 
   const rows = () => toRows(projects());
 
@@ -79,40 +87,117 @@ render(() => {
     return rows()[selected()];
   }
 
-  function attach() {
-    const row = current();
-    if (!row || row.kind !== "session") return;
-    // Hand the terminal to tmux; return here only after the user detaches.
+  /** Attach the terminal to a session by name; returns after the user detaches. */
+  function attachSessionName(name: string) {
     try {
-      execFileSync("tmux", ["attach", "-t", row.session.name], { stdio: "inherit" });
+      execFileSync("tmux", ["attach", "-t", name], { stdio: "inherit" });
     } catch {
       // detached or session gone — fall through
     }
     process.exit(0);
   }
 
-  function enter() {
-    const row = current();
-    if (!row) return;
-    if (row.kind === "session") {
-      attach();
+  /**
+   * Launch a project. When it has an `ide.yml`, run the full `tmux-ide` launch
+   * (builds the layout and attaches) — this blocks until the user detaches, so
+   * we refresh and stay in the cockpit rather than exit. Otherwise spin up a
+   * bare detached session so it appears in place.
+   */
+  function launchProject(project: TeamProject) {
+    if (!project.dir) return;
+    if (project.hasIdeYml) {
+      try {
+        execFileSync("tmux-ide", [], { cwd: project.dir, stdio: "inherit" });
+      } catch {
+        // launch failed or user detached — fall through to refresh
+      }
+      refresh();
+      return;
     }
-    // TODO(M2.2): launch project — a project row is a no-op for now.
-  }
-
-  function kill() {
-    const row = current();
-    // Killing only makes sense on a session row.
-    if (!row || row.kind !== "session") return;
     try {
-      execFileSync("tmux", ["kill-session", "-t", row.session.name], { stdio: "ignore" });
-    } catch {
-      // already gone
+      createDetachedSession(project.name, project.dir);
+      setMessage(`launched ${project.name}`);
+    } catch (e) {
+      setMessage(String((e as { message?: string })?.message ?? e));
     }
     refresh();
   }
 
+  /** Enter: attach on a session row; launch (or attach-first) on a project row. */
+  function enter() {
+    const row = current();
+    if (!row) return;
+    if (row.kind === "session") {
+      attachSessionName(row.session.name);
+      return;
+    }
+    const project = row.project;
+    // A running project attaches its first session — nicer than re-launching.
+    if (project.running && project.sessions.length > 0) {
+      attachSessionName(project.sessions[0].name);
+      return;
+    }
+    launchProject(project);
+  }
+
+  /** Kill only the tmux SESSION(s); the registry entry is untouched. */
+  function kill() {
+    const row = current();
+    if (!row) return;
+    if (row.kind === "session") {
+      killSession(row.session.name);
+    } else if (row.project.running) {
+      for (const s of row.project.sessions) killSession(s.name);
+    } else {
+      return;
+    }
+    refresh();
+  }
+
+  /** Unregister a stopped, registered project — never orphan a live session. */
+  function unregister() {
+    const row = current();
+    if (!row || row.kind !== "project") return;
+    const project = row.project;
+    if (!project.registered || project.running) return;
+    try {
+      unregisterProject(project.name);
+      setMessage(`unregistered ${project.name}`);
+    } catch (e) {
+      setMessage(String((e as { message?: string })?.message ?? e));
+    }
+    refresh();
+  }
+
+  /** Submit the register-dir prompt (registerProject is async from a sync key). */
+  function submitRegister() {
+    const dir = registerInput().trim();
+    registerProject({ dir })
+      .then(() => {
+        setRegisterMode(false);
+        setMessage("registered");
+        refresh();
+      })
+      .catch((e) => setMessage(String((e as { message?: string })?.message ?? e)));
+  }
+
   useKeyboard((evt) => {
+    // Register prompt swallows all keys while open.
+    if (registerMode()) {
+      if (evt.name === "escape") {
+        setRegisterMode(false);
+        setRegisterInput(process.cwd());
+        return;
+      }
+      if (evt.name === "return") {
+        submitRegister();
+        return;
+      }
+      const next = nextInput(registerInput(), evt);
+      if (next !== null) setRegisterInput(next);
+      return;
+    }
+
     const n = rows().length;
     if (evt.name === "q" || (evt.ctrl && evt.name === "c")) {
       process.exit(0);
@@ -122,6 +207,15 @@ render(() => {
       if (n > 0) setSelected((s) => (s + 1) % n);
     } else if (evt.name === "return") {
       enter();
+    } else if (evt.name === "l") {
+      const row = current();
+      if (row && row.kind === "project") launchProject(row.project);
+    } else if (evt.name === "a") {
+      setMessage("");
+      setRegisterInput(process.cwd());
+      setRegisterMode(true);
+    } else if (evt.name === "d") {
+      unregister();
     } else if (evt.name === "r") {
       refresh();
     } else if (evt.name === "x") {
@@ -138,6 +232,15 @@ render(() => {
         <box flexGrow={1} />
         <text fg={toRGBA(theme.fgMuted)}>{`${projects().length} projects`}</text>
       </box>
+
+      {/* register-dir prompt */}
+      <Show when={registerMode()}>
+        <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
+          <text fg={toRGBA(theme.accent)}>register dir:</text>
+          <text fg={toRGBA(theme.fg)}>{registerInput()}</text>
+          <text fg={toRGBA(theme.fgMuted)}>_</text>
+        </box>
+      </Show>
 
       {/* list */}
       <box flexDirection="column" flexGrow={1} paddingLeft={1} paddingRight={1} paddingTop={1}>
@@ -218,10 +321,20 @@ render(() => {
         </Show>
       </box>
 
+      {/* transient status line */}
+      <Show when={message().length > 0}>
+        <box paddingLeft={1} paddingRight={1}>
+          <text fg={toRGBA(theme.fgMuted)}>{message()}</text>
+        </box>
+      </Show>
+
       {/* footer */}
       <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={2}>
         <text fg={toRGBA(theme.fgMuted)}>↑↓ move</text>
-        <text fg={toRGBA(theme.fgMuted)}>↵ attach</text>
+        <text fg={toRGBA(theme.fgMuted)}>↵ launch/attach</text>
+        <text fg={toRGBA(theme.fgMuted)}>l launch</text>
+        <text fg={toRGBA(theme.fgMuted)}>a add</text>
+        <text fg={toRGBA(theme.fgMuted)}>d unreg</text>
         <text fg={toRGBA(theme.fgMuted)}>x kill</text>
         <text fg={toRGBA(theme.fgMuted)}>r refresh</text>
         <text fg={toRGBA(theme.fgMuted)}>q quit</text>
