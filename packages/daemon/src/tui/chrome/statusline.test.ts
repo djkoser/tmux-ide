@@ -2,7 +2,7 @@
  * Unit tests for the pure status-bar builder.
  */
 import { describe, expect, it } from "vitest";
-import { buildStatusline } from "./statusline.ts";
+import { buildStatusline, popupBindCommand, popupUnbindCommand, POPUP_KEY } from "./statusline.ts";
 import type { TeamProject } from "../team/projects.ts";
 import type { TeamSession } from "../team/sessions.ts";
 
@@ -66,5 +66,36 @@ describe("buildStatusline", () => {
   it("renders the brand alone for an empty fleet", () => {
     const bar = buildStatusline([], null);
     expect(bar).toContain("tmux-ide");
+  });
+});
+
+describe("popupBindCommand", () => {
+  it("binds M-p in the root table to a display-popup running the switcher", () => {
+    const cmd = popupBindCommand();
+    expect(cmd.slice(0, 5)).toEqual(["bind-key", "-n", POPUP_KEY, "display-popup", "-E"]);
+    // sized popup, switcher command last
+    expect(cmd).toContain("-w");
+    expect(cmd).toContain("-h");
+    expect(cmd[cmd.length - 1]).toBe("tmux-ide switcher");
+  });
+
+  it("uses M-p as the popup key (root table, avoids prefix p)", () => {
+    expect(POPUP_KEY).toBe("M-p");
+  });
+
+  it("passes a custom switcher command through as the bound command", () => {
+    const cmd = popupBindCommand("bun run switcher");
+    expect(cmd[cmd.length - 1]).toBe("bun run switcher");
+  });
+
+  it("does NOT append a #{client_name} arg (it would not format-expand)", () => {
+    // The switcher resolves its own client from inside the popup instead.
+    expect(popupBindCommand().join(" ")).not.toContain("client_name");
+  });
+});
+
+describe("popupUnbindCommand", () => {
+  it("unbinds M-p from the root table", () => {
+    expect(popupUnbindCommand()).toEqual(["unbind-key", "-n", POPUP_KEY]);
   });
 });

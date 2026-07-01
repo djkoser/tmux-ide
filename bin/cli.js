@@ -8284,8 +8284,11 @@ var init_report = __esm({
 // packages/daemon/src/tui/chrome/statusline.ts
 var statusline_exports = {};
 __export(statusline_exports, {
+  POPUP_KEY: () => POPUP_KEY,
   adoptSession: () => adoptSession,
   buildStatusline: () => buildStatusline,
+  popupBindCommand: () => popupBindCommand,
+  popupUnbindCommand: () => popupUnbindCommand,
   unadoptSession: () => unadoptSession
 });
 function buildStatusline(projects, active2, maxItems = 12) {
@@ -8302,18 +8305,40 @@ function buildStatusline(projects, active2, maxItems = 12) {
   const body = segments.join("  ");
   return `#[fg=colour75,bold] tmux-ide #[default] ${body}`;
 }
-function adoptSession(session, statuslineCmd = "tmux-ide statusline") {
+function popupBindCommand(switcherCmd = "tmux-ide switcher") {
+  return [
+    "bind-key",
+    "-n",
+    POPUP_KEY,
+    "display-popup",
+    "-E",
+    "-w",
+    "80%",
+    "-h",
+    "60%",
+    switcherCmd
+  ];
+}
+function popupUnbindCommand() {
+  return ["unbind-key", "-n", POPUP_KEY];
+}
+function adoptSession(session, statuslineCmd = "tmux-ide statusline", switcherCmd = "tmux-ide switcher") {
   const format = `#[align=left]#(${statuslineCmd} --active '#{session_name}')`;
   runTmux(["set-option", "-t", session, "status", "2"]);
   runTmux(["set-option", "-t", session, "status-interval", "2"]);
   runTmux(["set-option", "-t", session, "status-format[1]", format]);
+  runTmux(popupBindCommand(switcherCmd));
 }
 function unadoptSession(session) {
   runTmux(["set-option", "-u", "-t", session, "status"]);
   runTmux(["set-option", "-u", "-t", session, "status-interval"]);
   runTmux(["set-option", "-u", "-t", session, "status-format[1]"]);
+  try {
+    runTmux(popupUnbindCommand());
+  } catch {
+  }
 }
-var STATUS_STYLE, GLYPH;
+var STATUS_STYLE, GLYPH, POPUP_KEY;
 var init_statusline = __esm({
   "packages/daemon/src/tui/chrome/statusline.ts"() {
     "use strict";
@@ -8332,6 +8357,7 @@ var init_statusline = __esm({
       idle: "\u25CF",
       unknown: "\xB7"
     };
+    POPUP_KEY = "M-p";
   }
 });
 
@@ -9022,7 +9048,9 @@ var { positionals, values } = parseArgs({
     // force the team cockpit instead of launching a project
     team: { type: "boolean" },
     // statusline: the session whose bar is being rendered
-    active: { type: "string" }
+    active: { type: "string" },
+    // switcher: the tmux client the popup was invoked on (see `switcher` case)
+    client: { type: "string" }
   }
 });
 var knownCommands = /* @__PURE__ */ new Set([
@@ -9042,6 +9070,7 @@ var knownCommands = /* @__PURE__ */ new Set([
   "send",
   "settings",
   "team",
+  "switcher",
   "wait",
   "statusline",
   "adopt",
@@ -9086,6 +9115,7 @@ ${bold("Usage:")}
   ${cyan("tmux-ide restart")}            ${dim("Stop and relaunch the IDE session")}
   ${cyan("tmux-ide attach")}             ${dim("Reattach to a running session")}
   ${cyan("tmux-ide team")} [--json]      ${dim("TUI over all tmux sessions (--json prints fleet state)")}
+  ${cyan("tmux-ide switcher")}           ${dim("Compact session picker (opens in the M-p popup on adopted sessions)")}
   ${cyan("tmux-ide wait agent-status")} <session> --status <s> [--timeout <ms>]
                               ${dim("Block until a session reaches a status (exit 0 match / 1 timeout)")}
   ${cyan("tmux-ide adopt")} <session>    ${dim("Add the live tmux-ide status bar to a session")}
@@ -9144,13 +9174,13 @@ Run it from a cloned tmux-ide checkout with bun installed.`,
     );
   }
 }
-function execBunWidget(scriptPath, args, commandLabel) {
+function execBunWidget(scriptPath, args, commandLabel, extraEnv = {}) {
   assertBunWidgetAvailable(scriptPath, commandLabel);
   const bunfigRoot = resolve20(__dirname4, "..");
   execFileSync7("bun", [scriptPath, ...args], {
     stdio: "inherit",
     cwd: bunfigRoot,
-    env: { ...process.env, TMUX_IDE_CWD: process.cwd() }
+    env: { ...process.env, TMUX_IDE_CWD: process.cwd(), ...extraEnv }
   });
 }
 async function printFleetJson() {
@@ -9286,6 +9316,11 @@ try {
         break;
       }
       launchTeamHost();
+      break;
+    }
+    case "switcher": {
+      const clientArg = typeof values.client === "string" ? values.client : "";
+      execBunWidget(teamScriptPath, [], "switcher", { TMUX_IDE_PICKER_CLIENT: clientArg });
       break;
     }
     case "wait": {

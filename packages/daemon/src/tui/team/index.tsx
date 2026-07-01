@@ -50,6 +50,25 @@ function parseThemeArg(raw: string | undefined): Record<string, string> | undefi
 }
 const themeConfig = parseThemeArg(argv.theme);
 
+/**
+ * Resolve the tmux client the popup was invoked on, from INSIDE the popup.
+ *
+ * `display-message -p '#{client_name}'` uses the popup's inherited `$TMUX` /
+ * `$TMUX_PANE` to identify the invoking client — it returns the right client
+ * even with several attached to the same session (verified live on tmux 3.6).
+ * Must be called BEFORE `$TMUX` is cleared. Returns null on any failure, in
+ * which case the switcher falls back to a client-less `switch-client` (which
+ * still targets the current client when `$TMUX` is intact).
+ */
+function resolvePopupClient(): string | null {
+  try {
+    const name = runTmux(["display-message", "-p", "#{client_name}"]).toString().trim();
+    return name.length > 0 ? name : null;
+  } catch {
+    return null;
+  }
+}
+
 // Fixed sidebar width in columns — narrow enough to leave the detail pane room
 // on an 80-col terminal, wide enough for a project name + session count.
 const SIDEBAR_WIDTH = 34;
@@ -104,6 +123,26 @@ render(() => {
   // this the cockpit would list the host server's own sessions. Host CONTROL
   // commands stay correct regardless: they carry an explicit `-L tmux-ide`.
   if (hostMode) delete process.env.TMUX;
+  // Picker mode: the switcher runs inside a tmux `display-popup` (bound to M-p
+  // on adopted sessions). `TMUX_IDE_PICKER_CLIENT`'s PRESENCE flips picker mode
+  // on; its VALUE is an optional explicit client name. When empty we resolve
+  // the invoking client ourselves from inside the popup — `display-message -p
+  // '#{client_name}'` returns it correctly (verified live on tmux 3.6), unlike
+  // a `#{client_name}` in the bind command, which does not format-expand. We
+  // must resolve BEFORE clearing $TMUX (display-message needs the popup's tmux
+  // env to know which client it's on). Like host mode we then clear $TMUX so
+  // fleet queries hit the DEFAULT server; the explicit `-c <client>` on
+  // switch-client keeps the switch correct without it.
+  const pickerClientEnv = process.env.TMUX_IDE_PICKER_CLIENT ?? null;
+  const pickerMode = pickerClientEnv !== null;
+  let pickerClient: string | null = null;
+  if (pickerMode) {
+    pickerClient =
+      pickerClientEnv && pickerClientEnv.length > 0 ? pickerClientEnv : resolvePopupClient();
+    delete process.env.TMUX;
+  }
+  // Both compact modes (host + picker) render the single-column switcher.
+  const compactMode = hostMode || pickerMode;
   const statusColor: Record<AgentStatus, RGBA> = {
     blocked: RGBA.fromInts(240, 90, 90, 255), // red
     working: RGBA.fromInts(240, 200, 90, 255), // amber
@@ -191,10 +230,10 @@ render(() => {
 
   /** Capture the active session's active pane and shape it to the preview box. */
   function updatePreview() {
-    // Host mode has no preview box — the live MAIN pane already shows the
-    // session — so skip the capture-pane work entirely (it runs on every
-    // selection and every 2s refresh).
-    if (hostMode) return;
+    // The compact layouts (host + picker) have no preview box — host has the
+    // live MAIN pane, picker is a transient popup — so skip the capture-pane
+    // work entirely (it runs on every selection and every 2s refresh).
+    if (compactMode) return;
     const target = previewTarget();
     if (!target) {
       setPreview([]);
@@ -305,6 +344,72 @@ render(() => {
   }
 
   /**
+   * PICKER MODE: `switch-client` the invoking client to `sessionName`, then
+   * exit so tmux closes the popup. We pass `-c <pickerClient>` explicitly — the
+   * one incantation that works from the popup regardless of `$TMUX` state
+   * (verified live). On failure keep the popup open with the error on the
+   * status line rather than exiting into a broken state.
+   */
+  function pickerSwitch(sessionName: string) {
+    try {
+      const args = ["switch-client"];
+      if (pickerClient) args.push("-c", pickerClient);
+      args.push("-t", sessionName);
+      runTmux(args);
+    } catch (e) {
+      setMessage(String((e as { message?: string })?.message ?? e));
+      return;
+    }
+    process.exit(0);
+  }
+
+  /**
+   * PICKER MODE: bring a stopped project up detached, then switch to it and
+   * exit. An `ide.yml` project gets its full layout via `launch(dir, { attach:
+   * false })`; a plain project just needs a bare detached session. Mirrors
+   * `launchProjectInHost` but ends in `pickerSwitch` (no main pane to drive).
+   */
+  function pickerLaunchAndSwitch(project: TeamProject) {
+    if (!project.dir) return;
+    if (project.hasIdeYml) {
+      import("../../launch.ts")
+        .then(({ launch }) => launch(project.dir!, { attach: false }))
+        .then(() => pickerSwitch(project.name))
+        .catch((e) => setMessage(String((e as { message?: string })?.message ?? e)));
+      return;
+    }
+    try {
+      createDetachedSession(project.name, project.dir);
+      // Flag cockpit-created sessions so agents inside can detect tmux-ide.
+      try {
+        setSessionEnvironment(project.name, "TMUX_IDE", "1");
+      } catch {}
+    } catch (e) {
+      setMessage(String((e as { message?: string })?.message ?? e));
+      return;
+    }
+    pickerSwitch(project.name);
+  }
+
+  /**
+   * PICKER MODE enter: switch to the active project's live session, or launch
+   * the stopped project and switch to it. No preview / main pane / suspend —
+   * the popup only ever ends in a `switch-client` + exit.
+   */
+  function pickerEnter() {
+    const proj = activeProj();
+    if (!proj) return;
+    if (proj.running) {
+      const sess = activeSess() ?? proj.sessions[0];
+      if (sess) {
+        pickerSwitch(sess.name);
+        return;
+      }
+    }
+    pickerLaunchAndSwitch(proj);
+  }
+
+  /**
    * Launch a project. In host mode, bring it up detached and show it live in
    * the main pane (`launchProjectInHost`). In standalone mode: when it has an
    * `ide.yml`, run the full `tmux-ide` launch (builds the layout and attaches) —
@@ -374,7 +479,9 @@ render(() => {
       lastSessionClick = null;
       const sess = activeProj()?.sessions[index];
       if (sess) {
-        if (hostMode) {
+        if (pickerMode) {
+          pickerSwitch(sess.name);
+        } else if (hostMode) {
           showInMain(sess.name, activeProj()?.dir ?? invokeCwd);
           refresh(sess.name);
         } else {
@@ -402,6 +509,10 @@ render(() => {
    * it. Host mode never suspends the renderer — the switcher stays in pane 0.
    */
   function enter() {
+    if (pickerMode) {
+      pickerEnter();
+      return;
+    }
     const proj = activeProj();
     if (!proj) return;
     if (proj.running) {
@@ -633,6 +744,13 @@ render(() => {
       process.exit(0);
     }
 
+    // Picker mode: Esc just closes the popup. This sits AFTER the modal guards
+    // above (confirm / prompt / filter / help), so those still consume Esc to
+    // dismiss themselves first — only a "bare" Esc closes the picker.
+    if (pickerMode && evt.name === "escape") {
+      process.exit(0);
+    }
+
     const n = visibleProjects().length;
     // The rename default is Shift+R; single-char keys arrive lowercase with
     // shift as a modifier (per the @opentui convention), so map it explicitly.
@@ -656,7 +774,10 @@ render(() => {
         break;
       case "launch": {
         const proj = activeProj();
-        if (proj) launchProject(proj);
+        if (proj) {
+          if (pickerMode) pickerLaunchAndSwitch(proj);
+          else launchProject(proj);
+        }
         break;
       }
       case "new":
@@ -755,7 +876,9 @@ render(() => {
           <text fg={toRGBA(theme.fg)}>{filterQuery()}</text>
           <text fg={toRGBA(theme.fgMuted)}>_</text>
           <box flexGrow={1} />
-          <text fg={toRGBA(theme.fgMuted)}>{`${visibleProjects().length}/${projects().length}`}</text>
+          <text
+            fg={toRGBA(theme.fgMuted)}
+          >{`${visibleProjects().length}/${projects().length}`}</text>
         </box>
       </Show>
     );
@@ -900,13 +1023,26 @@ render(() => {
 
         {statusRow()}
 
-        {/* compact footer — shortened labels to fit ~34 cols */}
-        <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
-          <text fg={toRGBA(theme.fgMuted)}>↵ open</text>
-          <text fg={toRGBA(theme.fgMuted)}>n new</text>
-          <text fg={toRGBA(theme.fgMuted)}>/ find</text>
-          <text fg={toRGBA(theme.fgMuted)}>? help</text>
-        </box>
+        {/* compact footer — shortened labels to fit ~34 cols. Picker mode ends
+            in a switch-client + close, so it advertises that instead. */}
+        <Show
+          when={pickerMode}
+          fallback={
+            <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
+              <text fg={toRGBA(theme.fgMuted)}>↵ open</text>
+              <text fg={toRGBA(theme.fgMuted)}>n new</text>
+              <text fg={toRGBA(theme.fgMuted)}>/ find</text>
+              <text fg={toRGBA(theme.fgMuted)}>? help</text>
+            </box>
+          }
+        >
+          <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
+            <text fg={toRGBA(theme.fgMuted)}>↵ switch</text>
+            <text fg={toRGBA(theme.fgMuted)}>l launch</text>
+            <text fg={toRGBA(theme.fgMuted)}>/ find</text>
+            <text fg={toRGBA(theme.fgMuted)}>esc close</text>
+          </box>
+        </Show>
       </box>
     );
   }
@@ -1047,9 +1183,7 @@ render(() => {
                               backgroundColor={isActive() ? toRGBA(theme.border) : undefined}
                               onMouseDown={() => clickSession(i())}
                             >
-                              <text
-                                fg={isActive() ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}
-                              >
+                              <text fg={isActive() ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}>
                                 {isActive() ? "▸" : " "}
                               </text>
                               <text fg={statusColor[session.status]}>
@@ -1115,5 +1249,5 @@ render(() => {
     );
   }
 
-  return hostMode ? <CompactSwitcher /> : <FullApp />;
+  return compactMode ? <CompactSwitcher /> : <FullApp />;
 });

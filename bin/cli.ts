@@ -57,6 +57,8 @@ const { positionals, values } = parseArgs({
     team: { type: "boolean" },
     // statusline: the session whose bar is being rendered
     active: { type: "string" },
+    // switcher: the tmux client the popup was invoked on (see `switcher` case)
+    client: { type: "string" },
   },
 });
 
@@ -77,6 +79,7 @@ const knownCommands = new Set([
   "send",
   "settings",
   "team",
+  "switcher",
   "wait",
   "statusline",
   "adopt",
@@ -128,6 +131,7 @@ ${bold("Usage:")}
   ${cyan("tmux-ide restart")}            ${dim("Stop and relaunch the IDE session")}
   ${cyan("tmux-ide attach")}             ${dim("Reattach to a running session")}
   ${cyan("tmux-ide team")} [--json]      ${dim("TUI over all tmux sessions (--json prints fleet state)")}
+  ${cyan("tmux-ide switcher")}           ${dim("Compact session picker (opens in the M-p popup on adopted sessions)")}
   ${cyan("tmux-ide wait agent-status")} <session> --status <s> [--timeout <ms>]
                               ${dim("Block until a session reaches a status (exit 0 match / 1 timeout)")}
   ${cyan("tmux-ide adopt")} <session>    ${dim("Add the live tmux-ide status bar to a session")}
@@ -192,19 +196,25 @@ function assertBunWidgetAvailable(scriptPath: string, commandLabel: string): voi
   }
 }
 
-function execBunWidget(scriptPath: string, args: string[], commandLabel: string): void {
+function execBunWidget(
+  scriptPath: string,
+  args: string[],
+  commandLabel: string,
+  extraEnv: Record<string, string> = {},
+): void {
   assertBunWidgetAvailable(scriptPath, commandLabel);
   // Spawn from the repo root so bun finds `bunfig.toml` (the @opentui/solid
   // JSX preload). Without this, running from any other cwd — e.g. bare
   // `tmux-ide` in a project dir — falls back to the React JSX runtime and the
   // widget fails to load. The real invocation dir is forwarded via env so
   // in-widget prompts (register / new session) still default to where the user
-  // actually is.
+  // actually is. `extraEnv` layers on top for widget-specific flags (e.g. the
+  // switcher's picker-client hint).
   const bunfigRoot = resolve(__dirname, "..");
   execFileSync("bun", [scriptPath, ...args], {
     stdio: "inherit",
     cwd: bunfigRoot,
-    env: { ...process.env, TMUX_IDE_CWD: process.cwd() },
+    env: { ...process.env, TMUX_IDE_CWD: process.cwd(), ...extraEnv },
   });
 }
 
@@ -374,10 +384,19 @@ try {
       break;
     }
 
+    case "switcher": {
+      // Runs the team app in PICKER mode inside a tmux `display-popup` (bound to
+      // `M-p` on adopt). Picking a session `switch-client`s the invoking client
+      // there and the app exits, closing the popup. `TMUX_IDE_PICKER_CLIENT`
+      // both flips the app into picker mode and carries an optional explicit
+      // client name; empty means "resolve it yourself from inside the popup".
+      const clientArg = typeof values.client === "string" ? values.client : "";
+      execBunWidget(teamScriptPath, [], "switcher", { TMUX_IDE_PICKER_CLIENT: clientArg });
+      break;
+    }
+
     case "wait": {
-      const { createStatusTracker } = await import(
-        "../packages/daemon/src/tui/detect/classify.ts"
-      );
+      const { createStatusTracker } = await import("../packages/daemon/src/tui/detect/classify.ts");
       const { listTeamSessions } = await import("../packages/daemon/src/tui/team/sessions.ts");
       const { findSessionStatus } = await import("../packages/daemon/src/tui/team/report.ts");
 
@@ -425,13 +444,10 @@ try {
       // Called by tmux via #() every status-interval — keep it lean and never
       // let an error corrupt the bar (print a minimal brand instead).
       try {
-        const { createStatusTracker } = await import(
-          "../packages/daemon/src/tui/detect/classify.ts"
-        );
+        const { createStatusTracker } =
+          await import("../packages/daemon/src/tui/detect/classify.ts");
         const { listTeamProjects } = await import("../packages/daemon/src/tui/team/projects.ts");
-        const { buildStatusline } = await import(
-          "../packages/daemon/src/tui/chrome/statusline.ts"
-        );
+        const { buildStatusline } = await import("../packages/daemon/src/tui/chrome/statusline.ts");
         const projects = listTeamProjects(createStatusTracker());
         console.log(buildStatusline(projects, values.active ?? null));
       } catch {

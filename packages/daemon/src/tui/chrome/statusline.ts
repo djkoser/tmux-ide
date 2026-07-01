@@ -69,15 +69,68 @@ export function buildStatusline(
 }
 
 /**
- * Adopt a session: add the chrome row (status line 2) that shells out to
- * `tmux-ide statusline` every 2s. Options are set per-session (`-t`) so only
- * adopted sessions change; `unadoptSession` unsets them back to inherited.
+ * The root-table key that opens the floating switcher popup. Chosen to avoid
+ * tmux defaults: `M-p` (Alt+p) is unbound by stock tmux, and — unlike prefix
+ * `p` (previous-window) — it lives in the ROOT table so it fires without the
+ * prefix from any adopted session. Alt-letter keys are directional/rare in
+ * terminal apps, so grabbing one at the root is low-collision.
  */
-export function adoptSession(session: string, statuslineCmd = "tmux-ide statusline"): void {
+export const POPUP_KEY = "M-p";
+
+/**
+ * PURE — the tmux argv that binds the popup key: `M-p` opens a `display-popup`
+ * running the compact switcher, which `switch-client`s you to whatever you
+ * pick and then exits (closing the popup).
+ *
+ * The bound command is just `<switcherCmd>` (default `tmux-ide switcher`). We
+ * deliberately do NOT append `--client '#{client_name}'`: on tmux 3.6 a
+ * `#{...}` format in a `display-popup -E` command argument is NOT expanded at
+ * invocation (verified live — the literal string survives to the shell). The
+ * switcher instead resolves its own invoking client from inside the popup via
+ * `tmux display-message -p '#{client_name}'`, which DOES resolve correctly, and
+ * switches with an explicit `-c <client>`.
+ *
+ * Bindings are SERVER-wide (there is no per-session `bind-key`), so this is a
+ * global root-table bind — see the note on {@link unadoptSession}.
+ */
+export function popupBindCommand(switcherCmd = "tmux-ide switcher"): string[] {
+  return [
+    "bind-key",
+    "-n",
+    POPUP_KEY,
+    "display-popup",
+    "-E",
+    "-w",
+    "80%",
+    "-h",
+    "60%",
+    switcherCmd,
+  ];
+}
+
+/** PURE — the tmux argv that removes the popup key binding. */
+export function popupUnbindCommand(): string[] {
+  return ["unbind-key", "-n", POPUP_KEY];
+}
+
+/**
+ * Adopt a session: add the chrome row (status line 2) that shells out to
+ * `tmux-ide statusline` every 2s, and bind the popup key so `M-p` opens the
+ * floating switcher from anywhere in the session. Status options are set
+ * per-session (`-t`) so only adopted sessions change; the key bind is
+ * server-wide (tmux has no per-session bind). `unadoptSession` reverses both.
+ */
+export function adoptSession(
+  session: string,
+  statuslineCmd = "tmux-ide statusline",
+  switcherCmd = "tmux-ide switcher",
+): void {
   const format = `#[align=left]#(${statuslineCmd} --active '#{session_name}')`;
   runTmux(["set-option", "-t", session, "status", "2"]);
   runTmux(["set-option", "-t", session, "status-interval", "2"]);
   runTmux(["set-option", "-t", session, "status-format[1]", format]);
+  // Server-wide, idempotent (re-binding the same key just overwrites it).
+  runTmux(popupBindCommand(switcherCmd));
 }
 
 /** Remove the chrome row from a session (revert to inherited options). */
@@ -85,4 +138,12 @@ export function unadoptSession(session: string): void {
   runTmux(["set-option", "-u", "-t", session, "status"]);
   runTmux(["set-option", "-u", "-t", session, "status-interval"]);
   runTmux(["set-option", "-u", "-t", session, "status-format[1]"]);
+  // KNOWN SIMPLIFICATION: the popup key is a SERVER-wide bind, so unadopting
+  // one session removes `M-p` for ALL adopted sessions. Acceptable for now —
+  // best-effort so a missing bind (already unadopted) doesn't throw.
+  try {
+    runTmux(popupUnbindCommand());
+  } catch {
+    // no such key bound — nothing to undo
+  }
 }
