@@ -8,7 +8,7 @@
  * preload) and is spawned by `tmux-ide team`.
  */
 import { execFileSync } from "node:child_process";
-import { render, useKeyboard, useTerminalDimensions } from "@opentui/solid";
+import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid";
 import { RGBA, TextAttributes } from "@opentui/core";
 import { createSignal, createEffect, onMount, onCleanup, For, Show } from "solid-js";
 import {
@@ -90,6 +90,10 @@ render(() => {
   // resolved once at startup — the key handler routes through it.
   const keymap = loadKeymap();
 
+  // The OpenTUI renderer, captured once so the attach/launch paths can hand the
+  // terminal to a full-screen child and take it back afterwards.
+  const renderer = useRenderer();
+
   const [projects, setProjects] = createSignal<TeamProject[]>(listTeamProjects(tracker));
   const [selected, setSelected] = createSignal(0);
   // Whether the `?` keybindings overlay is showing.
@@ -120,8 +124,8 @@ render(() => {
   // What the list actually renders / navigates: filtered while filtering, else all.
   const visibleRows = () => (filterMode() ? filteredRows() : rows());
 
-  function refresh() {
-    const next = listTeamProjects(tracker);
+  function refresh(viewed?: string) {
+    const next = listTeamProjects(tracker, viewed ? { viewed } : {});
     setProjects(next);
     const count = filterMode()
       ? fuzzyFilter(filterQuery(), toRows(next), rowLabel).length
@@ -173,14 +177,45 @@ render(() => {
   // and the 2s refresh (which replaces the projects() array each tick).
   createEffect(updatePreview);
 
-  /** Attach the terminal to a session by name; returns after the user detaches. */
-  function attachSessionName(name: string) {
+  /**
+   * Hand the host terminal to a full-screen child process (a `tmux attach`, or
+   * a nested `tmux-ide` launch) and take it back when the child returns.
+   *
+   * `renderer.suspend()` / `renderer.resume()` are OpenTUI 0.1.88's built-in
+   * pair for exactly this: `suspend()` stops the render loop, disables
+   * mouse/raw mode, detaches the stdin listener and calls the native
+   * `suspendRenderer` (which restores the host terminal — leaves the alt-screen
+   * and shows the cursor); `resume()` re-enables raw mode + the stdin listener,
+   * calls `resumeRenderer` (re-enters the alt-screen), clears the buffer and
+   * restarts the render loop. So the cockpit survives the hand-off and repaints
+   * itself once the child exits — no `process.exit`. `finally` guarantees we
+   * always resume even if the child throws.
+   */
+  function withSuspendedTerminal(fn: () => void) {
+    renderer.suspend();
     try {
-      execFileSync("tmux", ["attach", "-t", name], { stdio: "inherit" });
-    } catch {
-      // detached or session gone — fall through
+      fn();
+    } finally {
+      renderer.resume();
     }
-    process.exit(0);
+  }
+
+  /**
+   * Attach the terminal to a session by name; returns to the cockpit after the
+   * user detaches (prefix+d) rather than exiting. A missing session or a normal
+   * detach both just return from `execFileSync`, so both land back here.
+   */
+  function attachSessionName(name: string) {
+    withSuspendedTerminal(() => {
+      try {
+        execFileSync("tmux", ["attach", "-t", name], { stdio: "inherit" });
+      } catch {
+        // detached or session gone — fall through
+      }
+    });
+    // Back in the cockpit: acknowledge the session we just viewed (clears any
+    // pending `done` for its panes) and repaint from fresh state.
+    refresh(name);
   }
 
   /**
@@ -192,11 +227,13 @@ render(() => {
   function launchProject(project: TeamProject) {
     if (!project.dir) return;
     if (project.hasIdeYml) {
-      try {
-        execFileSync("tmux-ide", [], { cwd: project.dir, stdio: "inherit" });
-      } catch {
-        // launch failed or user detached — fall through to refresh
-      }
+      withSuspendedTerminal(() => {
+        try {
+          execFileSync("tmux-ide", [], { cwd: project.dir, stdio: "inherit" });
+        } catch {
+          // launch failed or user detached — fall through to refresh
+        }
+      });
       refresh();
       return;
     }
