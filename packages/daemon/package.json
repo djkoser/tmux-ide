@@ -59,6 +59,7 @@
     "@parcel/watcher": "^2.5.6",
     "@tmux-ide/contracts": "workspace:*",
     "@tmux-ide/tmux-bridge": "workspace:*",
+    "@xterm/headless": "^6.0.0",
     "hono": "^4.12.8",
     "ignore": "^7.0.5",
     "js-yaml": "^4.1.1",
