@@ -14,7 +14,12 @@
 import { getSessionCwd } from "@tmux-ide/tmux-bridge";
 import type { AgentStatus, StatusTracker } from "../detect/classify.ts";
 import { listProjects } from "../../lib/project-registry.ts";
-import { listTeamSessions, rollupStatus, type TeamSession } from "./sessions.ts";
+import {
+  listTeamSessions,
+  rollupStatus,
+  type ListTeamSessionsOpts,
+  type TeamSession,
+} from "./sessions.ts";
 
 export interface TeamProject {
   name: string;
@@ -153,10 +158,12 @@ export function groupSessions(
  *
  * @param opts.viewed Forwarded to {@link listTeamSessions} to acknowledge the
  *   currently-attached session's pending `done`.
+ * @param opts.onPane Forwarded to {@link listTeamSessions} so a caller (the
+ *   chrome updater) can collect per-pane detail during the same scan.
  */
 export function listTeamProjects(
   tracker: StatusTracker,
-  opts: { viewed?: string } = {},
+  opts: Pick<ListTeamSessionsOpts, "viewed" | "onPane"> = {},
 ): TeamProject[] {
   let projects: ProjectInput[];
   try {

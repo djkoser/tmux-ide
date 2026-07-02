@@ -5,8 +5,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { adoptedSessionsFrom, runUpdaterTick } from "./updater.ts";
 import { buildStatusline } from "./statusline.ts";
+import { paneChip } from "./chip.ts";
 import type { AgentEventInit } from "./events.ts";
 import type { AgentStatus } from "../detect/classify.ts";
+import type { PaneDetail } from "../team/sessions.ts";
 import type { TeamProject } from "../team/projects.ts";
 import type { AttachedClient, ToastTarget } from "./notify.ts";
 
@@ -169,5 +171,105 @@ describe("runUpdaterTick", () => {
       appendEvents,
     });
     expect(appendEvents).not.toHaveBeenCalled();
+  });
+});
+
+describe("runUpdaterTick — pane chips", () => {
+  // A fake fleet scan that feeds fixed pane details through the tick's onPane.
+  function withPanes(panes: PaneDetail[]) {
+    return (onPane: (pane: PaneDetail) => void): TeamProject[] => {
+      for (const pane of panes) onPane(pane);
+      return [project("web")];
+    };
+  }
+
+  it("writes each adopted pane its `agent · status` chip", () => {
+    const writes: Array<[string, string]> = [];
+    runUpdaterTick({
+      listAdopted: () => ["web"],
+      computeProjects: withPanes([
+        { sessionName: "web", paneId: "%1", agent: "claude", status: "working" },
+        { sessionName: "web", paneId: "%2", agent: null, status: "idle" },
+      ]),
+      writeStatus: () => {},
+      writeChip: (paneId, value) => writes.push([paneId, value]),
+      chipCache: new Map(),
+    });
+    expect(writes).toEqual([
+      ["%1", paneChip("claude", "working")],
+      ["%2", ""], // non-agent pane → empty chip (border falls back to title)
+    ]);
+  });
+
+  it("skips panes of non-adopted sessions", () => {
+    const writeChip = vi.fn();
+    runUpdaterTick({
+      listAdopted: () => ["web"],
+      computeProjects: withPanes([
+        { sessionName: "web", paneId: "%1", agent: "claude", status: "working" },
+        { sessionName: "other", paneId: "%9", agent: "codex", status: "blocked" },
+      ]),
+      writeStatus: () => {},
+      writeChip,
+      chipCache: new Map(),
+    });
+    expect(writeChip).toHaveBeenCalledTimes(1);
+    expect(writeChip).toHaveBeenCalledWith("%1", paneChip("claude", "working"));
+  });
+
+  it("only writes a chip when its value CHANGED (uses the per-pane cache)", () => {
+    const writeChip = vi.fn();
+    const chipCache = new Map<string, string>();
+    const deps = {
+      listAdopted: () => ["web"],
+      computeProjects: withPanes([
+        { sessionName: "web", paneId: "%1", agent: "claude", status: "working" as AgentStatus },
+      ]),
+      writeStatus: () => {},
+      writeChip,
+      chipCache,
+    };
+    runUpdaterTick(deps);
+    runUpdaterTick(deps); // unchanged — must NOT rewrite
+    expect(writeChip).toHaveBeenCalledTimes(1);
+    expect(chipCache.get("%1")).toBe(paneChip("claude", "working"));
+  });
+
+  it("rewrites the chip when the pane's status changes", () => {
+    const writeChip = vi.fn();
+    const chipCache = new Map<string, string>();
+    runUpdaterTick({
+      listAdopted: () => ["web"],
+      computeProjects: withPanes([
+        { sessionName: "web", paneId: "%1", agent: "claude", status: "working" },
+      ]),
+      writeStatus: () => {},
+      writeChip,
+      chipCache,
+    });
+    runUpdaterTick({
+      listAdopted: () => ["web"],
+      computeProjects: withPanes([
+        { sessionName: "web", paneId: "%1", agent: "claude", status: "blocked" },
+      ]),
+      writeStatus: () => {},
+      writeChip,
+      chipCache,
+    });
+    expect(writeChip).toHaveBeenCalledTimes(2);
+    expect(writeChip).toHaveBeenLastCalledWith("%1", paneChip("claude", "blocked"));
+  });
+
+  it("does nothing without a writeChip/chipCache wired (bar-only callers)", () => {
+    // No writeChip/chipCache — the tick still writes bars, just no chips.
+    const writes: string[] = [];
+    runUpdaterTick({
+      listAdopted: () => ["web"],
+      computeProjects: withPanes([
+        { sessionName: "web", paneId: "%1", agent: "claude", status: "working" },
+      ]),
+      writeStatus: (s) => writes.push(s),
+    });
+    expect(writes).toEqual(["web"]);
   });
 });

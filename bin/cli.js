@@ -2669,20 +2669,37 @@ function listTeamSessions(tracker, opts = {}) {
     const panes = panesBySession.get(name) ?? [];
     const seen = opts.viewed === name;
     const nowSec = Math.floor(Date.now() / 1e3);
+    const wantPane = typeof opts.onPane === "function";
     const statuses = panes.map((pane) => {
       const authority = parseAuthority(pane.authority, nowSec);
+      let status2;
+      let manifest;
       if (authority !== null) {
         if (authority === "done" && seen) {
           ackDone(pane.id, nowSec);
-          return "idle";
+          status2 = "idle";
+        } else {
+          status2 = authority;
         }
-        return authority;
+        if (wantPane) {
+          manifest = resolveAgentCommand(pane.cmd, pane.pid, processTable, {
+            hint: pane.hint
+          }).manifest;
+        }
+      } else {
+        manifest = resolveAgentCommand(pane.cmd, pane.pid, processTable, {
+          hint: pane.hint
+        }).manifest;
+        const instant = manifest ? classifyInstant({ ...readPaneSnapshot(pane.id), title: pane.title }, manifest) : "unknown";
+        status2 = tracker.update(pane.id, instant, { seen });
       }
-      const manifest = resolveAgentCommand(pane.cmd, pane.pid, processTable, {
-        hint: pane.hint
-      }).manifest;
-      const instant = manifest ? classifyInstant({ ...readPaneSnapshot(pane.id), title: pane.title }, manifest) : "unknown";
-      return tracker.update(pane.id, instant, { seen });
+      opts.onPane?.({
+        sessionName: name,
+        paneId: pane.id,
+        agent: manifest && manifest.id !== "shell" ? manifest.id : null,
+        status: status2
+      });
+      return status2;
     });
     return {
       name,
@@ -2828,6 +2845,25 @@ var init_projects = __esm({
     init_src();
     init_project_registry();
     init_sessions2();
+  }
+});
+
+// packages/daemon/src/tui/chrome/chip.ts
+function paneChip(agent, status2) {
+  if (!agent) return "";
+  return `${CHIP_STYLE[status2]}${agent} \xB7 ${status2}#[default]`;
+}
+var CHIP_STYLE;
+var init_chip = __esm({
+  "packages/daemon/src/tui/chrome/chip.ts"() {
+    "use strict";
+    CHIP_STYLE = {
+      blocked: "#[fg=colour203,bold]",
+      working: "#[fg=colour221]",
+      done: "#[fg=colour111]",
+      idle: "#[fg=colour114]",
+      unknown: "#[fg=colour244]"
+    };
   }
 });
 
@@ -3001,6 +3037,7 @@ var init_notify = __esm({
 var updater_exports = {};
 __export(updater_exports, {
   ADOPTED_OPTION: () => ADOPTED_OPTION,
+  CHIP_OPTION: () => CHIP_OPTION,
   STATUS_OPTION: () => STATUS_OPTION,
   TICK_MS: () => TICK_MS,
   UPDATER_PID_OPTION: () => UPDATER_PID_OPTION,
@@ -3033,16 +3070,21 @@ function listAdoptedSessions() {
 function writeSessionStatus(session, value) {
   runTmux(["set-option", "-t", session, STATUS_OPTION, value]);
 }
+function writePaneChip(paneId, value) {
+  runTmux(["set-option", "-p", "-t", paneId, CHIP_OPTION, value]);
+}
 function fleetStatuses(projects) {
   return projects.flatMap((p) => p.sessions.map((s) => ({ name: s.name, status: s.status })));
 }
 function runUpdaterTick(deps2) {
   const adopted = deps2.listAdopted();
   if (adopted.length === 0) return;
-  const projects = deps2.computeProjects();
+  const panes = [];
+  const projects = deps2.computeProjects((pane) => panes.push(pane));
   for (const session of adopted) {
     deps2.writeStatus(session, buildStatusline(projects, session));
   }
+  writeChips(deps2, adopted, panes);
   if (deps2.prevState && deps2.appendEvents) {
     const { events, state } = diffFleet(deps2.prevState, fleetStatuses(projects));
     deps2.prevState.clear();
@@ -3051,6 +3093,18 @@ function runUpdaterTick(deps2) {
       deps2.appendEvents(events);
       dispatchNotifications(deps2, events);
     }
+  }
+}
+function writeChips(deps2, adopted, panes) {
+  const { writeChip, chipCache } = deps2;
+  if (!writeChip || !chipCache) return;
+  const adoptedSet = new Set(adopted);
+  for (const pane of panes) {
+    if (!adoptedSet.has(pane.sessionName)) continue;
+    const chip = paneChip(pane.agent, pane.status);
+    if (chipCache.get(pane.paneId) === chip) continue;
+    chipCache.set(pane.paneId, chip);
+    writeChip(pane.paneId, chip);
   }
 }
 function dispatchNotifications(deps2, events) {
@@ -3121,12 +3175,15 @@ function runUpdaterLoop() {
   const tracker = createStatusTracker();
   const prevState = /* @__PURE__ */ new Map();
   const lastNotified = /* @__PURE__ */ new Map();
+  const chipCache = /* @__PURE__ */ new Map();
   const tick = () => {
     try {
       runUpdaterTick({
         listAdopted: listAdoptedSessions,
-        computeProjects: () => listTeamProjects(tracker),
+        computeProjects: (onPane) => listTeamProjects(tracker, { onPane }),
         writeStatus: writeSessionStatus,
+        writeChip: writePaneChip,
+        chipCache,
         prevState,
         appendEvents,
         listClients: listAttachedClients,
@@ -3149,17 +3206,19 @@ function runUpdaterLoop() {
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
 }
-var STATUS_OPTION, ADOPTED_OPTION, UPDATER_SESSION, UPDATER_PID_OPTION, TICK_MS;
+var STATUS_OPTION, CHIP_OPTION, ADOPTED_OPTION, UPDATER_SESSION, UPDATER_PID_OPTION, TICK_MS;
 var init_updater = __esm({
   "packages/daemon/src/tui/chrome/updater.ts"() {
     "use strict";
     init_src();
     init_classify();
     init_projects();
+    init_chip();
     init_events();
     init_notify();
     init_statusline();
     STATUS_OPTION = "@tmux_ide_status";
+    CHIP_OPTION = "@tmux_ide_chip";
     ADOPTED_OPTION = "@tmux_ide_adopted";
     UPDATER_SESSION = "_tmux-ide-chrome";
     UPDATER_PID_OPTION = "@tmux_ide_updater_pid";
@@ -3253,6 +3312,7 @@ function statusClickUnbindCommand() {
 }
 function adoptOptionCommands(session) {
   const format = `#[align=left]#{${STATUS_OPTION}}`;
+  const borderFormat = ` #{?#{${CHIP_OPTION}},#{${CHIP_OPTION}},#{pane_title}} `;
   return [
     ["set-option", "-t", session, "status", "2"],
     ["set-option", "-t", session, "status-interval", "2"],
@@ -3261,6 +3321,9 @@ function adoptOptionCommands(session) {
     // behavior (the wheel enters copy-mode / scrolls pane history instead of the
     // terminal's native scrollback). Per-session (`-t`) so only adopted change.
     ["set-option", "-t", session, "mouse", "on"],
+    // Per-pane agent chips on the bottom border (see borderFormat above).
+    ["set-option", "-t", session, "pane-border-status", "bottom"],
+    ["set-option", "-t", session, "pane-border-format", borderFormat],
     // Marker the updater enumerates by (readable in list-sessions -F formats).
     ["set-option", "-t", session, ADOPTED_OPTION, "1"]
   ];
@@ -3271,6 +3334,8 @@ function unadoptOptionCommands(session) {
     ["set-option", "-u", "-t", session, "status-interval"],
     ["set-option", "-u", "-t", session, "status-format[1]"],
     ["set-option", "-u", "-t", session, "mouse"],
+    ["set-option", "-u", "-t", session, "pane-border-status"],
+    ["set-option", "-u", "-t", session, "pane-border-format"],
     ["set-option", "-u", "-t", session, ADOPTED_OPTION],
     ["set-option", "-u", "-t", session, STATUS_OPTION]
   ];

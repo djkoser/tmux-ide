@@ -23,6 +23,8 @@
 import { hasSession, isProcessAlive, runTmux } from "@tmux-ide/tmux-bridge";
 import { createStatusTracker, type AgentStatus } from "../detect/classify.ts";
 import { listTeamProjects, type TeamProject } from "../team/projects.ts";
+import type { PaneDetail } from "../team/sessions.ts";
+import { paneChip } from "./chip.ts";
 import { appendEvents, diffFleet, type AgentEventInit } from "./events.ts";
 import {
   decideNotifications,
@@ -39,6 +41,8 @@ import { buildStatusline } from "./statusline.ts";
 
 /** Per-session user option holding the pre-rendered status-bar string. */
 export const STATUS_OPTION = "@tmux_ide_status";
+/** Per-PANE user option holding the pre-rendered agent chip (read by pane-border-format). */
+export const CHIP_OPTION = "@tmux_ide_chip";
 /** Per-session marker option set on adopt so the updater can enumerate adopted sessions. */
 export const ADOPTED_OPTION = "@tmux_ide_adopted";
 /** The hidden internal session that hosts the updater loop. */
@@ -81,11 +85,31 @@ function writeSessionStatus(session: string, value: string): void {
   runTmux(["set-option", "-t", session, STATUS_OPTION, value]);
 }
 
+/** Write a pane's pre-rendered chip var (empty string clears it → title fallback). */
+function writePaneChip(paneId: string, value: string): void {
+  runTmux(["set-option", "-p", "-t", paneId, CHIP_OPTION, value]);
+}
+
 /** The io a single tick needs — injectable so the orchestration is unit-tested. */
 export interface UpdaterTickDeps {
   listAdopted: () => string[];
-  computeProjects: () => TeamProject[];
+  /**
+   * Compute the fleet. The tick passes an `onPane` collector so per-pane detail
+   * (agent + status) is recovered during the SAME scan the bars are built from
+   * — the loop wires this to `listTeamProjects(tracker, { onPane })`. Callers
+   * that don't need chips (tests) may ignore the argument.
+   */
+  computeProjects: (onPane: (pane: PaneDetail) => void) => TeamProject[];
   writeStatus: (session: string, value: string) => void;
+  /**
+   * Per-pane chip write (optional). When wired, the tick writes each ADOPTED
+   * session's panes a `@tmux_ide_chip` pane option (`agent · status`, or empty
+   * for a non-agent pane). Only CHANGED chips are written — `chipCache` holds
+   * the last value per pane and is mutated in place across ticks so the steady
+   * state costs zero set-options.
+   */
+  writeChip?: (paneId: string, value: string) => void;
+  chipCache?: Map<string, string>;
   /**
    * Transition tracking (optional). When both are supplied, the tick diffs the
    * WHOLE fleet against `prevState` and appends any transitions via
@@ -128,10 +152,13 @@ function fleetStatuses(projects: TeamProject[]): Array<{ name: string; status: A
 export function runUpdaterTick(deps: UpdaterTickDeps): void {
   const adopted = deps.listAdopted();
   if (adopted.length === 0) return;
-  const projects = deps.computeProjects();
+  // Collect per-pane detail during the fleet scan so chips need no second pass.
+  const panes: PaneDetail[] = [];
+  const projects = deps.computeProjects((pane) => panes.push(pane));
   for (const session of adopted) {
     deps.writeStatus(session, buildStatusline(projects, session));
   }
+  writeChips(deps, adopted, panes);
   if (deps.prevState && deps.appendEvents) {
     const { events, state } = diffFleet(deps.prevState, fleetStatuses(projects));
     deps.prevState.clear();
@@ -140,6 +167,26 @@ export function runUpdaterTick(deps: UpdaterTickDeps): void {
       deps.appendEvents(events);
       dispatchNotifications(deps, events);
     }
+  }
+}
+
+/**
+ * Write each adopted session's panes their agent chip — but only when the chip
+ * CHANGED since last tick (per-pane cache), so a steady fleet issues zero
+ * set-options. No-op unless both `writeChip` and `chipCache` are wired. Panes of
+ * non-adopted (user, un-adopted) sessions are skipped: we only paint borders on
+ * sessions we've adopted.
+ */
+function writeChips(deps: UpdaterTickDeps, adopted: string[], panes: PaneDetail[]): void {
+  const { writeChip, chipCache } = deps;
+  if (!writeChip || !chipCache) return;
+  const adoptedSet = new Set(adopted);
+  for (const pane of panes) {
+    if (!adoptedSet.has(pane.sessionName)) continue;
+    const chip = paneChip(pane.agent, pane.status);
+    if (chipCache.get(pane.paneId) === chip) continue;
+    chipCache.set(pane.paneId, chip);
+    writeChip(pane.paneId, chip);
   }
 }
 
@@ -259,12 +306,16 @@ export function runUpdaterLoop(): void {
   const prevState = new Map<string, AgentStatus>();
   // Persistent so the notification debounce survives across ticks.
   const lastNotified = new Map<string, number>();
+  // Persistent per-pane chip cache so we only rewrite a chip when it changed.
+  const chipCache = new Map<string, string>();
   const tick = () => {
     try {
       runUpdaterTick({
         listAdopted: listAdoptedSessions,
-        computeProjects: () => listTeamProjects(tracker),
+        computeProjects: (onPane) => listTeamProjects(tracker, { onPane }),
         writeStatus: writeSessionStatus,
+        writeChip: writePaneChip,
+        chipCache,
         prevState,
         appendEvents,
         listClients: listAttachedClients,

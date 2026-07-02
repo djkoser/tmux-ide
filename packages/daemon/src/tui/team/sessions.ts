@@ -17,6 +17,7 @@ import {
   type AgentStatus,
   type StatusTracker,
 } from "../detect/classify.ts";
+import type { AgentManifest } from "../detect/manifest.ts";
 import { readProcessTable, resolveAgentCommand } from "../detect/process-tree.ts";
 import { readPaneSnapshot } from "../detect/snapshot.ts";
 
@@ -25,6 +26,19 @@ export interface TeamSession {
   attached: boolean;
   windows: number;
   panes: number;
+  status: AgentStatus;
+}
+
+/**
+ * A single pane's resolved detail, handed to {@link ListTeamSessionsOpts.onPane}
+ * as each pane is classified. `agent` is the resolved agent id, or `null` for a
+ * non-agent pane (no manifest, or the `shell` catch-all — those get no chip).
+ * `status` is the final status (authority when fresh, else scraped/tracked).
+ */
+export interface PaneDetail {
+  sessionName: string;
+  paneId: string;
+  agent: string | null;
   status: AgentStatus;
 }
 
@@ -66,17 +80,33 @@ function tmux(args: string[]): string {
   }
 }
 
+/** Options for {@link listTeamSessions}. */
+export interface ListTeamSessionsOpts {
+  /**
+   * Name of the currently-attached/viewed session, if any — its panes are
+   * marked seen (acknowledging any pending `done`).
+   */
+  viewed?: string;
+  /**
+   * Per-pane sink, invoked once per pane with its resolved agent + final
+   * status as it's classified. Lets a caller (the chrome updater) recover the
+   * per-pane truth the rollup throws away, WITHOUT a second scan. When absent,
+   * the extra manifest resolution for authority panes is skipped — existing
+   * callers see zero behavior change.
+   */
+  onPane?: (pane: PaneDetail) => void;
+}
+
 /**
  * List every live tmux session with a rolled-up agent status.
  *
  * @param tracker Persistent status tracker threaded across refreshes so the
  *   cross-tick `done` state can be inferred.
- * @param opts.viewed Name of the currently-attached/viewed session, if any —
- *   its panes are marked seen (acknowledging any pending `done`).
+ * @param opts See {@link ListTeamSessionsOpts}.
  */
 export function listTeamSessions(
   tracker: StatusTracker,
-  opts: { viewed?: string } = {},
+  opts: ListTeamSessionsOpts = {},
 ): TeamSession[] {
   const raw = tmux([
     "list-sessions",
@@ -101,29 +131,51 @@ export function listTeamSessions(
       const seen = opts.viewed === name;
 
       const nowSec = Math.floor(Date.now() / 1000);
+      const wantPane = typeof opts.onPane === "function";
       const statuses = panes.map((pane) => {
         // AUTHORITY first: a fresh hook-reported state outranks scraping.
         const authority = parseAuthority(pane.authority, nowSec);
+        let status: AgentStatus;
+        // The manifest is resolved in the fallback anyway; for authority panes
+        // we only resolve it (cheaply — the process table is already loaded, no
+        // capture) when a pane sink wants the agent name for a chip.
+        let manifest: AgentManifest | undefined;
         if (authority !== null) {
           if (authority === "done" && seen) {
             // Viewing acknowledges a finished agent — persist the ack so the
             // pane doesn't flip back to done on the next tick.
             ackDone(pane.id, nowSec);
-            return "idle";
+            status = "idle";
+          } else {
+            status = authority;
           }
-          return authority;
+          if (wantPane) {
+            manifest = resolveAgentCommand(pane.cmd, pane.pid, processTable, {
+              hint: pane.hint,
+            }).manifest;
+          }
+        } else {
+          // FALLBACK: snapshot scraping. Resolve the real agent from the pane's
+          // process tree (pane_current_command alone is usually just node/bun/sh).
+          // Only capture recognized agent panes; unknown commands stay "unknown"
+          // without a capture-pane round-trip.
+          manifest = resolveAgentCommand(pane.cmd, pane.pid, processTable, {
+            hint: pane.hint,
+          }).manifest;
+          const instant = manifest
+            ? classifyInstant({ ...readPaneSnapshot(pane.id), title: pane.title }, manifest)
+            : "unknown";
+          status = tracker.update(pane.id, instant, { seen });
         }
-        // FALLBACK: snapshot scraping. Resolve the real agent from the pane's
-        // process tree (pane_current_command alone is usually just node/bun/sh).
-        // Only capture recognized agent panes; unknown commands stay "unknown"
-        // without a capture-pane round-trip.
-        const manifest = resolveAgentCommand(pane.cmd, pane.pid, processTable, {
-          hint: pane.hint,
-        }).manifest;
-        const instant = manifest
-          ? classifyInstant({ ...readPaneSnapshot(pane.id), title: pane.title }, manifest)
-          : "unknown";
-        return tracker.update(pane.id, instant, { seen });
+        // The `shell` catch-all isn't a real agent — a raw shell pane gets no
+        // chip (agent null → empty chip → border falls back to the pane title).
+        opts.onPane?.({
+          sessionName: name,
+          paneId: pane.id,
+          agent: manifest && manifest.id !== "shell" ? manifest.id : null,
+          status,
+        });
+        return status;
       });
 
       return {

@@ -18,6 +18,7 @@ import type { TeamProject } from "../team/projects.ts";
 import { cheatsheetBindCommand, cheatsheetUnbindCommand } from "./cheatsheet.ts";
 import {
   ADOPTED_OPTION,
+  CHIP_OPTION,
   listAdoptedSessions,
   seedSessionStatus,
   startUpdaterIfNeeded,
@@ -261,6 +262,12 @@ export function statusClickUnbindCommand(): string[] {
  */
 export function adoptOptionCommands(session: string): string[][] {
   const format = `#[align=left]#{${STATUS_OPTION}}`;
+  // Per-pane agent chip on the bottom border: render `@tmux_ide_chip` (kept
+  // fresh by the updater) when set, else fall back to the pane title. NOTE:
+  // tmux hides pane borders when a window has only ONE pane, so a chip only
+  // shows once a window has been split — acceptable (there's no border to paint
+  // in a single-pane window).
+  const borderFormat = ` #{?#{${CHIP_OPTION}},#{${CHIP_OPTION}},#{pane_title}} `;
   return [
     ["set-option", "-t", session, "status", "2"],
     ["set-option", "-t", session, "status-interval", "2"],
@@ -269,6 +276,9 @@ export function adoptOptionCommands(session: string): string[][] {
     // behavior (the wheel enters copy-mode / scrolls pane history instead of the
     // terminal's native scrollback). Per-session (`-t`) so only adopted change.
     ["set-option", "-t", session, "mouse", "on"],
+    // Per-pane agent chips on the bottom border (see borderFormat above).
+    ["set-option", "-t", session, "pane-border-status", "bottom"],
+    ["set-option", "-t", session, "pane-border-format", borderFormat],
     // Marker the updater enumerates by (readable in list-sessions -F formats).
     ["set-option", "-t", session, ADOPTED_OPTION, "1"],
   ];
@@ -284,6 +294,8 @@ export function unadoptOptionCommands(session: string): string[][] {
     ["set-option", "-u", "-t", session, "status-interval"],
     ["set-option", "-u", "-t", session, "status-format[1]"],
     ["set-option", "-u", "-t", session, "mouse"],
+    ["set-option", "-u", "-t", session, "pane-border-status"],
+    ["set-option", "-u", "-t", session, "pane-border-format"],
     ["set-option", "-u", "-t", session, ADOPTED_OPTION],
     ["set-option", "-u", "-t", session, STATUS_OPTION],
   ];
