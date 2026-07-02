@@ -39,6 +39,16 @@ import { matchGrammar } from "../../widgets/lib/grammar.ts";
 import { HelpOverlay, type WidgetKey } from "../../widgets/lib/help-overlay.tsx";
 import { isDoubleClick, type ClickRecord } from "./mouse.ts";
 import { treeNodes, findCursor } from "./tree.ts";
+import {
+  fleetRollup,
+  rollupChips,
+  isFleetEmpty,
+  emptyFleetActions,
+  panelForKey,
+  panelHints,
+  homeFooterHints,
+} from "./home.ts";
+import { PANEL_POPUPS, panelPopupCli, type PanelPopup } from "../chrome/panels.ts";
 
 /**
  * The team app's OWN keys, shown under the shared grammar in the `?` overlay —
@@ -358,6 +368,54 @@ render(() => {
     } catch {
       // chrome is optional
     }
+  }
+
+  /**
+   * Open a widget PANEL (explorer / changes / config) from the home screen.
+   *
+   * The panel lands on the SELECTED project's dir when a project row is active,
+   * else the invoke cwd — so the explorer/changes/config open on whatever you're
+   * looking at. Two hand-offs, chosen by whether we're inside tmux:
+   *
+   *  - INSIDE tmux: float the widget as a `display-popup -E` over the cockpit
+   *    pane — identical to the root-table panel binds (`M-e`/`M-g`/`M-,`). The
+   *    call blocks until the popup closes, then the cockpit repaints underneath.
+   *  - OUTSIDE tmux (bare terminal): the cockpit owns the whole screen, so we
+   *    suspend the renderer and run the widget full-screen IN PLACE via
+   *    `tmux-ide popup <widget>` (which bun-spawns the widget with stdio
+   *    inherited), resuming when it exits (esc/q). Same suspend/resume the
+   *    attach path uses.
+   */
+  function openPanel(widget: PanelPopup["widget"]) {
+    const panel = PANEL_POPUPS.find((p) => p.widget === widget);
+    if (!panel) return;
+    const dir = activeProj()?.dir ?? invokeCwd;
+    if (process.env.TMUX) {
+      try {
+        runTmux([
+          "display-popup",
+          "-E",
+          "-d",
+          dir,
+          "-w",
+          panel.width,
+          "-h",
+          panel.height,
+          panelPopupCli(widget),
+        ]);
+      } catch (e) {
+        setMessage(String((e as { message?: string })?.message ?? e));
+      }
+      return;
+    }
+    withSuspendedTerminal(() => {
+      try {
+        execFileSync("tmux-ide", ["popup", widget], { cwd: dir, stdio: "inherit" });
+      } catch {
+        // widget exited nonzero or the hand-off failed — resume regardless
+      }
+    });
+    refresh();
   }
 
   /**
@@ -834,6 +892,17 @@ render(() => {
       process.exit(0);
     }
 
+    // Home-only: e/g/, open the widget panels (explorer/changes/config) — the
+    // in-app echo of the tmux `M-e`/`M-g`/`M-,` binds. The picker popup stays a
+    // pure switcher, so panels are gated to the standalone cockpit.
+    if (!pickerMode) {
+      const panel = panelForKey(evt.name);
+      if (panel) {
+        openPanel(panel);
+        return;
+      }
+    }
+
     // The rename default is Shift+R; single-char keys arrive lowercase with
     // shift as a modifier (per the @opentui convention), so map it explicitly.
     const keyName = evt.name === "r" && evt.shift ? "R" : evt.name;
@@ -865,6 +934,10 @@ render(() => {
         if (proj) {
           if (pickerMode) pickerLaunchAndSwitch(proj);
           else launchProject(proj);
+        } else if (!pickerMode) {
+          // Nothing selected (e.g. the empty-fleet hero): `l` is the entry point
+          // to get a launchable project into the fleet — open the add-dir prompt.
+          openRegister();
         }
         break;
       }
@@ -913,10 +986,15 @@ render(() => {
   // come from the grammar; the team's own (configurable) keys are listed below
   // them, sourced from the live keymap so a rebind re-labels the overlay.
   function helpOverlay() {
-    const widgetKeys: WidgetKey[] = TEAM_WIDGET_ACTIONS.map((action) => ({
-      key: keymap[action].keys.join("/"),
-      label: keymap[action].description,
-    }));
+    const widgetKeys: WidgetKey[] = [
+      ...TEAM_WIDGET_ACTIONS.map((action) => ({
+        key: keymap[action].keys.join("/"),
+        label: keymap[action].description,
+      })),
+      // The in-app panel keys (e/g/,) live outside the configurable keymap, so
+      // list them from the shared panel registry with their readable labels.
+      ...panelHints("label").map((h) => ({ key: h.keys, label: h.label })),
+    ];
     return <HelpOverlay theme={theme} title="cockpit" widgetKeys={widgetKeys} />;
   }
 
@@ -957,6 +1035,42 @@ render(() => {
           </text>
         </box>
       </Show>
+    );
+  }
+
+  /**
+   * The empty-fleet hero — the home screen with nothing running yet. A friendly
+   * centered card naming the three ways forward (new session / launch a project
+   * dir / quit); the keys are live, handled by the same `n` / `l` / `q` paths.
+   */
+  function emptyHero() {
+    return (
+      <box flexDirection="column" flexGrow={1} alignItems="center" paddingTop={2}>
+        <box
+          flexDirection="column"
+          border
+          borderColor={toRGBA(theme.accent)}
+          backgroundColor={toRGBA(theme.selected)}
+          paddingLeft={3}
+          paddingRight={3}
+          paddingTop={1}
+          paddingBottom={1}
+        >
+          <text fg={toRGBA(theme.accent)} attributes={TextAttributes.BOLD}>
+            no sessions yet
+          </text>
+          <box paddingTop={1} flexDirection="column">
+            <For each={emptyFleetActions()}>
+              {(action) => (
+                <box flexDirection="row" gap={1}>
+                  <text fg={toRGBA(theme.accent)}>{action.key}</text>
+                  <text fg={toRGBA(theme.fg)}>{action.label}</text>
+                </box>
+              )}
+            </For>
+          </box>
+        </box>
+      </box>
     );
   }
 
@@ -1157,22 +1271,34 @@ render(() => {
   function FullApp() {
     return (
       <box flexDirection="column" flexGrow={1} backgroundColor={toRGBA(theme.bg)}>
-        {/* header */}
+        {/* header: product name + a live fleet rollup (blocked/working/done/idle
+            session counts, colored by status token) + the project total */}
         <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
-          <text fg={toRGBA(theme.accent)}>tmux-ide</text>
+          <text fg={toRGBA(theme.accent)} attributes={TextAttributes.BOLD}>
+            tmux-ide
+          </text>
           <text fg={toRGBA(theme.fgMuted)}>· team</text>
           <box flexGrow={1} />
-          <text fg={toRGBA(theme.fgMuted)}>{`${projects().length} projects`}</text>
+          <For each={rollupChips(fleetRollup(projects()))}>
+            {(chip) => (
+              <text fg={statusColor[chip.status]}>
+                {`${STATUS[chip.status].glyph}${chip.count}`}
+              </text>
+            )}
+          </For>
+          <text fg={toRGBA(theme.fgMuted)}>{`${projects().length}p`}</text>
         </box>
 
         {promptRow()}
         {filterRow()}
 
-        {/* middle: keybindings overlay, or the sidebar (left) + main detail (right) */}
+        {/* middle: keybindings overlay, else the empty-fleet hero when nothing is
+            running, else the sidebar (left) + main detail (right) */}
         <Show
           when={helpOpen()}
           fallback={
-            <box flexDirection="row" flexGrow={1}>
+            <Show when={!isFleetEmpty(projects())} fallback={emptyHero()}>
+              <box flexDirection="row" flexGrow={1}>
               {/* SIDEBAR — the project list */}
               <box
                 flexDirection="column"
@@ -1342,7 +1468,8 @@ render(() => {
                   </box>
                 </Show>
               </box>
-            </box>
+              </box>
+            </Show>
           }
         >
           {helpOverlay()}
@@ -1350,20 +1477,18 @@ render(() => {
 
         {statusRow()}
 
-        {/* footer */}
+        {/* footer — grammar-sourced hint line: the universal verbs' key glyphs
+            come from grammar.ts, interleaved with the cockpit's own session +
+            panel keys. The full key set stays in the `?` overlay. */}
         <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={2}>
-          <text fg={toRGBA(theme.fgMuted)}>↑↓ project</text>
-          <text fg={toRGBA(theme.fgMuted)}>↵ attach/launch</text>
-          <text fg={toRGBA(theme.fgMuted)}>n new</text>
-          <text fg={toRGBA(theme.fgMuted)}>R rename</text>
-          <text fg={toRGBA(theme.fgMuted)}>s split</text>
-          <text fg={toRGBA(theme.fgMuted)}>l launch</text>
-          <text fg={toRGBA(theme.fgMuted)}>a add</text>
-          <text fg={toRGBA(theme.fgMuted)}>d unreg</text>
-          <text fg={toRGBA(theme.fgMuted)}>x kill</text>
-          <text fg={toRGBA(theme.fgMuted)}>/ filter</text>
-          <text fg={toRGBA(theme.fgMuted)}>? help</text>
-          <text fg={toRGBA(theme.fgMuted)}>q quit</text>
+          <For each={homeFooterHints()}>
+            {(hint) => (
+              <box flexDirection="row" gap={1}>
+                <text fg={toRGBA(theme.accent)}>{hint.keys}</text>
+                <text fg={toRGBA(theme.fgMuted)}>{hint.label}</text>
+              </box>
+            )}
+          </For>
         </box>
       </box>
     );
