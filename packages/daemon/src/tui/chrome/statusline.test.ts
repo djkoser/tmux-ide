@@ -22,6 +22,7 @@ import {
   switcherPopupCommand,
   unadoptOptionCommands,
   unadoptSession,
+  updatePopupCommand,
 } from "./statusline.ts";
 import { kittyEscapeFor, kittyUserKeyIndex, kittyUserKeyName } from "./kitty-keys.ts";
 import { menuBindCommand, menuPaneBindCommand, menuStatusBindCommand } from "./menu.ts";
@@ -342,6 +343,26 @@ describe("statusClickBindCommand", () => {
   it("passes a custom cheatsheet command into the keys branch", () => {
     const branch = statusClickBindCommand("tmux-ide switcher", "bun run cheatsheet").at(-1)!;
     expect(branch).toContain("bun run cheatsheet");
+  });
+
+  it("dispatches the `update` range to the update-flow display-popup, nesting the rest", () => {
+    const branch = statusClickBindCommand().at(-1)!;
+    // the update branch matches the `update` range and opens the update popup
+    expect(branch).toContain("#{==:#{mouse_status_range},update}");
+    expect(branch).toContain("tmux-ide update --dry-run");
+    // and the home + keys + sw* branches remain nested inside it (chain intact)
+    expect(branch).toContain("#{==:#{mouse_status_range},home}");
+    expect(branch).toContain("#{==:#{mouse_status_range},keys}");
+    expect(branch).toContain("#{m:sw*,#{mouse_status_range}}");
+  });
+});
+
+describe("updatePopupCommand", () => {
+  it("runs `tmux-ide update --dry-run` in a popup that waits for Enter", () => {
+    const cmd = updatePopupCommand();
+    expect(cmd).toContain("display-popup -E");
+    expect(cmd).toContain("tmux-ide update --dry-run");
+    expect(cmd).toContain("read _"); // holds the popup open until Enter
   });
 });
 

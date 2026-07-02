@@ -3,8 +3,10 @@
  * and the tick orchestration (with injected io, no live tmux).
  */
 import { describe, expect, it, vi } from "vitest";
-import { adoptedSessionsFrom, runUpdaterTick } from "./updater.ts";
+import { adoptedSessionsFrom, runUpdaterTick, updateSegment } from "./updater.ts";
 import { buildStatusline } from "./statusline.ts";
+import { DEFAULT_THEME } from "../../lib/app-config.ts";
+import type { UpdateStatus } from "../../lib/update-check.ts";
 import { paneChip } from "./chip.ts";
 import type { AgentEventInit } from "./events.ts";
 import type { AgentStatus } from "../detect/classify.ts";
@@ -86,11 +88,22 @@ describe("runUpdaterTick", () => {
       computeProjects: () => [
         project("web", {
           status: "done",
-          sessions: [{ name: "web", attached: false, windows: 1, panes: 1, status: "done", windowList: [] }],
+          sessions: [
+            { name: "web", attached: false, windows: 1, panes: 1, status: "done", windowList: [] },
+          ],
         }),
         project("api", {
           status: "working",
-          sessions: [{ name: "api", attached: false, windows: 1, panes: 1, status: "working", windowList: [] }],
+          sessions: [
+            {
+              name: "api",
+              attached: false,
+              windows: 1,
+              panes: 1,
+              status: "working",
+              windowList: [],
+            },
+          ],
         }),
       ],
       writeStatus: () => {},
@@ -118,7 +131,16 @@ describe("runUpdaterTick", () => {
       computeProjects: () => [
         project("web", {
           status: "blocked",
-          sessions: [{ name: "web", attached: false, windows: 1, panes: 1, status: "blocked", windowList: [] }],
+          sessions: [
+            {
+              name: "web",
+              attached: false,
+              windows: 1,
+              panes: 1,
+              status: "blocked",
+              windowList: [],
+            },
+          ],
         }),
       ],
       writeStatus: () => {},
@@ -144,7 +166,16 @@ describe("runUpdaterTick", () => {
       computeProjects: () => [
         project("web", {
           status: "working",
-          sessions: [{ name: "web", attached: false, windows: 1, panes: 1, status: "working", windowList: [] }],
+          sessions: [
+            {
+              name: "web",
+              attached: false,
+              windows: 1,
+              panes: 1,
+              status: "working",
+              windowList: [],
+            },
+          ],
         }),
       ],
       writeStatus: () => {},
@@ -271,5 +302,97 @@ describe("runUpdaterTick — pane chips", () => {
       writeStatus: (s) => writes.push(s),
     });
     expect(writes).toEqual(["web"]);
+  });
+});
+
+describe("updateSegment", () => {
+  it("renders a clickable `⬆ v<latest>` chip when an update is available", () => {
+    const seg = updateSegment({ latest: "9.9.9", updateAvailable: true }, DEFAULT_THEME);
+    expect(seg).toContain("⬆ v9.9.9");
+    expect(seg).toContain(`#[fg=${DEFAULT_THEME.accent}]`);
+    // wrapped in the `update` mouse range so the click router can float the popup
+    expect(seg).toContain("#[range=user|update]");
+    expect(seg).toContain("#[norange]");
+  });
+
+  it("is empty when no update is available (takes no space on the bar)", () => {
+    expect(updateSegment({ latest: null, updateAvailable: false }, DEFAULT_THEME)).toBe("");
+    expect(updateSegment({ latest: "2.6.0", updateAvailable: false }, DEFAULT_THEME)).toBe("");
+  });
+});
+
+describe("runUpdaterTick — update surface", () => {
+  const available: UpdateStatus = { latest: "9.9.9", updateAvailable: true };
+
+  it("calls maybeCheckForUpdate once per tick and threads the segment into every bar", () => {
+    const projects = [project("web"), project("api")];
+    const check = vi.fn((): UpdateStatus => available);
+    const writes: Array<[string, string]> = [];
+    runUpdaterTick({
+      listAdopted: () => ["web", "api"],
+      computeProjects: () => projects,
+      writeStatus: (s, v) => writes.push([s, v]),
+      maybeCheckForUpdate: check,
+    });
+    expect(check).toHaveBeenCalledTimes(1);
+    const extra = updateSegment(available, DEFAULT_THEME);
+    // Each bar equals the buildStatusline with the update segment threaded in.
+    expect(writes[0]![1]).toBe(buildStatusline(projects, "web", 12, DEFAULT_THEME, extra));
+    expect(writes[1]![1]).toBe(buildStatusline(projects, "api", 12, DEFAULT_THEME, extra));
+    expect(writes[0]![1]).toContain("⬆ v9.9.9");
+  });
+
+  it("threads NO segment when no update is available", () => {
+    const projects = [project("web")];
+    const writes: string[] = [];
+    runUpdaterTick({
+      listAdopted: () => ["web"],
+      computeProjects: () => projects,
+      writeStatus: (_s, v) => writes.push(v),
+      maybeCheckForUpdate: () => ({ latest: null, updateAvailable: false }),
+    });
+    expect(writes[0]).toBe(buildStatusline(projects, "web"));
+    expect(writes[0]).not.toContain("⬆");
+  });
+
+  it("toasts every client once per version via markUpdateNotified", () => {
+    const clients: AttachedClient[] = [
+      { client: "/dev/ttys000", session: "web" },
+      { client: "/dev/ttys001", session: "api" },
+    ];
+    const toasted: ToastTarget[][] = [];
+    const notified = new Set<string>();
+    const deps = {
+      listAdopted: () => ["web"],
+      computeProjects: () => [project("web")],
+      writeStatus: () => {},
+      maybeCheckForUpdate: (): UpdateStatus => available,
+      // Mirrors the real markUpdateNotified: true the first time per version.
+      markUpdateNotified: (v: string) => (notified.has(v) ? false : (notified.add(v), true)),
+      listClients: () => clients,
+      sendToasts: (t: ToastTarget[]) => toasted.push(t),
+    };
+    runUpdaterTick(deps);
+    runUpdaterTick(deps); // second tick — already notified, no re-toast
+    expect(toasted).toHaveLength(1);
+    expect(toasted[0]).toEqual([
+      { client: "/dev/ttys000", message: "⬆ tmux-ide v9.9.9 available — run: tmux-ide update" },
+      { client: "/dev/ttys001", message: "⬆ tmux-ide v9.9.9 available — run: tmux-ide update" },
+    ]);
+  });
+
+  it("suppresses the update toast when the toast pref is off", () => {
+    const toasted: ToastTarget[][] = [];
+    runUpdaterTick({
+      listAdopted: () => ["web"],
+      computeProjects: () => [project("web")],
+      writeStatus: () => {},
+      maybeCheckForUpdate: (): UpdateStatus => available,
+      markUpdateNotified: () => true,
+      listClients: () => [{ client: "/dev/ttys000", session: "web" }],
+      sendToasts: (t) => toasted.push(t),
+      prefs: { toast: false, macos: false },
+    });
+    expect(toasted).toHaveLength(0);
   });
 });

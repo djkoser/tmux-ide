@@ -120,6 +120,7 @@ const knownCommands = new Set([
   "popup",
   "sidebar-toggle",
   "worktree",
+  "update",
   "command-center",
   "server",
   "help",
@@ -194,6 +195,7 @@ ${bold("Usage:")}
   ${cyan("tmux-ide status")} [--json]    ${dim("Show session status")}
   ${cyan("tmux-ide inspect")} [--json]   ${dim("Show effective config and runtime state")}
   ${cyan("tmux-ide doctor")}             ${dim("Check system requirements")}
+  ${cyan("tmux-ide update")} [--dry-run] ${dim("Update tmux-ide (detects dev checkout vs npm/pnpm/bun global)")}
   ${cyan("tmux-ide validate")} [--json]  ${dim("Validate ide.yml")}
   ${cyan("tmux-ide detect")} [--json]    ${dim("Detect project stack")}
   ${cyan("tmux-ide detect --write")}     ${dim("Detect and write ide.yml")}
@@ -303,6 +305,23 @@ function launchTeamCockpit(): void {
 try {
   switch (command) {
     case "start": {
+      // npm-style staleness nudge: one dim stderr line when a newer version is
+      // cached (never on --json, never blocking — best-effort, and stderr so it
+      // can't corrupt piped stdout). The dock is the primary surface; this is the
+      // hint for the moment you actually run the command.
+      if (!json) {
+        try {
+          const { getUpdateStatus } = await import("../packages/daemon/src/lib/update-check.ts");
+          const { latest, updateAvailable } = getUpdateStatus();
+          if (updateAvailable && latest) {
+            process.stderr.write(
+              dim(`⬆ tmux-ide v${latest} available — run \`tmux-ide update\`\n`),
+            );
+          }
+        } catch {
+          // never let the update hint interfere with launching
+        }
+      }
       const targetDir = resolve(startTargetDir || ".");
       const hasIdeYml = existsSync(join(targetDir, "ide.yml"));
       if (shouldOpenCockpit(hasIdeYml, values.team === true)) {
@@ -895,6 +914,7 @@ try {
         const { buildMenu, menuPositionArgs } =
           await import("../packages/daemon/src/tui/chrome/menu.ts");
         const { getAppConfig } = await import("../packages/daemon/src/lib/app-config.ts");
+        const { getUpdateStatus } = await import("../packages/daemon/src/lib/update-check.ts");
         // listTeamSessions already drops internal `_`-prefixed plumbing.
         const sessions = listTeamSessions(createStatusTracker()).map((s) => ({
           name: s.name,
@@ -912,7 +932,7 @@ try {
           "-c",
           client,
           ...position,
-          ...buildMenu(sessions, getAppConfig().theme),
+          ...buildMenu(sessions, getAppConfig().theme, getUpdateStatus()),
         ];
         execFileSync("tmux", args, { stdio: "ignore", timeout: 2000 });
       } catch {
@@ -1234,6 +1254,17 @@ try {
           console.log(`${r.branch ?? "(detached)"}${tag}  ${state}\n    ${r.path}`);
         }
       }
+      break;
+    }
+
+    case "update": {
+      // Detect how tmux-ide was installed and act on the pending update: a dev
+      // checkout prints the `git pull` hint; a global install prints (with
+      // --dry-run) or runs its package manager's update command. `__dirname` is
+      // this CLI's own directory — the anchor for the git-checkout probe + the
+      // package-manager path heuristic (see lib/update.ts).
+      const { runUpdate } = await import("../packages/daemon/src/lib/update.ts");
+      runUpdate({ cliDir: __dirname, dryRun: values["dry-run"] === true });
       break;
     }
 

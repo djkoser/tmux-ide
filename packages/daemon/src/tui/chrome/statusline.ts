@@ -253,6 +253,19 @@ export function homeUnbindCommand(key = HOME_KEY): string[] {
 }
 
 /**
+ * PURE — the `display-popup` command STRING for the dock's `⬆ v<latest>` update
+ * chip (see {@link ./updater.ts updateSegment}). It runs `tmux-ide update
+ * --dry-run` — which prints the exact command to run for THIS install (dev
+ * checkout, npm/pnpm/bun global) — then holds the popup open until Enter so the
+ * instruction is readable (a bare `-E` popup would close the instant the CLI
+ * exits). Shell-portable: `read _` (no bash-only `-n1`), no backslash escapes.
+ */
+export function updatePopupCommand(updateCmd = "tmux-ide update --dry-run"): string {
+  const shell = `${updateCmd}; echo ''; echo '[ press Enter to close ]'; read _`;
+  return `display-popup -E -w 70% -h 50% "${shell}"`;
+}
+
+/**
  * The root-table mouse key that routes clicks on the status bar. tmux fires
  * this for a click landing on a NAMED range in any status line (our chrome
  * row's `user|…` ranges), exposing the range name via `#{mouse_status_range}`.
@@ -307,6 +320,7 @@ export function statusClickBindCommand(
   const popup = switcherPopupCommand(switcherCmd);
   const cheatsheet = cheatsheetPopupCommand(cheatsheetCmd);
   const home = homePopupCommand();
+  const update = updatePopupCommand();
   // run-shell re-enters tmux with the name/client already format-expanded.
   const switchClient = `run-shell "tmux switch-client -c '#{client_name}' -t '#{s/^sw//:mouse_status_range}'"`;
   // `sw*` → switch, else window-list default. Its args are one level deep here.
@@ -317,6 +331,9 @@ export function statusClickBindCommand(
   // `home` → the home cockpit popup, else the keys branch. One more nesting
   // level, so both args are `dq`'d once more on top of what they already carry.
   const homeBranch = `if-shell -F "#{==:#{mouse_status_range},home}" ${dq(home)} ${dq(keysBranch)}`;
+  // `update` → the update-flow popup (the dock's `⬆ v<latest>` chip), else the
+  // home branch. Another nesting level, so both args carry one more `dq` layer.
+  const updateBranch = `if-shell -F "#{==:#{mouse_status_range},update}" ${dq(update)} ${dq(homeBranch)}`;
   return [
     "bind-key",
     "-n",
@@ -325,7 +342,7 @@ export function statusClickBindCommand(
     "-F",
     "#{==:#{mouse_status_range},switcher}",
     popup,
-    homeBranch,
+    updateBranch,
   ];
 }
 

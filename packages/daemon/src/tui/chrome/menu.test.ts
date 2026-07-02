@@ -16,7 +16,7 @@ import {
   MENU_PANE_KEY,
   MENU_STATUS_KEY,
 } from "./menu.ts";
-import { switcherPopupCommand, homePopupCommand } from "./statusline.ts";
+import { switcherPopupCommand, homePopupCommand, updatePopupCommand } from "./statusline.ts";
 import { cheatsheetPopupCommand } from "./cheatsheet.ts";
 import { PANEL_POPUPS, panelPopupCommand } from "./panels.ts";
 import { DEFAULT_THEME, type AppTheme } from "../../lib/app-config.ts";
@@ -98,6 +98,31 @@ describe("buildMenu", () => {
     expect(args.some((a) => a.includes("#[fg=colour114]△#[default] api"))).toBe(true);
     // no default working color / glyph leaks through
     expect(args.some((a) => a.includes("#[fg=colour221]"))).toBe(false);
+  });
+
+  it("has no update row when no update info is threaded (or none is pending)", () => {
+    expect(buildMenu([sess("web", "idle")]).some((a) => a.includes("Update available"))).toBe(
+      false,
+    );
+    expect(
+      buildMenu([sess("web", "idle")], DEFAULT_THEME, {
+        latest: "2.6.0",
+        updateAvailable: false,
+      }).some((a) => a.includes("Update available")),
+    ).toBe(false);
+  });
+
+  it("leads with an update row that opens the update popup when one is pending", () => {
+    const args = buildMenu([sess("web", "idle")], DEFAULT_THEME, {
+      latest: "9.9.9",
+      updateAvailable: true,
+    });
+    const i = args.findIndex((a) => a.includes("⬆ Update available (v9.9.9)"));
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(args[i + 1]).toBe("u"); // mnemonic
+    expect(args[i + 2]).toBe(updatePopupCommand());
+    // it's the FIRST group — before the home cockpit row
+    expect(i).toBeLessThan(args.indexOf("⌂ Home cockpit"));
   });
 
   it("caps the session list at 8 rows (keys 1..8)", () => {

@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { getCurrentVersion, getUpdateStatus } from "./lib/update-check.ts";
 
 interface CheckResult {
   label: string;
@@ -121,6 +122,21 @@ export async function doctor({
       () => {
         const version = execSync("cloudflared --version", { encoding: "utf-8" }).trim();
         return version;
+      },
+      { optional: true },
+    ),
+  );
+
+  checks.push(
+    check(
+      "tmux-ide up to date",
+      () => {
+        const current = getCurrentVersion();
+        const { latest, updateAvailable } = getUpdateStatus({ currentVersion: current });
+        if (updateAvailable) {
+          throw new Error(`v${current} — v${latest} available (run \`tmux-ide update\`)`);
+        }
+        return latest ? `v${current} (latest)` : `v${current} (latest unknown)`;
       },
       { optional: true },
     ),

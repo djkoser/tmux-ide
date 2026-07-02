@@ -21,10 +21,12 @@ import type { AgentStatus } from "../detect/classify.ts";
 import {
   switcherPopupCommand,
   homePopupCommand,
+  updatePopupCommand,
   MENU_KEY,
   MENU_PANE_KEY,
   MENU_STATUS_KEY,
 } from "./statusline.ts";
+import type { UpdateStatus } from "../../lib/update-check.ts";
 import { cheatsheetPopupCommand } from "./cheatsheet.ts";
 import { PANEL_POPUPS, panelPopupCommand } from "./panels.ts";
 
@@ -88,7 +90,16 @@ function sessionLabel(session: { name: string; status: AgentStatus }, theme: App
 export function buildMenu(
   sessions: Array<{ name: string; status: AgentStatus }>,
   theme: AppTheme = DEFAULT_THEME,
+  update?: UpdateStatus,
 ): string[] {
+  // When an update is pending, lead with a highlighted row that opens the same
+  // update popup the dock's `⬆ v<latest>` chip does. Its own group so it reads
+  // as a callout above the navigation actions.
+  const updateItems: string[] =
+    update?.updateAvailable && update.latest
+      ? [`#[fg=${theme.accent}]⬆ Update available (v${update.latest})`, "u", updatePopupCommand()]
+      : [];
+
   const header: string[] = [
     "⌂ Home cockpit",
     "h",
@@ -145,7 +156,7 @@ export function buildMenu(
 
   // Join non-empty groups with a single separator line between them.
   const items: string[] = [];
-  for (const group of [header, panelItems, sessionItems, footer]) {
+  for (const group of [updateItems, header, panelItems, sessionItems, footer]) {
     if (group.length === 0) continue;
     if (items.length > 0) items.push(""); // separator
     items.push(...group);

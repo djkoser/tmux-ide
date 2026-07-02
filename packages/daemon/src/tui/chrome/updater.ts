@@ -22,6 +22,11 @@
  */
 import { hasSession, isProcessAlive, runTmux } from "@tmux-ide/tmux-bridge";
 import { DEFAULT_THEME, getAppConfig, type AppTheme } from "../../lib/app-config.ts";
+import {
+  maybeCheckForUpdate,
+  markUpdateNotified,
+  type UpdateStatus,
+} from "../../lib/update-check.ts";
 import { createStatusTracker, type AgentStatus } from "../detect/classify.ts";
 import { listTeamProjects, type TeamProject } from "../team/projects.ts";
 import type { PaneDetail } from "../team/sessions.ts";
@@ -144,6 +149,27 @@ export interface UpdaterTickDeps {
   prefs?: NotificationPrefs;
   sendToasts?: (toasts: ToastTarget[]) => void;
   sendSystem?: (message: string) => void;
+  /**
+   * Update-flow surfacing (optional). When wired, the tick calls this cheap,
+   * cache-backed check each tick (throttled internally to 24h; it kicks off a
+   * background registry refresh). When it reports an available update the tick
+   * threads the `⬆ v<latest>` dock segment into every adopted session's bar and,
+   * via {@link markUpdateNotified}, fires a ONE-time toast for that version. Both
+   * deps-injected so the surfacing is unit-tested without a live tmux/network.
+   */
+  maybeCheckForUpdate?: () => UpdateStatus;
+  markUpdateNotified?: (version: string) => boolean;
+}
+
+/**
+ * PURE — the reserved dock segment for an available update: the clickable
+ * `⬆ v<latest>` chip (accent-colored, wrapped in a `user|update` mouse range so a
+ * click floats the update popup — see {@link ./statusline.ts statusClickBindCommand}).
+ * Empty string when there's nothing to offer, so it takes no space on the bar.
+ */
+export function updateSegment(status: UpdateStatus, theme: AppTheme): string {
+  if (!status.updateAvailable || !status.latest) return "";
+  return `#[range=user|update]#[fg=${theme.accent}]⬆ v${status.latest}#[default]#[norange]`;
 }
 
 /** Flatten the project view to a flat per-session status list for {@link diffFleet}. */
@@ -169,10 +195,16 @@ export function runUpdaterTick(deps: UpdaterTickDeps): void {
   // Collect per-pane detail during the fleet scan so chips need no second pass.
   const panes: PaneDetail[] = [];
   const projects = deps.computeProjects((pane) => panes.push(pane));
+  // The dock-first update surface: a cheap cache read that also kicks off the
+  // throttled background registry refresh. Threads the "⬆ v<latest>" chip into
+  // every bar this tick when an update is pending.
+  const update = deps.maybeCheckForUpdate?.();
+  const extra = update ? updateSegment(update, theme) : "";
   for (const session of adopted) {
-    deps.writeStatus(session, buildStatusline(projects, session, 12, theme));
+    deps.writeStatus(session, buildStatusline(projects, session, 12, theme, extra));
   }
   writeChips(deps, adopted, panes, theme);
+  if (update?.updateAvailable && update.latest) dispatchUpdateToast(deps, update.latest);
   if (deps.prevState && deps.appendEvents) {
     const { events, state } = diffFleet(deps.prevState, fleetStatuses(projects));
     deps.prevState.clear();
@@ -225,6 +257,22 @@ function dispatchNotifications(deps: UpdaterTickDeps, events: NotifyEvent[]): vo
   if (prefs.macos && sendSystem) {
     for (const { message } of decision.system) sendSystem(message);
   }
+}
+
+/**
+ * Toast every attached client ONCE that an update is out — "run: tmux-ide
+ * update". The one-time guarantee lives in {@link markUpdateNotified} (persisted
+ * in the update cache, so it survives updater restarts, unlike the fleet
+ * notification's in-memory debounce). Honors the `toast` prefs kill-switch and
+ * no-ops unless the toast deps are wired.
+ */
+function dispatchUpdateToast(deps: UpdaterTickDeps, version: string): void {
+  const { markUpdateNotified: mark, listClients, sendToasts: toast, prefs } = deps;
+  if (!mark || !listClients || !toast) return;
+  if (prefs && !prefs.toast) return;
+  if (!mark(version)) return; // already toasted this version
+  const message = `⬆ tmux-ide v${version} available — run: tmux-ide update`;
+  toast(listClients().map((c) => ({ client: c.client, message })));
 }
 
 /**
@@ -356,6 +404,8 @@ export function runUpdaterLoop(): void {
         prefs: readNotificationPrefs(),
         sendToasts,
         sendSystem: sendSystemNotification,
+        maybeCheckForUpdate: () => maybeCheckForUpdate({ enabled: config.updates.check }),
+        markUpdateNotified,
       });
     } catch {
       // never let one bad tick kill the loop
