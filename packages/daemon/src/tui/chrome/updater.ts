@@ -24,6 +24,17 @@ import { hasSession, isProcessAlive, runTmux } from "@tmux-ide/tmux-bridge";
 import { createStatusTracker, type AgentStatus } from "../detect/classify.ts";
 import { listTeamProjects, type TeamProject } from "../team/projects.ts";
 import { appendEvents, diffFleet, type AgentEventInit } from "./events.ts";
+import {
+  decideNotifications,
+  listAttachedClients,
+  readNotificationPrefs,
+  sendSystemNotification,
+  sendToasts,
+  type AttachedClient,
+  type NotificationPrefs,
+  type NotifyEvent,
+  type ToastTarget,
+} from "./notify.ts";
 import { buildStatusline } from "./statusline.ts";
 
 /** Per-session user option holding the pre-rendered status-bar string. */
@@ -83,6 +94,19 @@ export interface UpdaterTickDeps {
    */
   prevState?: Map<string, AgentStatus>;
   appendEvents?: (events: AgentEventInit[]) => void;
+  /**
+   * Notification dispatch (optional). When wired alongside `prevState`, the tick
+   * turns THIS tick's transitions into user pings — toasts on attached clients
+   * and/or a macOS notification — via {@link decideNotifications}, gated on
+   * `prefs`. `lastNotified` is the persistent debounce map, mutated in place.
+   * All deps-injected so the routing is unit-tested without a live tmux.
+   */
+  listClients?: () => AttachedClient[];
+  lastNotified?: Map<string, number>;
+  now?: () => number;
+  prefs?: NotificationPrefs;
+  sendToasts?: (toasts: ToastTarget[]) => void;
+  sendSystem?: (message: string) => void;
 }
 
 /** Flatten the project view to a flat per-session status list for {@link diffFleet}. */
@@ -112,7 +136,28 @@ export function runUpdaterTick(deps: UpdaterTickDeps): void {
     const { events, state } = diffFleet(deps.prevState, fleetStatuses(projects));
     deps.prevState.clear();
     for (const [name, status] of state) deps.prevState.set(name, status);
-    if (events.length > 0) deps.appendEvents(events);
+    if (events.length > 0) {
+      deps.appendEvents(events);
+      dispatchNotifications(deps, events);
+    }
+  }
+}
+
+/**
+ * Ping the user about who needs them from this tick's transitions. Only runs
+ * when the notification deps are wired AND at least one channel is enabled;
+ * `lastNotified` is mutated in place so the debounce persists across ticks.
+ */
+function dispatchNotifications(deps: UpdaterTickDeps, events: NotifyEvent[]): void {
+  const { listClients, lastNotified, now, prefs, sendToasts: toast, sendSystem } = deps;
+  if (!listClients || !lastNotified || !now || !prefs) return;
+  if (!prefs.toast && !prefs.macos) return;
+  const decision = decideNotifications(events, listClients(), lastNotified, now());
+  lastNotified.clear();
+  for (const [key, ts] of decision.nextLastNotified) lastNotified.set(key, ts);
+  if (prefs.toast && toast) toast(decision.toasts);
+  if (prefs.macos && sendSystem) {
+    for (const { message } of decision.system) sendSystem(message);
   }
 }
 
@@ -212,6 +257,8 @@ export function runUpdaterLoop(): void {
   const tracker = createStatusTracker();
   // Persistent across ticks so `diffFleet` can spot working→done etc.
   const prevState = new Map<string, AgentStatus>();
+  // Persistent so the notification debounce survives across ticks.
+  const lastNotified = new Map<string, number>();
   const tick = () => {
     try {
       runUpdaterTick({
@@ -220,6 +267,12 @@ export function runUpdaterLoop(): void {
         writeStatus: writeSessionStatus,
         prevState,
         appendEvents,
+        listClients: listAttachedClients,
+        lastNotified,
+        now: () => Date.now(),
+        prefs: readNotificationPrefs(),
+        sendToasts,
+        sendSystem: sendSystemNotification,
       });
     } catch {
       // never let one bad tick kill the loop

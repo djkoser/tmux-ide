@@ -8,6 +8,7 @@ import { buildStatusline } from "./statusline.ts";
 import type { AgentEventInit } from "./events.ts";
 import type { AgentStatus } from "../detect/classify.ts";
 import type { TeamProject } from "../team/projects.ts";
+import type { AttachedClient, ToastTarget } from "./notify.ts";
 
 function project(name: string, overrides: Partial<TeamProject> = {}): TeamProject {
   return {
@@ -104,6 +105,57 @@ describe("runUpdaterTick", () => {
     // prevState was mutated in place to the fresh fleet state.
     expect(prevState.get("web")).toBe("done");
     expect(prevState.get("api")).toBe("working");
+  });
+
+  it("dispatches a toast when a session transitions to blocked", () => {
+    const toasted: ToastTarget[][] = [];
+    const clients: AttachedClient[] = [{ client: "/dev/ttys000", session: "other" }];
+    const lastNotified = new Map<string, number>();
+    runUpdaterTick({
+      listAdopted: () => ["web"],
+      computeProjects: () => [
+        project("web", {
+          status: "blocked",
+          sessions: [{ name: "web", attached: false, windows: 1, panes: 1, status: "blocked" }],
+        }),
+      ],
+      writeStatus: () => {},
+      prevState: new Map<string, AgentStatus>([["web", "working"]]),
+      appendEvents: () => {},
+      listClients: () => clients,
+      lastNotified,
+      now: () => 1000,
+      prefs: { toast: true, macos: false },
+      sendToasts: (t) => toasted.push(t),
+      sendSystem: () => {},
+    });
+
+    expect(toasted).toEqual([[{ client: "/dev/ttys000", message: "⚠ web needs you (blocked)" }]]);
+    // The debounce map was updated in place for the next tick.
+    expect(lastNotified.get("web:blocked")).toBe(1000);
+  });
+
+  it("dispatches no toast for a working transition (only blocked/done notify)", () => {
+    const sendToasts = vi.fn();
+    runUpdaterTick({
+      listAdopted: () => ["web"],
+      computeProjects: () => [
+        project("web", {
+          status: "working",
+          sessions: [{ name: "web", attached: false, windows: 1, panes: 1, status: "working" }],
+        }),
+      ],
+      writeStatus: () => {},
+      prevState: new Map<string, AgentStatus>([["web", "idle"]]),
+      appendEvents: () => {},
+      listClients: () => [{ client: "c1", session: "other" }],
+      lastNotified: new Map(),
+      now: () => 1000,
+      prefs: { toast: true, macos: false },
+      sendToasts,
+      sendSystem: vi.fn(),
+    });
+    expect(sendToasts).toHaveBeenCalledWith([]);
   });
 
   it("does not call the event sink when nothing transitioned", () => {
