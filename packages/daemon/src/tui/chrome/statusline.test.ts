@@ -154,10 +154,10 @@ describe("buildStatusline", () => {
     expect(bar.match(/range=user\|sw/g)).toHaveLength(1); // just the switcher trigger
   });
 
-  it("ends with a right-aligned switcher trigger button carrying the ⌥p hint", () => {
+  it("ends with a right-aligned switcher trigger button carrying the prefix hint", () => {
     const bar = buildStatusline([project("web")], null);
     expect(bar).toContain("#[range=user|switcher]");
-    expect(bar).toContain("⧉ switch ⌥p");
+    expect(bar).toContain("⧉ switch ^b j");
     expect(bar).toContain("#[align=right]");
     // the trigger's range sits after the project ranges (right side of the row)
     expect(bar.indexOf("range=user|switcher")).toBeGreaterThan(bar.indexOf("range=user|sw"));
@@ -166,15 +166,15 @@ describe("buildStatusline", () => {
   it("carries a muted `[ ? keys ]` trigger just left of the switch trigger", () => {
     const bar = buildStatusline([project("web")], null);
     expect(bar).toContain("#[range=user|keys]");
-    expect(bar).toContain("[ ? keys ]");
+    expect(bar).toContain("[ ? keys ^b k ]");
     // the keys trigger sits before (left of) the primary switch trigger
     expect(bar.indexOf("range=user|keys")).toBeLessThan(bar.indexOf("range=user|switcher"));
   });
 
-  it("carries a muted `[ ⌂ home ⌥h ]` trigger as the first right-side trigger", () => {
+  it("carries a muted `[ ⌂ home ^b h ]` trigger as the first right-side trigger", () => {
     const bar = buildStatusline([project("web")], null);
     expect(bar).toContain("#[range=user|home]");
-    expect(bar).toContain("[ ⌂ home ⌥h ]");
+    expect(bar).toContain("[ ⌂ home ^b h ]");
     // the home trigger leads the right-side triggers (home → keys → switch)
     expect(bar.indexOf("range=user|home")).toBeLessThan(bar.indexOf("range=user|keys"));
     expect(bar.indexOf("range=user|keys")).toBeLessThan(bar.indexOf("range=user|switcher"));
@@ -184,7 +184,7 @@ describe("buildStatusline", () => {
     const bar = buildStatusline([project("hot", { status: "blocked" })], null, 12, CUSTOM_THEME);
     // brand + switch trigger use the custom accent
     expect(bar).toContain("#[fg=colour200,bold] tmux-ide #[default]");
-    expect(bar).toContain("#[fg=colour200,bold][ ⧉ switch ⌥p ]");
+    expect(bar).toContain("#[fg=colour200,bold][ ⧉ switch ^b j ]");
     // blocked keeps its bold, but with the custom status color + active glyph
     expect(bar).toContain("#[fg=colour99,bold]▲#[default]");
     // running name uses the custom fg

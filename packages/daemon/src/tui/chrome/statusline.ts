@@ -133,12 +133,16 @@ export function buildStatusline(
   // Two button-like, right-aligned triggers. `keys` (muted) floats the cheat
   // sheet; `switcher` (primary) opens the picker popup — switch stays visually
   // dominant, the sheet is the quieter companion just to its left.
-  const keysTrigger = `#[range=user|keys]#[fg=colour244][ ? keys ]#[default]#[norange]`;
-  // The home trigger floats the full fleet cockpit (the same M-h key opens) so
-  // "get me back to the home screen" is discoverable from the dock, not just via
-  // the key. Muted like `keys` — switch stays the dominant primary action.
-  const homeTrigger = `#[range=user|home]#[fg=colour244][ ⌂ home ⌥h ]#[default]#[norange]`;
-  const trigger = `#[range=user|switcher]#[fg=${theme.accent},bold][ ⧉ switch ⌥p ]#[default]#[norange]`;
+  // Key hints advertise the PREFIX form (^b h) — the binding that works under
+  // every keyboard protocol. The Alt twins still exist but die when a focused
+  // app (Claude Code) switches the terminal's key encoding, so they'd be a
+  // misleading promise on exactly the sessions people live in.
+  const keysTrigger = `#[range=user|keys]#[fg=colour244][ ? keys ^b k ]#[default]#[norange]`;
+  // The home trigger floats the full fleet cockpit (the same prefix-h / M-h keys
+  // open) so "get me back to the home screen" is discoverable from the dock,
+  // not just via the key. Muted like `keys` — switch stays the dominant action.
+  const homeTrigger = `#[range=user|home]#[fg=colour244][ ⌂ home ^b h ]#[default]#[norange]`;
+  const trigger = `#[range=user|switcher]#[fg=${theme.accent},bold][ ⧉ switch ^b j ]#[default]#[norange]`;
   return `#[fg=${theme.accent},bold] tmux-ide #[default] ${body}#[align=right]${extra}${homeTrigger} ${keysTrigger} ${trigger} `;
 }
 
