@@ -11,7 +11,8 @@
     "scripts",
     "skill",
     "templates",
-    "packages/daemon/dist"
+    "packages/daemon/dist",
+    "!packages/daemon/dist/tui"
   ],
   "scripts": {
     "build": "pnpm build:cli",
