@@ -1,289 +1,217 @@
 # tmux-ide — Claude Code Skill
+<!-- tmux-ide-skill-version: 2.6.0 -->
 
-tmux-ide turns any project into a tmux-powered terminal IDE using a simple `ide.yml` config file.
+tmux-ide is a **dock around tmux**: one command adds a native chrome to any tmux
+session — a fleet of tabs with live agent-status glyphs, ground-truth
+working/blocked/done detection, notifications when an agent needs a human, and a
+crash-proof restore. It's built _around_ tmux (adopt is additive tmux config, no
+wrapper process), and the whole UI is one keystroke away — one interaction
+grammar, one theme file. `ide.yml` is optional; adopt works on any session.
 
 ## When to use
 
-- User mentions multi-pane, tmux, terminal IDE, or dev environment
-- User wants to set up a development workspace
-- User asks about running multiple terminals/tools side-by-side
-- User wants to coordinate multiple Claude Code instances as a team
-- User mentions agent teams, team lead, or multi-agent workflows
+- User mentions tmux, a dock/status bar over sessions, an agent fleet, or session status
+- User wants live working/blocked/done status across multiple agents or panes
+- **You are an agent and want to report your own status** so the dock/fleet reflects it (the agent contract, below)
+- Post-crash recovery — a tmux server died and the user wants their fleet + Claude conversations back
+- User wants a git worktree (plus an adopted session) per branch
+- User wants to set up a multi-pane dev workspace with `ide.yml`
 
-## Setup workflow
+## The agent contract
 
-1. Check if `ide.yml` exists: `tmux-ide status --json`
-2. Auto-detect the project: `tmux-ide detect --json`
-3. **Present 2-3 layout options using ASCII diagrams** before writing config. Example:
+**This is the core of tmux-ide.** Detection is two-layer, and an agent that
+reports its own state is the authoritative layer — the dock trusts it over any
+screen-scraping. If you are an agent running in a tmux pane, self-report by
+setting a pane-local tmux option:
 
-   **Option A — Dual Claude + Dev (recommended)**
+```bash
+tmux set-option -p @agent_state "<state>:$(date +%s)"   # state = working | blocked | done | idle
+```
 
-   ```
-   ┌─────────────────┬─────────────────┐
-   │                 │                 │
-   │    Claude 1     │    Claude 2     │  70%
-   │                 │                 │
-   ├────────┬────────┴────────┬────────┤
-   │Dev Srv │  Tests  │ Shell │        │  30%
-   └────────┴─────────┴───────┘────────┘
-   ```
+The value is `<state>:<unix-epoch>`. A `working`/`blocked` report older than ~10
+minutes is treated as stale (the detector falls back to Layer 2), so long-running
+agents should re-stamp periodically. Two optional companions:
 
-   **Option B — Triple Claude**
+```bash
+tmux set-option -p @agent_session_id "<id>"   # your Claude session id — powers restore --resume-agents
+tmux set-option -p @agent_hint claude          # force which agent manifest Layer 2 uses for this pane
+```
 
-   ```
-   ┌───────────┬───────────┬───────────┐
-   │           │           │           │
-   │ Claude 1  │ Claude 2  │ Claude 3  │  70%
-   │           │           │           │
-   ├───────────┴─────┬─────┴───────────┤
-   │    Dev Server    │     Shell       │  30%
-   └─────────────────┴─────────────────┘
-   ```
+**Claude Code users get this for free** — `tmux-ide integration install claude`
+writes a POSIX hook into `~/.claude/settings.json` that stamps `@agent_state` on
+every lifecycle event (UserPromptSubmit/PreToolUse → working, Notification →
+blocked, Stop → done, SessionEnd → idle) and records `@agent_session_id`. It
+takes effect for **new** Claude Code sessions; the merge is reversible
+(`integration uninstall claude`).
 
-   **Option C — Single Claude + wide dev**
+**How detection layers work:** Layer 1 is the authority above — a fresh
+`@agent_state` option is ground truth. When none is present, Layer 2 resolves the
+agent from the pane's process tree and reads the visible screen against
+evidence-tuned per-agent manifests to infer working/blocked/done. Run
+`tmux-ide agent explain <pane>` to see exactly which layer fired for a pane and why.
 
+## Fleet control from the CLI
+
+Every command takes `--json` for structured output.
+
+```bash
+tmux-ide team --json                      # whole-fleet state: sessions, panes, agent statuses
+tmux-ide events --follow                   # stream agent-status transitions (needs an adopted session)
+tmux-ide events --json                     # recent transitions as JSON
+
+tmux-ide wait agent-status <session> --status blocked --timeout 60000   # block until a session hits a status
+tmux-ide wait output <pane|session> --match "<regex>" --timeout 60000   # block until a pane's output matches
+
+tmux-ide send <target> "<message>"        # send text to a pane (by name/title/role/ID); --to <name>, --no-enter
+tmux-ide agent explain <pane> --json       # debug how a pane's agent state was detected
+
+tmux-ide adopt <session>                   # add the dock to an existing session (additive tmux config)
+tmux-ide adopt --all                       # adopt every live session
+tmux-ide unadopt <session>                 # remove the dock — sessions keep running as plain tmux
+
+tmux-ide restore --dry-run --json          # preview rebuilding the fleet from the last snapshot
+tmux-ide restore --resume-agents           # rebuild after a tmux crash; revive Claude convos via claude --resume
+
+tmux-ide worktree create <branch> --from <ref>   # git worktree on a new branch + a session in it
+tmux-ide worktree open <branch>            # open/switch to an existing worktree's session
+tmux-ide worktree list --json              # worktrees joined with their session status
+tmux-ide worktree remove <branch> --force  # kill the session + remove the worktree
+
+tmux-ide update --dry-run                  # detect install method (dev checkout vs npm/pnpm/bun) and show/run the update
+tmux-ide doctor                            # system + integration health (tmux version, TUI surfaces, skill freshness)
+```
+
+## Keys & surfaces to tell USERS about
+
+Once a session is adopted, the whole UI is a keystroke away. **Lead with the
+prefix** — an agent pane can temporarily change key encoding and swallow a
+root-table `Alt` bind, but the tmux prefix always reaches tmux. Every surface has
+a prefix twin and an `⌥` fast-path (single keystroke when the terminal allows it).
+Right-click any pane or the bar opens the actions menu at the pointer.
+
+| Surface | Prefix (always works) | ⌥ fast-path |
+| --- | --- | --- |
+| Home cockpit — fleet tree, detail, preview | `prefix h` | `⌥h` |
+| Switch session | `prefix j` | `⌥p` |
+| Cheat sheet — every key on one page | `prefix k` | `⌥k` |
+| Actions menu (or right-click) | `prefix u` | `⌥m` |
+| Sidebar — fleet nav column | `prefix b` | `⌥b` |
+| Panels — explorer / changes / config | `prefix e` `g` `v` | `⌥e` `⌥g` `⌥,` |
+
+One interaction grammar everywhere: `j`/`k` move, `enter` opens, `/` filters,
+`esc` backs out, `?` asks. Bare `tmux-ide` with no `ide.yml` opens the **home
+cockpit** (the fleet home screen). `tmux-ide cheatsheet` prints the full sheet.
+
+## ide.yml (optional)
+
+Adopt works on any session. If you'd rather have tmux-ide build the layout, describe
+it in `ide.yml` (sessions launched from a config are adopted automatically).
+
+**Setup workflow for a user's project:**
+
+1. Check state: `tmux-ide status --json`
+2. Detect the stack: `tmux-ide detect --json`
+3. **Present 2-3 layout options as ASCII diagrams** before writing config:
+
+   **Option A — Claude + Dev (recommended)**
    ```
    ┌─────────────────────────────────────┐
-   │             Claude                  │  60%
+   │             Claude                  │  70%
    ├──────────┬──────────┬──────────────┤
-   │ Dev Srv  │  Tests   │    Shell     │  40%
+   │ Dev Srv  │  Tests   │    Shell     │  30%
    └──────────┴──────────┴──────────────┘
    ```
 
-   Adapt pane names/commands to the detected stack.
+   **Option B — Dual Claude**
+   ```
+   ┌─────────────────┬─────────────────┐
+   │    Claude 1     │    Claude 2     │  70%
+   ├────────┬────────┴───────┬─────────┤
+   │Dev Srv │     Tests      │  Shell  │  30%
+   └────────┴────────────────┴─────────┘
+   ```
 
-4. Once the user picks, write the config:
-   - Quick: `tmux-ide detect --write` then modify
-   - Or build custom with `tmux-ide config` subcommands
+   **Option C — Explorer + Claude + Changes (widget panes)**
+   ```
+   ┌──────────┬───────────────┬─────────┐
+   │ Explorer │    Claude     │ Changes │  100%
+   │ (widget) │               │ (widget)│
+   └──────────┴───────────────┴─────────┘
+   ```
 
-## Agent Teams workflow
+   Adapt pane names/commands to the detected stack (`pnpm dev`, `cargo watch`, …).
 
-Agent teams coordinate multiple Claude Code instances where a lead delegates tasks to teammates. Each gets its own tmux pane, and tmux-ide prepares that layout before Claude starts the actual team workflow.
-
-### When to suggest agent teams
-
-- User wants coordinated multi-agent development
-- User mentions team lead, teammates, or task delegation
-- User wants parallel work with inter-agent communication
-- User's task benefits from specialized roles (e.g., frontend + backend + review)
-
-### Prerequisites
-
-Agent teams require `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`. The tmux-ide install hook enables this in Claude Code settings, and tmux-ide also sets it automatically inside tmux sessions when `team` is configured in `ide.yml`.
-
-### Setup from scratch
-
-1. **Scaffold with agent team template:**
-
+4. Write it — quick path `tmux-ide detect --write`, or build with the config CLI:
    ```bash
-   tmux-ide init --template agent-team
+   tmux-ide config add-row --size 70%
+   tmux-ide config add-pane --row 0 --title Claude --command claude
+   tmux-ide config add-row --size 30%
+   tmux-ide config add-pane --row 1 --title "Dev Server" --command "pnpm dev"
+   tmux-ide config add-pane --row 1 --title Shell
+   tmux-ide validate --json      # always validate after mutations
    ```
 
-2. **Or enable teams on an existing config:**
-
-   ```bash
-   tmux-ide config enable-team --name "my-team"
-   ```
-
-   This finds all `command: claude` panes and assigns the first as `lead`, the rest as `teammate`.
-
-3. **Assign initial task hints to teammate panes:**
-
-   ```bash
-   tmux-ide config set rows.0.panes.1.task "Work on frontend components"
-   tmux-ide config set rows.0.panes.2.task "Work on API routes"
-   ```
-
-4. **Validate and launch the layout:**
-
-   ```bash
-   tmux-ide validate --json
-   tmux-ide
-   ```
-
-5. **Inside the lead pane, ask Claude to form the team:**
-
-   ```text
-   Start an agent team named my-team. Use the Frontend pane for components and the Backend pane for API routes.
-   ```
-
-### Present team layout options
-
-When suggesting agent team layouts, show the roles and note that Claude will create the team after launch:
-
-**Option A — Lead + 2 Teammates**
-
-```
-┌───────────┬───────────┬───────────┐
-│           │           │           │
-│   Lead    │Teammate 1 │Teammate 2 │  70%
-│ (claude)  │ (claude)  │ (claude)  │
-├───────────┴─────┬─────┴───────────┤
-│   Dev Server    │     Shell       │  30%
-└─────────────────┴─────────────────┘
-```
-
-**Option B — Lead + 3 Specialized Teammates**
-
-```
-┌────────┬────────┬────────┬────────┐
-│        │Frontend│Backend │ Review │
-│  Lead  │ Agent  │ Agent  │ Agent  │  70%
-│        │        │        │        │
-├────────┴────────┴──┬─────┴────────┤
-│    Dev Server      │    Shell     │  30%
-└────────────────────┴──────────────┘
-```
-
-### Team lead self-configuration
-
-When running as the team lead inside a tmux-ide session, you can reconfigure the layout for the team:
-
-```bash
-# Read current config
-tmux-ide config --json
-
-# Add a new teammate pane
-tmux-ide config add-pane --row 0 --title "Reviewer" --command "claude"
-tmux-ide config set rows.0.panes.3.role teammate
-tmux-ide config set rows.0.panes.3.task "Review all PRs and check for issues"
-
-# Or remove a teammate
-tmux-ide config remove-pane --row 0 --pane 2
-
-# Validate and restart to apply
-tmux-ide validate --json
-tmux-ide restart
-```
-
-### Disable teams
-
-```bash
-tmux-ide config disable-team
-```
-
-Removes the `team` config and all `role`/`task` fields from panes.
-
-## Session features (v1.2.0)
-
-tmux-ide sessions include these built-in features:
-
-### Mouse support
-
-Mouse is enabled by default. Users can click to focus panes, scroll with trackpad, and drag pane borders to resize.
-
-### Two-line status bar
-
-```
-Line 0:  MY-PROJECT IDE            ●            14:30 │ Mar 17
-Line 1:  ⏺ Claude 1 │ ● Claude 2 │ ⏺ Dev Server │ Shell
-```
-
-- Line 0: session name, window indicators, time/date
-- Line 1: clickable pane tabs (click to switch panes)
-- Green `⏺` next to panes with a running dev server (listening TCP port)
-- Pulsing `⏺` next to panes where Claude/Codex is actively working
-- Dim `●` next to panes where Claude/Codex is idle
-
-### Config drift detection
-
-If `ide.yml` is edited while a session is running, `tmux-ide` warns the user and suggests `tmux-ide restart` to apply changes.
-
-### Debugging
-
-```bash
-tmux-ide --verbose          # Log all tmux commands to stderr
-TMUX_IDE_DEBUG=1 tmux-ide   # Same via env var
-```
-
-## Programmatic CLI
-
-All commands support `--json` for structured output.
-
-### Read commands
-
-```bash
-tmux-ide status --json      # Session status
-tmux-ide validate --json    # Validate config
-tmux-ide detect --json      # Detect project stack
-tmux-ide config --json      # Dump config as JSON
-tmux-ide ls --json          # List sessions
-tmux-ide doctor --json      # System health check
-```
-
-### Write commands
-
-```bash
-tmux-ide detect --write                                    # Detect and write config
-tmux-ide config set name "my-app"                          # Set config value by dot path
-tmux-ide config set rows.0.size "70%"
-tmux-ide config add-pane --row 0 --title "Claude" --command "claude"
-tmux-ide config remove-pane --row 1 --pane 2
-tmux-ide config add-row --size "30%"
-tmux-ide config enable-team --name "my-team"               # Enable agent teams
-tmux-ide config disable-team                               # Disable agent teams
-```
-
-### Session commands
-
-```bash
-tmux-ide              # Launch (or re-launch) IDE
-tmux-ide stop         # Kill session
-tmux-ide restart      # Stop and relaunch
-tmux-ide attach       # Reattach
-tmux-ide init         # Scaffold config
-tmux-ide --verbose    # Launch with tmux command tracing
-```
-
-## Modification workflow
-
-1. Read: `tmux-ide config --json`
-2. Modify: `tmux-ide config set <path> <value>` or `add-pane`/`remove-pane`
-3. Validate: `tmux-ide validate --json`
-4. Apply: `tmux-ide restart` (needed if session is already running)
-
-## Best practices
-
-- Always use `--json` for programmatic access
-- Always run `validate --json` after config mutations
-- Top row ~70% height for Claude panes
-- 2-3 Claude panes in the top row (or lead + 2 teammates for teams)
-- Dev servers + shell in the bottom row
-- Use `detect --json` first to understand the project stack
-- For agent teams: assign specific tasks to teammate panes so your prompts stay focused
-- The team lead should have `focus: true` for easy access
-- Use `tmux-ide --verbose` or `TMUX_IDE_DEBUG=1` when debugging layout issues
-
-## ide.yml format
+**Schema:**
 
 ```yaml
-name: project-name
-before: pnpm install # optional pre-launch hook
-team: # optional agent team config
-  name: my-team
-rows:
-  - size: 70%
-    panes:
-      - title: Lead
-        command: claude
-        role: lead # optional layout metadata: "lead" or "teammate"
-        focus: true
-      - title: Teammate 1
-        command: claude
-        role: teammate
-        task: "Work on frontend" # suggested task text for your prompts
-      - title: Teammate 2
-        command: claude
-        role: teammate
-        task: "Work on backend"
-  - panes:
-      - title: Dev Server
-        command: pnpm dev
-        dir: apps/web # per-pane working directory
-        env:
-          PORT: 3000
-      - title: Shell
-theme:
+name: my-app # tmux session name
+sidebar: true # inject the nav column at launch (prefix b / ⌥b); or { width: "30" }
+before: pnpm install # optional pre-launch shell hook
+theme: # optional per-session pane colors
   accent: colour75
   border: colour238
+rows:
+  - size: 70% # row height percent (rows split evenly if omitted)
+    panes:
+      - title: Claude # pane border label
+        command: claude # command to run (optional)
+        size: 50% # pane width percent (optional)
+        dir: apps/web # per-pane working directory (optional)
+        focus: true # initial focus (optional)
+        env: # environment variables (optional)
+          PORT: "3000"
+  - panes:
+      - title: Explorer
+        type: explorer # widget pane: explorer | changes | preview | config
+        target: src/ # optional widget target path
+      - title: Shell
 ```
+
+Read config with `tmux-ide config --json`; mutate with `config set <dot.path> <value>`,
+`add-pane`, `remove-pane`, `add-row`; apply changes to a running session with
+`tmux-ide restart`.
+
+An optional mission/goal/task orchestrator exists as a **secondary** surface,
+configured via the `team` and `orchestrator` blocks in `ide.yml` (enable teams
+with `tmux-ide config enable-team --name <n>`). It's not the headline — see the
+Task System docs if a user explicitly wants coordinated multi-agent dispatch.
+
+## Config — ~/.tmux-ide/config.json
+
+The one product-wide config (override path with `TMUX_IDE_CONFIG`). A deep
+partial merge over defaults — any block or field you omit falls back:
+
+```jsonc
+{
+  "keys": { "home": "M-h", "popup": "M-p", "cheatsheet": "M-k", "menu": "M-m",
+            "sidebar": "M-b", "panels": { "explorer": "M-e", "changes": "M-g", "config": "M-," } },
+  "theme": { "accent": "colour75", "muted": "colour240", "fg": "colour250",
+             "status": { "blocked": "colour203", "working": "colour221", "done": "colour111",
+                         "idle": "colour114", "unknown": "colour244" },
+             "glyphs": { "active": "●", "inactive": "○" } },
+  "notifications": { "toast": true, "macos": false },
+  "restore": { "resumeAgents": false },
+  "updates": { "check": true },
+  "integrations": { "offer": true }
+}
+```
+
+One palette + one keymap drive every surface (status bar, chips, menu, cheat
+sheet, and the OpenTUI widgets), so re-theming the whole product is a one-file
+edit plus a re-adopt.
+
+## Keeping this skill current
+
+This file is managed — installs and `tmux-ide update` (dev checkouts) refresh the
+copy under `~/.claude/skills/tmux-ide`. To refresh it manually at any time, run
+`tmux-ide skill-sync`. `tmux-ide doctor` reports when the installed copy is stale.

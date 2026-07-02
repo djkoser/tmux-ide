@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getCurrentVersion, getUpdateStatus } from "./lib/update-check.ts";
+import { installedSkillVersion } from "./lib/skill-sync.ts";
 import { discoverAgents, presentAgents, type DiscoveredAgent } from "./lib/agent-discovery.ts";
 import { findCompiledTui, isBunAvailable } from "./tui/compiled.ts";
 
@@ -195,6 +196,27 @@ export async function doctor({
           throw new Error(`v${current} — v${latest} available (run \`tmux-ide update\`)`);
         }
         return latest ? `v${current} (latest)` : `v${current} (latest unknown)`;
+      },
+      { optional: true },
+    ),
+  );
+
+  checks.push(
+    check(
+      "Claude Code skill",
+      () => {
+        // The managed skill copy under ~/.claude/skills/tmux-ide should track the
+        // CLI version. Stale/missing → point at the one-command fix; installs and
+        // `tmux-ide update` refresh it automatically, so this is only a nudge.
+        const installed = installedSkillVersion();
+        const current = getCurrentVersion();
+        if (installed === null) {
+          throw new Error("not installed — run `tmux-ide skill-sync`");
+        }
+        if (installed !== current) {
+          throw new Error(`v${installed} (CLI v${current}) — run \`tmux-ide skill-sync\``);
+        }
+        return `in sync (v${installed})`;
       },
       { optional: true },
     ),

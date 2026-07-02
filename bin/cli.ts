@@ -122,6 +122,7 @@ const knownCommands = new Set([
   "sidebar-toggle",
   "worktree",
   "update",
+  "skill-sync",
   "command-center",
   "server",
   "help",
@@ -197,6 +198,7 @@ ${bold("Usage:")}
   ${cyan("tmux-ide inspect")} [--json]   ${dim("Show effective config and runtime state")}
   ${cyan("tmux-ide doctor")}             ${dim("Check system requirements")}
   ${cyan("tmux-ide update")} [--dry-run] ${dim("Update tmux-ide (detects dev checkout vs npm/pnpm/bun global)")}
+  ${cyan("tmux-ide skill-sync")}         ${dim("Refresh the bundled Claude Code skill in ~/.claude/skills/tmux-ide")}
   ${cyan("tmux-ide validate")} [--json]  ${dim("Validate ide.yml")}
   ${cyan("tmux-ide detect")} [--json]    ${dim("Detect project stack")}
   ${cyan("tmux-ide detect --write")}     ${dim("Detect and write ide.yml")}
@@ -776,8 +778,14 @@ try {
       const mod = await import("../packages/daemon/src/tui/integrations/claude.ts");
       if (sub === "install") {
         const { scriptPath, settingsPath } = mod.installClaudeIntegration();
+        // Hooks + skill = the complete agent setup, so one command does both:
+        // the lifecycle hooks (authoritative status) AND a fresh copy of the
+        // skill that tells the agent how to drive tmux-ide.
+        const { syncSkill } = await import("../packages/daemon/src/lib/skill-sync.ts");
+        const skill = syncSkill();
         console.log(`hook script: ${scriptPath}`);
         console.log(`settings:    ${settingsPath} (backup written once as .tmux-ide.bak)`);
+        console.log(`skill:       ${skill.action} → ${skill.path} (v${skill.to})`);
         console.log(
           "installed — NEW Claude Code sessions now report working/blocked/done " +
             "authoritatively into the tmux-ide chrome.",
@@ -1330,7 +1338,40 @@ try {
       // this CLI's own directory — the anchor for the git-checkout probe + the
       // package-manager path heuristic (see lib/update.ts).
       const { runUpdate } = await import("../packages/daemon/src/lib/update.ts");
-      runUpdate({ cliDir: __dirname, dryRun: values["dry-run"] === true });
+      const dryRun = values["dry-run"] === true;
+      const plan = runUpdate({ cliDir: __dirname, dryRun });
+      if (!dryRun) {
+        // The managed skill copy has to track the CLI. A global install refreshes
+        // it via the package's own postinstall (which just ran); a dev checkout
+        // has no postinstall, so `tmux-ide update` IS the checkout's refresh path
+        // — sync the skill directly here.
+        const { syncSkill } = await import("../packages/daemon/src/lib/skill-sync.ts");
+        if (plan.method === "dev") {
+          const result = syncSkill();
+          console.log("");
+          console.log(`skill: ${result.action} → ${result.path} (v${result.to})`);
+        } else {
+          console.log("");
+          console.log("skill: refreshed by the package postinstall (~/.claude/skills/tmux-ide)");
+        }
+      }
+      break;
+    }
+
+    case "skill-sync": {
+      // The universal manual refresh of the managed Claude Code skill copy.
+      // Fully-managed dir: overwrite is correct; version-equal is a no-op.
+      const { syncSkill } = await import("../packages/daemon/src/lib/skill-sync.ts");
+      const result = syncSkill();
+      if (json) {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        const detail =
+          result.action === "updated" && result.from
+            ? ` (v${result.from} → v${result.to})`
+            : ` (v${result.to})`;
+        console.log(`skill ${result.action}${detail}: ${result.path}`);
+      }
       break;
     }
 
