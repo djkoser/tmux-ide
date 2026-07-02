@@ -2,15 +2,21 @@
  * Data layer for the team TUI.
  *
  * Enumerates every live tmux session and rolls each one up to an agent
- * status using the real snapshot-based detector. For each pane we pick a
- * detection manifest by its current command; only recognized agent panes
- * are captured (a `capture-pane` call) and classified, and the resulting
- * per-pane states are folded through a persistent `StatusTracker` so that
- * `done` (a working→idle transition that hasn't been viewed) surfaces. The
- * pane statuses are then rolled up to a single session status.
+ * status. Detection is TWO-LAYER: a fresh `@agent_state` pane option —
+ * written by a lifecycle-hook integration (`tmux-ide integration install
+ * claude`) or any self-reporting agent — is AUTHORITATIVE; only panes
+ * without authority fall back to snapshot scraping (pick a manifest by the
+ * pane command, capture, classify, fold through the persistent
+ * `StatusTracker` so the cross-tick `done` surfaces). Pane statuses roll up
+ * to a single session status.
  */
 import { execFileSync } from "node:child_process";
-import { classifyInstant, type AgentStatus, type StatusTracker } from "../detect/classify.ts";
+import {
+  classifyInstant,
+  parseAuthority,
+  type AgentStatus,
+  type StatusTracker,
+} from "../detect/classify.ts";
 import { pickManifest } from "../detect/manifest.ts";
 import { BUNDLED_MANIFESTS } from "../detect/manifests.ts";
 import { readPaneSnapshot } from "../detect/snapshot.ts";
@@ -30,6 +36,8 @@ interface PaneRecord {
   cmd: string;
   /** `pane_title`. */
   title: string;
+  /** Raw `@agent_state` pane option (authority layer), if set. */
+  authority: string;
 }
 
 /** Severity order — highest present status wins in a rollup. */
@@ -85,10 +93,22 @@ export function listTeamSessions(
       const panes = panesBySession.get(name) ?? [];
       const seen = opts.viewed === name;
 
+      const nowSec = Math.floor(Date.now() / 1000);
       const statuses = panes.map((pane) => {
+        // AUTHORITY first: a fresh hook-reported state outranks scraping.
+        const authority = parseAuthority(pane.authority, nowSec);
+        if (authority !== null) {
+          if (authority === "done" && seen) {
+            // Viewing acknowledges a finished agent — persist the ack so the
+            // pane doesn't flip back to done on the next tick.
+            ackDone(pane.id, nowSec);
+            return "idle";
+          }
+          return authority;
+        }
+        // FALLBACK: snapshot scraping. Only capture recognized agent panes;
+        // unknown commands stay "unknown" without a capture-pane round-trip.
         const manifest = pickManifest(pane.cmd, BUNDLED_MANIFESTS);
-        // Only capture the pane buffer for recognized agent panes; unknown
-        // commands stay "unknown" without a capture-pane round-trip.
         const instant = manifest
           ? classifyInstant({ ...readPaneSnapshot(pane.id), title: pane.title }, manifest)
           : "unknown";
@@ -111,17 +131,25 @@ function collectPanes(): Map<string, PaneRecord[]> {
     "list-panes",
     "-a",
     "-F",
-    "#{session_name}\t#{pane_id}\t#{pane_current_command}\t#{pane_title}",
+    "#{session_name}\t#{pane_id}\t#{pane_current_command}\t#{@agent_state}\t#{pane_title}",
   ]);
   const bySession = new Map<string, PaneRecord[]>();
   for (const line of raw.split("\n").filter(Boolean)) {
-    const [session = "", id = "", cmd = "", title = ""] = line.split("\t");
+    const [session = "", id = "", cmd = "", authority = "", ...titleParts] = line.split("\t");
     if (!session) continue;
     const list = bySession.get(session) ?? [];
-    list.push({ id, cmd, title });
+    list.push({ id, cmd, authority, title: titleParts.join("\t") });
     bySession.set(session, list);
   }
   return bySession;
+}
+
+/**
+ * Acknowledge an authority-reported `done` for a viewed pane by rewriting its
+ * option to idle — otherwise the stamped "done" would resurface every tick.
+ */
+function ackDone(paneId: string, nowSec: number): void {
+  tmux(["set-option", "-p", "-t", paneId, "@agent_state", `idle:${nowSec}`]);
 }
 
 /**

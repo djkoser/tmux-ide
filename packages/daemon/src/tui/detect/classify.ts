@@ -21,6 +21,38 @@ export type AgentStatus = "blocked" | "working" | "done" | "idle" | "unknown";
 export type InstantState = "blocked" | "working" | "idle" | "unknown";
 
 /**
+ * Working/blocked reports older than this are considered stale — the agent
+ * (or its hook) probably died mid-turn, so we fall back to screen scraping.
+ * Done/idle are terminal until the next event and never go stale.
+ */
+const AUTHORITY_STALE_SECONDS = 600;
+
+const AUTHORITY_STATES = new Set(["working", "blocked", "done", "idle"]);
+
+/**
+ * Parse an authoritative `@agent_state` pane option (`"<state>:<epoch>"`,
+ * written by lifecycle-hook integrations or any self-reporting agent).
+ * PURE — returns the reported status, or null when the value is absent,
+ * malformed, or stale (working/blocked past {@link AUTHORITY_STALE_SECONDS}).
+ * A fresh authority report OUTRANKS screen-manifest scraping.
+ */
+export function parseAuthority(raw: string | undefined, nowSec: number): AgentStatus | null {
+  if (!raw) return null;
+  const sep = raw.lastIndexOf(":");
+  if (sep === -1) return null;
+  const state = raw.slice(0, sep);
+  const epoch = Number(raw.slice(sep + 1));
+  if (!AUTHORITY_STATES.has(state) || !Number.isFinite(epoch)) return null;
+  if (
+    (state === "working" || state === "blocked") &&
+    nowSec - epoch > AUTHORITY_STALE_SECONDS
+  ) {
+    return null;
+  }
+  return state as AgentStatus;
+}
+
+/**
  * Classify a single snapshot against a manifest — PURE, never throws.
  *
  * - no manifest → `"unknown"` (we can't reason about an unrecognized command)

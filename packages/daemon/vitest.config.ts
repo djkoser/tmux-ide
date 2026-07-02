@@ -14,6 +14,7 @@ export default defineConfig({
       "src/tui/team/*.test.ts",
       "src/tui/mirror/*.test.ts",
       "src/tui/chrome/*.test.ts",
+      "src/tui/integrations/*.test.ts",
     ],
     coverage: {
       provider: "v8",

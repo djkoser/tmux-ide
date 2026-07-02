@@ -85,6 +85,7 @@ const knownCommands = new Set([
   "statusline",
   "adopt",
   "unadopt",
+  "integration",
   "chrome-updater",
   "cheatsheet",
   "command-center",
@@ -140,6 +141,7 @@ ${bold("Usage:")}
   ${cyan("tmux-ide adopt")} <session>    ${dim("Add the live tmux-ide status bar to a session")}
   ${cyan("tmux-ide adopt --all")}        ${dim("Adopt every live (non-internal) session")}
   ${cyan("tmux-ide unadopt")} <session>  ${dim("Remove the status bar")}
+  ${cyan("tmux-ide integration install claude")}  ${dim("Authoritative agent status via Claude Code hooks")}
   ${cyan("tmux-ide cheatsheet")}         ${dim("Print the key cheat sheet (⌥k / [ ? keys ] popup)")}
   ${cyan("tmux-ide ls")}                 ${dim("List all tmux sessions")}
   ${cyan("tmux-ide status")} [--json]    ${dim("Show session status")}
@@ -495,6 +497,38 @@ try {
       }
       unadoptSession(target);
       console.log(`unadopted ${target}`);
+      break;
+    }
+
+    case "integration": {
+      const sub = positionals[1];
+      const agent = positionals[2];
+      if (!sub || (sub !== "status" && agent !== "claude")) {
+        console.error(
+          "Usage: tmux-ide integration <install|uninstall|status> claude\n" +
+            "  install    hook Claude Code lifecycle events into tmux pane state\n" +
+            "  uninstall  remove exactly the tmux-ide hook entries\n" +
+            "  status     show whether the integration is installed",
+        );
+        process.exit(1);
+      }
+      const mod = await import("../packages/daemon/src/tui/integrations/claude.ts");
+      if (sub === "install") {
+        const { scriptPath, settingsPath } = mod.installClaudeIntegration();
+        console.log(`hook script: ${scriptPath}`);
+        console.log(`settings:    ${settingsPath} (backup written once as .tmux-ide.bak)`);
+        console.log(
+          "installed — NEW Claude Code sessions now report working/blocked/done " +
+            "authoritatively into the tmux-ide chrome.",
+        );
+      } else if (sub === "uninstall") {
+        const { wasInstalled } = mod.uninstallClaudeIntegration();
+        console.log(wasInstalled ? "uninstalled — hook entries removed" : "was not installed");
+      } else {
+        const s = mod.claudeIntegrationStatus();
+        console.log(`claude: ${s.installed ? "installed" : "not installed"}`);
+        if (json) console.log(JSON.stringify(s));
+      }
       break;
     }
 

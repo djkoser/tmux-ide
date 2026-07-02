@@ -1768,8 +1768,21 @@ var classify_exports = {};
 __export(classify_exports, {
   classifyInstant: () => classifyInstant,
   classifyPaneCommand: () => classifyPaneCommand,
-  createStatusTracker: () => createStatusTracker
+  createStatusTracker: () => createStatusTracker,
+  parseAuthority: () => parseAuthority
 });
+function parseAuthority(raw, nowSec) {
+  if (!raw) return null;
+  const sep2 = raw.lastIndexOf(":");
+  if (sep2 === -1) return null;
+  const state = raw.slice(0, sep2);
+  const epoch = Number(raw.slice(sep2 + 1));
+  if (!AUTHORITY_STATES.has(state) || !Number.isFinite(epoch)) return null;
+  if ((state === "working" || state === "blocked") && nowSec - epoch > AUTHORITY_STALE_SECONDS) {
+    return null;
+  }
+  return state;
+}
 function classifyInstant(snapshot, manifest) {
   if (!manifest) return "unknown";
   const { state } = evaluateManifest(snapshot, manifest);
@@ -1834,11 +1847,14 @@ function createStatusTracker() {
     }
   };
 }
+var AUTHORITY_STALE_SECONDS, AUTHORITY_STATES;
 var init_classify = __esm({
   "packages/daemon/src/tui/detect/classify.ts"() {
     "use strict";
     init_manifest();
     init_manifests();
+    AUTHORITY_STALE_SECONDS = 600;
+    AUTHORITY_STATES = /* @__PURE__ */ new Set(["working", "blocked", "done", "idle"]);
   }
 });
 
@@ -2171,7 +2187,16 @@ function listTeamSessions(tracker, opts = {}) {
     const [name = "", attached = "", windows = "0"] = line.split("	");
     const panes = panesBySession.get(name) ?? [];
     const seen = opts.viewed === name;
+    const nowSec = Math.floor(Date.now() / 1e3);
     const statuses = panes.map((pane) => {
+      const authority = parseAuthority(pane.authority, nowSec);
+      if (authority !== null) {
+        if (authority === "done" && seen) {
+          ackDone(pane.id, nowSec);
+          return "idle";
+        }
+        return authority;
+      }
       const manifest = pickManifest(pane.cmd, BUNDLED_MANIFESTS);
       const instant = manifest ? classifyInstant({ ...readPaneSnapshot(pane.id), title: pane.title }, manifest) : "unknown";
       return tracker.update(pane.id, instant, { seen });
@@ -2190,17 +2215,20 @@ function collectPanes() {
     "list-panes",
     "-a",
     "-F",
-    "#{session_name}	#{pane_id}	#{pane_current_command}	#{pane_title}"
+    "#{session_name}	#{pane_id}	#{pane_current_command}	#{@agent_state}	#{pane_title}"
   ]);
   const bySession = /* @__PURE__ */ new Map();
   for (const line of raw.split("\n").filter(Boolean)) {
-    const [session = "", id = "", cmd = "", title = ""] = line.split("	");
+    const [session = "", id = "", cmd = "", authority = "", ...titleParts] = line.split("	");
     if (!session) continue;
     const list = bySession.get(session) ?? [];
-    list.push({ id, cmd, title });
+    list.push({ id, cmd, authority, title: titleParts.join("	") });
     bySession.set(session, list);
   }
   return bySession;
+}
+function ackDone(paneId, nowSec) {
+  tmux(["set-option", "-p", "-t", paneId, "@agent_state", `idle:${nowSec}`]);
 }
 function rollupStatus(statuses) {
   if (statuses.length === 0) return "idle";
@@ -4757,10 +4785,10 @@ function defaultDeferRestart(restart2) {
   setImmediate(restart2);
 }
 async function appSetRemoteAccessHandler(input, deps2 = {}) {
-  const readSettings = deps2.readSettings ?? readAppSettings;
+  const readSettings2 = deps2.readSettings ?? readAppSettings;
   const writeSettings = deps2.writeSettings ?? writeAppSettings;
   const nextEnabled = input.enabled;
-  const current = readSettings();
+  const current = readSettings2();
   const token = nextEnabled ? current.remoteAccess.token ?? (deps2.generateToken ?? generateAuthToken)() : null;
   const next = {
     ...current,
@@ -8677,6 +8705,124 @@ var init_report = __esm({
   }
 });
 
+// packages/daemon/src/tui/integrations/claude.ts
+var claude_exports = {};
+__export(claude_exports, {
+  EVENT_STATES: () => EVENT_STATES,
+  HOOK_SCRIPT: () => HOOK_SCRIPT,
+  HOOK_SCRIPT_RELPATH: () => HOOK_SCRIPT_RELPATH,
+  claudeIntegrationStatus: () => claudeIntegrationStatus,
+  claudeSettingsPath: () => claudeSettingsPath,
+  hookScriptPath: () => hookScriptPath,
+  installClaudeIntegration: () => installClaudeIntegration,
+  isInstalled: () => isInstalled,
+  mergeHooks: () => mergeHooks,
+  removeHooks: () => removeHooks,
+  uninstallClaudeIntegration: () => uninstallClaudeIntegration
+});
+import { chmodSync as chmodSync2, copyFileSync as copyFileSync2, existsSync as existsSync19, mkdirSync as mkdirSync8, readFileSync as readFileSync12, writeFileSync as writeFileSync9 } from "node:fs";
+import { homedir as homedir9 } from "node:os";
+import { dirname as dirname10, join as join15 } from "node:path";
+function hookScriptPath() {
+  return join15(homedir9(), HOOK_SCRIPT_RELPATH);
+}
+function claudeSettingsPath() {
+  return join15(homedir9(), ".claude", "settings.json");
+}
+function isOurs(group) {
+  return group.hooks?.some((h) => h.command?.includes(HOOK_SCRIPT_RELPATH)) ?? false;
+}
+function mergeHooks(settings, scriptPath) {
+  const next = { ...settings, hooks: { ...settings.hooks ?? {} } };
+  const hooks = next.hooks;
+  for (const { event, state, matcher } of EVENT_STATES) {
+    const existing = (hooks[event] ?? []).filter((g) => !isOurs(g));
+    const group = {
+      ...matcher !== void 0 ? { matcher } : {},
+      hooks: [{ type: "command", command: `${scriptPath} ${state}` }]
+    };
+    hooks[event] = [...existing, group];
+  }
+  return next;
+}
+function removeHooks(settings) {
+  if (!settings.hooks) return { ...settings };
+  const hooks = {};
+  for (const [event, groups] of Object.entries(settings.hooks)) {
+    const kept = groups.filter((g) => !isOurs(g));
+    if (kept.length > 0) hooks[event] = kept;
+  }
+  const next = { ...settings, hooks };
+  if (Object.keys(hooks).length === 0) delete next.hooks;
+  return next;
+}
+function isInstalled(settings) {
+  return Object.values(settings.hooks ?? {}).some((groups) => groups.some(isOurs));
+}
+function readSettings(path2) {
+  if (!existsSync19(path2)) return {};
+  try {
+    return JSON.parse(readFileSync12(path2, "utf8"));
+  } catch {
+    throw new Error(`${path2} is not valid JSON \u2014 fix or move it, then retry`);
+  }
+}
+function installClaudeIntegration() {
+  const script = hookScriptPath();
+  mkdirSync8(dirname10(script), { recursive: true });
+  writeFileSync9(script, HOOK_SCRIPT, "utf8");
+  chmodSync2(script, 493);
+  const settingsPath = claudeSettingsPath();
+  mkdirSync8(dirname10(settingsPath), { recursive: true });
+  const settings = readSettings(settingsPath);
+  const backup = `${settingsPath}.tmux-ide.bak`;
+  if (existsSync19(settingsPath) && !existsSync19(backup)) copyFileSync2(settingsPath, backup);
+  writeFileSync9(settingsPath, `${JSON.stringify(mergeHooks(settings, script), null, 2)}
+`, "utf8");
+  return { scriptPath: script, settingsPath };
+}
+function uninstallClaudeIntegration() {
+  const settingsPath = claudeSettingsPath();
+  const settings = readSettings(settingsPath);
+  const wasInstalled = isInstalled(settings);
+  if (wasInstalled) {
+    writeFileSync9(settingsPath, `${JSON.stringify(removeHooks(settings), null, 2)}
+`, "utf8");
+  }
+  return { settingsPath, wasInstalled };
+}
+function claudeIntegrationStatus() {
+  return {
+    installed: isInstalled(readSettings(claudeSettingsPath())),
+    scriptExists: existsSync19(hookScriptPath())
+  };
+}
+var HOOK_SCRIPT_RELPATH, HOOK_SCRIPT, EVENT_STATES;
+var init_claude = __esm({
+  "packages/daemon/src/tui/integrations/claude.ts"() {
+    "use strict";
+    HOOK_SCRIPT_RELPATH = ".tmux-ide/hooks/claude-state.sh";
+    HOOK_SCRIPT = `#!/bin/sh
+# tmux-ide agent-state hook (installed by: tmux-ide integration install claude)
+# $1 = state to report: working | blocked | done | idle
+state="\${1:-idle}"
+payload="$(cat 2>/dev/null || true)"
+[ -n "$TMUX_PANE" ] || exit 0
+tmux set-option -p -t "$TMUX_PANE" @agent_state "\${state}:$(date +%s)" 2>/dev/null || exit 0
+sid="$(printf '%s' "$payload" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' | head -1)"
+[ -n "$sid" ] && tmux set-option -p -t "$TMUX_PANE" @agent_session_id "$sid" 2>/dev/null
+exit 0
+`;
+    EVENT_STATES = [
+      { event: "UserPromptSubmit", state: "working" },
+      { event: "PreToolUse", state: "working", matcher: "*" },
+      { event: "Notification", state: "blocked" },
+      { event: "Stop", state: "done" },
+      { event: "SessionEnd", state: "idle" }
+    ];
+  }
+});
+
 // packages/daemon/src/command-center/index.ts
 var command_center_exports = {};
 __export(command_center_exports, {
@@ -8779,9 +8925,9 @@ var init_server2 = __esm({
 // bin/cli.ts
 init_launch();
 import { parseArgs } from "node:util";
-import { resolve as resolve20, dirname as dirname10, join as join15 } from "node:path";
+import { resolve as resolve20, dirname as dirname11, join as join16 } from "node:path";
 import { execFileSync as execFileSync7 } from "node:child_process";
-import { existsSync as existsSync19 } from "node:fs";
+import { existsSync as existsSync20 } from "node:fs";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // packages/daemon/src/tui/team/entry.ts
@@ -9333,7 +9479,7 @@ init_restart();
 init_send();
 init_errors2();
 init_output();
-var __dirname4 = dirname10(fileURLToPath4(import.meta.url));
+var __dirname4 = dirname11(fileURLToPath4(import.meta.url));
 var { positionals, values } = parseArgs({
   allowPositionals: true,
   strict: false,
@@ -9392,6 +9538,7 @@ var knownCommands = /* @__PURE__ */ new Set([
   "statusline",
   "adopt",
   "unadopt",
+  "integration",
   "chrome-updater",
   "cheatsheet",
   "command-center",
@@ -9440,6 +9587,7 @@ ${bold2("Usage:")}
   ${cyan2("tmux-ide adopt")} <session>    ${dim2("Add the live tmux-ide status bar to a session")}
   ${cyan2("tmux-ide adopt --all")}        ${dim2("Adopt every live (non-internal) session")}
   ${cyan2("tmux-ide unadopt")} <session>  ${dim2("Remove the status bar")}
+  ${cyan2("tmux-ide integration install claude")}  ${dim2("Authoritative agent status via Claude Code hooks")}
   ${cyan2("tmux-ide cheatsheet")}         ${dim2("Print the key cheat sheet (\u2325k / [ ? keys ] popup)")}
   ${cyan2("tmux-ide ls")}                 ${dim2("List all tmux sessions")}
   ${cyan2("tmux-ide status")} [--json]    ${dim2("Show session status")}
@@ -9474,7 +9622,7 @@ ${bold2("Flags:")}
   ${cyan2("-v, --version")}               ${dim2("Show version number")}`);
 }
 function assertBunWidgetAvailable(scriptPath, commandLabel) {
-  const widgetMissing = !existsSync19(scriptPath);
+  const widgetMissing = !existsSync20(scriptPath);
   let bunMissing = false;
   try {
     execFileSync7("bun", ["--version"], { stdio: "ignore" });
@@ -9518,7 +9666,7 @@ try {
   switch (command) {
     case "start": {
       const targetDir = resolve20(startTargetDir || ".");
-      const hasIdeYml = existsSync19(join15(targetDir, "ide.yml"));
+      const hasIdeYml = existsSync20(join16(targetDir, "ide.yml"));
       if (shouldOpenCockpit(hasIdeYml, values.team === true)) {
         if (json) {
           await printFleetJson();
@@ -9615,8 +9763,8 @@ try {
       const messageStart = values.to ? 1 : 2;
       let message = positionals.slice(messageStart).join(" ");
       if (!message && !process.stdin.isTTY) {
-        const { readFileSync: readFileSync12 } = await import("node:fs");
-        message = readFileSync12(0, "utf-8").trim();
+        const { readFileSync: readFileSync13 } = await import("node:fs");
+        message = readFileSync13(0, "utf-8").trim();
       }
       await send(null, { json, to: target, message, noEnter: values["no-enter"] });
       break;
@@ -9725,6 +9873,33 @@ try {
       }
       unadoptSession2(target);
       console.log(`unadopted ${target}`);
+      break;
+    }
+    case "integration": {
+      const sub = positionals[1];
+      const agent = positionals[2];
+      if (!sub || sub !== "status" && agent !== "claude") {
+        console.error(
+          "Usage: tmux-ide integration <install|uninstall|status> claude\n  install    hook Claude Code lifecycle events into tmux pane state\n  uninstall  remove exactly the tmux-ide hook entries\n  status     show whether the integration is installed"
+        );
+        process.exit(1);
+      }
+      const mod = await Promise.resolve().then(() => (init_claude(), claude_exports));
+      if (sub === "install") {
+        const { scriptPath, settingsPath } = mod.installClaudeIntegration();
+        console.log(`hook script: ${scriptPath}`);
+        console.log(`settings:    ${settingsPath} (backup written once as .tmux-ide.bak)`);
+        console.log(
+          "installed \u2014 NEW Claude Code sessions now report working/blocked/done authoritatively into the tmux-ide chrome."
+        );
+      } else if (sub === "uninstall") {
+        const { wasInstalled } = mod.uninstallClaudeIntegration();
+        console.log(wasInstalled ? "uninstalled \u2014 hook entries removed" : "was not installed");
+      } else {
+        const s = mod.claudeIntegrationStatus();
+        console.log(`claude: ${s.installed ? "installed" : "not installed"}`);
+        if (json) console.log(JSON.stringify(s));
+      }
       break;
     }
     case "chrome-updater": {
