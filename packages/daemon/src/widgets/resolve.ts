@@ -1,4 +1,5 @@
 import { resolve, dirname } from "node:path";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { ThemeConfig } from "../types.ts";
 import { shellEscape } from "../lib/shell.ts";
@@ -12,32 +13,55 @@ interface WidgetOptions {
   theme: ThemeConfig | null;
 }
 
-// The .tsx extension is used at runtime; Bun handles JSX via preload plugin
+// The .tsx extension is used at runtime; Bun handles JSX via preload plugin.
+// Exactly the widgets that exist — a stale entry here becomes a dead
+// `Module not found` pane at launch time.
 const WIDGET_ENTRY_POINTS: Record<string, string> = {
   explorer: "explorer/index.tsx",
   changes: "changes/index.tsx",
   preview: "preview/index.tsx",
-  tasks: "tasks/index.tsx",
-  costs: "costs/index.tsx",
   setup: "setup/index.tsx",
   config: "config/index.tsx",
-  "mission-control": "mission-control/index.tsx",
   sidebar: "sidebar/index.tsx",
 };
+
+/**
+ * Resolve a widget entry to an absolute path that works from BOTH runtimes:
+ * unbundled (this file lives in packages/daemon/src/widgets — entries are
+ * siblings) and the esbuild bundle (import.meta.url collapses to bin/cli.js,
+ * so entries live at ../packages/daemon/src/widgets from there). Probing with
+ * existsSync keeps one code path honest instead of guessing by environment.
+ */
+function widgetEntryPath(entry: string): string {
+  const sibling = resolve(__dirname, entry);
+  if (existsSync(sibling)) return sibling;
+  return resolve(__dirname, "../packages/daemon/src/widgets", entry);
+}
+
+/**
+ * The tmux-ide repo root — where bunfig.toml (the JSX preload) lives. Widgets
+ * must be SPAWNED from here regardless of which project they render (the
+ * project dir travels via --dir); cd-ing to the project instead crashes bun
+ * with "Cannot find module react/jsx-dev-runtime" outside this repo.
+ */
+const REPO_ROOT = existsSync(resolve(__dirname, "explorer/index.tsx"))
+  ? resolve(__dirname, "../../../..") // unbundled: src/widgets → repo root
+  : resolve(__dirname, ".."); // bundled: bin → repo root
 
 export function resolveWidgetCommand(type: string, opts: WidgetOptions): string {
   const entry = WIDGET_ENTRY_POINTS[type];
   if (!entry) throw new Error(`Unknown widget type: ${type}`);
 
-  const scriptPath = resolve(__dirname, entry);
+  const scriptPath = widgetEntryPath(entry);
   const args = [`--session=${opts.session}`, `--dir=${opts.dir}`];
   if (opts.target) args.push(`--target=${opts.target}`);
   if (opts.theme) args.push(`--theme=${JSON.stringify(opts.theme)}`);
 
   const escapedArgs = args.map(shellEscape).join(" ");
 
-  // cd to project root first so bunfig.toml preload is found
-  return `cd ${shellEscape(opts.dir)} && bun ${shellEscape(scriptPath)} ${escapedArgs}`;
+  // cd to the tmux-ide REPO root (not the project) so bunfig.toml's JSX
+  // preload is found; the project dir rides in via --dir.
+  return `cd ${shellEscape(REPO_ROOT)} && bun ${shellEscape(scriptPath)} ${escapedArgs}`;
 }
 
 export interface WidgetSpawnSpec {
@@ -54,12 +78,12 @@ export function resolveWidgetSpawn(type: string, opts: WidgetOptions): WidgetSpa
   const entry = WIDGET_ENTRY_POINTS[type];
   if (!entry) throw new Error(`Unknown widget type: ${type}`);
 
-  const scriptPath = resolve(__dirname, entry);
+  const scriptPath = widgetEntryPath(entry);
   const args = [`--session=${opts.session}`, `--dir=${opts.dir}`];
   if (opts.target) args.push(`--target=${opts.target}`);
   if (opts.theme) args.push(`--theme=${JSON.stringify(opts.theme)}`);
 
-  return { cwd: opts.dir, cmd: ["bun", scriptPath, ...args] };
+  return { cwd: REPO_ROOT, cmd: ["bun", scriptPath, ...args] };
 }
 
 export const WIDGET_TYPES = Object.keys(WIDGET_ENTRY_POINTS);
