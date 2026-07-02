@@ -5,6 +5,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { adoptedSessionsFrom, runUpdaterTick } from "./updater.ts";
 import { buildStatusline } from "./statusline.ts";
+import type { AgentEventInit } from "./events.ts";
+import type { AgentStatus } from "../detect/classify.ts";
 import type { TeamProject } from "../team/projects.ts";
 
 function project(name: string, overrides: Partial<TeamProject> = {}): TeamProject {
@@ -70,5 +72,50 @@ describe("runUpdaterTick", () => {
     runUpdaterTick({ listAdopted: () => [], computeProjects, writeStatus });
     expect(computeProjects).not.toHaveBeenCalled();
     expect(writeStatus).not.toHaveBeenCalled();
+  });
+
+  it("appends the fleet's transitions to the injected event sink", () => {
+    const appended: AgentEventInit[][] = [];
+    const prevState = new Map<string, AgentStatus>([["web", "working"]]);
+    runUpdaterTick({
+      listAdopted: () => ["web"],
+      // web changes working→done; api is seen for the first time.
+      computeProjects: () => [
+        project("web", {
+          status: "done",
+          sessions: [{ name: "web", attached: false, windows: 1, panes: 1, status: "done" }],
+        }),
+        project("api", {
+          status: "working",
+          sessions: [{ name: "api", attached: false, windows: 1, panes: 1, status: "working" }],
+        }),
+      ],
+      writeStatus: () => {},
+      prevState,
+      appendEvents: (events) => appended.push(events),
+    });
+
+    expect(appended).toEqual([
+      [
+        { session: "web", from: "working", to: "done" },
+        { session: "api", from: null, to: "working" },
+      ],
+    ]);
+    // prevState was mutated in place to the fresh fleet state.
+    expect(prevState.get("web")).toBe("done");
+    expect(prevState.get("api")).toBe("working");
+  });
+
+  it("does not call the event sink when nothing transitioned", () => {
+    const appendEvents = vi.fn();
+    const prevState = new Map<string, AgentStatus>([["web", "idle"]]);
+    runUpdaterTick({
+      listAdopted: () => ["web"],
+      computeProjects: () => [project("web")], // status "idle" — unchanged
+      writeStatus: () => {},
+      prevState,
+      appendEvents,
+    });
+    expect(appendEvents).not.toHaveBeenCalled();
   });
 });

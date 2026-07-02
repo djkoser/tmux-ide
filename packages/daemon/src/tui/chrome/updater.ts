@@ -21,8 +21,9 @@
  * without a live tmux; `adoptedSessionsFrom` is a pure parser.
  */
 import { hasSession, isProcessAlive, runTmux } from "@tmux-ide/tmux-bridge";
-import { createStatusTracker } from "../detect/classify.ts";
+import { createStatusTracker, type AgentStatus } from "../detect/classify.ts";
 import { listTeamProjects, type TeamProject } from "../team/projects.ts";
+import { appendEvents, diffFleet, type AgentEventInit } from "./events.ts";
 import { buildStatusline } from "./statusline.ts";
 
 /** Per-session user option holding the pre-rendered status-bar string. */
@@ -74,6 +75,19 @@ export interface UpdaterTickDeps {
   listAdopted: () => string[];
   computeProjects: () => TeamProject[];
   writeStatus: (session: string, value: string) => void;
+  /**
+   * Transition tracking (optional). When both are supplied, the tick diffs the
+   * WHOLE fleet against `prevState` and appends any transitions via
+   * `appendEvents`, mutating `prevState` in place to the fresh state. Omitted by
+   * callers/tests that only care about the status bars.
+   */
+  prevState?: Map<string, AgentStatus>;
+  appendEvents?: (events: AgentEventInit[]) => void;
+}
+
+/** Flatten the project view to a flat per-session status list for {@link diffFleet}. */
+function fleetStatuses(projects: TeamProject[]): Array<{ name: string; status: AgentStatus }> {
+  return projects.flatMap((p) => p.sessions.map((s) => ({ name: s.name, status: s.status })));
 }
 
 /**
@@ -81,6 +95,11 @@ export interface UpdaterTickDeps {
  * adopted session its own {@link buildStatusline} (its name flagged active so
  * the per-session highlight is correct). PURE given its deps — no tmux, no
  * fleet scan when nothing is adopted.
+ *
+ * When `prevState`/`appendEvents` are wired, it also detects state TRANSITIONS
+ * across the whole fleet (not just adopted sessions) and appends them to the
+ * event log — the updater is the one process that sees every tick, so it's the
+ * natural place to emit history.
  */
 export function runUpdaterTick(deps: UpdaterTickDeps): void {
   const adopted = deps.listAdopted();
@@ -88,6 +107,12 @@ export function runUpdaterTick(deps: UpdaterTickDeps): void {
   const projects = deps.computeProjects();
   for (const session of adopted) {
     deps.writeStatus(session, buildStatusline(projects, session));
+  }
+  if (deps.prevState && deps.appendEvents) {
+    const { events, state } = diffFleet(deps.prevState, fleetStatuses(projects));
+    deps.prevState.clear();
+    for (const [name, status] of state) deps.prevState.set(name, status);
+    if (events.length > 0) deps.appendEvents(events);
   }
 }
 
@@ -185,12 +210,16 @@ function releaseUpdater(): void {
 export function runUpdaterLoop(): void {
   if (!claimUpdater()) return;
   const tracker = createStatusTracker();
+  // Persistent across ticks so `diffFleet` can spot working→done etc.
+  const prevState = new Map<string, AgentStatus>();
   const tick = () => {
     try {
       runUpdaterTick({
         listAdopted: listAdoptedSessions,
         computeProjects: () => listTeamProjects(tracker),
         writeStatus: writeSessionStatus,
+        prevState,
+        appendEvents,
       });
     } catch {
       // never let one bad tick kill the loop

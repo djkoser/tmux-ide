@@ -52,6 +52,9 @@ const { positionals, values } = parseArgs({
     // wait command flags
     status: { type: "string" },
     timeout: { type: "string" },
+    match: { type: "string" },
+    // events command flag
+    follow: { type: "boolean" },
     // force the team cockpit instead of launching a project
     team: { type: "boolean" },
     // adopt every live (non-internal) session at once
@@ -82,6 +85,7 @@ const knownCommands = new Set([
   "team",
   "switcher",
   "wait",
+  "events",
   "statusline",
   "adopt",
   "unadopt",
@@ -139,6 +143,9 @@ ${bold("Usage:")}
   ${cyan("tmux-ide switcher")}           ${dim("Compact session picker (opens in the M-p popup on adopted sessions)")}
   ${cyan("tmux-ide wait agent-status")} <session> --status <s> [--timeout <ms>]
                               ${dim("Block until a session reaches a status (exit 0 match / 1 timeout)")}
+  ${cyan("tmux-ide wait output")} <pane|session> --match <regex> [--timeout <ms>]
+                              ${dim("Block until a pane's output matches a regex (exit 0 match / 1 timeout)")}
+  ${cyan("tmux-ide events")} [--follow] [--json]  ${dim("Stream agent-status transitions (needs an adopted session)")}
   ${cyan("tmux-ide adopt")} <session>    ${dim("Add the live tmux-ide status bar to a session")}
   ${cyan("tmux-ide adopt --all")}        ${dim("Adopt every live (non-internal) session")}
   ${cyan("tmux-ide unadopt")} <session>  ${dim("Remove the status bar")}
@@ -400,12 +407,68 @@ try {
     }
 
     case "wait": {
+      const sub = positionals[1];
+
+      // `wait output <pane|session> --match <regex>` — block until a pane's
+      // captured text matches. The target may be a pane id (%N) or a session
+      // name; tmux resolves both (a session targets its active pane).
+      if (sub === "output") {
+        const target = positionals[2];
+        const pattern = values.match;
+        if (!target || typeof pattern !== "string" || pattern.length === 0) {
+          console.error(
+            "Usage: tmux-ide wait output <pane|session> --match <regex> [--timeout <ms>]",
+          );
+          process.exit(1);
+        }
+        try {
+          new RegExp(pattern!); // validate up front; a bad pattern is a usage error
+        } catch (err) {
+          console.error(`Invalid --match regex: ${(err as Error).message}`);
+          process.exit(1);
+        }
+        const { capturePane } = await import("../packages/tmux-bridge/src/index.ts");
+        const outTimeout = Number(values.timeout ?? "60000");
+        const outStart = Date.now();
+        const nap = (ms: number) => new Promise((r) => setTimeout(r, ms));
+        while (true) {
+          let text = "";
+          try {
+            text = capturePane(target!, { lines: 200 });
+          } catch {
+            // pane/session not (yet) available — keep polling until timeout
+          }
+          const lines = text.split("\n");
+          // Fresh regex per test so a user-supplied /g flag can't carry lastIndex
+          // between calls. Report the specific matching line when we can.
+          let hit: string | null = null;
+          for (const line of lines) {
+            if (new RegExp(pattern!).test(line)) {
+              hit = line;
+              break;
+            }
+          }
+          if (hit === null && new RegExp(pattern!).test(text)) hit = lines[lines.length - 1] ?? "";
+          if (hit !== null) {
+            if (json) console.log(JSON.stringify({ matched: hit }));
+            else console.log(hit);
+            process.exit(0);
+          }
+          if (Date.now() - outStart >= outTimeout) {
+            console.error(
+              `Timed out after ${outTimeout}ms waiting for ${target} output to match /${pattern}/`,
+            );
+            process.exit(1);
+          }
+          await nap(500);
+        }
+      }
+
       const { createStatusTracker } = await import("../packages/daemon/src/tui/detect/classify.ts");
       const { listTeamSessions } = await import("../packages/daemon/src/tui/team/sessions.ts");
       const { findSessionStatus } = await import("../packages/daemon/src/tui/team/report.ts");
 
       const VALID = new Set(["blocked", "working", "done", "idle", "unknown"]);
-      const sub = positionals[1];
       const sessionName = positionals[2];
       const want = values.status;
 
@@ -442,6 +505,93 @@ try {
         }
         await sleep(750);
       }
+    }
+
+    case "events": {
+      // Stream agent-status transitions from the log the chrome updater writes.
+      const { readFileSync, existsSync, statSync, openSync, readSync, closeSync } =
+        await import("node:fs");
+      const { eventsPath, formatEventLine } =
+        await import("../packages/daemon/src/tui/chrome/events.ts");
+      type Status = "blocked" | "working" | "done" | "idle" | "unknown";
+      type EventLike = { ts: string; session: string; from: Status | null; to: Status };
+
+      const path = eventsPath();
+      if (!existsSync(path)) {
+        console.log("no events yet — is a session adopted? (the chrome updater writes events)");
+        break;
+      }
+
+      // Status → ANSI color, matching the chrome bar's palette in spirit.
+      const paintStatus = (status: Status | null, text: string): string => {
+        if (noColor || status === null) return text;
+        const code =
+          status === "blocked"
+            ? "203"
+            : status === "working"
+              ? "221"
+              : status === "done"
+                ? "111"
+                : status === "idle"
+                  ? "114"
+                  : "244";
+        return `\x1b[38;5;${code}m${text}\x1b[39m`;
+      };
+      const printLine = (raw: string): void => {
+        if (json) {
+          console.log(raw);
+          return;
+        }
+        try {
+          const ev = JSON.parse(raw) as EventLike;
+          console.log(formatEventLine(ev, paintStatus));
+        } catch {
+          // skip malformed line
+        }
+      };
+
+      const allLines = readFileSync(path, "utf8")
+        .split("\n")
+        .filter((l) => l.trim().length > 0);
+      for (const line of allLines.slice(-50)) printLine(line);
+
+      if (!values.follow) break;
+
+      // Follow: poll the file for appended bytes and stream complete new lines.
+      let offset = statSync(path).size;
+      let leftover = "";
+      const timer = setInterval(() => {
+        let size: number;
+        try {
+          size = statSync(path).size;
+        } catch {
+          return;
+        }
+        if (size < offset) {
+          // rotated/truncated — restart from the top of the new file
+          offset = 0;
+          leftover = "";
+        }
+        if (size <= offset) return;
+        const fd = openSync(path, "r");
+        try {
+          const buf = Buffer.alloc(size - offset);
+          readSync(fd, buf, 0, buf.length, offset);
+          offset = size;
+          const parts = (leftover + buf.toString("utf8")).split("\n");
+          leftover = parts.pop() ?? "";
+          for (const line of parts) if (line.trim().length > 0) printLine(line);
+        } finally {
+          closeSync(fd);
+        }
+      }, 500);
+      process.on("SIGINT", () => {
+        clearInterval(timer);
+        process.exit(0);
+      });
+      // Keep the process alive; the interval + SIGINT handler own the lifecycle.
+      await new Promise(() => {});
+      break;
     }
 
     case "statusline": {
