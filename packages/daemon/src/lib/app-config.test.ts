@@ -75,6 +75,14 @@ describe("parseAppConfig — deep partial merge", () => {
     expect(parseAppConfig({ welcome: { show: false } }).welcome.show).toBe(false);
   });
 
+  it("defaults integrations.offer to true and coerces a mistyped value back to it", () => {
+    expect(DEFAULT_APP_CONFIG.integrations.offer).toBe(true);
+    expect(parseAppConfig(undefined).integrations.offer).toBe(true);
+    expect(parseAppConfig({ integrations: { offer: "nope" } }).integrations.offer).toBe(true);
+    // an explicit false is honoured (suppresses the first-adopt offer popup)
+    expect(parseAppConfig({ integrations: { offer: false } }).integrations.offer).toBe(false);
+  });
+
   it("overrides the sidebar key while keeping the other chrome keys default", () => {
     const cfg = parseAppConfig({ keys: { sidebar: "M-B" } });
     expect(cfg.keys.sidebar).toBe("M-B");

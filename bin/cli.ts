@@ -758,12 +758,15 @@ try {
     case "integration": {
       const sub = positionals[1];
       const agent = positionals[2];
-      if (!sub || (sub !== "status" && agent !== "claude")) {
+      // `status` and `offer` need no agent arg; install/uninstall are claude-only.
+      const needsClaude = sub === "install" || sub === "uninstall";
+      if (!sub || (needsClaude && agent !== "claude")) {
         console.error(
-          "Usage: tmux-ide integration <install|uninstall|status> claude\n" +
+          "Usage: tmux-ide integration <install|uninstall|status|offer> [claude]\n" +
             "  install    hook Claude Code lifecycle events into tmux pane state\n" +
             "  uninstall  remove exactly the tmux-ide hook entries\n" +
-            "  status     show whether the integration is installed",
+            "  status     list discovered agents + integration state\n" +
+            "  offer      one-time first-adopt install prompt (used by the popup)",
         );
         process.exit(1);
       }
@@ -779,10 +782,70 @@ try {
       } else if (sub === "uninstall") {
         const { wasInstalled } = mod.uninstallClaudeIntegration();
         console.log(wasInstalled ? "uninstalled — hook entries removed" : "was not installed");
+      } else if (sub === "offer") {
+        // The one-time first-adopt prompt, run inside a `display-popup` by
+        // adoptSession (see ../packages/daemon/src/tui/integrations/offer.ts). It
+        // reads ONE key: `y` installs, anything else skips — and writes the
+        // marker either way so it never asks twice. Must never throw or hang.
+        const offerMod = await import("../packages/daemon/src/tui/integrations/offer.ts");
+        try {
+          console.log(offerMod.buildOfferText());
+        } catch {
+          console.log("Claude Code detected — install the tmux-ide integration? [y/N]");
+        }
+        const act = (key: string): void => {
+          offerMod.markIntegrationOffered();
+          if (key === "y" || key === "Y") {
+            try {
+              mod.installClaudeIntegration();
+              console.log("\ninstalled — new Claude Code sessions now report state to tmux-ide.");
+            } catch (e) {
+              console.log(`\ninstall failed: ${(e as Error).message}`);
+            }
+          } else {
+            console.log("\nskipped — run `tmux-ide integration install claude` anytime.");
+          }
+        };
+        // Test/automation hook: a forced key exits immediately, no stdin — lets
+        // the offer flow be exercised deterministically without a live keypress.
+        const forced = process.env.TMUX_IDE_OFFER_KEY;
+        if (forced !== undefined) {
+          act(forced);
+          process.exit(0);
+        }
+        const closeOffer = () => process.exit(0);
+        const offerTimer = setTimeout(closeOffer, 60_000);
+        offerTimer.unref?.();
+        try {
+          process.stdin.setRawMode?.(true);
+          process.stdin.resume();
+          process.stdin.once("data", (data) => {
+            act(data.toString());
+            console.log("\n[ press any key to close ]");
+            process.stdin.once("data", closeOffer);
+            process.stdin.once("end", closeOffer);
+          });
+          process.stdin.once("end", closeOffer);
+        } catch {
+          closeOffer();
+        }
       } else {
-        const s = mod.claudeIntegrationStatus();
-        console.log(`claude: ${s.installed ? "installed" : "not installed"}`);
-        if (json) console.log(JSON.stringify(s));
+        // status — the discovery table: every known agent, whether it's on PATH,
+        // and (for agents we integrate) whether the integration is installed.
+        const { discoverAgents } = await import("../packages/daemon/src/lib/agent-discovery.ts");
+        const agents = discoverAgents();
+        if (json) {
+          console.log(JSON.stringify({ agents }, null, 2));
+          break;
+        }
+        for (const a of agents) {
+          let state: string;
+          if (a.path === null) state = "not found";
+          else if (a.integration)
+            state = a.installed ? "integration installed ✓" : "on PATH — integration not installed";
+          else state = "detected (no integration)";
+          console.log(`  ${a.id.padEnd(10)} ${state}`);
+        }
       }
       break;
     }

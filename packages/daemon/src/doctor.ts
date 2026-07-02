@@ -2,12 +2,44 @@ import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { getCurrentVersion, getUpdateStatus } from "./lib/update-check.ts";
+import { discoverAgents, presentAgents, type DiscoveredAgent } from "./lib/agent-discovery.ts";
 
 interface CheckResult {
   label: string;
   pass: boolean;
   detail: string;
   optional: boolean;
+}
+
+/**
+ * PURE — the "agent integrations" doctor rows, one per DISCOVERED agent (absent
+ * agents produce nothing — no noise). All rows are optional (informational, they
+ * never fail the overall check):
+ *   - `claude` + integration installed → a passing ✓ "integration installed ✓".
+ *   - `claude` on PATH but NOT installed → a ○ hint pointing at the installer.
+ *   - any other agent on PATH → a passing ✓ noting screen-manifest detection is
+ *     active but there's no lifecycle integration yet.
+ */
+export function agentIntegrationRows(agents: DiscoveredAgent[]): CheckResult[] {
+  return presentAgents(agents).map((agent) => {
+    const label = `agent: ${agent.id}`;
+    if (agent.integration) {
+      return agent.installed
+        ? { label, pass: true, detail: "integration installed ✓", optional: true }
+        : {
+            label,
+            pass: false,
+            detail: `found on PATH — run \`tmux-ide integration install ${agent.id}\` for ground-truth status`,
+            optional: true,
+          };
+    }
+    return {
+      label,
+      pass: true,
+      detail: "found — screen-manifest detection active (no lifecycle integration yet)",
+      optional: true,
+    };
+  });
 }
 
 function check(
@@ -141,6 +173,9 @@ export async function doctor({
       { optional: true },
     ),
   );
+
+  // Agent integrations: one row per agent discovered on PATH (absent → no row).
+  checks.push(...agentIntegrationRows(discoverAgents()));
 
   const allPass = checks.every((c) => c.pass || c.optional);
 

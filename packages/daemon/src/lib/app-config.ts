@@ -122,6 +122,17 @@ export interface AppWelcome {
   show: boolean;
 }
 
+/** Agent-integration auto-discovery config. */
+export interface AppIntegrations {
+  /**
+   * Whether the first-adopt integration OFFER may show (default true). Set false
+   * to suppress the one-time "claude detected — install the integration?" popup
+   * independently of the `<home>/integration-offered` marker (which records that
+   * it has already been shown once).
+   */
+  offer: boolean;
+}
+
 /** Worktree flow config (`tmux-ide worktree`). */
 export interface AppWorktrees {
   /**
@@ -141,6 +152,7 @@ export interface AppConfig {
   restore: AppRestore;
   updates: AppUpdates;
   welcome: AppWelcome;
+  integrations: AppIntegrations;
   worktrees: AppWorktrees;
 }
 
@@ -176,6 +188,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   restore: { resumeAgents: false },
   updates: { check: true },
   welcome: { show: true },
+  integrations: { offer: true },
   worktrees: { dir: "" },
 };
 
@@ -230,6 +243,7 @@ export function parseAppConfig(input: unknown): AppConfig {
   const restore = asObject(root.restore);
   const updates = asObject(root.updates);
   const welcome = asObject(root.welcome);
+  const integrations = asObject(root.integrations);
   const worktrees = asObject(root.worktrees);
   return {
     keys: {
@@ -271,6 +285,7 @@ export function parseAppConfig(input: unknown): AppConfig {
     restore: { resumeAgents: pickBool(restore.resumeAgents, D.restore.resumeAgents) },
     updates: { check: pickBool(updates.check, D.updates.check) },
     welcome: { show: pickBool(welcome.show, D.welcome.show) },
+    integrations: { offer: pickBool(integrations.offer, D.integrations.offer) },
     worktrees: { dir: pickString(worktrees.dir, D.worktrees.dir) },
   };
 }

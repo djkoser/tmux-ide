@@ -9,7 +9,9 @@ export default defineConfig({
   test: {
     include: [
       "src/restore.test.ts",
+      "src/doctor.test.ts",
       "src/terminal/__tests__/*.test.ts",
+      "src/lib/app-config.test.ts",
       "src/lib/__tests__/*.test.ts",
       "src/tui/detect/*.test.ts",
       "src/tui/team/*.test.ts",

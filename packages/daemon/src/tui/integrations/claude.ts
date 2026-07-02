@@ -19,7 +19,14 @@
  * hook-script path, a one-time backup is written next to settings.json, and
  * uninstall removes exactly our entries.
  */
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -30,8 +37,14 @@ export function hookScriptPath(): string {
   return join(homedir(), HOOK_SCRIPT_RELPATH);
 }
 
+/**
+ * Absolute path to Claude Code's settings file: `TMUX_IDE_CLAUDE_SETTINGS` when
+ * set (tests / per-run overrides), else `~/.claude/settings.json`. The override
+ * lets install/offer flows be exercised against a scratch file so a test never
+ * reads or rewrites the user's real settings.
+ */
 export function claudeSettingsPath(): string {
-  return join(homedir(), ".claude", "settings.json");
+  return process.env.TMUX_IDE_CLAUDE_SETTINGS ?? join(homedir(), ".claude", "settings.json");
 }
 
 /**

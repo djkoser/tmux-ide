@@ -27,6 +27,7 @@ import {
 import { PANEL_POPUPS, panelKey, panelPopupBindCommand } from "./panels.ts";
 import { sidebarToggleBindCommand } from "./sidebar.ts";
 import { maybeShowWelcomePopup } from "./welcome.ts";
+import { maybeOfferIntegrationPopup } from "../integrations/offer.ts";
 import { kittyEscapeFor, kittyUserKeyIndex, kittyUserKeyName } from "./kitty-keys.ts";
 import {
   ADOPTED_OPTION,
@@ -470,6 +471,10 @@ export function adoptSession(session: string, switcherCmd = "tmux-ide switcher")
   // First-run: float the one-time welcome card on the adopting client (gated by
   // the marker file + config; best-effort, never blocks or fails the adopt).
   maybeShowWelcomePopup();
+  // First-adopt: if Claude Code is on PATH but the integration isn't installed,
+  // offer to install it (one-time, marker + config gated; best-effort — never
+  // blocks or fails the adopt). See ../integrations/offer.ts.
+  maybeOfferIntegrationPopup();
 }
 
 /**
