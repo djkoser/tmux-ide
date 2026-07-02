@@ -130,6 +130,19 @@ describe("parseAppConfig — mistyped fields fall back to default", () => {
     });
     expect(parseAppConfig({ updates: { check: false } }).updates).toEqual({ check: false });
   });
+
+  it("worktrees.dir — a non-empty string overrides, anything else stays the empty default", () => {
+    expect(parseAppConfig({ worktrees: { dir: "../checkouts" } }).worktrees).toEqual({
+      dir: "../checkouts",
+    });
+    expect(parseAppConfig({ worktrees: { dir: "" } }).worktrees).toEqual(
+      DEFAULT_APP_CONFIG.worktrees,
+    );
+    expect(parseAppConfig({ worktrees: { dir: 42 } }).worktrees).toEqual(
+      DEFAULT_APP_CONFIG.worktrees,
+    );
+    expect(parseAppConfig({ worktrees: "nope" }).worktrees).toEqual(DEFAULT_APP_CONFIG.worktrees);
+  });
 });
 
 describe("loadAppConfig / getAppConfig / TMUX_IDE_CONFIG", () => {

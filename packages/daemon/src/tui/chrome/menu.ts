@@ -118,6 +118,16 @@ export function buildMenu(
     "＋ New session…",
     "n",
     `command-prompt -p "new session name:" "new-session -d -s '%%' ; switch-client -t '%%'"`,
+    "⎇ New worktree…",
+    "w",
+    // Prompt for a branch, then create a git worktree + session for it. The
+    // command-prompt template is SINGLE-quoted so the inner run-shell arg can be
+    // DOUBLE-quoted — run-shell only format-expands #{session_name} inside double
+    // quotes (single quotes suppress it). `%%` is command-prompt's branch
+    // substitution; --session carries the current session so the CLI resolves the
+    // repo from its cwd (run-shell's own cwd is the tmux server's, not the pane's).
+    // Quoting verified live on tmux 3.6 with branch `feat/x-1`.
+    `command-prompt -p "worktree branch:" 'run-shell "tmux-ide worktree create %% --session #{session_name}"'`,
     "✕ Kill this session",
     "x",
     `confirm-before -p "kill session #S? (y/n)" kill-session`,

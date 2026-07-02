@@ -212,6 +212,7 @@ export function buildCheatsheet(opts: { width: number; keys?: AppKeys; theme?: A
   lines.push(pad(cyan("tmux-ide team --json")));
   lines.push(pad(cyan("tmux-ide wait agent-status <s> --status done")));
   lines.push(pad(cyan("tmux-ide adopt/unadopt <session>")));
+  lines.push(pad(cyan("tmux-ide worktree create <branch>") + dim("   (⎇ in the menu)")));
 
   return lines.map((line) => clip(line, width)).join("\n");
 }

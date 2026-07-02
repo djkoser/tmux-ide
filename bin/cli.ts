@@ -76,6 +76,12 @@ const { positionals, values } = parseArgs({
     // actions menu opens at the pointer instead of centered (see `menu` case)
     x: { type: "string" },
     y: { type: "string" },
+    // worktree: base ref for a new branch, the worktree checkout dir override,
+    // skip creating a session, and force-remove a dirty worktree (see `worktree`)
+    from: { type: "string" },
+    dir: { type: "string" },
+    "no-session": { type: "boolean" },
+    force: { type: "boolean" },
   },
 });
 
@@ -110,6 +116,7 @@ const knownCommands = new Set([
   "menu",
   "popup",
   "sidebar-toggle",
+  "worktree",
   "command-center",
   "server",
   "help",
@@ -175,6 +182,11 @@ ${bold("Usage:")}
   ${cyan("tmux-ide menu")} [--client N]  ${dim("Open the right-click actions menu (⌥m / right-click any pane or the bar)")}
   ${cyan("tmux-ide popup")} <widget>     ${dim("Open a widget as a floating panel (explorer/changes/config; ⌥e/⌥g/⌥,)")}
   ${cyan("tmux-ide sidebar-toggle")} [--session S]  ${dim("Toggle the app nav column (⌥b on adopted sessions)")}
+  ${cyan("tmux-ide worktree create")} <branch> [--from <ref>] [--dir <path>] [--no-session]
+                              ${dim("Add a git worktree (new branch) + open a session in it")}
+  ${cyan("tmux-ide worktree open")} <branch>    ${dim("Open (or switch to) the session for an existing worktree")}
+  ${cyan("tmux-ide worktree list")} [--json]    ${dim("List worktrees joined with their session status")}
+  ${cyan("tmux-ide worktree remove")} <branch> [--force]  ${dim("Kill the worktree's session + remove the worktree")}
   ${cyan("tmux-ide ls")}                 ${dim("List all tmux sessions")}
   ${cyan("tmux-ide status")} [--json]    ${dim("Show session status")}
   ${cyan("tmux-ide inspect")} [--json]   ${dim("Show effective config and runtime state")}
@@ -953,6 +965,223 @@ try {
         openSidebarPane(session, dir, width, theme);
       } catch {
         // tmux unavailable / widget missing — silent no-op (fired from a bind)
+      }
+      break;
+    }
+
+    case "worktree": {
+      const sub = positionals[1];
+      const KNOWN_SUBS = new Set(["create", "open", "list", "remove"]);
+      if (!sub || !KNOWN_SUBS.has(sub)) {
+        throw new IdeError(
+          "Usage: tmux-ide worktree <create|open|list|remove> <branch> [flags]\n" +
+            "  create <branch> [--from <ref>] [--dir <path>] [--no-session]\n" +
+            "  open <branch>\n" +
+            "  list [--json]\n" +
+            "  remove <branch> [--force]",
+          { code: "USAGE", exitCode: 1 },
+        );
+      }
+
+      const {
+        worktreeSessionName,
+        worktreePath,
+        listWorktrees,
+        createWorktree,
+        removeWorktree,
+        WorktreeError,
+      } = await import("../packages/daemon/src/lib/worktree.ts");
+      const { getSessionName } = await import("../packages/daemon/src/lib/yaml-io.ts");
+      const { getSessionCwd, hasSession, killSession, createDetachedSession } =
+        await import("../packages/tmux-bridge/src/index.ts");
+
+      // The repo the command targets: the --session's cwd when invoked from the
+      // menu (run-shell's own cwd is the tmux server's, not the pane's — verified
+      // live), else the CLI's cwd.
+      let repoDir = process.cwd();
+      const sessionArg = typeof values.session === "string" ? values.session.trim() : "";
+      if (sessionArg && !sessionArg.includes("#{")) {
+        try {
+          const cwd = getSessionCwd(sessionArg);
+          if (cwd) repoDir = cwd;
+        } catch {
+          // fall back to the CLI cwd
+        }
+      }
+
+      // The project identity for session names: the MAIN worktree's ide.yml name
+      // (or its dir basename). `git worktree list` returns the main checkout first.
+      const worktrees = listWorktrees(repoDir);
+      const mainPath = worktrees[0]?.path ?? repoDir;
+      const projectName = getSessionName(mainPath).name;
+
+      // Start a session in a worktree checkout: full IDE layout when it has an
+      // ide.yml (launch under the worktree's own session name so it never
+      // collides with the parent repo's session), else a plain adopted session.
+      // Never auto-attaches — the caller may be inside tmux (the menu) — it prints
+      // how to switch instead.
+      async function openWorktreeSession(wtPath: string, name: string): Promise<void> {
+        if (existsSync(join(wtPath, "ide.yml"))) {
+          await launch(wtPath, { attach: false, sessionName: name });
+        } else {
+          if (!hasSession(name)) createDetachedSession(name, wtPath);
+          const { adoptSession } = await import("../packages/daemon/src/tui/chrome/statusline.ts");
+          adoptSession(name);
+        }
+      }
+
+      function printSwitchHint(name: string, wtPath: string): void {
+        console.log(`Worktree ready: ${wtPath}`);
+        console.log(`Session: ${name}`);
+        if (process.env.TMUX) {
+          console.log(`Switch to it:  tmux switch-client -t '${name}'`);
+        } else {
+          console.log(`Attach to it:  tmux attach -t '${name}'`);
+        }
+      }
+
+      if (sub === "create") {
+        const branch = positionals[2];
+        if (!branch) {
+          throw new IdeError(
+            "Usage: tmux-ide worktree create <branch> [--from <ref>] [--dir <path>] [--no-session]",
+            { code: "USAGE", exitCode: 1 },
+          );
+        }
+        const { getAppConfig } = await import("../packages/daemon/src/lib/app-config.ts");
+        const dirOverride =
+          typeof values.dir === "string" && values.dir.length > 0
+            ? values.dir
+            : getAppConfig().worktrees.dir || null;
+        const wtPath = worktreePath(repoDir, branch, dirOverride);
+        const from = typeof values.from === "string" ? values.from : null;
+
+        // Default: create a NEW branch off `from` (HEAD when absent). If the
+        // branch already exists and no explicit base was given, fall back to
+        // checking it out into the worktree instead of failing.
+        try {
+          createWorktree(repoDir, branch, wtPath, { newBranch: true, from });
+        } catch (err) {
+          if (err instanceof WorktreeError && err.code === "BRANCH_EXISTS" && !from) {
+            createWorktree(repoDir, branch, wtPath, { newBranch: false });
+          } else {
+            throw err;
+          }
+        }
+
+        const sessionName = worktreeSessionName(projectName, branch);
+        if (!values["no-session"]) {
+          await openWorktreeSession(wtPath, sessionName);
+        }
+
+        if (json) {
+          console.log(
+            JSON.stringify({
+              branch,
+              path: wtPath,
+              session: values["no-session"] ? null : sessionName,
+            }),
+          );
+        } else if (values["no-session"]) {
+          console.log(`Worktree ready: ${wtPath}`);
+          console.log(`Open a session later:  tmux-ide worktree open '${branch}'`);
+        } else {
+          printSwitchHint(sessionName, wtPath);
+        }
+        break;
+      }
+
+      if (sub === "open") {
+        const branch = positionals[2];
+        if (!branch) {
+          throw new IdeError("Usage: tmux-ide worktree open <branch>", {
+            code: "USAGE",
+            exitCode: 1,
+          });
+        }
+        const entry = worktrees.find((w) => w.branch === branch);
+        if (!entry) {
+          throw new IdeError(
+            `No worktree for branch "${branch}". Create one with: tmux-ide worktree create '${branch}'`,
+            { code: "USAGE", exitCode: 1 },
+          );
+        }
+        const sessionName = worktreeSessionName(projectName, branch);
+        const already = hasSession(sessionName);
+        if (!already) await openWorktreeSession(entry.path, sessionName);
+        if (json) {
+          console.log(
+            JSON.stringify({ branch, path: entry.path, session: sessionName, created: !already }),
+          );
+        } else {
+          if (already) console.log(`Session already running.`);
+          printSwitchHint(sessionName, entry.path);
+        }
+        break;
+      }
+
+      if (sub === "remove") {
+        const branch = positionals[2];
+        if (!branch) {
+          throw new IdeError("Usage: tmux-ide worktree remove <branch> [--force]", {
+            code: "USAGE",
+            exitCode: 1,
+          });
+        }
+        const entry = worktrees.find((w) => w.branch === branch);
+        if (!entry) {
+          throw new IdeError(`No worktree for branch "${branch}".`, {
+            code: "USAGE",
+            exitCode: 1,
+          });
+        }
+        // Remove the worktree FIRST so a failed removal (e.g. dirty without
+        // --force, which throws here) never orphan-kills the still-usable
+        // session. Only after a clean removal do we kill ONLY this worktree's
+        // own session (never the parent repo's or a user session — the name is
+        // fully derived from the worktree's branch).
+        removeWorktree(repoDir, entry.path, { force: values.force === true });
+        const sessionName = worktreeSessionName(projectName, branch);
+        const killed = hasSession(sessionName) ? killSession(sessionName).stopped : false;
+        if (json) {
+          console.log(
+            JSON.stringify({ branch, path: entry.path, sessionKilled: killed, removed: true }),
+          );
+        } else {
+          console.log(`Removed worktree ${entry.path}${killed ? ` (killed ${sessionName})` : ""}.`);
+        }
+        break;
+      }
+
+      // sub === "list"
+      const { createStatusTracker } = await import("../packages/daemon/src/tui/detect/classify.ts");
+      const { listTeamSessions } = await import("../packages/daemon/src/tui/team/sessions.ts");
+      const sessions = listTeamSessions(createStatusTracker());
+      const rows = worktrees.map((wt) => {
+        const isPrimary = wt.path === mainPath;
+        const candidates: string[] = [];
+        if (isPrimary) candidates.push(projectName);
+        if (wt.branch) candidates.push(worktreeSessionName(projectName, wt.branch));
+        const match = sessions.find((s) => candidates.includes(s.name)) ?? null;
+        return {
+          path: wt.path,
+          branch: wt.branch,
+          primary: isPrimary,
+          session: match?.name ?? null,
+          running: match !== null,
+          status: match?.status ?? null,
+        };
+      });
+      if (json) {
+        console.log(JSON.stringify({ repo: mainPath, worktrees: rows }, null, 2));
+      } else if (rows.length === 0) {
+        console.log("No worktrees.");
+      } else {
+        for (const r of rows) {
+          const tag = r.primary ? " (primary)" : "";
+          const state = r.running ? `${r.status} · ${r.session}` : "no session";
+          console.log(`${r.branch ?? "(detached)"}${tag}  ${state}\n    ${r.path}`);
+        }
       }
       break;
     }

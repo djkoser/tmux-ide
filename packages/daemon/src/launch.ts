@@ -193,13 +193,21 @@ function runBeforeHook(command: string | undefined, dir: string): void {
 
 export async function launch(
   targetDir: string | undefined,
-  { json = false, attach = true }: { json?: boolean; attach?: boolean } = {},
+  {
+    json = false,
+    attach = true,
+    sessionName,
+  }: { json?: boolean; attach?: boolean; sessionName?: string } = {},
 ): Promise<void> {
   const dir = resolve(targetDir ?? ".");
   const config = loadLaunchConfig(dir);
 
   const { name: fallbackName } = getSessionName(dir);
-  const session = config.name ?? fallbackName;
+  // A `sessionName` override lets a worktree checkout run under its own session
+  // name (e.g. `app@branch`) instead of colliding with the parent repo's
+  // `config.name`; the whole flow keys off `session`, so the override threads
+  // through session creation, adoption, and drift detection unchanged.
+  const session = sessionName ?? config.name ?? fallbackName;
   const headless = config.orchestrator?.widgets === false;
   const rows = headless ? stripWidgetPanes(config.rows) : config.rows;
   const theme = config.theme ?? {};

@@ -10609,7 +10609,7 @@ __export(worktree_exports, {
 import { execFileSync as execFileSync10 } from "node:child_process";
 import { basename as basename9, dirname as dirname13, isAbsolute as isAbsolute6, join as join20, resolve as resolve21 } from "node:path";
 function sanitizeForTmux(part) {
-  return part.replace(/[.:\s]+/g, "-");
+  return part.replace(/[.:/\s]+/g, "-");
 }
 function worktreeSessionName(project, branch) {
   return `${sanitizeForTmux(project)}@${sanitizeForTmux(branch)}`;

@@ -110,6 +110,16 @@ export interface AppUpdates {
   check: boolean;
 }
 
+/** Worktree flow config (`tmux-ide worktree`). */
+export interface AppWorktrees {
+  /**
+   * Base directory for worktree checkouts. Empty (default) → a sibling
+   * `<repo>-worktrees` dir next to each repo. A non-empty value overrides that
+   * base; a relative path is resolved against the repo.
+   */
+  dir: string;
+}
+
 /** The whole config. */
 export interface AppConfig {
   keys: AppKeys;
@@ -118,6 +128,7 @@ export interface AppConfig {
   notifications: AppNotifications;
   restore: AppRestore;
   updates: AppUpdates;
+  worktrees: AppWorktrees;
 }
 
 // ---------------------------------------------------------------------------
@@ -150,6 +161,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   notifications: { toast: true, macos: false },
   restore: { resumeAgents: false },
   updates: { check: true },
+  worktrees: { dir: "" },
 };
 
 /** The default theme tokens — the fallback threaded into the pure builders. */
@@ -202,6 +214,7 @@ export function parseAppConfig(input: unknown): AppConfig {
   const notifications = asObject(root.notifications);
   const restore = asObject(root.restore);
   const updates = asObject(root.updates);
+  const worktrees = asObject(root.worktrees);
   return {
     keys: {
       popup: pickString(keys.popup, D.keys.popup),
@@ -240,6 +253,7 @@ export function parseAppConfig(input: unknown): AppConfig {
     },
     restore: { resumeAgents: pickBool(restore.resumeAgents, D.restore.resumeAgents) },
     updates: { check: pickBool(updates.check, D.updates.check) },
+    worktrees: { dir: pickString(worktrees.dir, D.worktrees.dir) },
   };
 }
 

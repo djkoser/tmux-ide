@@ -118,6 +118,23 @@ describe("buildMenu", () => {
     expect(args[iKill + 2]).toContain("kill-session");
   });
 
+  it("offers a new-worktree action that prompts for a branch and creates a worktree + session", () => {
+    const args = buildMenu([]);
+    const i = args.indexOf("⎇ New worktree…");
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(args[i + 1]).toBe("w");
+    // command-prompt template is single-quoted so the inner run-shell arg stays
+    // double-quoted (required for #{session_name} to expand — single quotes
+    // suppress it). `%%` is the branch substitution; the session is forwarded so
+    // the CLI resolves the repo dir (run-shell's cwd is the server's, not the pane's).
+    expect(args[i + 2]).toBe(
+      `command-prompt -p "worktree branch:" 'run-shell "tmux-ide worktree create %% --session #{session_name}"'`,
+    );
+    // it sits between New session and Kill (same footer group — no extra separator)
+    expect(args.indexOf("＋ New session…")).toBeLessThan(i);
+    expect(i).toBeLessThan(args.indexOf("✕ Kill this session"));
+  });
+
   it("separates the groups with empty-name separator items", () => {
     // With sessions: header · sep · panels · sep · sessions · sep · footer →
     // exactly 3 separators.
