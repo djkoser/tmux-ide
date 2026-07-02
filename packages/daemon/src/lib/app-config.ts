@@ -53,6 +53,8 @@ export interface AppKeys {
   cheatsheet: string;
   /** Actions menu (default `M-m`). */
   menu: string;
+  /** Sidebar (app nav column) toggle (default `M-b`). */
+  sidebar: string;
   /** Per-widget panel popups (default `M-e`/`M-g`/`M-,`). */
   panels: AppPanelKeys;
 }
@@ -128,6 +130,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     popup: "M-p",
     cheatsheet: "M-k",
     menu: "M-m",
+    sidebar: "M-b",
     panels: { explorer: "M-e", changes: "M-g", config: "M-," },
   },
   theme: {
@@ -204,6 +207,7 @@ export function parseAppConfig(input: unknown): AppConfig {
       popup: pickString(keys.popup, D.keys.popup),
       cheatsheet: pickString(keys.cheatsheet, D.keys.cheatsheet),
       menu: pickString(keys.menu, D.keys.menu),
+      sidebar: pickString(keys.sidebar, D.keys.sidebar),
       panels: {
         explorer: pickString(panels.explorer, D.keys.panels.explorer),
         changes: pickString(panels.changes, D.keys.panels.changes),

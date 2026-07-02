@@ -7,6 +7,7 @@ import {
   menuBindCommand,
   menuPaneBindCommand,
   menuPaneUnbindCommand,
+  menuPositionArgs,
   menuQuoteName,
   menuStatusBindCommand,
   menuStatusUnbindCommand,
@@ -182,26 +183,49 @@ describe("menuBindCommand", () => {
 });
 
 describe("menuStatusBindCommand", () => {
-  it("binds a right-click on the status bar (MouseDown3Status) to the same menu", () => {
+  it("binds a right-click on the status bar (MouseDown3Status) to the same menu, at the pointer", () => {
     const cmd = menuStatusBindCommand();
     expect(cmd.slice(0, 4)).toEqual(["bind-key", "-n", MENU_STATUS_KEY, "run-shell"]);
-    expect(cmd[cmd.length - 1]).toBe(`tmux-ide menu --client '#{client_name}'`);
+    // mouse binds forward the click position so the menu opens at the pointer
+    expect(cmd[cmd.length - 1]).toBe(
+      `tmux-ide menu --client '#{client_name}' --x '#{mouse_x}' --y '#{mouse_y}'`,
+    );
     expect(MENU_STATUS_KEY).toBe("MouseDown3Status");
   });
 });
 
 describe("menuPaneBindCommand", () => {
-  it("binds a right-click on ANY pane body (MouseDown3Pane) to the same menu", () => {
+  it("binds a right-click on ANY pane body (MouseDown3Pane) to the same menu, at the pointer", () => {
     const cmd = menuPaneBindCommand();
     expect(cmd.slice(0, 4)).toEqual(["bind-key", "-n", MENU_PANE_KEY, "run-shell"]);
     expect(cmd).toContain("-b");
-    expect(cmd[cmd.length - 1]).toBe(`tmux-ide menu --client '#{client_name}'`);
+    expect(cmd[cmd.length - 1]).toBe(
+      `tmux-ide menu --client '#{client_name}' --x '#{mouse_x}' --y '#{mouse_y}'`,
+    );
     expect(MENU_PANE_KEY).toBe("MouseDown3Pane");
   });
 
-  it("passes a custom menu command through", () => {
+  it("passes a custom menu command through with the coord forwarding", () => {
     const cmd = menuPaneBindCommand("bun run menu");
-    expect(cmd[cmd.length - 1]).toBe(`bun run menu --client '#{client_name}'`);
+    expect(cmd[cmd.length - 1]).toBe(
+      `bun run menu --client '#{client_name}' --x '#{mouse_x}' --y '#{mouse_y}'`,
+    );
+  });
+});
+
+describe("menuPositionArgs", () => {
+  it("emits -x/-y flags for numeric coords", () => {
+    expect(menuPositionArgs("12", "5")).toEqual(["-x", "12", "-y", "5"]);
+    expect(menuPositionArgs("0", "0")).toEqual(["-x", "0", "-y", "0"]);
+  });
+
+  it("omits the flags (→ centered) when either coord is missing or non-numeric", () => {
+    expect(menuPositionArgs(undefined, "5")).toEqual([]);
+    expect(menuPositionArgs("12", undefined)).toEqual([]);
+    // an unexpanded #{mouse_*} literal from the keyboard path
+    expect(menuPositionArgs("#{mouse_x}", "#{mouse_y}")).toEqual([]);
+    expect(menuPositionArgs("12", "abc")).toEqual([]);
+    expect(menuPositionArgs("1.5", "2")).toEqual([]);
   });
 });
 

@@ -84,6 +84,21 @@ interface PaneRecord {
   windowName: string;
   /** `window_active` — whether this pane's window is the session's active one. */
   windowActive: boolean;
+  /** `@tmux_ide_sidebar` — set on the app's own nav-column pane. Such panes are
+   *  chrome, not agents, so they're excluded from the status rollup entirely. */
+  sidebar: boolean;
+}
+
+/** The pane option that marks the app's sidebar (nav-column) pane. */
+export const SIDEBAR_PANE_OPTION = "@tmux_ide_sidebar";
+
+/**
+ * PURE — drop the app's own sidebar panes from a session's pane list. The
+ * sidebar is chrome (it renders the fleet nav column), so it must never fold
+ * into the session's agent-status rollup, pane count, or window breakdown.
+ */
+export function excludeSidebarPanes<T extends { sidebar: boolean }>(panes: T[]): T[] {
+  return panes.filter((pane) => !pane.sidebar);
 }
 
 /** Severity order — highest present status wins in a rollup. */
@@ -156,7 +171,9 @@ export function listTeamSessions(
     .filter((line) => isListableSession(line.split("\t")[0] ?? ""))
     .map((line) => {
       const [name = "", attached = "", windows = "0"] = line.split("\t");
-      const panes = panesBySession.get(name) ?? [];
+      // Sidebar panes are chrome, not agents — drop them before any rollup so
+      // they never pollute the session status, pane count, or window list.
+      const panes = excludeSidebarPanes(panesBySession.get(name) ?? []);
       const seen = opts.viewed === name;
 
       const nowSec = Math.floor(Date.now() / 1000);
@@ -228,7 +245,7 @@ function collectPanes(): Map<string, PaneRecord[]> {
     "-F",
     // Window fields sit before pane_title so the (tab-safe) title stays the
     // trailing catch-all — window names don't contain tabs in practice.
-    "#{session_name}\t#{pane_id}\t#{pane_pid}\t#{pane_current_command}\t#{@agent_state}\t#{@agent_hint}\t#{window_index}\t#{window_name}\t#{window_active}\t#{pane_title}",
+    `#{session_name}\t#{pane_id}\t#{pane_pid}\t#{pane_current_command}\t#{@agent_state}\t#{@agent_hint}\t#{${SIDEBAR_PANE_OPTION}}\t#{window_index}\t#{window_name}\t#{window_active}\t#{pane_title}`,
   ]);
   const bySession = new Map<string, PaneRecord[]>();
   for (const line of raw.split("\n").filter(Boolean)) {
@@ -239,6 +256,7 @@ function collectPanes(): Map<string, PaneRecord[]> {
       cmd = "",
       authority = "",
       hint = "",
+      sidebar = "",
       windowIndex = "0",
       windowName = "",
       windowActive = "0",
@@ -252,6 +270,7 @@ function collectPanes(): Map<string, PaneRecord[]> {
       cmd,
       authority,
       hint,
+      sidebar: sidebar === "1",
       windowIndex: Number(windowIndex) || 0,
       windowName,
       windowActive: windowActive === "1",
@@ -301,14 +320,8 @@ export interface WindowPaneInput {
  * true if ANY of its panes report `window_active`. Windows come back in
  * ascending index order. An empty pane list yields an empty window list.
  */
-export function rollupWindows(
-  panes: WindowPaneInput[],
-  statuses: AgentStatus[],
-): TeamWindow[] {
-  const byIndex = new Map<
-    number,
-    { name: string; active: boolean; statuses: AgentStatus[] }
-  >();
+export function rollupWindows(panes: WindowPaneInput[], statuses: AgentStatus[]): TeamWindow[] {
+  const byIndex = new Map<number, { name: string; active: boolean; statuses: AgentStatus[] }>();
   panes.forEach((pane, i) => {
     let entry = byIndex.get(pane.windowIndex);
     if (!entry) {

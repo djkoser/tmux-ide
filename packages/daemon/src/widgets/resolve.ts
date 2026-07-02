@@ -22,6 +22,7 @@ const WIDGET_ENTRY_POINTS: Record<string, string> = {
   setup: "setup/index.tsx",
   config: "config/index.tsx",
   "mission-control": "mission-control/index.tsx",
+  sidebar: "sidebar/index.tsx",
 };
 
 export function resolveWidgetCommand(type: string, opts: WidgetOptions): string {

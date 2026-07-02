@@ -22,6 +22,7 @@ import {
   splitPane,
 } from "@tmux-ide/tmux-bridge";
 import { validateConfig } from "./validate.ts";
+import { resolveSidebarConfig } from "./tui/chrome/sidebar.ts";
 import { resolveWidgetCommand } from "./widgets/resolve.ts";
 import { shellEscape } from "./lib/shell.ts";
 import type { IdeConfig, Row } from "./types.ts";
@@ -293,7 +294,21 @@ export async function launch(
   // Store config hash for drift detection on re-launch
   setSessionVariable(session, "@config_hash", configHash(config));
 
-  // Focus the correct pane
+  // Sidebar sugar: `sidebar: true` (or `{ width }`) injects the app nav column
+  // as a full-height left split of the whole window (`-h -b -f`), built AFTER
+  // the rows so `-f` spans their combined height. Best-effort — the layout must
+  // never fail because the chrome column couldn't open.
+  const sidebar = resolveSidebarConfig(config.sidebar);
+  if (sidebar.enabled) {
+    try {
+      const { openSidebarPane } = await import("./tui/chrome/sidebar.ts");
+      openSidebarPane(session, dir, sidebar.width, config.theme ?? null);
+    } catch {
+      // sidebar is optional chrome — never block launch
+    }
+  }
+
+  // Focus the correct pane (the sidebar split above steals focus to itself).
   selectPane(focusPane);
 
   // Launch summary

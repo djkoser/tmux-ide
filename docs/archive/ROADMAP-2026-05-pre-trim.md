@@ -1,3 +1,11 @@
+> **⚠️ ARCHIVED — dated, do not follow.** This roadmap predates the v2.6.0 focus
+> trim (`72e22e9 trim front-ends — remove dashboard, electron, solid UI packages`).
+> Everything below targets the abandoned Vite + Solid + Effect **dashboard** and the
+> emdash/opencode adoption plan (Monaco editor, git-ops UI, repo search, multi-terminal,
+> LSP-as-tool). Those front-ends were deleted; `packages/` is now `contracts`, `daemon`,
+> `daemon-client`, `tmux-bridge` only, and the product direction is the native-tmux TUI
+> (the M8→M15 milestone line). Kept for historical reference / salvage only.
+
 # tmux-ide ROADMAP
 
 Single source of truth for where we are, what's in flight, and what's next on the path to a full agent-based IDE. Updated as we go.

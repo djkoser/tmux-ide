@@ -89,6 +89,12 @@ export function buildMenu(
     "? Cheat sheet",
     "k",
     cheatsheetPopupCommand(),
+    "▏ Toggle sidebar",
+    "b",
+    // run-shell format-expands #{session_name}, so the toggle targets whatever
+    // session the opening client is viewing (bind args don't expand; run-shell
+    // does — the same trick the menu bind itself uses).
+    `run-shell "tmux-ide sidebar-toggle --session '#{session_name}'"`,
   ];
 
   // The widget panels — each row opens the same floating popup its root-table
@@ -146,6 +152,42 @@ function menuRunShellArgs(menuCmd: string): string[] {
 }
 
 /**
+ * Like {@link menuRunShellArgs} but for a MOUSE bind: also forwards the click
+ * position via `#{mouse_x}` / `#{mouse_y}`, which ARE valid at fire time inside a
+ * mouse binding (run-shell expands them). The CLI passes them to `display-menu
+ * -x/-y` so the menu opens AT the pointer instead of dead-center. Keyboard binds
+ * (M-m) deliberately stay coordless — centered is right when there's no pointer.
+ */
+function menuMouseRunShellArgs(menuCmd: string): string[] {
+  return [
+    "run-shell",
+    "-b",
+    `${menuCmd} --client '#{client_name}' --x '#{mouse_x}' --y '#{mouse_y}'`,
+  ];
+}
+
+/**
+ * PURE — the `display-menu` position flags (`-x <n> -y <n>`) for a click at
+ * `(x, y)`, or `[]` when either coord is absent or non-numeric (the keyboard
+ * path, or an unexpanded `#{mouse_*}` literal) so tmux falls back to centering.
+ * `-x` is the menu's LEFT edge and `-y` measures from the TOP for plain numerics
+ * on tmux 3.6, so the raw mouse coords place the menu's top-left at the pointer.
+ */
+export function menuPositionArgs(x: string | undefined, y: string | undefined): string[] {
+  const nx = parseCoord(x);
+  const ny = parseCoord(y);
+  if (nx === null || ny === null) return [];
+  return ["-x", String(nx), "-y", String(ny)];
+}
+
+/** Parse a non-negative integer coord, or null for anything else. */
+function parseCoord(value: string | undefined): number | null {
+  if (typeof value !== "string" || !/^\d+$/.test(value)) return null;
+  const n = Number(value);
+  return Number.isInteger(n) ? n : null;
+}
+
+/**
  * PURE — the tmux argv that binds {@link MENU_KEY} (`M-m`, root table) to open
  * the actions menu. Server-wide bind, mirroring the switcher's M-p — see the note
  * on `unadoptSession`.
@@ -161,18 +203,19 @@ export function menuBindCommand(menuCmd = "tmux-ide menu", key = MENU_KEY): stri
  * menu, so the session-list content is what matters, not the click target.
  */
 export function menuStatusBindCommand(menuCmd = "tmux-ide menu"): string[] {
-  return ["bind-key", "-n", MENU_STATUS_KEY, ...menuRunShellArgs(menuCmd)];
+  return ["bind-key", "-n", MENU_STATUS_KEY, ...menuMouseRunShellArgs(menuCmd)];
 }
 
 /**
  * PURE — the tmux argv that binds a RIGHT-click on ANY pane body
  * ({@link MENU_PANE_KEY}) to open the same actions menu, so the menu is reachable
- * everywhere, not only from the dock row. Same `run-shell` command as the other
- * menu binds. Panes whose app captures the mouse (vim, agent TUIs) eat the event
- * — graceful degradation, `M-m` still works there.
+ * everywhere, not only from the dock row. Forwards the click position (see
+ * {@link menuMouseRunShellArgs}) so the menu opens at the pointer. Panes whose app
+ * captures the mouse (vim, agent TUIs) eat the event — graceful degradation,
+ * `M-m` still works there.
  */
 export function menuPaneBindCommand(menuCmd = "tmux-ide menu"): string[] {
-  return ["bind-key", "-n", MENU_PANE_KEY, ...menuRunShellArgs(menuCmd)];
+  return ["bind-key", "-n", MENU_PANE_KEY, ...menuMouseRunShellArgs(menuCmd)];
 }
 
 /** PURE — the tmux argv that removes the {@link MENU_KEY} binding. */

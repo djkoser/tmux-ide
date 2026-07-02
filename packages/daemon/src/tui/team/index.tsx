@@ -36,6 +36,7 @@ import { fuzzyFilter } from "./fuzzy.ts";
 import { clampIndex, wrapIndex } from "./nav.ts";
 import { ACTION_ORDER, loadKeymap, resolveAction } from "./keymap.ts";
 import { isDoubleClick, type ClickRecord } from "./mouse.ts";
+import { treeNodes, findCursor } from "./tree.ts";
 
 // Theme pass-through: `bin/cli.ts` forwards the project's ide.yml `theme` as
 // `--theme=<json>`. A malformed value must never crash the cockpit, so the
@@ -203,27 +204,18 @@ render(() => {
    * marks a project row and `wi:-1` a session (or project) row.
    */
   function pickerNodes(): Array<{ pi: number; si: number; wi: number }> {
-    const nodes: Array<{ pi: number; si: number; wi: number }> = [];
-    visibleProjects().forEach((proj, pi) => {
-      nodes.push({ pi, si: -1, wi: -1 });
-      if (pi !== activeProject()) return;
-      proj.sessions.forEach((sess, si) => {
-        nodes.push({ pi, si, wi: -1 });
-        if (si === activeSession()) {
-          sess.windowList.forEach((_w, wi) => nodes.push({ pi, si, wi }));
-        }
-      });
-    });
-    return nodes;
+    return treeNodes(visibleProjects(), activeProject(), activeSession());
   }
 
   /** Move the picker's flat cursor by `delta`, wrapping across the row union. */
   function movePicker(delta: number) {
     const nodes = pickerNodes();
     if (nodes.length === 0) return;
-    const cur = nodes.findIndex(
-      (n) => n.pi === activeProject() && n.si === activeSession() && n.wi === activeWindow(),
-    );
+    const cur = findCursor(nodes, {
+      pi: activeProject(),
+      si: activeSession(),
+      wi: activeWindow(),
+    });
     const next = nodes[wrapIndex(cur >= 0 ? cur : 0, delta, nodes.length)]!;
     setActiveProject(next.pi);
     setActiveSession(next.si);

@@ -70,6 +70,12 @@ const { positionals, values } = parseArgs({
     active: { type: "string" },
     // switcher: the tmux client the popup was invoked on (see `switcher` case)
     client: { type: "string" },
+    // sidebar-toggle: the session whose nav column is toggled (see `sidebar-toggle`)
+    session: { type: "string" },
+    // menu: the click position (mouse binds forward #{mouse_x}/#{mouse_y}) so the
+    // actions menu opens at the pointer instead of centered (see `menu` case)
+    x: { type: "string" },
+    y: { type: "string" },
   },
 });
 
@@ -103,6 +109,7 @@ const knownCommands = new Set([
   "cheatsheet",
   "menu",
   "popup",
+  "sidebar-toggle",
   "command-center",
   "server",
   "help",
@@ -167,6 +174,7 @@ ${bold("Usage:")}
   ${cyan("tmux-ide cheatsheet")}         ${dim("Print the key cheat sheet (⌥k / [ ? keys ] popup)")}
   ${cyan("tmux-ide menu")} [--client N]  ${dim("Open the right-click actions menu (⌥m / right-click any pane or the bar)")}
   ${cyan("tmux-ide popup")} <widget>     ${dim("Open a widget as a floating panel (explorer/changes/config; ⌥e/⌥g/⌥,)")}
+  ${cyan("tmux-ide sidebar-toggle")} [--session S]  ${dim("Toggle the app nav column (⌥b on adopted sessions)")}
   ${cyan("tmux-ide ls")}                 ${dim("List all tmux sessions")}
   ${cyan("tmux-ide status")} [--json]    ${dim("Show session status")}
   ${cyan("tmux-ide inspect")} [--json]   ${dim("Show effective config and runtime state")}
@@ -821,14 +829,28 @@ try {
         const { createStatusTracker } =
           await import("../packages/daemon/src/tui/detect/classify.ts");
         const { listTeamSessions } = await import("../packages/daemon/src/tui/team/sessions.ts");
-        const { buildMenu } = await import("../packages/daemon/src/tui/chrome/menu.ts");
+        const { buildMenu, menuPositionArgs } =
+          await import("../packages/daemon/src/tui/chrome/menu.ts");
         const { getAppConfig } = await import("../packages/daemon/src/lib/app-config.ts");
         // listTeamSessions already drops internal `_`-prefixed plumbing.
         const sessions = listTeamSessions(createStatusTracker()).map((s) => ({
           name: s.name,
           status: s.status,
         }));
-        const args = ["display-menu", "-c", client, ...buildMenu(sessions, getAppConfig().theme)];
+        // Position flags from a mouse bind's forwarded coords; empty (→ centered)
+        // for the keyboard path or unexpanded #{mouse_*} literals. Must precede
+        // the menu spec (buildMenu opens with -T), so they slot in right after -c.
+        const position = menuPositionArgs(
+          typeof values.x === "string" ? values.x : undefined,
+          typeof values.y === "string" ? values.y : undefined,
+        );
+        const args = [
+          "display-menu",
+          "-c",
+          client,
+          ...position,
+          ...buildMenu(sessions, getAppConfig().theme),
+        ];
         execFileSync("tmux", args, { stdio: "ignore", timeout: 2000 });
       } catch {
         // no client / tmux unavailable / a call timed out — nothing to show
@@ -852,12 +874,7 @@ try {
       // Resolve the widget entry from THIS file's dir (bin/), mirroring the
       // setup/config cases — the bundler rewrites `import.meta.url` to the bin/
       // bundle, so a `resolve.ts`-relative path would miss the sources.
-      const scriptPath = resolve(
-        __dirname,
-        "../packages/daemon/src/widgets",
-        widget,
-        "index.tsx",
-      );
+      const scriptPath = resolve(__dirname, "../packages/daemon/src/widgets", widget, "index.tsx");
       // The popup opened with `-d '#{pane_current_path}'`, so our cwd IS the
       // pane's project dir — forward it as `--dir`. Resolve the session so the
       // widget's tmux side-channels (preview file, "send to claude") target it;
@@ -876,6 +893,67 @@ try {
       const popupArgs = [`--dir=${process.cwd()}`];
       if (popupSession) popupArgs.push(`--session=${popupSession}`);
       execBunWidget(scriptPath, popupArgs, `popup ${widget}`);
+      break;
+    }
+
+    case "sidebar-toggle": {
+      // Toggle the app nav column in a session (bound to `keys.sidebar`, default
+      // M-b, via `run-shell` which expands `--session '#{session_name}'`). If a
+      // sidebar pane already exists → close it; else split a full-height left
+      // column running the sidebar widget. Runs inside tmux key dispatch, so it
+      // stays best-effort — a failure is a silent no-op, never a wedged bind.
+      try {
+        const {
+          findSidebarPane,
+          openSidebarPane,
+          closeSidebarPane,
+          resolveSidebarConfig,
+          DEFAULT_SIDEBAR_WIDTH,
+        } = await import("../packages/daemon/src/tui/chrome/sidebar.ts");
+        // Resolve the target session: the explicit --session, else the invoking
+        // client's session via display-message.
+        let session = typeof values.session === "string" ? values.session.trim() : "";
+        if (!session || session.includes("#{")) {
+          try {
+            session = execFileSync("tmux", ["display-message", "-p", "#{session_name}"], {
+              encoding: "utf8",
+              stdio: ["ignore", "pipe", "ignore"],
+              timeout: 2000,
+            }).trim();
+          } catch {
+            session = "";
+          }
+        }
+        if (!session) break; // no session context — nothing to toggle
+        const existing = findSidebarPane(session);
+        if (existing) {
+          closeSidebarPane(existing);
+          break;
+        }
+        // Opening: resolve the session's cwd + best-effort sidebar width/theme
+        // from an ide.yml there (any adopted session may have none → defaults).
+        const { getSessionCwd } = await import("../packages/tmux-bridge/src/index.ts");
+        let dir = process.cwd();
+        try {
+          dir = getSessionCwd(session) ?? dir;
+        } catch {
+          // no cwd — fall back to the CLI's cwd
+        }
+        let width = DEFAULT_SIDEBAR_WIDTH;
+        let theme = null;
+        try {
+          const { readConfig } = await import("../packages/daemon/src/lib/yaml-io.ts");
+          const { config } = readConfig(dir);
+          theme = config.theme ?? null;
+          const sb = resolveSidebarConfig(config.sidebar);
+          if (sb.enabled) width = sb.width;
+        } catch {
+          // no/invalid ide.yml — defaults are fine
+        }
+        openSidebarPane(session, dir, width, theme);
+      } catch {
+        // tmux unavailable / widget missing — silent no-op (fired from a bind)
+      }
       break;
     }
 

@@ -87,6 +87,7 @@ describe("buildCheatsheet", () => {
           popup: "M-o",
           cheatsheet: "M-j",
           menu: "M-u",
+          sidebar: "M-w",
           panels: { explorer: "M-x", changes: "M-y", config: "M-z" },
         },
         theme: {
@@ -99,6 +100,8 @@ describe("buildCheatsheet", () => {
     expect(sheet).toContain("⌥o");
     expect(sheet).toContain("⌥j");
     expect(sheet).toContain("⌥u");
+    // the sidebar toggle key renders in the dock group (⌥w)
+    expect(sheet).toContain("⌥w");
     // and the panels group renders the configured panel keys (⌥x / ⌥y / ⌥z)
     expect(sheet).toContain("⌥x");
     expect(sheet).toContain("⌥y");

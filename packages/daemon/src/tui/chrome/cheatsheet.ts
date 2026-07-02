@@ -123,7 +123,7 @@ export function buildCheatsheet(opts: { width: number; keys?: AppKeys; theme?: A
   lines.push(head("dock"));
   lines.push(
     pad(
-      `${bold(renderKey(keys.popup))} switcher popup   ${bold(renderKey(keys.cheatsheet))} this sheet   ${bold(renderKey(keys.menu))} actions menu`,
+      `${bold(renderKey(keys.popup))} switcher popup   ${bold(renderKey(keys.cheatsheet))} this sheet   ${bold(renderKey(keys.menu))} actions menu   ${bold(renderKey(keys.sidebar))} sidebar`,
     ),
   );
   lines.push(

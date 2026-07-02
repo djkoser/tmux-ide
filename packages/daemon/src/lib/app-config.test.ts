@@ -50,6 +50,18 @@ describe("parseAppConfig — deep partial merge", () => {
     expect(cfg.updater).toEqual(DEFAULT_APP_CONFIG.updater);
   });
 
+  it("defaults the sidebar toggle key to M-b", () => {
+    expect(DEFAULT_APP_CONFIG.keys.sidebar).toBe("M-b");
+    expect(parseAppConfig(undefined).keys.sidebar).toBe("M-b");
+  });
+
+  it("overrides the sidebar key while keeping the other chrome keys default", () => {
+    const cfg = parseAppConfig({ keys: { sidebar: "M-B" } });
+    expect(cfg.keys.sidebar).toBe("M-B");
+    expect(cfg.keys.popup).toBe("M-p");
+    expect(cfg.keys.menu).toBe("M-m");
+  });
+
   it("defaults the panel keys to M-e / M-g / M-,", () => {
     expect(DEFAULT_APP_CONFIG.keys.panels).toEqual({
       explorer: "M-e",

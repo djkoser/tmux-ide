@@ -35,6 +35,7 @@ import {
   panelPopupBindCommand,
   panelPopupUnbindCommand,
 } from "./panels.ts";
+import { sidebarToggleBindCommand, sidebarToggleUnbindCommand } from "./sidebar.ts";
 import {
   ADOPTED_OPTION,
   CHIP_OPTION,
@@ -376,6 +377,9 @@ export function adoptSession(session: string, switcherCmd = "tmux-ide switcher")
   for (const panel of PANEL_POPUPS) {
     runTmux(panelPopupBindCommand(panel, panelKey(panel, keys.panels)));
   }
+  // The SIDEBAR toggle: the configured key summons/dismisses the app nav column
+  // in whatever session the client is viewing (run-shell expands the session).
+  runTmux(sidebarToggleBindCommand("tmux-ide sidebar-toggle", keys.sidebar));
   // Seed the bar now so it's never blank, then make sure the loop that keeps it
   // fresh is up.
   seedSessionStatus(session);
@@ -432,6 +436,11 @@ export function unadoptSession(session: string): void {
     } catch {
       // no such key bound — nothing to undo
     }
+  }
+  try {
+    runTmux(sidebarToggleUnbindCommand(keys.sidebar));
+  } catch {
+    // no such key bound — nothing to undo
   }
   // The updater only needs to run while something is adopted.
   if (listAdoptedSessions().length === 0) stopUpdater();

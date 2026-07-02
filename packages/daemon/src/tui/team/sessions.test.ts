@@ -1,6 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { isListableSession, rollupStatus, rollupWindows } from "./sessions.ts";
+import {
+  excludeSidebarPanes,
+  isListableSession,
+  rollupStatus,
+  rollupWindows,
+} from "./sessions.ts";
 import type { AgentStatus } from "../detect/classify.ts";
+
+describe("excludeSidebarPanes", () => {
+  it("drops panes marked as the app sidebar", () => {
+    const panes = [
+      { id: "%1", sidebar: false },
+      { id: "%2", sidebar: true },
+      { id: "%3", sidebar: false },
+    ];
+    expect(excludeSidebarPanes(panes).map((p) => p.id)).toEqual(["%1", "%3"]);
+  });
+
+  it("keeps every pane when none is a sidebar", () => {
+    const panes = [{ sidebar: false }, { sidebar: false }];
+    expect(excludeSidebarPanes(panes)).toHaveLength(2);
+  });
+
+  it("returns empty when the only pane is the sidebar", () => {
+    expect(excludeSidebarPanes([{ sidebar: true }])).toEqual([]);
+  });
+});
 
 describe("rollupStatus", () => {
   it("blocked wins over everything else", () => {

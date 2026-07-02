@@ -19,8 +19,14 @@ import {
 } from "./statusline.ts";
 import { menuBindCommand, menuPaneBindCommand, menuStatusBindCommand } from "./menu.ts";
 import { PANEL_POPUPS, panelKey, panelPopupBindCommand } from "./panels.ts";
+import { sidebarToggleBindCommand } from "./sidebar.ts";
 import { ADOPTED_OPTION, STATUS_OPTION } from "./updater.ts";
-import { DEFAULT_KEYS, DEFAULT_THEME, _resetForTests, type AppTheme } from "../../lib/app-config.ts";
+import {
+  DEFAULT_KEYS,
+  DEFAULT_THEME,
+  _resetForTests,
+  type AppTheme,
+} from "../../lib/app-config.ts";
 import type { TeamProject } from "../team/projects.ts";
 import type { TeamSession } from "../team/sessions.ts";
 
@@ -382,6 +388,14 @@ describe("adoptSession key binds", () => {
     // and the pre-existing binds are still applied (no regression)
     expect(calls).toContainEqual(popupBindCommand("tmux-ide switcher"));
     expect(calls).toContainEqual(statusClickBindCommand("tmux-ide switcher"));
+  });
+
+  it("binds the sidebar toggle key (M-b → tmux-ide sidebar-toggle)", () => {
+    adoptSession("web");
+    const calls = runTmux.mock.calls.map((c) => c[0] as string[]);
+    expect(calls).toContainEqual(
+      sidebarToggleBindCommand("tmux-ide sidebar-toggle", DEFAULT_KEYS.sidebar),
+    );
   });
 
   it("binds one display-popup panel key per widget (explorer/changes/config)", () => {
