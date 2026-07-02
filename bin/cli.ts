@@ -64,6 +64,8 @@ const { positionals, values } = parseArgs({
     "dry-run": { type: "boolean" },
     // restore: replay recorded pane commands (off by default for safety)
     "run-commands": { type: "boolean" },
+    // restore: revive agent conversations via `claude --resume <id>`
+    "resume-agents": { type: "boolean" },
     // statusline: the session whose bar is being rendered
     active: { type: "string" },
     // switcher: the tmux client the popup was invoked on (see `switcher` case)
@@ -144,8 +146,9 @@ ${bold("Usage:")}
   ${cyan("tmux-ide init")} [--template]  ${dim("Scaffold a new ide.yml (auto-detects stack)")}
   ${cyan("tmux-ide stop")}               ${dim("Kill the current IDE session")}
   ${cyan("tmux-ide restart")}            ${dim("Stop and relaunch the IDE session")}
-  ${cyan("tmux-ide restore")} [--dry-run] [--run-commands] [--json]
+  ${cyan("tmux-ide restore")} [--dry-run] [--run-commands] [--resume-agents] [--json]
                               ${dim("Rebuild the fleet from the last snapshot after a tmux crash")}
+                              ${dim("(--resume-agents revives claude conversations via claude --resume)")}
   ${cyan("tmux-ide attach")}             ${dim("Reattach to a running session")}
   ${cyan("tmux-ide team")} [--json]      ${dim("TUI over all tmux sessions (--json prints fleet state)")}
   ${cyan("tmux-ide switcher")}           ${dim("Compact session picker (opens in the M-p popup on adopted sessions)")}
@@ -301,6 +304,7 @@ try {
         json,
         dryRun: values["dry-run"] === true,
         runCommands: values["run-commands"] === true,
+        resumeAgents: values["resume-agents"] === true,
       });
       break;
 

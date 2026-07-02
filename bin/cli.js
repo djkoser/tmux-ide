@@ -9981,14 +9981,14 @@ __export(claude_exports, {
   removeHooks: () => removeHooks,
   uninstallClaudeIntegration: () => uninstallClaudeIntegration
 });
-import { chmodSync as chmodSync2, copyFileSync as copyFileSync2, existsSync as existsSync22, mkdirSync as mkdirSync10, readFileSync as readFileSync15, writeFileSync as writeFileSync10 } from "node:fs";
-import { homedir as homedir13 } from "node:os";
-import { dirname as dirname11, join as join19 } from "node:path";
+import { chmodSync as chmodSync2, copyFileSync as copyFileSync2, existsSync as existsSync23, mkdirSync as mkdirSync10, readFileSync as readFileSync16, writeFileSync as writeFileSync10 } from "node:fs";
+import { homedir as homedir14 } from "node:os";
+import { dirname as dirname11, join as join20 } from "node:path";
 function hookScriptPath() {
-  return join19(homedir13(), HOOK_SCRIPT_RELPATH);
+  return join20(homedir14(), HOOK_SCRIPT_RELPATH);
 }
 function claudeSettingsPath() {
-  return join19(homedir13(), ".claude", "settings.json");
+  return join20(homedir14(), ".claude", "settings.json");
 }
 function isOurs(group) {
   return group.hooks?.some((h) => h.command?.includes(HOOK_SCRIPT_RELPATH)) ?? false;
@@ -10021,9 +10021,9 @@ function isInstalled(settings) {
   return Object.values(settings.hooks ?? {}).some((groups) => groups.some(isOurs));
 }
 function readSettings(path2) {
-  if (!existsSync22(path2)) return {};
+  if (!existsSync23(path2)) return {};
   try {
-    return JSON.parse(readFileSync15(path2, "utf8"));
+    return JSON.parse(readFileSync16(path2, "utf8"));
   } catch {
     throw new Error(`${path2} is not valid JSON \u2014 fix or move it, then retry`);
   }
@@ -10037,7 +10037,7 @@ function installClaudeIntegration() {
   mkdirSync10(dirname11(settingsPath), { recursive: true });
   const settings = readSettings(settingsPath);
   const backup = `${settingsPath}.tmux-ide.bak`;
-  if (existsSync22(settingsPath) && !existsSync22(backup)) copyFileSync2(settingsPath, backup);
+  if (existsSync23(settingsPath) && !existsSync23(backup)) copyFileSync2(settingsPath, backup);
   writeFileSync10(settingsPath, `${JSON.stringify(mergeHooks(settings, script), null, 2)}
 `, "utf8");
   return { scriptPath: script, settingsPath };
@@ -10055,7 +10055,7 @@ function uninstallClaudeIntegration() {
 function claudeIntegrationStatus() {
   return {
     installed: isInstalled(readSettings(claudeSettingsPath())),
-    scriptExists: existsSync22(hookScriptPath())
+    scriptExists: existsSync23(hookScriptPath())
   };
 }
 var HOOK_SCRIPT_RELPATH, HOOK_SCRIPT, EVENT_STATES;
@@ -10186,9 +10186,9 @@ var init_server2 = __esm({
 // bin/cli.ts
 init_launch();
 import { parseArgs } from "node:util";
-import { resolve as resolve20, dirname as dirname12, join as join20 } from "node:path";
+import { resolve as resolve20, dirname as dirname12, join as join21 } from "node:path";
 import { execFileSync as execFileSync10 } from "node:child_process";
-import { existsSync as existsSync23 } from "node:fs";
+import { existsSync as existsSync24 } from "node:fs";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // packages/daemon/src/tui/team/entry.ts
@@ -10744,6 +10744,9 @@ init_errors2();
 init_project_registry();
 init_statusline();
 init_snapshot2();
+import { existsSync as existsSync22, readFileSync as readFileSync15 } from "node:fs";
+import { homedir as homedir13 } from "node:os";
+import { join as join19 } from "node:path";
 function buildRestorePlan(snapshot, liveSessionNames, ideProjects = /* @__PURE__ */ new Map()) {
   const live = new Set(liveSessionNames);
   const actions = [];
@@ -10763,14 +10766,57 @@ function buildRestorePlan(snapshot, liveSessionNames, ideProjects = /* @__PURE__
   }
   return { actions, paneCount };
 }
+var SAFE_SESSION_ID = /^[A-Za-z0-9-]+$/;
+function paneResumeCommand(pane, opts) {
+  if (!opts.resumeAgents) return null;
+  if (pane.agent !== "claude") return null;
+  const id = pane.agentSessionId;
+  if (!id || !SAFE_SESSION_ID.test(id)) return null;
+  return `claude --resume ${id}`;
+}
+function countResumableAgents(session, resumeAgents) {
+  let n = 0;
+  for (const window of session.windows) {
+    for (const pane of window.panes) {
+      if (paneResumeCommand(pane, { resumeAgents })) n++;
+    }
+  }
+  return n;
+}
+var DEFAULT_RESTORE_PREFS = { resumeAgents: false };
+function restorePrefs(parsedConfig) {
+  const restore2 = parsedConfig && typeof parsedConfig === "object" ? parsedConfig.restore : void 0;
+  if (!restore2 || typeof restore2 !== "object") {
+    return { ...DEFAULT_RESTORE_PREFS };
+  }
+  const resumeAgents = restore2.resumeAgents;
+  return {
+    resumeAgents: typeof resumeAgents === "boolean" ? resumeAgents : DEFAULT_RESTORE_PREFS.resumeAgents
+  };
+}
+function restoreConfigPath() {
+  return join19(homedir13(), ".tmux-ide", "config.json");
+}
+function readRestorePrefs() {
+  const path2 = restoreConfigPath();
+  if (existsSync22(path2)) {
+    try {
+      return restorePrefs(JSON.parse(readFileSync15(path2, "utf-8")));
+    } catch {
+    }
+  }
+  return { ...DEFAULT_RESTORE_PREFS };
+}
 function tmuxCapture(args) {
   return runTmux(args, { encoding: "utf-8" }).toString().trim();
 }
-function rebuildSession(session, runCommands) {
+function rebuildSession(session, opts) {
+  const { runCommands, resumeAgents } = opts;
+  const resumedTitles = [];
   const windows = session.windows;
   if (windows.length === 0) {
     runTmux(["new-session", "-d", "-s", session.name, "-c", session.cwd]);
-    return;
+    return resumedTitles;
   }
   windows.forEach((window, w) => {
     const windowCwd = window.panes[0]?.cwd || session.cwd;
@@ -10824,7 +10870,12 @@ function rebuildSession(session, runCommands) {
       if (pane.agent) {
         runTmux(["set-option", "-p", "-t", paneId, "@agent_hint", pane.agent]);
       }
-      if (runCommands && pane.command) {
+      const resumeCmd = paneResumeCommand(pane, { resumeAgents });
+      if (resumeCmd) {
+        runTmux(["send-keys", "-t", paneId, "-l", "--", resumeCmd]);
+        runTmux(["send-keys", "-t", paneId, "Enter"]);
+        resumedTitles.push(pane.title || paneId);
+      } else if (runCommands && pane.command) {
         runTmux(["send-keys", "-t", paneId, "-l", "--", pane.command]);
         runTmux(["send-keys", "-t", paneId, "Enter"]);
       }
@@ -10834,6 +10885,7 @@ function rebuildSession(session, runCommands) {
   if (activeIndex >= 0) {
     runTmux(["select-window", "-t", `${session.name}:${windows[activeIndex].index}`]);
   }
+  return resumedTitles;
 }
 function ideBackedProjects() {
   const map = /* @__PURE__ */ new Map();
@@ -10856,7 +10908,8 @@ function liveSessions() {
 async function restore({
   json: json2 = false,
   dryRun = false,
-  runCommands = false
+  runCommands = false,
+  resumeAgents = false
 } = {}) {
   const snapshot = readSnapshot();
   if (!snapshot) {
@@ -10865,13 +10918,25 @@ async function restore({
       { code: "NO_SNAPSHOT", exitCode: 1 }
     );
   }
+  const resume = resumeAgents || readRestorePrefs().resumeAgents;
   const plan = buildRestorePlan(snapshot, liveSessions(), ideBackedProjects());
   if (dryRun) {
-    reportPlan(plan, snapshot, { json: json2, dryRun: true, restored: [], launched: [] });
+    reportPlan(plan, snapshot, {
+      json: json2,
+      dryRun: true,
+      restored: [],
+      launched: [],
+      resumed: [],
+      resumeAgents: resume
+    });
     return;
   }
   const restored = [];
   const launched = [];
+  const resumed = [];
+  const recordResumed = (session, panes) => {
+    if (panes.length) resumed.push({ session, panes });
+  };
   for (const action of plan.actions) {
     if (action.kind === "skip") continue;
     if (action.kind === "launch") {
@@ -10880,18 +10945,28 @@ async function restore({
       else {
         const snap = snapshot.sessions.find((s) => s.name === action.session);
         if (snap) {
-          rebuildSession(snap, runCommands);
+          recordResumed(snap.name, rebuildSession(snap, { runCommands, resumeAgents: resume }));
           if (snap.adopted) safeAdopt(snap.name);
           restored.push(action.session);
         }
       }
       continue;
     }
-    rebuildSession(action.session, runCommands);
+    recordResumed(
+      action.session.name,
+      rebuildSession(action.session, { runCommands, resumeAgents: resume })
+    );
     if (action.session.adopted) safeAdopt(action.session.name);
     restored.push(action.session.name);
   }
-  reportPlan(plan, snapshot, { json: json2, dryRun: false, restored, launched });
+  reportPlan(plan, snapshot, {
+    json: json2,
+    dryRun: false,
+    restored,
+    launched,
+    resumed,
+    resumeAgents: resume
+  });
 }
 function safeAdopt(session) {
   try {
@@ -10913,10 +10988,11 @@ async function launchProject(dir, json2) {
     console.log = restoreLog;
   }
 }
-function reportPlan(plan, snapshot, { json: json2, dryRun, restored, launched }) {
+function reportPlan(plan, snapshot, { json: json2, dryRun, restored, launched, resumed, resumeAgents }) {
   const skipped = plan.actions.filter((a) => a.kind === "skip").map((a) => a.session);
   const willLaunch = plan.actions.filter((a) => a.kind === "launch").map((a) => a.session);
   const willRebuild = plan.actions.filter((a) => a.kind === "rebuild").map((a) => a.session.name);
+  const resumedPanes = resumed.reduce((n, r) => n + r.panes.length, 0);
   if (json2) {
     console.log(
       JSON.stringify(
@@ -10926,7 +11002,10 @@ function reportPlan(plan, snapshot, { json: json2, dryRun, restored, launched })
           skipped,
           launched: dryRun ? willLaunch : launched,
           restored: dryRun ? willRebuild : restored,
-          panes: plan.paneCount
+          panes: plan.paneCount,
+          resumeAgents,
+          resumedPanes,
+          resumed
         },
         null,
         2
@@ -10944,15 +11023,23 @@ function reportPlan(plan, snapshot, { json: json2, dryRun, restored, launched })
       } else {
         const w = action.session.windows.length;
         const p = action.session.windows.reduce((n, win) => n + win.panes.length, 0);
+        const wouldResume = countResumableAgents(action.session, resumeAgents);
+        const resumeNote = wouldResume ? `, would resume ${wouldResume} agent${wouldResume === 1 ? "" : "s"}` : "";
         console.log(
-          `  rebuild  ${action.session.name} (${w} window${w === 1 ? "" : "s"}, ${p} pane${p === 1 ? "" : "s"})`
+          `  rebuild  ${action.session.name} (${w} window${w === 1 ? "" : "s"}, ${p} pane${p === 1 ? "" : "s"}${resumeNote})`
         );
       }
     }
     return;
   }
+  const resumedBySession = new Map(resumed.map((r) => [r.session, r.panes.length]));
+  const resumeSuffix = (name) => {
+    const n = resumedBySession.get(name) ?? 0;
+    return n ? ` (resumed ${n} agent${n === 1 ? "" : "s"})` : "";
+  };
   const parts = [];
-  if (restored.length) parts.push(`rebuilt ${restored.join(", ")}`);
+  if (restored.length)
+    parts.push(`rebuilt ${restored.map((s) => `${s}${resumeSuffix(s)}`).join(", ")}`);
   if (launched.length) parts.push(`launched ${launched.join(", ")}`);
   if (skipped.length) parts.push(`skipped ${skipped.join(", ")} (already running)`);
   console.log(parts.length ? `Restored: ${parts.join("; ")}` : "Nothing to restore.");
@@ -11000,6 +11087,8 @@ var { positionals, values } = parseArgs({
     "dry-run": { type: "boolean" },
     // restore: replay recorded pane commands (off by default for safety)
     "run-commands": { type: "boolean" },
+    // restore: revive agent conversations via `claude --resume <id>`
+    "resume-agents": { type: "boolean" },
     // statusline: the session whose bar is being rendered
     active: { type: "string" },
     // switcher: the tmux client the popup was invoked on (see `switcher` case)
@@ -11072,8 +11161,9 @@ ${bold2("Usage:")}
   ${cyan2("tmux-ide init")} [--template]  ${dim2("Scaffold a new ide.yml (auto-detects stack)")}
   ${cyan2("tmux-ide stop")}               ${dim2("Kill the current IDE session")}
   ${cyan2("tmux-ide restart")}            ${dim2("Stop and relaunch the IDE session")}
-  ${cyan2("tmux-ide restore")} [--dry-run] [--run-commands] [--json]
+  ${cyan2("tmux-ide restore")} [--dry-run] [--run-commands] [--resume-agents] [--json]
                               ${dim2("Rebuild the fleet from the last snapshot after a tmux crash")}
+                              ${dim2("(--resume-agents revives claude conversations via claude --resume)")}
   ${cyan2("tmux-ide attach")}             ${dim2("Reattach to a running session")}
   ${cyan2("tmux-ide team")} [--json]      ${dim2("TUI over all tmux sessions (--json prints fleet state)")}
   ${cyan2("tmux-ide switcher")}           ${dim2("Compact session picker (opens in the M-p popup on adopted sessions)")}
@@ -11121,7 +11211,7 @@ ${bold2("Flags:")}
   ${cyan2("-v, --version")}               ${dim2("Show version number")}`);
 }
 function assertBunWidgetAvailable(scriptPath, commandLabel) {
-  const widgetMissing = !existsSync23(scriptPath);
+  const widgetMissing = !existsSync24(scriptPath);
   let bunMissing = false;
   try {
     execFileSync10("bun", ["--version"], { stdio: "ignore" });
@@ -11165,7 +11255,7 @@ try {
   switch (command) {
     case "start": {
       const targetDir = resolve20(startTargetDir || ".");
-      const hasIdeYml = existsSync23(join20(targetDir, "ide.yml"));
+      const hasIdeYml = existsSync24(join21(targetDir, "ide.yml"));
       if (shouldOpenCockpit(hasIdeYml, values.team === true)) {
         if (json) {
           await printFleetJson();
@@ -11193,7 +11283,8 @@ try {
       await restore({
         json,
         dryRun: values["dry-run"] === true,
-        runCommands: values["run-commands"] === true
+        runCommands: values["run-commands"] === true,
+        resumeAgents: values["resume-agents"] === true
       });
       break;
     case "ls":
@@ -11269,8 +11360,8 @@ try {
       const messageStart = values.to ? 1 : 2;
       let message = positionals.slice(messageStart).join(" ");
       if (!message && !process.stdin.isTTY) {
-        const { readFileSync: readFileSync16 } = await import("node:fs");
-        message = readFileSync16(0, "utf-8").trim();
+        const { readFileSync: readFileSync17 } = await import("node:fs");
+        message = readFileSync17(0, "utf-8").trim();
       }
       await send(null, { json, to: target, message, noEnter: values["no-enter"] });
       break;
@@ -11380,10 +11471,10 @@ try {
       }
     }
     case "events": {
-      const { readFileSync: readFileSync16, existsSync: existsSync24, statSync: statSync5, openSync, readSync, closeSync } = await import("node:fs");
+      const { readFileSync: readFileSync17, existsSync: existsSync25, statSync: statSync5, openSync, readSync, closeSync } = await import("node:fs");
       const { eventsPath: eventsPath2, formatEventLine: formatEventLine2 } = await Promise.resolve().then(() => (init_events(), events_exports));
       const path2 = eventsPath2();
-      if (!existsSync24(path2)) {
+      if (!existsSync25(path2)) {
         console.log("no events yet \u2014 is a session adopted? (the chrome updater writes events)");
         break;
       }
@@ -11403,7 +11494,7 @@ try {
         } catch {
         }
       };
-      const allLines = readFileSync16(path2, "utf8").split("\n").filter((l) => l.trim().length > 0);
+      const allLines = readFileSync17(path2, "utf8").split("\n").filter((l) => l.trim().length > 0);
       for (const line of allLines.slice(-50)) printLine(line);
       if (!values.follow) break;
       let offset = statSync5(path2).size;

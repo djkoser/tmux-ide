@@ -9,17 +9,31 @@
  * Safety first: an already-live session is NEVER clobbered (it's skipped), and
  * recorded pane commands are NOT auto-run unless `--run-commands` is passed —
  * a restored agent pane is a plain shell in the right directory with its title
- * restored, and 0037 layers agent-resume on top.
+ * restored.
  *
- * {@link buildRestorePlan} is PURE (skip/launch/rebuild decisions + create
- * order + layout strings, unit-tested); {@link restore} is the thin io wrapper
- * that reads the snapshot + registry + live tmux, then executes the plan.
+ * `--resume-agents` (or `{ "restore": { "resumeAgents": true } }` in
+ * `~/.tmux-ide/config.json`) layers native agent-resume on top: a rebuilt
+ * claude pane that carries a recorded `@agent_session_id` relaunches as
+ * `claude --resume <id>`, reviving the actual conversation rather than opening
+ * a fresh shell. See {@link paneResumeCommand} for the exact decision table.
+ *
+ * {@link buildRestorePlan} + {@link paneResumeCommand} + {@link restorePrefs}
+ * are PURE (unit-tested); {@link restore} is the thin io wrapper that reads the
+ * snapshot + registry + live tmux + config, then executes the plan.
  */
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { runTmux } from "@tmux-ide/tmux-bridge";
 import { IdeError } from "./lib/errors.ts";
 import { listProjects } from "./lib/project-registry.ts";
 import { adoptSession } from "./tui/chrome/statusline.ts";
-import { readSnapshot, type FleetSnapshot, type SessionSnapshot } from "./tui/chrome/snapshot.ts";
+import {
+  readSnapshot,
+  type FleetSnapshot,
+  type PaneSnapshot,
+  type SessionSnapshot,
+} from "./tui/chrome/snapshot.ts";
 
 // ---------------------------------------------------------------------------
 // Pure plan
@@ -77,6 +91,99 @@ export function buildRestorePlan(
 }
 
 // ---------------------------------------------------------------------------
+// Pure — agent resume decision
+// ---------------------------------------------------------------------------
+
+/** A session id is trusted only if it's the uuid alphabet — nothing shell-active. */
+const SAFE_SESSION_ID = /^[A-Za-z0-9-]+$/;
+
+/**
+ * PURE — the command to relaunch a pane so its agent conversation is revived,
+ * or `null` for "no resume — leave it a plain shell (or replay `command`)".
+ *
+ * Decision table (only fires when `resumeAgents` is on):
+ *  - claude + a recorded `@agent_session_id` → `claude --resume <id>`. The id is
+ *    a uuid, but we don't trust the snapshot: unless it matches
+ *    {@link SAFE_SESSION_ID} (`[A-Za-z0-9-]`) we bail to `null` rather than risk
+ *    feeding shell metacharacters into send-keys.
+ *  - claude with NO session id → `null`. `claude --continue` would be too
+ *    magical here (it resumes the most-recent conversation in the cwd, which may
+ *    belong to a different pane); a fresh shell is the safe, predictable default.
+ *  - any other agent → `null`. No native resume story yet.
+ *  - `resumeAgents` off → always `null`.
+ */
+export function paneResumeCommand(
+  pane: PaneSnapshot,
+  opts: { resumeAgents: boolean },
+): string | null {
+  if (!opts.resumeAgents) return null;
+  if (pane.agent !== "claude") return null;
+  const id = pane.agentSessionId;
+  if (!id || !SAFE_SESSION_ID.test(id)) return null;
+  return `claude --resume ${id}`;
+}
+
+/** PURE — how many of a session's panes would resume under `resumeAgents`. */
+export function countResumableAgents(session: SessionSnapshot, resumeAgents: boolean): number {
+  let n = 0;
+  for (const window of session.windows) {
+    for (const pane of window.panes) {
+      if (paneResumeCommand(pane, { resumeAgents })) n++;
+    }
+  }
+  return n;
+}
+
+// ---------------------------------------------------------------------------
+// Pure — restore preferences (~/.tmux-ide/config.json)
+// ---------------------------------------------------------------------------
+
+/** Restore behaviour toggles (minimal, pre-M14). */
+export interface RestorePrefs {
+  resumeAgents: boolean;
+}
+
+/** Default: don't resume agents unless asked (flag or config). */
+export const DEFAULT_RESTORE_PREFS: RestorePrefs = { resumeAgents: false };
+
+/**
+ * PURE — read `{ restore: { resumeAgents } }` out of a parsed config, falling
+ * back to {@link DEFAULT_RESTORE_PREFS} for anything missing or mistyped.
+ */
+export function restorePrefs(parsedConfig: unknown): RestorePrefs {
+  const restore =
+    parsedConfig && typeof parsedConfig === "object"
+      ? (parsedConfig as { restore?: unknown }).restore
+      : undefined;
+  if (!restore || typeof restore !== "object") {
+    return { ...DEFAULT_RESTORE_PREFS };
+  }
+  const resumeAgents = (restore as { resumeAgents?: unknown }).resumeAgents;
+  return {
+    resumeAgents:
+      typeof resumeAgents === "boolean" ? resumeAgents : DEFAULT_RESTORE_PREFS.resumeAgents,
+  };
+}
+
+/** Absolute path to the shared minimal config (same file the notifier reads). */
+export function restoreConfigPath(): string {
+  return join(homedir(), ".tmux-ide", "config.json");
+}
+
+/** io — resolve restore prefs from `~/.tmux-ide/config.json`; missing/invalid → defaults. */
+export function readRestorePrefs(): RestorePrefs {
+  const path = restoreConfigPath();
+  if (existsSync(path)) {
+    try {
+      return restorePrefs(JSON.parse(readFileSync(path, "utf-8")));
+    } catch {
+      // malformed config — keep defaults
+    }
+  }
+  return { ...DEFAULT_RESTORE_PREFS };
+}
+
+// ---------------------------------------------------------------------------
 // io — execute a rebuild action against live tmux
 // ---------------------------------------------------------------------------
 
@@ -84,17 +191,32 @@ function tmuxCapture(args: string[]): string {
   return runTmux(args, { encoding: "utf-8" }).toString().trim();
 }
 
+/** Options for one raw rebuild (see {@link rebuildSession}). */
+interface RebuildOptions {
+  /** Replay each pane's recorded command (`--run-commands`). */
+  runCommands: boolean;
+  /** Relaunch resumable agent panes as `claude --resume <id>` (`--resume-agents`). */
+  resumeAgents: boolean;
+}
+
 /**
  * Raw-rebuild one session from its snapshot: create the session + its first
  * window, add the remaining windows, split each window's panes (with their
  * cwds), apply the recorded layout, restore titles, set the active window, and
- * — with `runCommands` — replay each pane's recorded command.
+ * relaunch each pane per {@link RebuildOptions}.
+ *
+ * Per pane, at most ONE command is ever sent: an agent-resume command (when
+ * eligible under {@link paneResumeCommand}) takes precedence and, if it fires,
+ * suppresses the `--run-commands` replay for that pane. Returns the titles of
+ * the panes that were resumed (for the report).
  */
-function rebuildSession(session: SessionSnapshot, runCommands: boolean): void {
+function rebuildSession(session: SessionSnapshot, opts: RebuildOptions): string[] {
+  const { runCommands, resumeAgents } = opts;
+  const resumedTitles: string[] = [];
   const windows = session.windows;
   if (windows.length === 0) {
     runTmux(["new-session", "-d", "-s", session.name, "-c", session.cwd]);
-    return;
+    return resumedTitles;
   }
 
   windows.forEach((window, w) => {
@@ -164,7 +286,14 @@ function rebuildSession(session: SessionSnapshot, runCommands: boolean): void {
       if (pane.agent) {
         runTmux(["set-option", "-p", "-t", paneId, "@agent_hint", pane.agent]);
       }
-      if (runCommands && pane.command) {
+      // Resume the agent conversation if eligible; that takes precedence over
+      // the recorded-command replay so a pane is never sent two commands.
+      const resumeCmd = paneResumeCommand(pane, { resumeAgents });
+      if (resumeCmd) {
+        runTmux(["send-keys", "-t", paneId, "-l", "--", resumeCmd]);
+        runTmux(["send-keys", "-t", paneId, "Enter"]);
+        resumedTitles.push(pane.title || paneId);
+      } else if (runCommands && pane.command) {
         runTmux(["send-keys", "-t", paneId, "-l", "--", pane.command]);
         runTmux(["send-keys", "-t", paneId, "Enter"]);
       }
@@ -176,6 +305,7 @@ function rebuildSession(session: SessionSnapshot, runCommands: boolean): void {
   if (activeIndex >= 0) {
     runTmux(["select-window", "-t", `${session.name}:${windows[activeIndex]!.index}`]);
   }
+  return resumedTitles;
 }
 
 // ---------------------------------------------------------------------------
@@ -209,17 +339,28 @@ export interface RestoreOptions {
   json?: boolean;
   dryRun?: boolean;
   runCommands?: boolean;
+  /** Relaunch resumable agent panes (`--resume-agents`); ORed with config default. */
+  resumeAgents?: boolean;
+}
+
+/** One rebuilt session's resumed agent panes (for the report). */
+interface ResumedSession {
+  session: string;
+  panes: string[];
 }
 
 /**
  * Rebuild the fleet from the last snapshot. Missing snapshot → friendly exit 1.
  * `dryRun` prints the plan without touching tmux; `runCommands` opts into
- * replaying recorded pane commands (off by default for safety).
+ * replaying recorded pane commands (off by default for safety); `resumeAgents`
+ * (flag ORed with the `~/.tmux-ide/config.json` default) revives agent
+ * conversations via `claude --resume <id>`.
  */
 export async function restore({
   json = false,
   dryRun = false,
   runCommands = false,
+  resumeAgents = false,
 }: RestoreOptions = {}): Promise<void> {
   const snapshot = readSnapshot();
   if (!snapshot) {
@@ -229,15 +370,28 @@ export async function restore({
     );
   }
 
+  // The flag forces resume on; config makes it the default. No negative flag.
+  const resume = resumeAgents || readRestorePrefs().resumeAgents;
   const plan = buildRestorePlan(snapshot, liveSessions(), ideBackedProjects());
 
   if (dryRun) {
-    reportPlan(plan, snapshot, { json, dryRun: true, restored: [], launched: [] });
+    reportPlan(plan, snapshot, {
+      json,
+      dryRun: true,
+      restored: [],
+      launched: [],
+      resumed: [],
+      resumeAgents: resume,
+    });
     return;
   }
 
   const restored: string[] = [];
   const launched: string[] = [];
+  const resumed: ResumedSession[] = [];
+  const recordResumed = (session: string, panes: string[]) => {
+    if (panes.length) resumed.push({ session, panes });
+  };
   for (const action of plan.actions) {
     if (action.kind === "skip") continue;
     if (action.kind === "launch") {
@@ -248,19 +402,29 @@ export async function restore({
         // session still comes back.
         const snap = snapshot.sessions.find((s) => s.name === action.session);
         if (snap) {
-          rebuildSession(snap, runCommands);
+          recordResumed(snap.name, rebuildSession(snap, { runCommands, resumeAgents: resume }));
           if (snap.adopted) safeAdopt(snap.name);
           restored.push(action.session);
         }
       }
       continue;
     }
-    rebuildSession(action.session, runCommands);
+    recordResumed(
+      action.session.name,
+      rebuildSession(action.session, { runCommands, resumeAgents: resume }),
+    );
     if (action.session.adopted) safeAdopt(action.session.name);
     restored.push(action.session.name);
   }
 
-  reportPlan(plan, snapshot, { json, dryRun: false, restored, launched });
+  reportPlan(plan, snapshot, {
+    json,
+    dryRun: false,
+    restored,
+    launched,
+    resumed,
+    resumeAgents: resume,
+  });
 }
 
 /** Adopt a restored session into the chrome; never let a chrome failure abort restore. */
@@ -296,16 +460,21 @@ interface ReportContext {
   dryRun: boolean;
   restored: string[];
   launched: string[];
+  /** Per-session resumed agent panes (empty on dry-run — see `resumeAgents`). */
+  resumed: ResumedSession[];
+  /** Whether resume is on (drives the dry-run `(would resume N agents)` note). */
+  resumeAgents: boolean;
 }
 
 function reportPlan(
   plan: RestorePlan,
   snapshot: FleetSnapshot,
-  { json, dryRun, restored, launched }: ReportContext,
+  { json, dryRun, restored, launched, resumed, resumeAgents }: ReportContext,
 ): void {
   const skipped = plan.actions.filter((a) => a.kind === "skip").map((a) => a.session);
   const willLaunch = plan.actions.filter((a) => a.kind === "launch").map((a) => a.session);
   const willRebuild = plan.actions.filter((a) => a.kind === "rebuild").map((a) => a.session.name);
+  const resumedPanes = resumed.reduce((n, r) => n + r.panes.length, 0);
 
   if (json) {
     console.log(
@@ -317,6 +486,9 @@ function reportPlan(
           launched: dryRun ? willLaunch : launched,
           restored: dryRun ? willRebuild : restored,
           panes: plan.paneCount,
+          resumeAgents,
+          resumedPanes,
+          resumed,
         },
         null,
         2,
@@ -335,16 +507,26 @@ function reportPlan(
       } else {
         const w = action.session.windows.length;
         const p = action.session.windows.reduce((n, win) => n + win.panes.length, 0);
+        const wouldResume = countResumableAgents(action.session, resumeAgents);
+        const resumeNote = wouldResume
+          ? `, would resume ${wouldResume} agent${wouldResume === 1 ? "" : "s"}`
+          : "";
         console.log(
-          `  rebuild  ${action.session.name} (${w} window${w === 1 ? "" : "s"}, ${p} pane${p === 1 ? "" : "s"})`,
+          `  rebuild  ${action.session.name} (${w} window${w === 1 ? "" : "s"}, ${p} pane${p === 1 ? "" : "s"}${resumeNote})`,
         );
       }
     }
     return;
   }
 
+  const resumedBySession = new Map(resumed.map((r) => [r.session, r.panes.length]));
+  const resumeSuffix = (name: string) => {
+    const n = resumedBySession.get(name) ?? 0;
+    return n ? ` (resumed ${n} agent${n === 1 ? "" : "s"})` : "";
+  };
   const parts: string[] = [];
-  if (restored.length) parts.push(`rebuilt ${restored.join(", ")}`);
+  if (restored.length)
+    parts.push(`rebuilt ${restored.map((s) => `${s}${resumeSuffix(s)}`).join(", ")}`);
   if (launched.length) parts.push(`launched ${launched.join(", ")}`);
   if (skipped.length) parts.push(`skipped ${skipped.join(", ")} (already running)`);
   console.log(parts.length ? `Restored: ${parts.join("; ")}` : "Nothing to restore.");

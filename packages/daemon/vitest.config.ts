@@ -8,6 +8,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: [
+      "src/restore.test.ts",
       "src/terminal/__tests__/*.test.ts",
       "src/lib/__tests__/*.test.ts",
       "src/tui/detect/*.test.ts",
