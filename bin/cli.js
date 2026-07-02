@@ -3109,6 +3109,27 @@ var init_welcome = __esm({
   }
 });
 
+// packages/daemon/src/tui/chrome/kitty-keys.ts
+function kittyEscapeFor(key) {
+  const m = /^M-(.)$/.exec(key);
+  const ch = m?.[1];
+  if (ch === void 0) return null;
+  const code = ch.toLowerCase().codePointAt(0);
+  if (code === void 0) return null;
+  return `\x1B[${code};3:1u`;
+}
+function kittyUserKeyIndex(slot) {
+  return 100 + slot;
+}
+function kittyUserKeyName(slot) {
+  return `User${kittyUserKeyIndex(slot)}`;
+}
+var init_kitty_keys = __esm({
+  "packages/daemon/src/tui/chrome/kitty-keys.ts"() {
+    "use strict";
+  }
+});
+
 // packages/daemon/src/schemas/registry.ts
 import { z as z9 } from "zod";
 var RegisteredProjectSchemaZ, RegisterProjectRequestSchemaZ, InitProjectRequestSchemaZ, ProjectTemplateSchemaZ;
@@ -4073,6 +4094,7 @@ __export(statusline_exports, {
   adoptOptionCommands: () => adoptOptionCommands,
   adoptSession: () => adoptSession,
   adoptableSessionNames: () => adoptableSessionNames,
+  altKeyBinds: () => altKeyBinds,
   buildStatusline: () => buildStatusline,
   homeBindCommand: () => homeBindCommand,
   homePopupCommand: () => homePopupCommand,
@@ -4197,20 +4219,33 @@ function unadoptOptionCommands(session) {
     ["set-option", "-u", "-t", session, STATUS_OPTION]
   ];
 }
+function altKeyBinds(keys, switcherCmd = "tmux-ide switcher") {
+  return [
+    { key: keys.popup, bind: popupBindCommand(switcherCmd, keys.popup) },
+    { key: keys.home, bind: homeBindCommand("tmux-ide team --popup", keys.home) },
+    { key: keys.cheatsheet, bind: cheatsheetBindCommand("tmux-ide cheatsheet", keys.cheatsheet) },
+    { key: keys.menu, bind: menuBindCommand("tmux-ide menu", keys.menu) },
+    { key: keys.sidebar, bind: sidebarToggleBindCommand("tmux-ide sidebar-toggle", keys.sidebar) },
+    ...PANEL_POPUPS.map((panel) => {
+      const key = panelKey(panel, keys.panels);
+      return { key, bind: panelPopupBindCommand(panel, key) };
+    })
+  ];
+}
 function adoptSession(session, switcherCmd = "tmux-ide switcher") {
   for (const argv of adoptOptionCommands(session)) runTmux(argv);
   const keys = getAppConfig().keys;
-  runTmux(popupBindCommand(switcherCmd, keys.popup));
-  runTmux(homeBindCommand("tmux-ide team --popup", keys.home));
-  runTmux(cheatsheetBindCommand("tmux-ide cheatsheet", keys.cheatsheet));
   runTmux(statusClickBindCommand(switcherCmd));
-  runTmux(menuBindCommand("tmux-ide menu", keys.menu));
   runTmux(menuStatusBindCommand());
   runTmux(menuPaneBindCommand());
-  for (const panel of PANEL_POPUPS) {
-    runTmux(panelPopupBindCommand(panel, panelKey(panel, keys.panels)));
-  }
-  runTmux(sidebarToggleBindCommand("tmux-ide sidebar-toggle", keys.sidebar));
+  altKeyBinds(keys, switcherCmd).forEach(({ key, bind }, i) => {
+    runTmux(bind);
+    const escape = kittyEscapeFor(key);
+    if (escape === null) return;
+    const idx = kittyUserKeyIndex(i);
+    runTmux(["set-option", "-s", `user-keys[${idx}]`, escape]);
+    runTmux(["bind-key", "-n", kittyUserKeyName(i), ...bind.slice(3)]);
+  });
   seedSessionStatus(session);
   startUpdaterIfNeeded();
   maybeShowWelcomePopup();
@@ -4218,44 +4253,31 @@ function adoptSession(session, switcherCmd = "tmux-ide switcher") {
 function unadoptSession(session) {
   for (const argv of unadoptOptionCommands(session)) runTmux(argv);
   const keys = getAppConfig().keys;
-  try {
-    runTmux(popupUnbindCommand(keys.popup));
-  } catch {
-  }
-  try {
-    runTmux(homeUnbindCommand(keys.home));
-  } catch {
-  }
-  try {
-    runTmux(cheatsheetUnbindCommand(keys.cheatsheet));
-  } catch {
-  }
-  try {
-    runTmux(statusClickUnbindCommand());
-  } catch {
-  }
-  try {
-    runTmux(menuUnbindCommand(keys.menu));
-  } catch {
-  }
-  try {
-    runTmux(menuStatusUnbindCommand());
-  } catch {
-  }
-  try {
-    runTmux(menuPaneUnbindCommand());
-  } catch {
-  }
-  for (const panel of PANEL_POPUPS) {
+  for (const undo of [
+    statusClickUnbindCommand(),
+    menuStatusUnbindCommand(),
+    menuPaneUnbindCommand()
+  ]) {
     try {
-      runTmux(panelPopupUnbindCommand(panelKey(panel, keys.panels)));
+      runTmux(undo);
     } catch {
     }
   }
-  try {
-    runTmux(sidebarToggleUnbindCommand(keys.sidebar));
-  } catch {
-  }
+  altKeyBinds(keys, "tmux-ide switcher").forEach(({ key }, i) => {
+    try {
+      runTmux(["unbind-key", "-n", key]);
+    } catch {
+    }
+    if (kittyEscapeFor(key) === null) return;
+    try {
+      runTmux(["unbind-key", "-n", kittyUserKeyName(i)]);
+    } catch {
+    }
+    try {
+      runTmux(["set-option", "-su", `user-keys[${kittyUserKeyIndex(i)}]`]);
+    } catch {
+    }
+  });
   if (listAdoptedSessions().length === 0) stopUpdater();
 }
 var POPUP_KEY, HOME_KEY, MENU_KEY, MENU_STATUS_KEY, MENU_PANE_KEY, STATUS_CLICK_KEY;
@@ -4269,6 +4291,7 @@ var init_statusline = __esm({
     init_panels();
     init_sidebar();
     init_welcome();
+    init_kitty_keys();
     init_updater();
     POPUP_KEY = "M-p";
     HOME_KEY = "M-h";

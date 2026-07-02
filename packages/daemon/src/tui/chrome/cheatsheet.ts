@@ -124,13 +124,13 @@ export function buildCheatsheet(opts: { width: number; keys?: AppKeys; theme?: A
   lines.push(head("dock"));
   lines.push(
     pad(
-      `${bold(renderKey(keys.popup))} switcher popup   ${bold(renderKey(keys.cheatsheet))} this sheet   ${bold(renderKey(keys.menu))} actions menu   ${bold(renderKey(keys.sidebar))} sidebar`,
+      `${bold(renderKey(keys.home))} home cockpit   ${bold(renderKey(keys.popup))} switcher popup   ${bold(renderKey(keys.cheatsheet))} this sheet   ${bold(renderKey(keys.menu))} actions menu   ${bold(renderKey(keys.sidebar))} sidebar`,
     ),
   );
   lines.push(
     pad(
       dim(
-        `bar: click a project tab = switch there · click [ ⧉ switch ${renderKey(keys.popup)} ] = switcher · right-click anywhere = menu`,
+        `bar: click a project tab = switch there · [ ⌂ home ${renderKey(keys.home)} ] = home · [ ⧉ switch ${renderKey(keys.popup)} ] = switcher · right-click anywhere = menu`,
       ),
     ),
   );

@@ -15,6 +15,7 @@ import {
   HOME_PANEL_KEYS,
   panelHints,
   homeFooterHints,
+  pickerFooterHints,
 } from "./home.ts";
 
 function session(name: string, status: AgentStatus): TeamSession {
@@ -125,5 +126,18 @@ describe("homeFooterHints", () => {
   it("includes every panel hint", () => {
     const labels = homeFooterHints().map((h) => h.label);
     for (const p of PANEL_POPUPS) expect(labels).toContain(p.widget);
+  });
+});
+
+describe("pickerFooterHints", () => {
+  it("advertises switch/launch/find/help/close, with the discoverable keys from the grammar", () => {
+    const hints = pickerFooterHints();
+    const byLabel = (label: string) => hints.find((h) => h.label === label)!;
+    // the picker ends in a switch-client + close
+    expect(byLabel("switch").keys).toBe("↵");
+    expect(byLabel("close").keys).toBe("esc");
+    // filter + help keys are sourced from the grammar so they can't drift
+    expect(byLabel("find").keys).toBe(GRAMMAR_KEYS.filter[0]);
+    expect(byLabel("help").keys).toBe(GRAMMAR_KEYS.help[0]);
   });
 });

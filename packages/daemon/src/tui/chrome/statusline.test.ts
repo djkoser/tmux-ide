@@ -6,6 +6,7 @@ import {
   adoptableSessionNames,
   adoptOptionCommands,
   adoptSession,
+  altKeyBinds,
   buildStatusline,
   homeBindCommand,
   homePopupCommand,
@@ -20,7 +21,9 @@ import {
   STATUS_CLICK_KEY,
   switcherPopupCommand,
   unadoptOptionCommands,
+  unadoptSession,
 } from "./statusline.ts";
+import { kittyEscapeFor, kittyUserKeyIndex, kittyUserKeyName } from "./kitty-keys.ts";
 import { menuBindCommand, menuPaneBindCommand, menuStatusBindCommand } from "./menu.ts";
 import { PANEL_POPUPS, panelKey, panelPopupBindCommand } from "./panels.ts";
 import { sidebarToggleBindCommand } from "./sidebar.ts";
@@ -468,5 +471,42 @@ describe("adoptSession key binds", () => {
       DEFAULT_KEYS.panels.changes,
       DEFAULT_KEYS.panels.config,
     ]).toEqual(["M-e", "M-g", "M-,"]);
+  });
+
+  it("registers a kitty-protocol User-key fallback alongside every Alt-key bind", () => {
+    adoptSession("web");
+    const calls = runTmux.mock.calls.map((c) => c[0] as string[]);
+    // Every entry in the single altKeyBinds source is an `M-<c>` key, so each
+    // gets all three: the M- bind, the user-keys[100+i] escape, and the UserN
+    // twin running the identical action argv (bind minus `bind-key -n <key>`).
+    altKeyBinds(DEFAULT_KEYS).forEach(({ key, bind }, i) => {
+      const escape = kittyEscapeFor(key);
+      expect(escape).not.toBeNull();
+      expect(calls).toContainEqual(bind);
+      expect(calls).toContainEqual([
+        "set-option",
+        "-s",
+        `user-keys[${kittyUserKeyIndex(i)}]`,
+        escape,
+      ]);
+      expect(calls).toContainEqual(["bind-key", "-n", kittyUserKeyName(i), ...bind.slice(3)]);
+    });
+    // the popup fallback specifically: User100 runs the same display-popup as M-p
+    expect(calls).toContainEqual([
+      "bind-key",
+      "-n",
+      "User100",
+      ...popupBindCommand("tmux-ide switcher", DEFAULT_KEYS.popup).slice(3),
+    ]);
+  });
+
+  it("unbinds every Alt key, its User-key twin, and the user-keys slot on unadopt", () => {
+    unadoptSession("web");
+    const calls = runTmux.mock.calls.map((c) => c[0] as string[]);
+    altKeyBinds(DEFAULT_KEYS).forEach(({ key }, i) => {
+      expect(calls).toContainEqual(["unbind-key", "-n", key]);
+      expect(calls).toContainEqual(["unbind-key", "-n", kittyUserKeyName(i)]);
+      expect(calls).toContainEqual(["set-option", "-su", `user-keys[${kittyUserKeyIndex(i)}]`]);
+    });
   });
 });

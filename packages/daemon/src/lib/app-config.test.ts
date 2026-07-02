@@ -55,6 +55,26 @@ describe("parseAppConfig — deep partial merge", () => {
     expect(parseAppConfig(undefined).keys.sidebar).toBe("M-b");
   });
 
+  it("defaults the home cockpit key to M-h", () => {
+    expect(DEFAULT_APP_CONFIG.keys.home).toBe("M-h");
+    expect(parseAppConfig(undefined).keys.home).toBe("M-h");
+  });
+
+  it("overrides the home key while keeping the other chrome keys default", () => {
+    const cfg = parseAppConfig({ keys: { home: "M-H" } });
+    expect(cfg.keys.home).toBe("M-H");
+    expect(cfg.keys.popup).toBe("M-p");
+    expect(cfg.keys.cheatsheet).toBe("M-k");
+  });
+
+  it("defaults welcome.show to true and coerces a mistyped value back to it", () => {
+    expect(DEFAULT_APP_CONFIG.welcome.show).toBe(true);
+    expect(parseAppConfig(undefined).welcome.show).toBe(true);
+    expect(parseAppConfig({ welcome: { show: "nope" } }).welcome.show).toBe(true);
+    // an explicit false is honoured
+    expect(parseAppConfig({ welcome: { show: false } }).welcome.show).toBe(false);
+  });
+
   it("overrides the sidebar key while keeping the other chrome keys default", () => {
     const cfg = parseAppConfig({ keys: { sidebar: "M-B" } });
     expect(cfg.keys.sidebar).toBe("M-B");

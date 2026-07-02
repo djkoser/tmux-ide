@@ -13,30 +13,21 @@
  * `buildStatusline` is pure (tested); the io wrappers are thin.
  */
 import { runTmux } from "@tmux-ide/tmux-bridge";
-import { DEFAULT_THEME, getAppConfig, type AppTheme } from "../../lib/app-config.ts";
+import { DEFAULT_THEME, getAppConfig, type AppKeys, type AppTheme } from "../../lib/app-config.ts";
 import type { AgentStatus } from "../detect/classify.ts";
 import type { TeamProject } from "../team/projects.ts";
-import {
-  cheatsheetBindCommand,
-  cheatsheetPopupCommand,
-  cheatsheetUnbindCommand,
-} from "./cheatsheet.ts";
+import { cheatsheetBindCommand, cheatsheetPopupCommand } from "./cheatsheet.ts";
 import {
   menuBindCommand,
   menuPaneBindCommand,
   menuPaneUnbindCommand,
   menuStatusBindCommand,
   menuStatusUnbindCommand,
-  menuUnbindCommand,
 } from "./menu.ts";
-import {
-  PANEL_POPUPS,
-  panelKey,
-  panelPopupBindCommand,
-  panelPopupUnbindCommand,
-} from "./panels.ts";
-import { sidebarToggleBindCommand, sidebarToggleUnbindCommand } from "./sidebar.ts";
+import { PANEL_POPUPS, panelKey, panelPopupBindCommand } from "./panels.ts";
+import { sidebarToggleBindCommand } from "./sidebar.ts";
 import { maybeShowWelcomePopup } from "./welcome.ts";
+import { kittyEscapeFor, kittyUserKeyIndex, kittyUserKeyName } from "./kitty-keys.ts";
 import {
   ADOPTED_OPTION,
   CHIP_OPTION,
@@ -405,34 +396,56 @@ export function unadoptOptionCommands(session: string): string[][] {
   ];
 }
 
+/**
+ * The root-table ALT-KEY binds adopt registers, as `(tmux key, bind argv)`
+ * pairs, in a STABLE order: popup, home, cheat sheet, menu, sidebar, then the
+ * panels. Threaded through ONE place so adopt, unadopt, AND the kitty-protocol
+ * User-key fallbacks all agree — the bind argv's action (everything after
+ * `bind-key -n <key>`) is reused verbatim for the `UserN` twin (see
+ * {@link ./kitty-keys.ts}). The mouse binds (status-click / right-click) are
+ * NOT here — they aren't Alt keys and need no kitty fallback.
+ */
+export function altKeyBinds(
+  keys: AppKeys,
+  switcherCmd = "tmux-ide switcher",
+): Array<{ key: string; bind: string[] }> {
+  return [
+    { key: keys.popup, bind: popupBindCommand(switcherCmd, keys.popup) },
+    { key: keys.home, bind: homeBindCommand("tmux-ide team --popup", keys.home) },
+    { key: keys.cheatsheet, bind: cheatsheetBindCommand("tmux-ide cheatsheet", keys.cheatsheet) },
+    { key: keys.menu, bind: menuBindCommand("tmux-ide menu", keys.menu) },
+    { key: keys.sidebar, bind: sidebarToggleBindCommand("tmux-ide sidebar-toggle", keys.sidebar) },
+    ...PANEL_POPUPS.map((panel) => {
+      const key = panelKey(panel, keys.panels);
+      return { key, bind: panelPopupBindCommand(panel, key) };
+    }),
+  ];
+}
+
 export function adoptSession(session: string, switcherCmd = "tmux-ide switcher"): void {
   for (const argv of adoptOptionCommands(session)) runTmux(argv);
   // Key binds are configurable via ~/.tmux-ide/config.json (keys.*); re-adopting
   // after a config change rebinds them. Server-wide + idempotent (re-binding a
-  // key just overwrites it): the popup, the cheat sheet, and the click router.
+  // key just overwrites it).
   const keys = getAppConfig().keys;
-  runTmux(popupBindCommand(switcherCmd, keys.popup));
-  // The HOME cockpit: the configured home key floats the full fleet home over
-  // any session (Enter switch-clients + closes — see homePopupCommand).
-  runTmux(homeBindCommand("tmux-ide team --popup", keys.home));
-  runTmux(cheatsheetBindCommand("tmux-ide cheatsheet", keys.cheatsheet));
+  // The mouse binds: the status-click router and the two right-click menu
+  // openers (chrome row + any pane body). Not Alt keys → no kitty fallback.
   runTmux(statusClickBindCommand(switcherCmd));
-  // The actions menu: the configured menu key, a right-click on the chrome row
-  // (MouseDown3Status), and a right-click on ANY pane body (MouseDown3Pane) all
-  // open tmux's native display-menu, rebuilt live by the `menu` CLI command — so
-  // the menu is reachable from anywhere, not just the dock row.
-  runTmux(menuBindCommand("tmux-ide menu", keys.menu));
   runTmux(menuStatusBindCommand());
   runTmux(menuPaneBindCommand());
-  // The widget PANELS: one root-table key per panel opens the widget as a
-  // floating `display-popup` on the pane's cwd (the one-app milestone). Keys are
-  // configurable via keys.panels.*; sizing is per-widget (see ./panels.ts).
-  for (const panel of PANEL_POPUPS) {
-    runTmux(panelPopupBindCommand(panel, panelKey(panel, keys.panels)));
-  }
-  // The SIDEBAR toggle: the configured key summons/dismisses the app nav column
-  // in whatever session the client is viewing (run-shell expands the session).
-  runTmux(sidebarToggleBindCommand("tmux-ide sidebar-toggle", keys.sidebar));
+  // Every root-table Alt-key bind, PLUS a kitty-protocol User-key fallback so the
+  // shortcut still fires when a focused Claude Code pane has the Kitty keyboard
+  // protocol on (tmux 3.6 doesn't normalize the `ESC[<code>;3:1u` full form back
+  // to `M-…`). The UserN twin runs the identical action argv (`bind.slice(3)` —
+  // everything after `bind-key -n <key>`). See {@link ./kitty-keys.ts}.
+  altKeyBinds(keys, switcherCmd).forEach(({ key, bind }, i) => {
+    runTmux(bind);
+    const escape = kittyEscapeFor(key);
+    if (escape === null) return; // not an `M-<c>` key → no fallback
+    const idx = kittyUserKeyIndex(i);
+    runTmux(["set-option", "-s", `user-keys[${idx}]`, escape]);
+    runTmux(["bind-key", "-n", kittyUserKeyName(i), ...bind.slice(3)]);
+  });
   // Seed the bar now so it's never blank, then make sure the loop that keeps it
   // fresh is up.
   seedSessionStatus(session);
@@ -454,55 +467,38 @@ export function unadoptSession(session: string): void {
   // sessions. Acceptable for now — best-effort so a missing bind (already
   // unadopted) doesn't throw. Unbind the SAME configured keys adopt bound.
   const keys = getAppConfig().keys;
-  try {
-    runTmux(popupUnbindCommand(keys.popup));
-  } catch {
-    // no such key bound — nothing to undo
-  }
-  try {
-    runTmux(homeUnbindCommand(keys.home));
-  } catch {
-    // no such key bound — nothing to undo
-  }
-  try {
-    runTmux(cheatsheetUnbindCommand(keys.cheatsheet));
-  } catch {
-    // no such key bound — nothing to undo
-  }
-  try {
-    runTmux(statusClickUnbindCommand());
-  } catch {
-    // no such key bound — nothing to undo
-  }
-  try {
-    runTmux(menuUnbindCommand(keys.menu));
-  } catch {
-    // no such key bound — nothing to undo
-  }
-  try {
-    runTmux(menuStatusUnbindCommand());
-  } catch {
-    // no such key bound — nothing to undo
-  }
-  try {
-    runTmux(menuPaneUnbindCommand());
-  } catch {
-    // no such key bound — nothing to undo
-  }
-  // Drop the widget panel binds (same configured keys adopt bound). Best-effort
-  // so an already-removed bind doesn't throw.
-  for (const panel of PANEL_POPUPS) {
+  // The mouse binds (status-click router + the two right-click menu openers).
+  for (const undo of [
+    statusClickUnbindCommand(),
+    menuStatusUnbindCommand(),
+    menuPaneUnbindCommand(),
+  ]) {
     try {
-      runTmux(panelPopupUnbindCommand(panelKey(panel, keys.panels)));
+      runTmux(undo);
     } catch {
       // no such key bound — nothing to undo
     }
   }
-  try {
-    runTmux(sidebarToggleUnbindCommand(keys.sidebar));
-  } catch {
-    // no such key bound — nothing to undo
-  }
+  // Every Alt-key bind AND its kitty User-key fallback + the user-keys slot,
+  // walked in the SAME order adopt registered them so the slot indices line up.
+  altKeyBinds(keys, "tmux-ide switcher").forEach(({ key }, i) => {
+    try {
+      runTmux(["unbind-key", "-n", key]);
+    } catch {
+      // no such key bound — nothing to undo
+    }
+    if (kittyEscapeFor(key) === null) return;
+    try {
+      runTmux(["unbind-key", "-n", kittyUserKeyName(i)]);
+    } catch {
+      // no such User key bound — nothing to undo
+    }
+    try {
+      runTmux(["set-option", "-su", `user-keys[${kittyUserKeyIndex(i)}]`]);
+    } catch {
+      // no such user-keys slot set — nothing to undo
+    }
+  });
   // The updater only needs to run while something is adopted.
   if (listAdoptedSessions().length === 0) stopUpdater();
 }

@@ -102,6 +102,7 @@ describe("buildCheatsheet", () => {
         width: 100,
         keys: {
           popup: "M-o",
+          home: "M-i",
           cheatsheet: "M-j",
           menu: "M-u",
           sidebar: "M-w",
@@ -117,6 +118,8 @@ describe("buildCheatsheet", () => {
     expect(sheet).toContain("⌥o");
     expect(sheet).toContain("⌥j");
     expect(sheet).toContain("⌥u");
+    // the home cockpit key renders in the dock group (⌥i)
+    expect(sheet).toContain("⌥i");
     // the sidebar toggle key renders in the dock group (⌥w)
     expect(sheet).toContain("⌥w");
     // and the panels group renders the configured panel keys (⌥x / ⌥y / ⌥z)

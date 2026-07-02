@@ -93,64 +93,73 @@ export function FileTree(props: FileTreeProps) {
         },
       }}
     >
-      <For each={props.nodes}>
-        {(node, index) => {
-          const isSelected = createMemo(() => index() === props.selected);
-          const icon = node.entry.isDir ? "> " : "  ";
-          const nameColor = () =>
-            getNameColor(
-              node.entry.name,
-              node.entry.isDir,
-              isSelected(),
-              node.entry.ignored,
-              props.theme,
-            );
-          const rowBg = () =>
-            isSelected()
-              ? toRGBA(props.theme.selected)
-              : index() % 2 === 1
-                ? toRGBA(props.theme.rowAlt)
-                : TRANSPARENT;
+      <Show
+        when={props.nodes.length > 0}
+        fallback={
+          <box paddingLeft={2} paddingTop={1}>
+            <text fg={toRGBA(props.theme.fgMuted)}>empty directory</text>
+          </box>
+        }
+      >
+        <For each={props.nodes}>
+          {(node, index) => {
+            const isSelected = createMemo(() => index() === props.selected);
+            const icon = node.entry.isDir ? "> " : "  ";
+            const nameColor = () =>
+              getNameColor(
+                node.entry.name,
+                node.entry.isDir,
+                isSelected(),
+                node.entry.ignored,
+                props.theme,
+              );
+            const rowBg = () =>
+              isSelected()
+                ? toRGBA(props.theme.selected)
+                : index() % 2 === 1
+                  ? toRGBA(props.theme.rowAlt)
+                  : TRANSPARENT;
 
-          return (
-            <box
-              id={String(index())}
-              backgroundColor={rowBg()}
-              flexDirection="row"
-              paddingLeft={1}
-              paddingRight={1}
-              onMouseMove={() => {
-                props.onInputModeChange("mouse");
-                props.onSelect(index());
-              }}
-              onMouseDown={() => props.onSelect(index())}
-              onMouseUp={() => {
-                props.onActivate(node);
-              }}
-            >
-              <text fg={toRGBA(nameColor())} wrapMode="none" flexGrow={1}>
-                {icon}
-                {node.entry.name}
-                {node.entry.isDir ? "/" : ""}
-              </text>
-              <Show when={node.gitStatus}>
-                <text
-                  fg={toRGBA(getStatusColor(node.gitStatus!, props.theme))}
-                  flexShrink={0}
-                  wrapMode="none"
-                >
-                  {getStatusLabel(node.gitStatus!)}
+            return (
+              <box
+                id={String(index())}
+                backgroundColor={rowBg()}
+                flexDirection="row"
+                paddingLeft={1}
+                paddingRight={1}
+                onMouseMove={() => {
+                  props.onInputModeChange("mouse");
+                  props.onSelect(index());
+                }}
+                onMouseDown={() => props.onSelect(index())}
+                onMouseUp={() => {
+                  props.onActivate(node);
+                }}
+              >
+                <text fg={toRGBA(nameColor())} wrapMode="none" flexGrow={1}>
+                  {icon}
+                  {node.entry.name}
+                  {node.entry.isDir ? "/" : ""}
                 </text>
-              </Show>
-              <Show when={isSelected() && !node.entry.isDir}>
-                <text fg={toRGBA(props.theme.fgMuted)} flexShrink={0} wrapMode="none">
-                  {" c: send to claude code"}
-                </text>
-              </Show>
-            </box>
-          );
-        }}
-      </For>
+                <Show when={node.gitStatus}>
+                  <text
+                    fg={toRGBA(getStatusColor(node.gitStatus!, props.theme))}
+                    flexShrink={0}
+                    wrapMode="none"
+                  >
+                    {getStatusLabel(node.gitStatus!)}
+                  </text>
+                </Show>
+                <Show when={isSelected() && !node.entry.isDir}>
+                  <text fg={toRGBA(props.theme.fgMuted)} flexShrink={0} wrapMode="none">
+                    {" c: send to claude code"}
+                  </text>
+                </Show>
+              </box>
+            );
+          }}
+        </For>
+      </Show>
     </scrollbox>
   );
 }

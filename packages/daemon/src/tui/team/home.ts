@@ -151,3 +151,20 @@ export function homeFooterHints(): FooterHint[] {
     { keys: GRAMMAR_KEYS.quit[0]!, label: "quit" },
   ];
 }
+
+/**
+ * PURE — the compact PICKER popup's footer hints. The picker ends in a
+ * switch-client + close, so it advertises that. The discoverable universal verbs
+ * (filter / help / dismiss) come from {@link GRAMMAR_KEYS} so the footer can't
+ * advertise a key the grammar doesn't bind — in particular `? help`, which
+ * surfaces the full keybindings overlay from inside the popup.
+ */
+export function pickerFooterHints(): FooterHint[] {
+  return [
+    { keys: "↵", label: "switch" },
+    { keys: "l", label: "launch" },
+    { keys: GRAMMAR_KEYS.filter[0]!, label: "find" },
+    { keys: GRAMMAR_KEYS.help[0]!, label: "help" },
+    { keys: "esc", label: "close" },
+  ];
+}

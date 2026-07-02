@@ -47,6 +47,7 @@ import {
   panelForKey,
   panelHints,
   homeFooterHints,
+  pickerFooterHints,
 } from "./home.ts";
 import { PANEL_POPUPS, panelPopupCli, type PanelPopup } from "../chrome/panels.ts";
 
@@ -140,25 +141,36 @@ render(() => {
   // with cwd set to the repo root (for the bun JSX preload), so it forwards the
   // real cwd via env; fall back to process.cwd() when run directly.
   const invokeCwd = process.env.TMUX_IDE_CWD ?? process.cwd();
-  // Picker mode: the switcher runs inside a tmux `display-popup` (bound to M-p
-  // on adopted sessions). `TMUX_IDE_PICKER_CLIENT`'s PRESENCE flips picker mode
-  // on; its VALUE is an optional explicit client name. When empty we resolve
-  // the invoking client ourselves from inside the popup — `display-message -p
-  // '#{client_name}'` returns it correctly (verified live on tmux 3.6), unlike
-  // a `#{client_name}` in the bind command, which does not format-expand. We
-  // must resolve BEFORE clearing $TMUX (display-message needs the popup's tmux
-  // env to know which client it's on). Like host mode we then clear $TMUX so
-  // fleet queries hit the DEFAULT server; the explicit `-c <client>` on
-  // switch-client keeps the switch correct without it.
+  // Two ways the cockpit runs inside a tmux `display-popup` over a client:
+  //  - PICKER mode (`M-p`): `TMUX_IDE_PICKER_CLIENT` present → the compact
+  //    single-column switcher.
+  //  - HOME-POPUP mode (`M-h`): `TMUX_IDE_POPUP_CLIENT` present → the FULL
+  //    two-column home, floated over the session instead of owning the terminal.
+  // Both share "SWITCH mode": Enter `switch-client`s the invoking client + exits
+  // (closing the popup) instead of attaching in place, and a bare Esc closes.
+  //
+  // Each env var's PRESENCE flips its mode on; its VALUE is an optional explicit
+  // client name. When empty we resolve the invoking client ourselves from inside
+  // the popup — `display-message -p '#{client_name}'` returns it correctly
+  // (verified live on tmux 3.6), unlike a `#{client_name}` in the bind command,
+  // which does not format-expand. We must resolve BEFORE clearing $TMUX
+  // (display-message needs the popup's tmux env to know which client it's on).
+  // Like host mode we then clear $TMUX so fleet queries hit the DEFAULT server;
+  // the explicit `-c <client>` on switch-client keeps the switch correct.
   const pickerClientEnv = process.env.TMUX_IDE_PICKER_CLIENT ?? null;
+  const popupClientEnv = process.env.TMUX_IDE_POPUP_CLIENT ?? null;
   const pickerMode = pickerClientEnv !== null;
-  let pickerClient: string | null = null;
-  if (pickerMode) {
-    pickerClient =
-      pickerClientEnv && pickerClientEnv.length > 0 ? pickerClientEnv : resolvePopupClient();
+  // Home-popup only when it's not also picker (picker wins if both are somehow set).
+  const popupHomeMode = popupClientEnv !== null && !pickerMode;
+  const switchMode = pickerMode || popupHomeMode;
+  let switchClient: string | null = null;
+  if (switchMode) {
+    const explicit = pickerClientEnv ?? popupClientEnv ?? "";
+    switchClient = explicit.length > 0 ? explicit : resolvePopupClient();
     delete process.env.TMUX;
   }
-  // Picker mode renders the compact single-column switcher (the popup layout).
+  // Only the picker renders the compact single-column layout; home-popup keeps
+  // the full two-column app (just with switch-on-Enter behaviour).
   const compactMode = pickerMode;
   // Shared with the tmux chrome via the app theme tokens (blocked red, working
   // amber, done blue, idle green) so the cockpit matches the status bar palette.
@@ -419,16 +431,16 @@ render(() => {
   }
 
   /**
-   * PICKER MODE: `switch-client` the invoking client to `sessionName`, then
-   * exit so tmux closes the popup. We pass `-c <pickerClient>` explicitly — the
-   * one incantation that works from the popup regardless of `$TMUX` state
-   * (verified live). On failure keep the popup open with the error on the
-   * status line rather than exiting into a broken state.
+   * SWITCH MODE (picker `M-p` or home-popup `M-h`): `switch-client` the invoking
+   * client to `sessionName`, then exit so tmux closes the popup. We pass
+   * `-c <switchClient>` explicitly — the one incantation that works from the
+   * popup regardless of `$TMUX` state (verified live). On failure keep the popup
+   * open with the error on the status line rather than exiting into a broken state.
    */
   function pickerSwitch(sessionName: string) {
     try {
       const args = ["switch-client"];
-      if (pickerClient) args.push("-c", pickerClient);
+      if (switchClient) args.push("-c", switchClient);
       args.push("-t", sessionName);
       runTmux(args);
     } catch (e) {
@@ -556,7 +568,7 @@ render(() => {
       lastSessionClick = null;
       const sess = activeProj()?.sessions[index];
       if (sess) {
-        if (pickerMode) {
+        if (switchMode) {
           pickerSwitch(sess.name);
         } else {
           attachSessionName(sess.name);
@@ -604,7 +616,7 @@ render(() => {
    * when stopped, launch it. In picker mode this instead switch-clients + exits.
    */
   function enter() {
-    if (pickerMode) {
+    if (switchMode) {
       pickerEnter();
       return;
     }
@@ -838,10 +850,10 @@ render(() => {
       process.exit(0);
     }
 
-    // Picker mode: Esc just closes the popup. This sits AFTER the modal guards
-    // above (confirm / prompt / filter / help), so those still consume Esc to
-    // dismiss themselves first — only a "bare" Esc closes the picker.
-    if (pickerMode && evt.name === "escape") {
+    // Switch mode (picker / home-popup): Esc just closes the popup. This sits
+    // AFTER the modal guards above (confirm / prompt / filter / help), so those
+    // still consume Esc to dismiss themselves first — only a "bare" Esc closes it.
+    if (switchMode && evt.name === "escape") {
       process.exit(0);
     }
 
@@ -892,10 +904,11 @@ render(() => {
       process.exit(0);
     }
 
-    // Home-only: e/g/, open the widget panels (explorer/changes/config) — the
-    // in-app echo of the tmux `M-e`/`M-g`/`M-,` binds. The picker popup stays a
-    // pure switcher, so panels are gated to the standalone cockpit.
-    if (!pickerMode) {
+    // Standalone-only: e/g/, open the widget panels (explorer/changes/config) —
+    // the in-app echo of the tmux `M-e`/`M-g`/`M-,` binds. Both popup variants
+    // (picker + home-popup) stay pure navigators — a nested popup over a popup is
+    // avoided — so panels are gated to the terminal-owning cockpit.
+    if (!switchMode) {
       const panel = panelForKey(evt.name);
       if (panel) {
         openPanel(panel);
@@ -932,9 +945,9 @@ render(() => {
       case "launch": {
         const proj = activeProj();
         if (proj) {
-          if (pickerMode) pickerLaunchAndSwitch(proj);
+          if (switchMode) pickerLaunchAndSwitch(proj);
           else launchProject(proj);
-        } else if (!pickerMode) {
+        } else if (!switchMode) {
           // Nothing selected (e.g. the empty-fleet hero): `l` is the entry point
           // to get a launchable project into the fleet — open the add-dir prompt.
           openRegister();
@@ -1253,10 +1266,9 @@ render(() => {
         {/* compact footer — shortened labels to fit ~34 cols. The picker ends in
             a switch-client + close, so it advertises that. */}
         <box paddingLeft={1} paddingRight={1} flexDirection="row" gap={1}>
-          <text fg={toRGBA(theme.fgMuted)}>↵ switch</text>
-          <text fg={toRGBA(theme.fgMuted)}>l launch</text>
-          <text fg={toRGBA(theme.fgMuted)}>/ find</text>
-          <text fg={toRGBA(theme.fgMuted)}>esc close</text>
+          <For each={pickerFooterHints()}>
+            {(hint) => <text fg={toRGBA(theme.fgMuted)}>{`${hint.keys} ${hint.label}`}</text>}
+          </For>
         </box>
       </box>
     );
@@ -1299,175 +1311,182 @@ render(() => {
           fallback={
             <Show when={!isFleetEmpty(projects())} fallback={emptyHero()}>
               <box flexDirection="row" flexGrow={1}>
-              {/* SIDEBAR — the project list */}
-              <box
-                flexDirection="column"
-                width={SIDEBAR_WIDTH}
-                paddingLeft={1}
-                paddingRight={1}
-                paddingTop={1}
-                onMouseScroll={scrollProjects}
-              >
-                <text fg={toRGBA(theme.fgMuted)} attributes={TextAttributes.BOLD}>
-                  PROJECTS
-                </text>
-                <box flexDirection="column" paddingTop={1}>
-                  <Show
-                    when={visibleProjects().length > 0}
-                    fallback={
-                      <text fg={toRGBA(theme.fgMuted)}>
-                        {filterMode() ? "no match" : "no projects — a to add"}
-                      </text>
-                    }
-                  >
-                    <For each={visibleProjects()}>
-                      {(project, i) => {
-                        const isActive = () => i() === activeProject();
-                        const running = project.running;
-                        return (
-                          <box
-                            flexDirection="column"
-                            paddingLeft={1}
-                            paddingRight={1}
-                            backgroundColor={isActive() ? toRGBA(theme.border) : undefined}
-                            onMouseDown={() => clickProject(i())}
-                          >
-                            <box flexDirection="row" gap={1}>
-                              <text fg={isActive() ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}>
-                                {isActive() ? "▸" : " "}
-                              </text>
-                              <text
-                                fg={running ? statusColor[project.status] : toRGBA(theme.fgMuted)}
-                              >
-                                {running ? STATUS[project.status].glyph : "○"}
-                              </text>
-                              <text
-                                fg={
-                                  isActive()
-                                    ? toRGBA(theme.accent)
-                                    : running
-                                      ? toRGBA(theme.fg)
-                                      : toRGBA(theme.fgMuted)
-                                }
-                                attributes={isActive() ? TextAttributes.BOLD : 0}
-                              >
-                                {project.name.padEnd(18).slice(0, 18)}
-                              </text>
-                              <box flexGrow={1} />
-                              <text fg={toRGBA(theme.fgMuted)}>
-                                {running ? `${project.sessions.length}` : "○ stopped"}
-                              </text>
-                            </box>
-                            <Show when={project.gitBranch}>
-                              <box flexDirection="row" paddingLeft={2}>
-                                <text fg={toRGBA(theme.fgMuted)}>{project.gitBranch ?? ""}</text>
-                              </box>
-                            </Show>
-                          </box>
-                        );
-                      }}
-                    </For>
-                  </Show>
-                </box>
-              </box>
-
-              {/* vertical separator */}
-              <box width={1} backgroundColor={toRGBA(theme.border)} />
-
-              {/* MAIN — the active project's detail: sessions + live preview */}
-              <box flexDirection="column" flexGrow={1} paddingLeft={1} paddingTop={1}>
-                <Show
-                  when={activeProj()}
-                  fallback={<text fg={toRGBA(theme.fgMuted)}>no project selected</text>}
+                {/* SIDEBAR — the project list */}
+                <box
+                  flexDirection="column"
+                  width={SIDEBAR_WIDTH}
+                  paddingLeft={1}
+                  paddingRight={1}
+                  paddingTop={1}
+                  onMouseScroll={scrollProjects}
                 >
-                  {/* header: name · dir · branch · ide.yml */}
-                  <box flexDirection="row" gap={1} paddingRight={1}>
-                    <text fg={toRGBA(theme.accent)} attributes={TextAttributes.BOLD}>
-                      {activeProj()!.name}
-                    </text>
-                    <text fg={toRGBA(theme.fgMuted)}>{activeProj()!.dir ?? ""}</text>
-                    <text fg={toRGBA(theme.fgMuted)}>{activeProj()!.gitBranch ?? ""}</text>
-                    <Show when={activeProj()!.hasIdeYml}>
-                      <text fg={toRGBA(theme.fgMuted)}>ide.yml</text>
-                    </Show>
-                  </box>
-
-                  {/* sessions sub-list */}
+                  <text fg={toRGBA(theme.fgMuted)} attributes={TextAttributes.BOLD}>
+                    PROJECTS
+                  </text>
                   <box flexDirection="column" paddingTop={1}>
                     <Show
-                      when={(activeProj()?.sessions ?? []).length > 0}
-                      fallback={<text fg={toRGBA(theme.fgMuted)}>no sessions — l to launch</text>}
+                      when={visibleProjects().length > 0}
+                      fallback={
+                        <text fg={toRGBA(theme.fgMuted)}>
+                          {filterMode() ? "no match" : "no projects — a to add"}
+                        </text>
+                      }
                     >
-                      <For each={activeProj()?.sessions ?? []}>
-                        {(session, i) => {
-                          const isActive = () => i() === activeSession();
+                      <For each={visibleProjects()}>
+                        {(project, i) => {
+                          const isActive = () => i() === activeProject();
+                          const running = project.running;
                           return (
-                            <box flexDirection="column">
-                              <box
-                                flexDirection="row"
-                                gap={1}
-                                paddingLeft={1}
-                                paddingRight={1}
-                                backgroundColor={isActive() ? toRGBA(theme.border) : undefined}
-                                onMouseDown={() => clickSession(i())}
-                              >
+                            <box
+                              flexDirection="column"
+                              paddingLeft={1}
+                              paddingRight={1}
+                              backgroundColor={isActive() ? toRGBA(theme.border) : undefined}
+                              onMouseDown={() => clickProject(i())}
+                            >
+                              <box flexDirection="row" gap={1}>
                                 <text
                                   fg={isActive() ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}
                                 >
                                   {isActive() ? "▸" : " "}
                                 </text>
-                                <text fg={statusColor[session.status]}>
-                                  {STATUS[session.status].glyph}
+                                <text
+                                  fg={running ? statusColor[project.status] : toRGBA(theme.fgMuted)}
+                                >
+                                  {running ? STATUS[project.status].glyph : "○"}
                                 </text>
-                                <text fg={toRGBA(theme.fg)}>
-                                  {session.name.padEnd(22).slice(0, 22)}
+                                <text
+                                  fg={
+                                    isActive()
+                                      ? toRGBA(theme.accent)
+                                      : running
+                                        ? toRGBA(theme.fg)
+                                        : toRGBA(theme.fgMuted)
+                                  }
+                                  attributes={isActive() ? TextAttributes.BOLD : 0}
+                                >
+                                  {project.name.padEnd(18).slice(0, 18)}
                                 </text>
+                                <box flexGrow={1} />
                                 <text fg={toRGBA(theme.fgMuted)}>
-                                  {STATUS[session.status].label.padEnd(8)}
-                                </text>
-                                <text fg={toRGBA(theme.fgMuted)}>{`${session.panes}p`}</text>
-                                <text fg={toRGBA(theme.fgMuted)}>
-                                  {session.attached ? "· attached" : ""}
+                                  {running ? `${project.sessions.length}` : "○ stopped"}
                                 </text>
                               </box>
-                              {/* windows (tabs) — read-only breakdown under each session */}
-                              <For each={session.windowList}>
-                                {(win) => (
-                                  <box flexDirection="row" gap={1} paddingLeft={4} paddingRight={1}>
-                                    <text fg={statusColor[win.status]}>
-                                      {STATUS[win.status].glyph}
-                                    </text>
-                                    <text fg={toRGBA(theme.fgMuted)}>
-                                      {`${win.index}:${win.name}${win.active ? " *" : ""}`}
-                                    </text>
-                                    <box flexGrow={1} />
-                                    <text fg={toRGBA(theme.fgMuted)}>{`${win.panes}p`}</text>
-                                  </box>
-                                )}
-                              </For>
+                              <Show when={project.gitBranch}>
+                                <box flexDirection="row" paddingLeft={2}>
+                                  <text fg={toRGBA(theme.fgMuted)}>{project.gitBranch ?? ""}</text>
+                                </box>
+                              </Show>
                             </box>
                           );
                         }}
                       </For>
                     </Show>
                   </box>
+                </box>
 
-                  {/* live preview of the active session's active pane */}
-                  <box flexDirection="column" flexGrow={1} paddingTop={1}>
-                    <Show
-                      when={previewTitle().length > 0}
-                      fallback={<text fg={toRGBA(theme.fgMuted)}>no live session</text>}
-                    >
-                      <text fg={toRGBA(theme.accent)}>{previewTitle()}</text>
-                    </Show>
-                    <box flexDirection="column" flexGrow={1} paddingTop={1}>
-                      <For each={preview()}>
-                        {(line) => <text fg={toRGBA(theme.fgMuted)}>{line}</text>}
-                      </For>
+                {/* vertical separator */}
+                <box width={1} backgroundColor={toRGBA(theme.border)} />
+
+                {/* MAIN — the active project's detail: sessions + live preview */}
+                <box flexDirection="column" flexGrow={1} paddingLeft={1} paddingTop={1}>
+                  <Show
+                    when={activeProj()}
+                    fallback={<text fg={toRGBA(theme.fgMuted)}>no project selected</text>}
+                  >
+                    {/* header: name · dir · branch · ide.yml */}
+                    <box flexDirection="row" gap={1} paddingRight={1}>
+                      <text fg={toRGBA(theme.accent)} attributes={TextAttributes.BOLD}>
+                        {activeProj()!.name}
+                      </text>
+                      <text fg={toRGBA(theme.fgMuted)}>{activeProj()!.dir ?? ""}</text>
+                      <text fg={toRGBA(theme.fgMuted)}>{activeProj()!.gitBranch ?? ""}</text>
+                      <Show when={activeProj()!.hasIdeYml}>
+                        <text fg={toRGBA(theme.fgMuted)}>ide.yml</text>
+                      </Show>
                     </box>
-                  </box>
-                </Show>
-              </box>
+
+                    {/* sessions sub-list */}
+                    <box flexDirection="column" paddingTop={1}>
+                      <Show
+                        when={(activeProj()?.sessions ?? []).length > 0}
+                        fallback={<text fg={toRGBA(theme.fgMuted)}>no sessions — l to launch</text>}
+                      >
+                        <For each={activeProj()?.sessions ?? []}>
+                          {(session, i) => {
+                            const isActive = () => i() === activeSession();
+                            return (
+                              <box flexDirection="column">
+                                <box
+                                  flexDirection="row"
+                                  gap={1}
+                                  paddingLeft={1}
+                                  paddingRight={1}
+                                  backgroundColor={isActive() ? toRGBA(theme.border) : undefined}
+                                  onMouseDown={() => clickSession(i())}
+                                >
+                                  <text
+                                    fg={isActive() ? toRGBA(theme.accent) : toRGBA(theme.fgMuted)}
+                                  >
+                                    {isActive() ? "▸" : " "}
+                                  </text>
+                                  <text fg={statusColor[session.status]}>
+                                    {STATUS[session.status].glyph}
+                                  </text>
+                                  <text fg={toRGBA(theme.fg)}>
+                                    {session.name.padEnd(22).slice(0, 22)}
+                                  </text>
+                                  <text fg={toRGBA(theme.fgMuted)}>
+                                    {STATUS[session.status].label.padEnd(8)}
+                                  </text>
+                                  <text fg={toRGBA(theme.fgMuted)}>{`${session.panes}p`}</text>
+                                  <text fg={toRGBA(theme.fgMuted)}>
+                                    {session.attached ? "· attached" : ""}
+                                  </text>
+                                </box>
+                                {/* windows (tabs) — read-only breakdown under each session */}
+                                <For each={session.windowList}>
+                                  {(win) => (
+                                    <box
+                                      flexDirection="row"
+                                      gap={1}
+                                      paddingLeft={4}
+                                      paddingRight={1}
+                                    >
+                                      <text fg={statusColor[win.status]}>
+                                        {STATUS[win.status].glyph}
+                                      </text>
+                                      <text fg={toRGBA(theme.fgMuted)}>
+                                        {`${win.index}:${win.name}${win.active ? " *" : ""}`}
+                                      </text>
+                                      <box flexGrow={1} />
+                                      <text fg={toRGBA(theme.fgMuted)}>{`${win.panes}p`}</text>
+                                    </box>
+                                  )}
+                                </For>
+                              </box>
+                            );
+                          }}
+                        </For>
+                      </Show>
+                    </box>
+
+                    {/* live preview of the active session's active pane */}
+                    <box flexDirection="column" flexGrow={1} paddingTop={1}>
+                      <Show
+                        when={previewTitle().length > 0}
+                        fallback={<text fg={toRGBA(theme.fgMuted)}>no live session</text>}
+                      >
+                        <text fg={toRGBA(theme.accent)}>{previewTitle()}</text>
+                      </Show>
+                      <box flexDirection="column" flexGrow={1} paddingTop={1}>
+                        <For each={preview()}>
+                          {(line) => <text fg={toRGBA(theme.fgMuted)}>{line}</text>}
+                        </For>
+                      </box>
+                    </box>
+                  </Show>
+                </box>
               </box>
             </Show>
           }

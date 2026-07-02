@@ -49,6 +49,8 @@ export interface AppPanelKeys {
 export interface AppKeys {
   /** Switcher popup (default `M-p`). */
   popup: string;
+  /** Home cockpit popup — the full fleet home from any session (default `M-h`). */
+  home: string;
   /** Cheat-sheet popup (default `M-k`). */
   cheatsheet: string;
   /** Actions menu (default `M-m`). */
@@ -110,6 +112,16 @@ export interface AppUpdates {
   check: boolean;
 }
 
+/** First-run welcome toggles. */
+export interface AppWelcome {
+  /**
+   * Whether the first-run welcome card may show (default true). Set false to
+   * suppress it independently of the `~/.tmux-ide/welcomed` marker file (which
+   * records that it has already been shown once).
+   */
+  show: boolean;
+}
+
 /** Worktree flow config (`tmux-ide worktree`). */
 export interface AppWorktrees {
   /**
@@ -128,6 +140,7 @@ export interface AppConfig {
   notifications: AppNotifications;
   restore: AppRestore;
   updates: AppUpdates;
+  welcome: AppWelcome;
   worktrees: AppWorktrees;
 }
 
@@ -139,6 +152,7 @@ export interface AppConfig {
 export const DEFAULT_APP_CONFIG: AppConfig = {
   keys: {
     popup: "M-p",
+    home: "M-h",
     cheatsheet: "M-k",
     menu: "M-m",
     sidebar: "M-b",
@@ -161,6 +175,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   notifications: { toast: true, macos: false },
   restore: { resumeAgents: false },
   updates: { check: true },
+  welcome: { show: true },
   worktrees: { dir: "" },
 };
 
@@ -214,10 +229,12 @@ export function parseAppConfig(input: unknown): AppConfig {
   const notifications = asObject(root.notifications);
   const restore = asObject(root.restore);
   const updates = asObject(root.updates);
+  const welcome = asObject(root.welcome);
   const worktrees = asObject(root.worktrees);
   return {
     keys: {
       popup: pickString(keys.popup, D.keys.popup),
+      home: pickString(keys.home, D.keys.home),
       cheatsheet: pickString(keys.cheatsheet, D.keys.cheatsheet),
       menu: pickString(keys.menu, D.keys.menu),
       sidebar: pickString(keys.sidebar, D.keys.sidebar),
@@ -253,6 +270,7 @@ export function parseAppConfig(input: unknown): AppConfig {
     },
     restore: { resumeAgents: pickBool(restore.resumeAgents, D.restore.resumeAgents) },
     updates: { check: pickBool(updates.check, D.updates.check) },
+    welcome: { show: pickBool(welcome.show, D.welcome.show) },
     worktrees: { dir: pickString(worktrees.dir, D.worktrees.dir) },
   };
 }

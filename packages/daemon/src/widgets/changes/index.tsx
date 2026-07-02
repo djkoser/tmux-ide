@@ -473,7 +473,7 @@ render(
               when={allFiles().length > 0}
               fallback={
                 <box paddingLeft={2} paddingTop={1}>
-                  <text fg={toRGBA(theme.fgMuted)}>All clean ✓</text>
+                  <text fg={toRGBA(theme.fgMuted)}>no changes — working tree clean ✓</text>
                 </box>
               }
             >
