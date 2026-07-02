@@ -1,19 +1,48 @@
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
-import { readConfig } from "./lib/yaml-io.ts";
-import { loadSkills } from "./lib/skill-registry.ts";
-import {
-  validateTasksTree,
-  type TaskStoreIntegrityReport,
-  type TaskStoreIssue,
-} from "./lib/task-store.ts";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { getCurrentVersion, getUpdateStatus } from "./lib/update-check.ts";
+import { installedSkillVersion } from "./lib/skill-sync.ts";
+import { discoverAgents, presentAgents, type DiscoveredAgent } from "./lib/agent-discovery.ts";
+import { findCompiledTui, isBunAvailable } from "./tui/compiled.ts";
 
 interface CheckResult {
   label: string;
   pass: boolean;
   detail: string;
   optional: boolean;
+}
+
+/**
+ * PURE — the "agent integrations" doctor rows, one per DISCOVERED agent (absent
+ * agents produce nothing — no noise). All rows are optional (informational, they
+ * never fail the overall check):
+ *   - `claude` + integration installed → a passing ✓ "integration installed ✓".
+ *   - `claude` on PATH but NOT installed → a ○ hint pointing at the installer.
+ *   - any other agent on PATH → a passing ✓ noting screen-manifest detection is
+ *     active but there's no lifecycle integration yet.
+ */
+export function agentIntegrationRows(agents: DiscoveredAgent[]): CheckResult[] {
+  return presentAgents(agents).map((agent) => {
+    const label = `agent: ${agent.id}`;
+    if (agent.integration) {
+      return agent.installed
+        ? { label, pass: true, detail: "integration installed ✓", optional: true }
+        : {
+            label,
+            pass: false,
+            detail: `found on PATH — run \`tmux-ide integration install ${agent.id}\` for ground-truth status`,
+            optional: true,
+          };
+    }
+    return {
+      label,
+      pass: true,
+      detail: "found — screen-manifest detection active (no lifecycle integration yet)",
+      optional: true,
+    };
+  });
 }
 
 function check(
@@ -31,12 +60,8 @@ function check(
 
 export async function doctor({
   json,
-  tasks,
-  fix,
 }: {
   json?: boolean;
-  tasks?: boolean;
-  fix?: boolean;
 } = {}): Promise<void> {
   const checks: CheckResult[] = [];
 
@@ -93,12 +118,23 @@ export async function doctor({
 
   checks.push(
     check(
-      "Claude Code agent teams",
+      "TUI surfaces (cockpit / widgets)",
       () => {
-        if (process.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS !== "1") {
-          throw new Error("not set (enable with CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1)");
-        }
-        return "enabled";
+        // The OpenTUI/Solid surfaces run either from a dev checkout (bun + the
+        // `.tsx` sources) or, when installed, from the compiled `tmux-ide-tui`
+        // binary. Report which path is live so a "nothing renders" install is
+        // diagnosable instead of silent. Mirrors resolveTuiLaunch's order.
+        const here = dirname(fileURLToPath(import.meta.url));
+        const checkoutEntry = [
+          resolve(here, "../packages/daemon/src/tui/team/index.tsx"),
+          resolve(here, "tui/team/index.tsx"),
+        ].find(existsSync);
+        const binary = findCompiledTui();
+        if (checkoutEntry && isBunAvailable()) return "dev checkout (bun)";
+        if (binary) return `compiled binary (${binary})`;
+        throw new Error(
+          "no dev checkout+bun and no compiled binary — build one with `pnpm build:tui` or install a release that ships it",
+        );
       },
       { optional: true },
     ),
@@ -106,25 +142,12 @@ export async function doctor({
 
   checks.push(
     check(
-      "pane skill references",
+      "Claude Code agent teams",
       () => {
-        const dir = resolve(".");
-        const { config } = readConfig(dir);
-        const skills = loadSkills(dir);
-        const skillNames = new Set(skills.map((s) => s.name));
-        const unresolved: string[] = [];
-        for (const row of config.rows) {
-          for (const pane of row.panes) {
-            if (pane.skill && !skillNames.has(pane.skill)) {
-              unresolved.push(`${pane.title ?? "untitled"} → ${pane.skill}`);
-            }
-          }
+        if (process.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS !== "1") {
+          throw new Error("not set (enable with CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1)");
         }
-        if (unresolved.length > 0) {
-          throw new Error(`${unresolved.length} unresolved: ${unresolved.join(", ")}`);
-        }
-        const count = config.rows.flatMap((r) => r.panes).filter((p) => p.skill).length;
-        return count > 0 ? `${count} reference(s), all resolved` : "no skill references";
+        return "enabled";
       },
       { optional: true },
     ),
@@ -163,24 +186,49 @@ export async function doctor({
     ),
   );
 
-  let taskReport: TaskStoreIntegrityReport | null = null;
-  if (tasks) {
-    taskReport = validateTasksTree(resolve("."), { fix });
-    checks.push({
-      label: "task integrity",
-      pass: taskReport.ok,
-      detail:
-        taskReport.issues.length === 0
-          ? "clean"
-          : `${taskReport.issues.length} issue(s)${fix ? ", safe fixes applied where possible" : ""}`,
-      optional: false,
-    });
-  }
+  checks.push(
+    check(
+      "tmux-ide up to date",
+      () => {
+        const current = getCurrentVersion();
+        const { latest, updateAvailable } = getUpdateStatus({ currentVersion: current });
+        if (updateAvailable) {
+          throw new Error(`v${current} — v${latest} available (run \`tmux-ide update\`)`);
+        }
+        return latest ? `v${current} (latest)` : `v${current} (latest unknown)`;
+      },
+      { optional: true },
+    ),
+  );
+
+  checks.push(
+    check(
+      "Claude Code skill",
+      () => {
+        // The managed skill copy under ~/.claude/skills/tmux-ide should track the
+        // CLI version. Stale/missing → point at the one-command fix; installs and
+        // `tmux-ide update` refresh it automatically, so this is only a nudge.
+        const installed = installedSkillVersion();
+        const current = getCurrentVersion();
+        if (installed === null) {
+          throw new Error("not installed — run `tmux-ide skill-sync`");
+        }
+        if (installed !== current) {
+          throw new Error(`v${installed} (CLI v${current}) — run \`tmux-ide skill-sync\``);
+        }
+        return `in sync (v${installed})`;
+      },
+      { optional: true },
+    ),
+  );
+
+  // Agent integrations: one row per agent discovered on PATH (absent → no row).
+  checks.push(...agentIntegrationRows(discoverAgents()));
 
   const allPass = checks.every((c) => c.pass || c.optional);
 
   if (json) {
-    console.log(JSON.stringify({ ok: allPass, checks, tasks: taskReport }, null, 2));
+    console.log(JSON.stringify({ ok: allPass, checks }, null, 2));
     return;
   }
 
@@ -190,19 +238,5 @@ export async function doctor({
     console.log(`${color}${icon}\x1b[0m ${c.label} — ${c.detail}`);
   }
 
-  if (taskReport && taskReport.issues.length > 0) {
-    console.log("");
-    console.log("Task integrity issues:");
-    for (const issue of taskReport.issues) {
-      console.log(formatTaskIssue(issue));
-    }
-  }
-
   if (!allPass) process.exitCode = 1;
-}
-
-function formatTaskIssue(issue: TaskStoreIssue): string {
-  const file = issue.file ? `${issue.file}: ` : "";
-  const fixed = issue.fixed ? " (fixed)" : "";
-  return `  - ${file}${issue.message}${fixed}`;
 }

@@ -1,0 +1,114 @@
+---
+title: The Dock & Keys
+description: The native tmux chrome that adopt adds to any session — fleet tabs, agent glyphs, and every keystroke
+---
+
+# The dock & keys
+
+`tmux-ide adopt <session>` adds a **dock** — a native tmux chrome row — to any
+existing session. It's the always-on surface: a fleet of tabs, live agent-status
+glyphs, and triggers into the rest of the app. Everything it draws is a tmux
+option, so it renders on the server and shows up on every client (including SSH),
+and `unadopt` reverts it completely.
+
+## What's on the bar
+
+```
+┌ web ● ─┬ api ○ ─┬ infra ◍ ─┐   [ ⌂ home ^b h ] [ ? keys ^b k ] [ ⧉ switch ^b j ]
+```
+
+- **Fleet tabs** — one per session in your fleet. Click a tab to switch to it.
+- **Agent-status glyphs** — each tab carries a glyph tinted by the session's
+  agent state: blocked, working, done, or idle. One glance across the bar tells
+  you where the fleet stands. See [Agent detection](/docs/agent-detection).
+- **Triggers** — clickable `[ ⌂ home ]`, `[ ? keys ]`, and `[ ⧉ switch ]` open
+  the home cockpit, the cheat sheet, and the session switcher. Each advertises
+  its **prefix twin** (`^b h`, `^b k`, `^b j`) — the key form that works
+  everywhere (see below).
+
+Per-pane, the border chip reads the agent for that specific pane, e.g.
+`claude · working`.
+
+## Adopt, unadopt, and safety
+
+```bash
+tmux-ide adopt work        # add the chrome to one session
+tmux-ide adopt --all       # adopt every live (non-internal) session
+tmux-ide unadopt work      # remove the chrome; session keeps running
+```
+
+Adoption is **purely additive tmux configuration**. There is no wrapper process
+between you and tmux. If tmux-ide crashes or you uninstall it, adopted sessions
+keep running as ordinary tmux — you just lose the decoration. That's the whole
+point: no lock-in, no risk.
+
+## One interaction grammar
+
+Every surface tmux-ide draws speaks the same five keys:
+
+| Key       | Action                     |
+| --------- | -------------------------- |
+| `j` / `k` | Move down / up             |
+| `enter`   | Open / confirm             |
+| `/`       | Filter                     |
+| `esc`     | Back out / close           |
+| `?`       | Show keys for this surface |
+
+Learn it once; it works in the home cockpit, the sidebar, and every panel.
+
+## The keys
+
+Once a session is adopted, the whole app is a couple of keystrokes away. Every
+surface has two bindings — reach for the **prefix twin** first; the `⌥` key is a
+faster shortcut when it's available.
+
+| Action         | Prefix (always works) | Alt fast-path |
+| -------------- | --------------------- | ------------- |
+| Home cockpit   | `prefix h`            | `⌥h`          |
+| Switch session | `prefix j`            | `⌥p`          |
+| Cheat sheet    | `prefix k`            | `⌥k`          |
+| Actions menu   | `prefix u`            | `⌥m`          |
+| Sidebar        | `prefix b`            | `⌥b`          |
+| File explorer  | `prefix e`            | `⌥e`          |
+| Git changes    | `prefix g`            | `⌥g`          |
+| Config editor  | `prefix v`            | `⌥,`          |
+
+`prefix` is your tmux prefix (`C-b` unless you've changed it), so `prefix h` means
+"press `C-b`, release, then `h`".
+
+### Why prefix-first
+
+The prefix twins are the **reliable** path: they work under every keyboard
+protocol. The `⌥` (root-table) binds are a genuine one-keystroke fast path, but an
+agent pane can temporarily switch how the terminal encodes keys (the kitty
+keyboard protocol), which can swallow a root-table `Alt` bind before tmux ever
+sees it. tmux-ide registers kitty-encoded fallbacks for the `⌥` keys, but coverage
+varies by terminal — the prefix is immune by construction, so lead with it.
+
+Both forms come from the same entries in `~/.tmux-ide/config.json` (`keys.*`):
+rebind the fast-path key and its prefix twin follows. See
+[Theming & config](/docs/theming).
+
+On a fresh install, a first-run welcome card names the core keys once. Reprint the
+full sheet any time:
+
+```bash
+tmux-ide cheatsheet
+```
+
+## The actions menu
+
+Right-click any pane or the status bar to open a native tmux menu **at the
+pointer** — it opens on button _release_. The same menu is on `prefix u` (or
+`⌥m`). Either way the action set is identical wherever you invoke it, so you never
+have to remember which surface owns a command.
+
+```bash
+tmux-ide menu [--client N]
+```
+
+## See also
+
+- [Home, sidebar & panels](/docs/app-surfaces) — the floating surfaces the dock triggers
+- [Agent detection](/docs/agent-detection) — what the glyphs mean and where they come from
+- [Theming & config](/docs/theming) — rebind every key and recolor every glyph

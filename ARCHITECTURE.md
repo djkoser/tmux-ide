@@ -266,7 +266,7 @@ The general flow for adding a new feature (use `git diff viewer` as the worked e
 
 - **This doc is canonical.** PRs that change the stack (§2) or boundary rules (§3) MUST update it in the same commit.
 - Per-concern audit docs (`docs/goal-NN-<name>.md`) are the source for _why we picked this library_ — keep them around as historical context.
-- The `ROADMAP.md` is the current state of the world (what's shipped, what's in flight). This doc is the rules; the roadmap is the work.
+- There is no current roadmap doc — the strategic plan lives in the milestone commit line (M-numbers on `feat/v2.6.0`). The old `docs/ROADMAP.md` is archived at `docs/archive/ROADMAP-2026-05-pre-trim.md` (dated: it targets the deleted Solid/Effect dashboard — do not follow).
 - When in doubt about a structural choice: **check opencode first** (`context/opencode/packages/{core,ui,app,sdk}/`).
 - When in doubt about an IDE feature behavior: **check emdash first** (`context/emdash/src/{main,renderer}/`).
 

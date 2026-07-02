@@ -18,7 +18,16 @@ export const PaneSchema = z.object({
   title: z.string().optional(),
   command: z.string().optional(),
   type: z
-    .enum(["explorer", "changes", "preview", "tasks", "costs", "config", "mission-control"])
+    .enum([
+      "explorer",
+      "changes",
+      "preview",
+      "tasks",
+      "costs",
+      "config",
+      "mission-control",
+      "sidebar",
+    ])
     .optional(),
   target: z.string().optional(),
   dir: z.string().optional(),
@@ -100,6 +109,17 @@ export const DashboardConfigSchema = z.object({
   port: z.number().int().positive().optional(),
 });
 
+/**
+ * The app nav-column sidebar sugar. `sidebar: true` injects a full-height left
+ * column (default width) at launch; `sidebar: { width: "30" }` sets its column
+ * width (in tmux cols, as a string to match the CLI/tmux world). `false` /
+ * omitted means no sidebar.
+ */
+export const SidebarConfigSchema = z.union([
+  z.boolean(),
+  z.object({ width: z.string().optional() }),
+]);
+
 export const IdeConfigSchema = z.object({
   name: z.string().optional(),
   before: z.string().optional(),
@@ -111,6 +131,7 @@ export const IdeConfigSchema = z.object({
     })
     .optional(),
   rows: z.array(RowSchema).min(1),
+  sidebar: SidebarConfigSchema.optional(),
   theme: ThemeConfigSchema.optional(),
   orchestrator: OrchestratorYamlConfigSchema.optional(),
   command_center: CommandCenterConfigSchema.optional(),
@@ -141,6 +162,7 @@ export type ThemeConfig = z.infer<typeof ThemeConfigSchema>;
 export type Pane = z.infer<typeof PaneSchema>;
 export type Row = z.infer<typeof RowSchema>;
 export type OrchestratorYamlConfig = z.infer<typeof OrchestratorYamlConfigSchema>;
+export type SidebarConfig = z.infer<typeof SidebarConfigSchema>;
 export type CommandCenterConfig = z.infer<typeof CommandCenterConfigSchema>;
 export type DashboardConfig = z.infer<typeof DashboardConfigSchema>;
 export type IdeConfig = z.infer<typeof IdeConfigSchema>;

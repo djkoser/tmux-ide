@@ -2,7 +2,9 @@
 
 [![CI](https://github.com/wavyrai/tmux-ide/actions/workflows/ci.yml/badge.svg)](https://github.com/wavyrai/tmux-ide/actions/workflows/ci.yml)
 
-Turn any project into a tmux-powered terminal IDE with a simple `ide.yml` config file.
+**The terminal that understands your agents.**
+
+Other tools rebuild the terminal to understand agents. tmux-ide teaches the terminal you already use to understand them. One command adds a native chrome to any tmux session: a fleet of tabs with live agent-status glyphs, ground-truth working/blocked/done detection, notifications when an agent needs you, and a crash-proof restore that rebuilds your whole fleet — including your Claude conversations. It's built _around_ tmux, so there's nothing to migrate and nothing to lock into.
 
 ## Install
 
@@ -10,142 +12,146 @@ Turn any project into a tmux-powered terminal IDE with a simple `ide.yml` config
 npm install -g tmux-ide
 ```
 
-Global install also registers the bundled Claude Code skill and enables `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in `~/.claude/settings.json` if Claude Code is installed locally on the machine.
+Global install also registers the bundled Claude Code skill and enables `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in `~/.claude/settings.json` if Claude Code is installed locally.
 
-## Quick Start
+## Quick start
 
 ```bash
-tmux-ide init         # Scaffold ide.yml (auto-detects your stack)
-tmux-ide              # Launch the IDE
-tmux-ide stop         # Kill the session
-tmux-ide restart      # Stop and relaunch
-tmux-ide attach       # Reattach to a running session
-tmux-ide inspect      # Inspect effective config + runtime state
+tmux-ide adopt work                    # add the dock to a session you already have
+tmux-ide integration install claude    # ground-truth agent status via Claude Code hooks
+tmux-ide events --follow               # stream agent-status transitions
+tmux-ide unadopt work                  # revert — it was only tmux options
 ```
 
-## ide.yml Format
+`adopt` is purely additive tmux configuration. If tmux-ide ever crashes or is uninstalled, your sessions keep running as ordinary tmux — no wrapper process, no lock-in. And because the chrome lives server-side, it renders from any client, including over SSH.
+
+## The three-beat story
+
+**Adopt in place.** `tmux-ide adopt <session>` drops a status bar onto any existing session: clickable fleet tabs, per-agent glyphs, and `[ ⌂ home ] [ ⧉ switch ] [ ? keys ]` triggers.
+
+**Know your fleet.** Install the Claude Code integration and working/blocked/done come from the agent's own lifecycle. A toast fires on every attached client the moment an agent goes blocked or done; per-pane border chips read `claude · working`. Any agent can self-report with one pane option:
+
+```bash
+tmux set-option -p @agent_state "working:$(date +%s)"
+```
+
+**Survive anything.** Continuous snapshots mean a tmux server death isn't a lost afternoon. `tmux-ide restore` rebuilds every session, window, layout, cwd, and title; `--resume-agents` revives your Claude conversations from their recorded session ids.
+
+## Teams of any agents
+
+Run a heterogeneous fleet — Claude Code, codex, cursor-agent, aider, anything — in one set of sessions, and let them coordinate. Every agent's status is on a shared bus every other agent can read; one agent can task another by typing into its prompt; and any agent can block until a teammate finishes. It's agent-agnostic by design: Claude Code reports automatically, everyone else self-reports with a one-line pane option.
+
+```bash
+tmux-ide team --json                                   # read the fleet's status
+tmux-ide send %2 "implement /login, then run the tests" # task another agent
+tmux-ide wait output %2 --match "tests passed"          # block until it finishes
+tmux-ide wait agent-status api --status done            # or wait on a whole session
+```
+
+`send` types straight into another agent's prompt (target by pane ID, title, role, or name; long messages auto-route through a dispatch file). `wait` exits `0` on match, `1` on timeout, so it scripts cleanly. See the multi-agent teams docs for a worked lead-dispatches-to-codex example.
+
+## One app, a keystroke away
+
+Once a session is adopted, the whole UI is a keystroke or two away — one interaction grammar (`j`/`k` move, `enter` opens, `/` filters, `esc` backs out, `?` asks) and one theme file (`~/.tmux-ide/config.json`).
+
+Every surface has a **prefix twin** (`prefix` then a letter) that works under every keyboard protocol, plus an `⌥` fast-path for a single keystroke when your terminal allows it. Lead with the prefix — an agent pane can temporarily change how the terminal encodes keys and swallow a root-table `Alt` bind, but the tmux prefix always reaches tmux. Right-click anywhere opens the actions menu at the pointer.
+
+| Surface                                        | Prefix (always works) | Alt fast-path  |
+| ---------------------------------------------- | --------------------- | -------------- |
+| Home cockpit — fleet tree, detail, preview     | `prefix h`            | `⌥h`           |
+| Switch session                                 | `prefix j`            | `⌥p`           |
+| Cheat sheet — every key on one page            | `prefix k`            | `⌥k`           |
+| Actions menu — at the pointer (or right-click) | `prefix u`            | `⌥m`           |
+| Sidebar — a fleet nav column                   | `prefix b`            | `⌥b`           |
+| Panels — explorer / changes / config           | `prefix e` `g` `v`    | `⌥e` `⌥g` `⌥,` |
+
+## Optional: describe a layout with ide.yml
+
+Adopt works on any session. If you'd rather have tmux-ide build the layout, scaffold an `ide.yml`:
+
+```bash
+tmux-ide init          # auto-detects your stack
+tmux-ide               # launch (the session is adopted automatically)
+```
 
 ```yaml
-name: project-name # tmux session name
-
-before: pnpm install # optional pre-launch hook
+name: my-app
+sidebar: true # nav column (prefix b / ⌥b)
 
 rows:
-  - size: 70% # row height percentage
+  - size: 70%
     panes:
-      - title: Editor # pane border label
-        command: vim # command to run (optional)
-        size: 60% # pane width percentage (optional)
-        dir: apps/web # per-pane working directory (optional)
-        focus: true # initial focus (optional)
-        env: # environment variables (optional)
-          PORT: 3000
+      - title: Claude
+        command: claude
+        focus: true
       - title: Shell
-
   - panes:
       - title: Dev Server
         command: pnpm dev
-      - title: Tests
-        command: pnpm test
-
-theme: # optional color overrides
-  accent: colour75
-  border: colour238
-  bg: colour235
-  fg: colour248
 ```
 
-## Commands
+## More
 
-| Command                                            | Description                             |
-| -------------------------------------------------- | --------------------------------------- |
-| `tmux-ide`                                         | Launch IDE from `ide.yml`               |
-| `tmux-ide <path>`                                  | Launch from a specific directory        |
-| `tmux-ide init [--template <name>]`                | Scaffold a new `ide.yml`                |
-| `tmux-ide stop`                                    | Kill the current IDE session            |
-| `tmux-ide restart`                                 | Stop and relaunch the IDE session       |
-| `tmux-ide attach`                                  | Reattach to a running session           |
-| `tmux-ide ls`                                      | List all tmux sessions                  |
-| `tmux-ide status`                                  | Show session status                     |
-| `tmux-ide inspect`                                 | Show effective config and runtime state |
-| `tmux-ide doctor`                                  | Check system requirements               |
-| `tmux-ide validate`                                | Validate `ide.yml`                      |
-| `tmux-ide detect`                                  | Detect project stack and explain why    |
-| `tmux-ide detect --write`                          | Detect and write `ide.yml`              |
-| `tmux-ide config`                                  | Dump config as JSON                     |
-| `tmux-ide config set <path> <value>`               | Set a config value                      |
-| `tmux-ide config add-pane --row <N>`               | Add a pane to a row                     |
-| `tmux-ide config remove-pane --row <N> --pane <M>` | Remove a pane                           |
-| `tmux-ide config add-row [--size <percent>]`       | Add a new row                           |
-| `tmux-ide config enable-team --name <name>`        | Enable agent teams                      |
-| `tmux-ide config disable-team`                     | Disable agent teams                     |
+tmux-ide also has a `worktree` flow (a git worktree plus an adopted session per branch), `wait` coordination primitives, a `--json` surface on every command, and an optional task/mission orchestrator for coordinated multi-agent work. See the docs:
 
-All commands support `--json` for structured output.
-
-`tmux-ide detect` now includes reasoning about the package manager, language, framework, and dev-command signals it used. `tmux-ide inspect` combines config validation, resolved layout details, and live tmux state in one command.
-
-## Templates
-
-Use `tmux-ide init --template <name>` with one of:
-
-- `default` - General-purpose layout
-- `nextjs` - Next.js development
-- `convex` - Convex + Next.js
-- `vite` - Vite project
-- `python` - Python development
-- `go` - Go development
-- `agent-team` - Agent team with lead + teammates
-- `agent-team-nextjs` - Agent team for Next.js
-- `agent-team-monorepo` - Agent team for monorepos
-
-## Contributor Workflow
-
-The repo now uses a pnpm workspace with a root CLI package and a separate docs app package:
-
-```bash
-pnpm install
-pnpm test
-pnpm docs:build
-pnpm check
-pnpm pack:check
-```
-
-`pnpm check` is the intended local pre-push command and matches the default release checklist. `npm publish` is still guarded by `prepublishOnly`, so publishing runs the same full check path automatically.
-
-Reliability stress coverage is available outside normal CI:
-
-```bash
-pnpm test:stress
-```
-
-By default it runs concurrent task-store writers for 60 seconds and validates WAL recovery plus JSON integrity. Set `TMUX_IDE_STRESS_MS` for a shorter local run, or `TMUX_IDE_STRESS_DAEMON_CMD` to start a daemon process that the harness will periodically `SIGKILL` and restart.
-
-## CI
-
-GitHub Actions validates:
-
-- the Node CLI test suite on Node 18, 20, and 22
-- the docs site production build
-- the package can be packed successfully with `npm pack --dry-run`
-
-That keeps the release surface small but catches the main regressions for a CLI-first package.
-
-## Open Source Project Files
-
-- [CONTRIBUTING.md](CONTRIBUTING.md) for local setup and contribution workflow
-- [RELEASE.md](RELEASE.md) for the publish checklist
-- [CHANGELOG.md](CHANGELOG.md) for release notes
-- [SECURITY.md](SECURITY.md) for vulnerability reporting
-
-Release note convention:
-
-- Keep the next version under an `Unreleased` heading in `CHANGELOG.md` until the tag is cut.
-- Move it to a dated release entry when the release is actually published.
+- [Getting started](https://github.com/wavyrai/tmux-ide) and the full docs site
+- Run `tmux-ide --help` for the complete command list
 
 ## Requirements
 
-- **tmux** >= 3.0
-- **Node.js** >= 18
+- **tmux** — 3.2+ recommended (`tmux-ide doctor` requires ≥ 3.0; 3.6 is the smoothest)
+- **Node.js** — ≥ 20
+- **Bun** — only needed for the TUI surfaces (home cockpit, sidebar, floating
+  panels) **when running from a dev checkout**. Installed releases ship a
+  compiled `tmux-ide-tui` binary instead, so no bun runtime is required.
+
+Run `tmux-ide doctor` to check your machine — the "TUI surfaces" row reports
+whether they resolve via a dev checkout (bun) or the compiled binary.
+
+### TUI surfaces & the compiled binary
+
+The cockpit/sidebar/widget surfaces are OpenTUI/Solid (`.tsx`). In a dev checkout
+they run under `bun` (the bunfig preload supplies the JSX transform). For
+installed users there is no checkout and often no bun, so those surfaces run from
+a single self-contained executable built with `bun build --compile`:
+
+```bash
+pnpm build:tui   # → packages/daemon/dist/tui/tmux-ide-tui (requires bun to build)
+```
+
+It bundles every surface behind a `tmux-ide-tui <surface> [flags]` dispatcher,
+embeds the native OpenTUI dylib, and pre-transforms JSX at build time — so it
+needs no runtime. The CLI resolves surfaces checkout-first, binary-second; the
+binary is the installed fallback.
+
+**Note:** a compiled binary is platform-specific (built for the host
+OS/arch). Shipping it for every platform requires per-target builds
+(`--target bun-<os>-<arch>`); a single npm tarball carries only the build host's
+binary. Until per-platform artifacts are wired, installs on other platforms fall
+back to the "install bun + run from a checkout" path, which `tmux-ide doctor`
+spells out.
+
+## Contributor workflow
+
+The repo is a pnpm workspace with a root CLI package and a separate docs app package:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm lint
+pnpm format:check
+pnpm test
+pnpm docs:build
+pnpm pack:check
+```
+
+`pnpm check` is the intended local pre-push command and matches the default release checklist.
+
+## Open source project files
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) — local setup and contribution workflow
+- [RELEASE.md](RELEASE.md) — publish checklist
+- [CHANGELOG.md](CHANGELOG.md) — release notes
+- [SECURITY.md](SECURITY.md) — vulnerability reporting
 
 ## License
 

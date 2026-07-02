@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { homedir } from "node:os";
 
@@ -7,11 +7,33 @@ if (!shouldInstallClaudeIntegration() || !existsSync(claudeDir)) {
   process.exit(0);
 }
 
-const skillDir = resolve(claudeDir, "skills", "tmux-ide");
-mkdirSync(skillDir, { recursive: true });
-const src = resolve(dirname(import.meta.dirname), "skill", "SKILL.md");
-if (existsSync(src)) {
-  copyFileSync(src, resolve(skillDir, "SKILL.md"));
+// Sync the bundled Claude Code skill into ~/.claude/skills/tmux-ide, rewriting
+// its version marker to the installed package version. This is the JS twin of
+// packages/daemon/src/lib/skill-sync.ts (syncSkill) — postinstall runs under
+// stock node before any build, so it can't import the TS module; keep the marker
+// regex in sync with VERSION_MARKER_RE there. Best-effort: never fail an install.
+try {
+  const pkgRoot = dirname(import.meta.dirname);
+  const src = resolve(pkgRoot, "skill", "SKILL.md");
+  if (existsSync(src)) {
+    const skillDir = resolve(claudeDir, "skills", "tmux-ide");
+    mkdirSync(skillDir, { recursive: true });
+    let content = readFileSync(src, "utf-8");
+    try {
+      const { version } = JSON.parse(readFileSync(resolve(pkgRoot, "package.json"), "utf-8"));
+      if (typeof version === "string" && version.length > 0) {
+        content = content.replace(
+          /<!--\s*tmux-ide-skill-version:\s*[^\s]+\s*-->/,
+          `<!-- tmux-ide-skill-version: ${version} -->`,
+        );
+      }
+    } catch {
+      // couldn't read the version — copy the skill verbatim
+    }
+    writeFileSync(resolve(skillDir, "SKILL.md"), content);
+  }
+} catch {
+  // skill sync is best-effort; a failure must not break the install
 }
 
 const settingsPath = resolve(claudeDir, "settings.json");

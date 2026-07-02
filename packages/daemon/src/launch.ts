@@ -1,7 +1,6 @@
-import { resolve, join } from "node:path";
+import { resolve } from "node:path";
 import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { readConfig, getSessionName } from "./lib/yaml-io.ts";
 import { computeSizes, toSplitPercents } from "./lib/sizes.ts";
 import { outputError } from "./lib/output.ts";
@@ -23,9 +22,10 @@ import {
   splitPane,
 } from "@tmux-ide/tmux-bridge";
 import { validateConfig } from "./validate.ts";
+import { resolveSidebarConfig } from "./tui/chrome/sidebar.ts";
 import { resolveWidgetCommand } from "./widgets/resolve.ts";
 import { shellEscape } from "./lib/shell.ts";
-import type { IdeConfig, Row, Pane } from "./types.ts";
+import type { IdeConfig, Row } from "./types.ts";
 
 function stripWidgetPanes(rows: Row[]): Row[] {
   return rows
@@ -164,6 +164,21 @@ function loadLaunchConfig(dir: string): IdeConfig {
   return config;
 }
 
+/**
+ * Best-effort: adopt the session into the native chrome (status bar + switcher
+ * popup + the shared background updater). A chrome failure must NEVER break
+ * launch, so it's fully swallowed; the import is dynamic to keep the hot path
+ * clean and the data-layer graph out of the common launch flow.
+ */
+async function bestEffortAdopt(session: string): Promise<void> {
+  try {
+    const { adoptSession } = await import("./tui/chrome/statusline.ts");
+    adoptSession(session);
+  } catch {
+    // chrome is optional — never let it block the session
+  }
+}
+
 function runBeforeHook(command: string | undefined, dir: string): void {
   if (!command) return;
 
@@ -178,13 +193,21 @@ function runBeforeHook(command: string | undefined, dir: string): void {
 
 export async function launch(
   targetDir: string | undefined,
-  { json = false, attach = true }: { json?: boolean; attach?: boolean } = {},
+  {
+    json = false,
+    attach = true,
+    sessionName,
+  }: { json?: boolean; attach?: boolean; sessionName?: string } = {},
 ): Promise<void> {
   const dir = resolve(targetDir ?? ".");
   const config = loadLaunchConfig(dir);
 
   const { name: fallbackName } = getSessionName(dir);
-  const session = config.name ?? fallbackName;
+  // A `sessionName` override lets a worktree checkout run under its own session
+  // name (e.g. `app@branch`) instead of colliding with the parent repo's
+  // `config.name`; the whole flow keys off `session`, so the override threads
+  // through session creation, adoption, and drift detection unchanged.
+  const session = sessionName ?? config.name ?? fallbackName;
   const headless = config.orchestrator?.widgets === false;
   const rows = headless ? stripWidgetPanes(config.rows) : config.rows;
   const theme = config.theme ?? {};
@@ -207,6 +230,8 @@ export async function launch(
       console.log(`Session "${session}" is already running. Attaching...`);
     }
 
+    // Keep the chrome in place across re-launches (idempotent).
+    await bestEffortAdopt(session);
     if (attach) {
       attachSession(session);
     }
@@ -277,23 +302,21 @@ export async function launch(
   // Store config hash for drift detection on re-launch
   setSessionVariable(session, "@config_hash", configHash(config));
 
-  // Inject master agent prompt and task docs if orchestrator is enabled
-  if (config.orchestrator?.enabled) {
-    ensureTaskDocs(dir);
-
-    const masterPaneTitle = config.orchestrator.master_pane;
-    if (masterPaneTitle) {
-      const masterAction = paneActions.find((a) => a.title === masterPaneTitle);
-      if (masterAction) {
-        const masterPrompt = buildMasterAgentPrompt(config);
-        setTimeout(() => {
-          sendLiteral(masterAction.targetPane, masterPrompt);
-        }, 5000);
-      }
+  // Sidebar sugar: `sidebar: true` (or `{ width }`) injects the app nav column
+  // as a full-height left split of the whole window (`-h -b -f`), built AFTER
+  // the rows so `-f` spans their combined height. Best-effort — the layout must
+  // never fail because the chrome column couldn't open.
+  const sidebar = resolveSidebarConfig(config.sidebar);
+  if (sidebar.enabled) {
+    try {
+      const { openSidebarPane } = await import("./tui/chrome/sidebar.ts");
+      openSidebarPane(session, dir, sidebar.width, config.theme ?? null);
+    } catch {
+      // sidebar is optional chrome — never block launch
     }
   }
 
-  // Focus the correct pane
+  // Focus the correct pane (the sidebar split above steals focus to itself).
   selectPane(focusPane);
 
   // Launch summary
@@ -302,7 +325,7 @@ export async function launch(
     `Starting "${session}" (${rows.length} row${rows.length === 1 ? "" : "s"}, ${totalPanes} pane${totalPanes === 1 ? "" : "s"})...`,
   );
 
-  // Surface the dashboard URL so users know where the web UI lives.
+  // Surface the command-center URL so users know where the API lives.
   // Read the canonical daemon info file the daemon writes on startup;
   // tolerate its absence (daemon may still be coming up, or running
   // sessionless). Print only when we have a real port to advertise.
@@ -310,198 +333,17 @@ export async function launch(
     const { readCanonicalDaemonInfo } = await import("./lib/canonical-daemon.ts");
     const info = readCanonicalDaemonInfo();
     if (info) {
-      console.log(`Dashboard: http://${info.bindHostname}:${info.port}/`);
+      console.log(`Command center: http://${info.bindHostname}:${info.port}/`);
     }
   } catch {
-    // Non-fatal — the user can still run `tmux-ide dashboard` later.
+    // Non-fatal — the daemon may still be coming up.
   }
+
+  // Adopt into the native chrome so the new session shows the tmux-ide bar.
+  await bestEffortAdopt(session);
 
   // Attach
   if (attach) {
     attachSession(session);
-  }
-}
-
-export function buildMasterAgentPrompt(config: IdeConfig): string {
-  const teammatePanes = config.rows
-    .flatMap((r) => r.panes ?? [])
-    .filter((p: Pane) => p.role === "teammate" && p.command === "claude")
-    .map((p: Pane) => p.title)
-    .filter(Boolean);
-
-  const isMissionsMode = config.orchestrator?.dispatch_mode === "missions";
-
-  const milestonesSection = isMissionsMode
-    ? `
-## Milestones
-Milestones gate execution — tasks in M2 won't dispatch until M1 is validated.
-- tmux-ide milestone create "title" --sequence N
-- tmux-ide milestone list --json
-- tmux-ide mission plan-complete  (activates milestones, starts dispatch)
-`
-    : "";
-
-  return `You are the Lead Agent for this tmux-ide session.
-
-## Your role
-You coordinate a team of coding agents. The human gives you high-level goals, and you break them into structured tasks that your teammates execute. You plan, delegate, and review — you do not implement.
-
-## Your teammates
-${teammatePanes.map((t) => `- ${t}`).join("\n")}
-
-## Task management commands
-- tmux-ide mission set "title" --description "..."
-- tmux-ide goal create "title" --priority N --acceptance "criteria"
-- tmux-ide goal list --json
-- tmux-ide task create "title" --goal NN --priority N --specialty "type" --fulfills "VAL-001,VAL-002"
-- tmux-ide task list --json
-- tmux-ide task show NNN --json (shows full mission→goal→task context)
-- tmux-ide task done NNN --proof "what was accomplished"
-- tmux-ide goal done NN
-
-## How it works
-1. Set the mission: tmux-ide mission set "title" --description "..."
-2. Create goals with acceptance criteria
-3. Create tasks under goals — use --specialty to hint agent type, --fulfills to link validation assertions
-4. The orchestrator automatically dispatches unassigned tasks to idle teammates
-5. Teammates work in the project directory
-6. When teammates finish, they run tmux-ide task done
-7. You get notified and review their work
-8. You report progress to the human
-${milestonesSection}
-## Validation contracts
-Define acceptance criteria in .tasks/validation-contract.md using assertion IDs:
-  **VAL-001**: All tests pass
-  **VAL-002**: No TypeScript errors
-Link tasks to assertions: tmux-ide task create "title" --fulfills "VAL-001,VAL-002"
-After a milestone's tasks complete, the Validator agent automatically verifies assertions.
-
-## Knowledge library
-- .tmux-ide/library/architecture.md — project context injected into agent prompts
-- .tmux-ide/library/learnings.md — auto-appended by orchestrator after task completion
-- AGENTS.md — project boundaries injected into all agent prompts
-Update architecture.md when the project structure changes significantly.
-
-## Important
-- Do NOT use --assign when creating tasks — the orchestrator handles dispatch automatically
-- Use --specialty to hint which agent type should pick it up
-- Focus on PLANNING and REVIEWING, not implementing
-- Break work into small, clear tasks (one per teammate)
-- Each task should be completable independently
-- Set clear acceptance criteria in goals
-- Check progress: tmux-ide task list --json`;
-}
-
-const TASK_DOCS_MARKER = "## Task Management";
-
-const TASK_DOCS_SECTION = `
-## Task Management
-
-tmux-ide provides structured task management for coordinated multi-agent work.
-
-### Mission & Goals
-
-\`\`\`bash
-tmux-ide mission set "title" --description "..."   # Set the project mission
-tmux-ide mission show                               # Show current mission
-tmux-ide mission clear                              # Clear the mission
-
-tmux-ide goal create "title" --priority N --acceptance "criteria"
-tmux-ide goal list [--json]                         # List all goals
-tmux-ide goal show <id> [--json]                    # Show goal with tasks
-tmux-ide goal update <id> --status done
-tmux-ide goal done <id>                             # Mark goal complete
-tmux-ide goal delete <id>
-\`\`\`
-
-### Tasks
-
-\`\`\`bash
-tmux-ide task create "title" --goal NN --priority N --assign "Agent" --tags "a,b" --depends "001,002"
-tmux-ide task list [--status todo --goal NN] [--json]
-tmux-ide task show <id> [--json]                    # Full mission→goal→task context
-tmux-ide task update <id> --status review --proof '{"tests":{"passed":10,"total":10}}'
-tmux-ide task claim <id> --assign "Agent Name"      # Claim and start a task
-tmux-ide task done <id> --proof "description"       # Mark task complete with proof
-tmux-ide task delete <id>
-\`\`\`
-
-### Proof Format
-
-The \`--proof\` flag accepts either a plain string (stored as \`notes\`) or a JSON object:
-
-\`\`\`json
-{
-  "tests": { "passed": 10, "total": 10 },
-  "pr": { "number": 42, "url": "https://...", "status": "merged" },
-  "ci": { "status": "passing", "url": "https://..." },
-  "notes": "Additional context"
-}
-\`\`\`
-
-### Task Dependencies
-
-Use \`--depends "001,002"\` to declare that a task depends on other tasks. The orchestrator will not dispatch a task until all its dependencies are complete.
-
-### Milestones
-
-\`\`\`bash
-tmux-ide milestone create "title" --sequence N
-tmux-ide milestone list [--json]
-tmux-ide mission plan-complete  # activate milestones and start dispatch
-\`\`\`
-
-### Validation
-
-\`\`\`bash
-tmux-ide validate show [--json]
-tmux-ide validate assert VAL-001 --status passing --evidence "what you verified"
-tmux-ide validate coverage [--json]
-\`\`\`
-`;
-
-export function ensureTaskDocs(dir: string): void {
-  const claudeMdPath = join(dir, "CLAUDE.md");
-
-  if (existsSync(claudeMdPath)) {
-    const content = readFileSync(claudeMdPath, "utf-8");
-    if (!content.includes(TASK_DOCS_MARKER)) {
-      writeFileSync(claudeMdPath, content + TASK_DOCS_SECTION);
-    }
-  } else {
-    writeFileSync(claudeMdPath, `# Project\n${TASK_DOCS_SECTION}`);
-  }
-
-  // Ensure library directory and stubs exist
-  const libraryDir = join(dir, ".tmux-ide", "library");
-  if (!existsSync(libraryDir)) {
-    mkdirSync(libraryDir, { recursive: true });
-  }
-  const archPath = join(libraryDir, "architecture.md");
-  if (!existsSync(archPath)) {
-    writeFileSync(
-      archPath,
-      "# Architecture\n\n<!-- Describe your project architecture here. This is injected into agent dispatch prompts. -->\n",
-    );
-  }
-  const learningsPath = join(libraryDir, "learnings.md");
-  if (!existsSync(learningsPath)) {
-    writeFileSync(
-      learningsPath,
-      "# Learnings\n\n<!-- Task summaries are automatically appended here by the orchestrator. -->\n",
-    );
-  }
-
-  // Ensure .tasks/ directory and validation contract stub
-  const tasksDir = join(dir, ".tasks");
-  if (!existsSync(tasksDir)) {
-    mkdirSync(tasksDir, { recursive: true });
-  }
-  const contractPath = join(tasksDir, "validation-contract.md");
-  if (!existsSync(contractPath)) {
-    writeFileSync(
-      contractPath,
-      "# Validation Contract\n\n<!-- Define assertions for the validator agent. Example: -->\n<!-- - VAL-001: All tests pass -->\n<!-- - VAL-002: No TypeScript errors -->\n",
-    );
   }
 }

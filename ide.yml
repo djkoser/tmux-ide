@@ -20,8 +20,8 @@ rows:
         size: 30%
   - size: 30%
     panes:
-      - title: Mission Control
-        type: mission-control
+      - title: Changes
+        type: changes
         size: 40%
       - title: Explorer
         type: explorer

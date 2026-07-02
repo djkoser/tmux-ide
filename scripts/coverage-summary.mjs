@@ -14,12 +14,7 @@ import { join } from "node:path";
 
 const ROOT = process.cwd();
 
-const PACKAGES = [
-  { name: "daemon", dir: "packages/daemon", target: 70 },
-  { name: "chat-solid", dir: "packages/chat-solid", target: 80 },
-  { name: "v2-solid-widgets", dir: "packages/v2-solid-widgets", target: 80 },
-  { name: "dashboard", dir: "dashboard", target: 60 },
-];
+const PACKAGES = [{ name: "daemon", dir: "packages/daemon", target: 70 }];
 
 function readSummary(pkgDir) {
   const path = join(ROOT, pkgDir, "coverage", "coverage-summary.json");
