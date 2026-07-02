@@ -36,6 +36,7 @@ import {
   panelPopupUnbindCommand,
 } from "./panels.ts";
 import { sidebarToggleBindCommand, sidebarToggleUnbindCommand } from "./sidebar.ts";
+import { maybeShowWelcomePopup } from "./welcome.ts";
 import {
   ADOPTED_OPTION,
   CHIP_OPTION,
@@ -141,8 +142,12 @@ export function buildStatusline(
   // sheet; `switcher` (primary) opens the picker popup — switch stays visually
   // dominant, the sheet is the quieter companion just to its left.
   const keysTrigger = `#[range=user|keys]#[fg=colour244][ ? keys ]#[default]#[norange]`;
+  // The home trigger floats the full fleet cockpit (the same M-h key opens) so
+  // "get me back to the home screen" is discoverable from the dock, not just via
+  // the key. Muted like `keys` — switch stays the dominant primary action.
+  const homeTrigger = `#[range=user|home]#[fg=colour244][ ⌂ home ⌥h ]#[default]#[norange]`;
   const trigger = `#[range=user|switcher]#[fg=${theme.accent},bold][ ⧉ switch ⌥p ]#[default]#[norange]`;
-  return `#[fg=${theme.accent},bold] tmux-ide #[default] ${body}#[align=right]${extra}${keysTrigger} ${trigger} `;
+  return `#[fg=${theme.accent},bold] tmux-ide #[default] ${body}#[align=right]${extra}${homeTrigger} ${keysTrigger} ${trigger} `;
 }
 
 /**
@@ -153,6 +158,15 @@ export function buildStatusline(
  * terminal apps, so grabbing one at the root is low-collision.
  */
 export const POPUP_KEY = "M-p";
+
+/**
+ * The root-table key that floats the full fleet HOME cockpit: `M-h` (Alt+h).
+ * Like {@link POPUP_KEY} it lives in the ROOT table so it fires without the
+ * prefix from any adopted session. Where the switcher is the compact picker,
+ * this opens the full two-column home (fleet tree + detail) as a large popup —
+ * "get me home from anywhere", the first half of the discovery flow.
+ */
+export const HOME_KEY = "M-h";
 
 /**
  * The root-table key that opens the right-click actions menu: `M-m` (Alt+m).
@@ -168,7 +182,11 @@ export const MENU_KEY = "M-m";
  * range-independent (unlike the left-click router — see {@link STATUS_CLICK_KEY}),
  * so it opens the same actions menu regardless of what's under the click.
  */
-export const MENU_STATUS_KEY = "MouseDown3Status";
+// MouseUP, deliberately: the menu is built via a ~150ms CLI hop, so a DOWN bind
+// opens it under a still-held button and the user's release lands on/near the
+// fresh menu and dismisses it instantly (measured live; -O does not save it).
+// Opening on release means no trailing button event exists to kill the menu.
+export const MENU_STATUS_KEY = "MouseUp3Status";
 
 /**
  * The root-table mouse key for a RIGHT-click on ANY pane body (not just the
@@ -179,7 +197,7 @@ export const MENU_STATUS_KEY = "MouseDown3Status";
  * consumes the event before tmux sees it — graceful degradation, the `M-m` key
  * still opens the menu there.
  */
-export const MENU_PANE_KEY = "MouseDown3Pane";
+export const MENU_PANE_KEY = "MouseUp3Pane";
 
 /**
  * PURE — the `display-popup` command STRING that floats the switcher (shared by
@@ -217,6 +235,33 @@ export function popupUnbindCommand(key = POPUP_KEY): string[] {
 }
 
 /**
+ * PURE — the `display-popup` command STRING that floats the full HOME cockpit
+ * (shared by the M-h bind, the dock's `[ ⌂ home ⌥h ]` trigger, and the actions
+ * menu's Home item, so all three open an identical popup). The bound command is
+ * `tmux-ide team --popup`: the `--popup` flag tells the cockpit it's floating
+ * over a tmux client, so — like the switcher popup — Enter `switch-client`s the
+ * invoking client and closes instead of attaching in place. Large (95%×95%)
+ * because it's the full two-column layout, not the compact picker.
+ */
+export function homePopupCommand(homeCmd = "tmux-ide team --popup"): string {
+  return `display-popup -E -w 95% -h 95% "${homeCmd}"`;
+}
+
+/**
+ * PURE — the tmux argv that binds {@link HOME_KEY} (`M-h`, root table) to the
+ * home cockpit popup. Server-wide bind, mirroring the switcher's M-p — see the
+ * note on {@link unadoptSession}. Idempotent: re-binding overwrites.
+ */
+export function homeBindCommand(homeCmd = "tmux-ide team --popup", key = HOME_KEY): string[] {
+  return ["bind-key", "-n", key, "display-popup", "-E", "-w", "95%", "-h", "95%", homeCmd];
+}
+
+/** PURE — the tmux argv that removes the home key binding. */
+export function homeUnbindCommand(key = HOME_KEY): string[] {
+  return ["unbind-key", "-n", key];
+}
+
+/**
  * The root-table mouse key that routes clicks on the status bar. tmux fires
  * this for a click landing on a NAMED range in any status line (our chrome
  * row's `user|…` ranges), exposing the range name via `#{mouse_status_range}`.
@@ -240,6 +285,7 @@ function dq(cmd: string): string {
  * Dispatch is on `#{mouse_status_range}` (the `#[range=user|<name>]` under the
  * click, surfaced as `<name>`), a nested if-shell chain:
  *   - `switcher`      → the SAME `display-popup` the M-p key runs.
+ *   - `home`          → the home-cockpit `display-popup` the M-h key runs.
  *   - `keys`          → the cheat-sheet `display-popup` the M-k key runs.
  *   - `sw<session>`   → switch the clicking client to `<session>`.
  *   - anything else   → tmux's default `select-window -t =` (window-list clicks
@@ -269,6 +315,7 @@ export function statusClickBindCommand(
 ): string[] {
   const popup = switcherPopupCommand(switcherCmd);
   const cheatsheet = cheatsheetPopupCommand(cheatsheetCmd);
+  const home = homePopupCommand();
   // run-shell re-enters tmux with the name/client already format-expanded.
   const switchClient = `run-shell "tmux switch-client -c '#{client_name}' -t '#{s/^sw//:mouse_status_range}'"`;
   // `sw*` → switch, else window-list default. Its args are one level deep here.
@@ -276,6 +323,9 @@ export function statusClickBindCommand(
   // `keys` → cheat sheet, else the sw branch. Both args nest one level deeper,
   // so they're `dq`'d again — dequoting peels the layers off in order.
   const keysBranch = `if-shell -F "#{==:#{mouse_status_range},keys}" ${dq(cheatsheet)} ${dq(swBranch)}`;
+  // `home` → the home cockpit popup, else the keys branch. One more nesting
+  // level, so both args are `dq`'d once more on top of what they already carry.
+  const homeBranch = `if-shell -F "#{==:#{mouse_status_range},home}" ${dq(home)} ${dq(keysBranch)}`;
   return [
     "bind-key",
     "-n",
@@ -284,7 +334,7 @@ export function statusClickBindCommand(
     "-F",
     "#{==:#{mouse_status_range},switcher}",
     popup,
-    keysBranch,
+    homeBranch,
   ];
 }
 
@@ -362,6 +412,9 @@ export function adoptSession(session: string, switcherCmd = "tmux-ide switcher")
   // key just overwrites it): the popup, the cheat sheet, and the click router.
   const keys = getAppConfig().keys;
   runTmux(popupBindCommand(switcherCmd, keys.popup));
+  // The HOME cockpit: the configured home key floats the full fleet home over
+  // any session (Enter switch-clients + closes — see homePopupCommand).
+  runTmux(homeBindCommand("tmux-ide team --popup", keys.home));
   runTmux(cheatsheetBindCommand("tmux-ide cheatsheet", keys.cheatsheet));
   runTmux(statusClickBindCommand(switcherCmd));
   // The actions menu: the configured menu key, a right-click on the chrome row
@@ -384,6 +437,9 @@ export function adoptSession(session: string, switcherCmd = "tmux-ide switcher")
   // fresh is up.
   seedSessionStatus(session);
   startUpdaterIfNeeded();
+  // First-run: float the one-time welcome card on the adopting client (gated by
+  // the marker file + config; best-effort, never blocks or fails the adopt).
+  maybeShowWelcomePopup();
 }
 
 /**
@@ -400,6 +456,11 @@ export function unadoptSession(session: string): void {
   const keys = getAppConfig().keys;
   try {
     runTmux(popupUnbindCommand(keys.popup));
+  } catch {
+    // no such key bound — nothing to undo
+  }
+  try {
+    runTmux(homeUnbindCommand(keys.home));
   } catch {
     // no such key bound — nothing to undo
   }

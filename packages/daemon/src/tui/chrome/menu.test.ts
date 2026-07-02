@@ -16,7 +16,7 @@ import {
   MENU_PANE_KEY,
   MENU_STATUS_KEY,
 } from "./menu.ts";
-import { switcherPopupCommand } from "./statusline.ts";
+import { switcherPopupCommand, homePopupCommand } from "./statusline.ts";
 import { cheatsheetPopupCommand } from "./cheatsheet.ts";
 import { PANEL_POPUPS, panelPopupCommand } from "./panels.ts";
 import { DEFAULT_THEME, type AppTheme } from "../../lib/app-config.ts";
@@ -30,6 +30,14 @@ describe("buildMenu", () => {
   it("leads with the tmux-ide title", () => {
     const args = buildMenu([]);
     expect(args.slice(0, 2)).toEqual(["-T", "tmux-ide"]);
+  });
+
+  it("opens the home cockpit via the exact same popup command M-h uses", () => {
+    const args = buildMenu([]);
+    const i = args.indexOf("⌂ Home cockpit");
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(args[i + 1]).toBe("h"); // mnemonic key
+    expect(args[i + 2]).toBe(homePopupCommand());
   });
 
   it("opens the switcher via the exact same popup command M-p uses", () => {
@@ -200,7 +208,7 @@ describe("menuBindCommand", () => {
 });
 
 describe("menuStatusBindCommand", () => {
-  it("binds a right-click on the status bar (MouseDown3Status) to the same menu, at the pointer", () => {
+  it("binds a right-click on the status bar (MouseUp3Status) to the same menu, at the pointer", () => {
     const cmd = menuStatusBindCommand();
     expect(cmd.slice(0, 4)).toEqual(["bind-key", "-n", MENU_STATUS_KEY, "run-shell"]);
     // status mouse_x is already a screen column; the dock is at the bottom, so
@@ -208,12 +216,12 @@ describe("menuStatusBindCommand", () => {
     expect(cmd[cmd.length - 1]).toBe(
       `tmux-ide menu --client '#{client_name}' --x '#{mouse_x}' --y '#{client_height}'`,
     );
-    expect(MENU_STATUS_KEY).toBe("MouseDown3Status");
+    expect(MENU_STATUS_KEY).toBe("MouseUp3Status");
   });
 });
 
 describe("menuPaneBindCommand", () => {
-  it("binds a right-click on ANY pane body (MouseDown3Pane) to the same menu, at the pointer", () => {
+  it("binds a right-click on ANY pane body (MouseUp3Pane) to the same menu, at the pointer", () => {
     const cmd = menuPaneBindCommand();
     expect(cmd.slice(0, 4)).toEqual(["bind-key", "-n", MENU_PANE_KEY, "run-shell"]);
     expect(cmd).toContain("-b");
@@ -222,7 +230,7 @@ describe("menuPaneBindCommand", () => {
     expect(cmd[cmd.length - 1]).toBe(
       `tmux-ide menu --client '#{client_name}' --x '#{e|+:#{pane_left},#{mouse_x}}' --y '#{e|+:#{pane_top},#{mouse_y}}'`,
     );
-    expect(MENU_PANE_KEY).toBe("MouseDown3Pane");
+    expect(MENU_PANE_KEY).toBe("MouseUp3Pane");
   });
 
   it("passes a custom menu command through with the coord forwarding", () => {
@@ -235,7 +243,9 @@ describe("menuPaneBindCommand", () => {
 
 describe("menuPositionArgs", () => {
   it("emits -x/-y flags for numeric coords", () => {
-    expect(menuPositionArgs("12", "5")).toEqual(["-x", "12", "-y", "5"]);
+    // y is nudged one row up so the trailing button-release lands BELOW the
+    // menu instead of on its border (which dismisses it even with -O).
+    expect(menuPositionArgs("12", "5")).toEqual(["-x", "12", "-y", "4"]);
     expect(menuPositionArgs("0", "0")).toEqual(["-x", "0", "-y", "0"]);
   });
 

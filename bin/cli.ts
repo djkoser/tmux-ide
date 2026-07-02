@@ -70,6 +70,8 @@ const { positionals, values } = parseArgs({
     active: { type: "string" },
     // switcher: the tmux client the popup was invoked on (see `switcher` case)
     client: { type: "string" },
+    // team --popup: run the home cockpit as a popup over a tmux client (M-h)
+    popup: { type: "boolean" },
     // sidebar-toggle: the session whose nav column is toggled (see `sidebar-toggle`)
     session: { type: "string" },
     // menu: the click position (mouse binds forward #{mouse_x}/#{mouse_y}) so the
@@ -113,6 +115,7 @@ const knownCommands = new Set([
   "integration",
   "chrome-updater",
   "cheatsheet",
+  "welcome",
   "menu",
   "popup",
   "sidebar-toggle",
@@ -210,6 +213,14 @@ ${bold("Pane Messaging:")}
 ${bold("Server:")}
   ${cyan("tmux-ide command-center")} [--port N]    ${dim("Start the command-center HTTP API")}
   ${cyan("tmux-ide server")} [--port N]            ${dim("Start HTTP + PTY WebSocket server")}
+
+${bold("Discover (in the TUI):")}
+  ${dim("Bare")} ${cyan("tmux-ide")} ${dim("with no ide.yml opens the HOME cockpit — the fleet home screen.")}
+  ${dim("Once a session is adopted, the whole UI is one keystroke away:")}
+  ${cyan("⌥h")}  ${dim("home cockpit from anywhere    ")}${cyan("⌥p")}  ${dim("switch session")}
+  ${cyan("⌥k")}  ${dim("cheat sheet (all keys)        ")}${cyan("⌥m")}  ${dim("actions menu (or right-click any pane / the bar)")}
+  ${cyan("⌥e ⌥g ⌥,")}  ${dim("file / changes / config panels   ")}${cyan("⌥b")}  ${dim("sidebar")}
+  ${dim("A first-run welcome card names these keys once. Run")} ${cyan("tmux-ide cheatsheet")} ${dim("to see the full sheet.")}
 
 ${bold("Flags:")}
   ${cyan("--json")}                      ${dim("Output as JSON (all commands)")}
@@ -433,6 +444,17 @@ try {
       // exit without spawning the (bun/OpenTUI) TUI.
       if (json) {
         await printFleetJson();
+        break;
+      }
+      // `--popup` runs the FULL home cockpit inside a tmux `display-popup` (bound
+      // to `M-h` on adopt / the dock's `[ ⌂ home ⌥h ]` trigger). Like the
+      // switcher, `TMUX_IDE_POPUP_CLIENT` flips popup mode (Enter switch-clients
+      // the invoking client + closes) and carries an optional explicit client;
+      // empty means "resolve it yourself from inside the popup". Unlike the
+      // switcher it keeps the full two-column layout, not the compact picker.
+      if (values.popup === true) {
+        const clientArg = typeof values.client === "string" ? values.client : "";
+        execBunWidget(teamScriptPath, [], "team --popup", { TMUX_IDE_POPUP_CLIENT: clientArg });
         break;
       }
       launchTeamCockpit();
@@ -793,6 +815,35 @@ try {
         process.stdin.once("end", close);
       } catch {
         close();
+      }
+      break;
+    }
+
+    case "welcome": {
+      // Prints the one-time first-run welcome card, then blocks until ANY key
+      // closes it (the popup exits). Floated by `adoptSession` via a
+      // `display-popup -E "tmux-ide welcome"` on first adopt (see
+      // ./chrome/welcome.ts). Mirrors the cheatsheet case — must never throw, and
+      // must close on a key / EOF / a 60s fallback so the popup can't hang.
+      try {
+        const { buildWelcomeText } = await import("../packages/daemon/src/tui/chrome/welcome.ts");
+        const { getAppConfig } = await import("../packages/daemon/src/lib/app-config.ts");
+        console.log(buildWelcomeText(getAppConfig().keys));
+      } catch {
+        console.log(
+          "Welcome to tmux-ide. Right-click for the menu · ⌥h home · ⌥p switch · ⌥k all keys.",
+        );
+      }
+      const closeWelcome = () => process.exit(0);
+      const welcomeTimer = setTimeout(closeWelcome, 60_000);
+      welcomeTimer.unref?.();
+      try {
+        process.stdin.setRawMode?.(true);
+        process.stdin.resume();
+        process.stdin.once("data", closeWelcome);
+        process.stdin.once("end", closeWelcome);
+      } catch {
+        closeWelcome();
       }
       break;
     }

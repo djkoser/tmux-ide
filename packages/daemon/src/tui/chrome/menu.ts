@@ -18,7 +18,13 @@
  */
 import { DEFAULT_THEME, type AppTheme } from "../../lib/app-config.ts";
 import type { AgentStatus } from "../detect/classify.ts";
-import { switcherPopupCommand, MENU_KEY, MENU_PANE_KEY, MENU_STATUS_KEY } from "./statusline.ts";
+import {
+  switcherPopupCommand,
+  homePopupCommand,
+  MENU_KEY,
+  MENU_PANE_KEY,
+  MENU_STATUS_KEY,
+} from "./statusline.ts";
 import { cheatsheetPopupCommand } from "./cheatsheet.ts";
 import { PANEL_POPUPS, panelPopupCommand } from "./panels.ts";
 
@@ -63,8 +69,9 @@ function sessionLabel(session: { name: string; status: AgentStatus }, theme: App
  * minus the runtime `-c <client>`/placement flags the CLI prepends): a
  * `tmux-ide` title, then four groups joined by separator lines —
  *
- *   1. `⧉ Switch session…` (s) → the same switcher popup M-p / the bar trigger
- *      opens; `? Cheat sheet` (k) → the same cheat-sheet popup M-k opens. Both
+ *   1. `⌂ Home cockpit` (h) → the same home popup M-h / the bar trigger opens;
+ *      `⧉ Switch session…` (s) → the same switcher popup M-p / the bar trigger
+ *      opens; `? Cheat sheet` (k) → the same cheat-sheet popup M-k opens. All
  *      reuse the exact popup command strings so a menu pick behaves identically.
  *   2. the widget PANELS (Files e / Changes g / Config ,) → the same floating
  *      `display-popup` each panel's root-table key opens (see ./panels.ts).
@@ -83,6 +90,9 @@ export function buildMenu(
   theme: AppTheme = DEFAULT_THEME,
 ): string[] {
   const header: string[] = [
+    "⌂ Home cockpit",
+    "h",
+    homePopupCommand(),
     "⧉ Switch session…",
     "s",
     switcherPopupCommand(),
@@ -207,7 +217,11 @@ export function menuPositionArgs(x: string | undefined, y: string | undefined): 
   const nx = parseCoord(x);
   const ny = parseCoord(y);
   if (nx === null || ny === null) return [];
-  return ["-x", String(nx), "-y", String(ny)];
+  // One row ABOVE the pointer: -y is the menu's bottom edge, and if the pointer
+  // cell were ON the menu, the user's trailing button-release would land on the
+  // border and dismiss it instantly (even with -O — measured live). A -1 offset
+  // puts the release just BELOW the menu, which -O survives.
+  return ["-x", String(nx), "-y", String(Math.max(0, ny - 1))];
 }
 
 /** Parse a non-negative integer coord, or null for anything else. */

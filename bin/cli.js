@@ -2524,10 +2524,12 @@ function parseAppConfig(input) {
   const notifications = asObject(root.notifications);
   const restore2 = asObject(root.restore);
   const updates = asObject(root.updates);
+  const welcome = asObject(root.welcome);
   const worktrees = asObject(root.worktrees);
   return {
     keys: {
       popup: pickString(keys.popup, D.keys.popup),
+      home: pickString(keys.home, D.keys.home),
       cheatsheet: pickString(keys.cheatsheet, D.keys.cheatsheet),
       menu: pickString(keys.menu, D.keys.menu),
       sidebar: pickString(keys.sidebar, D.keys.sidebar),
@@ -2563,6 +2565,7 @@ function parseAppConfig(input) {
     },
     restore: { resumeAgents: pickBool(restore2.resumeAgents, D.restore.resumeAgents) },
     updates: { check: pickBool(updates.check, D.updates.check) },
+    welcome: { show: pickBool(welcome.show, D.welcome.show) },
     worktrees: { dir: pickString(worktrees.dir, D.worktrees.dir) }
   };
 }
@@ -2592,6 +2595,7 @@ var init_app_config = __esm({
     DEFAULT_APP_CONFIG = {
       keys: {
         popup: "M-p",
+        home: "M-h",
         cheatsheet: "M-k",
         menu: "M-m",
         sidebar: "M-b",
@@ -2614,6 +2618,7 @@ var init_app_config = __esm({
       notifications: { toast: true, macos: false },
       restore: { resumeAgents: false },
       updates: { check: true },
+      welcome: { show: true },
       worktrees: { dir: "" }
     };
     DEFAULT_THEME = DEFAULT_APP_CONFIG.theme;
@@ -2790,13 +2795,13 @@ function buildCheatsheet(opts) {
   lines.push(head("dock"));
   lines.push(
     pad(
-      `${bold(renderKey(keys.popup))} switcher popup   ${bold(renderKey(keys.cheatsheet))} this sheet   ${bold(renderKey(keys.menu))} actions menu   ${bold(renderKey(keys.sidebar))} sidebar`
+      `${bold(renderKey(keys.home))} home cockpit   ${bold(renderKey(keys.popup))} switcher popup   ${bold(renderKey(keys.cheatsheet))} this sheet   ${bold(renderKey(keys.menu))} actions menu   ${bold(renderKey(keys.sidebar))} sidebar`
     )
   );
   lines.push(
     pad(
       dim(
-        `bar: click a project tab = switch there \xB7 click [ \u29C9 switch ${renderKey(keys.popup)} ] = switcher \xB7 right-click anywhere = menu`
+        `bar: click a project tab = switch there \xB7 [ \u2302 home ${renderKey(keys.home)} ] = home \xB7 [ \u29C9 switch ${renderKey(keys.popup)} ] = switcher \xB7 right-click anywhere = menu`
       )
     )
   );
@@ -2920,6 +2925,9 @@ function sessionLabel(session, theme) {
 }
 function buildMenu(sessions, theme = DEFAULT_THEME) {
   const header = [
+    "\u2302 Home cockpit",
+    "h",
+    homePopupCommand(),
     "\u29C9 Switch session\u2026",
     "s",
     switcherPopupCommand(),
@@ -2992,7 +3000,7 @@ function menuPositionArgs(x, y) {
   const nx = parseCoord(x);
   const ny = parseCoord(y);
   if (nx === null || ny === null) return [];
-  return ["-x", String(nx), "-y", String(ny)];
+  return ["-x", String(nx), "-y", String(Math.max(0, ny - 1))];
 }
 function parseCoord(value) {
   if (typeof value !== "string" || !/^\d+$/.test(value)) return null;
@@ -3027,6 +3035,77 @@ var init_menu = __esm({
     init_panels();
     PANEL_MENU_KEYS = ["e", "g", ","];
     MAX_SESSION_ITEMS = 8;
+  }
+});
+
+// packages/daemon/src/tui/chrome/welcome.ts
+var welcome_exports = {};
+__export(welcome_exports, {
+  buildWelcomeText: () => buildWelcomeText,
+  markWelcomed: () => markWelcomed,
+  maybeShowWelcomePopup: () => maybeShowWelcomePopup,
+  shouldShowWelcome: () => shouldShowWelcome,
+  welcomeMarkerPath: () => welcomeMarkerPath
+});
+import { spawn as spawn2 } from "node:child_process";
+import { existsSync as existsSync5, mkdirSync, writeFileSync as writeFileSync2 } from "node:fs";
+import { homedir as homedir4 } from "node:os";
+import { dirname as dirname3, join as join4 } from "node:path";
+function renderKey2(tmuxKey) {
+  return tmuxKey.replace(/M-/g, "\u2325").replace(/C-/g, "^").replace(/S-/g, "\u21E7");
+}
+function welcomeMarkerPath() {
+  const home = process.env.TMUX_IDE_HOME ?? join4(homedir4(), ".tmux-ide");
+  return join4(home, "welcomed");
+}
+function shouldShowWelcome() {
+  return !existsSync5(welcomeMarkerPath()) && getAppConfig().welcome.show;
+}
+function markWelcomed() {
+  const path2 = welcomeMarkerPath();
+  try {
+    mkdirSync(dirname3(path2), { recursive: true });
+    writeFileSync2(path2, (/* @__PURE__ */ new Date()).toISOString());
+  } catch {
+  }
+}
+function buildWelcomeText(keys = DEFAULT_KEYS) {
+  const lines = [
+    head2(" You're in tmux-ide"),
+    dim2(" your terminal, now a fleet you can see and steer."),
+    "",
+    " Four keys unlock everything:",
+    `   ${bold2("right-click")}   the actions menu \u2014 anywhere`,
+    `   ${bold2(renderKey2(keys.home).padEnd(11))}   the home cockpit`,
+    `   ${bold2(renderKey2(keys.popup).padEnd(11))}   switch session`,
+    `   ${bold2(renderKey2(keys.cheatsheet).padEnd(11))}   all keys (the cheat sheet)`,
+    "",
+    dim2(" This card shows once \u2014 press any key to close.")
+  ];
+  return lines.join("\n");
+}
+function maybeShowWelcomePopup() {
+  if (!shouldShowWelcome()) return;
+  if (!process.env.TMUX) return;
+  try {
+    const child = spawn2(
+      "tmux",
+      ["display-popup", "-E", "-w", "60", "-h", "12", "tmux-ide welcome"],
+      { stdio: "ignore", detached: true }
+    );
+    child.unref();
+  } catch {
+  }
+  markWelcomed();
+}
+var bold2, dim2, head2;
+var init_welcome = __esm({
+  "packages/daemon/src/tui/chrome/welcome.ts"() {
+    "use strict";
+    init_app_config();
+    bold2 = (s) => `\x1B[1m${s}\x1B[22m`;
+    dim2 = (s) => `\x1B[2m${s}\x1B[22m`;
+    head2 = (s) => `\x1B[1;36m${s}\x1B[0m`;
   }
 });
 
@@ -3068,7 +3147,7 @@ var init_registry = __esm({
 
 // packages/daemon/src/lib/project-probe.ts
 import { execFile } from "node:child_process";
-import { existsSync as existsSync5 } from "node:fs";
+import { existsSync as existsSync6 } from "node:fs";
 import { basename as basename3, isAbsolute, resolve as resolve6 } from "node:path";
 function sanitizeName(raw) {
   return raw.trim().replace(/\s+/g, "-").replace(/[^A-Za-z0-9._-]/g, "").replace(/^-+|-+$/g, "");
@@ -3099,7 +3178,7 @@ var init_project_probe = __esm({
     "use strict";
     GIT_TIMEOUT_MS = 2e3;
     realIo = {
-      exists: existsSync5,
+      exists: existsSync6,
       runGit: (args, cwd) => new Promise((resolveResult) => {
         execFile(
           "git",
@@ -3120,9 +3199,9 @@ var init_project_probe = __esm({
 
 // packages/daemon/src/lib/project-registry.ts
 import { EventEmitter } from "node:events";
-import { existsSync as existsSync6, mkdirSync, readFileSync as readFileSync5, renameSync, writeFileSync as writeFileSync2 } from "node:fs";
-import { homedir as homedir4 } from "node:os";
-import { dirname as dirname3, isAbsolute as isAbsolute2, join as join4, resolve as resolve7 } from "node:path";
+import { existsSync as existsSync7, mkdirSync as mkdirSync2, readFileSync as readFileSync5, renameSync, writeFileSync as writeFileSync3 } from "node:fs";
+import { homedir as homedir5 } from "node:os";
+import { dirname as dirname4, isAbsolute as isAbsolute2, join as join5, resolve as resolve7 } from "node:path";
 import { z as z10 } from "zod";
 function applyAction(state, action) {
   switch (action.type) {
@@ -3154,14 +3233,14 @@ function buildRegisteredProject(probe, name, registeredAt) {
 function registryDir() {
   const override = process.env[REGISTRY_DIR_ENV];
   if (override && override.length > 0) return override;
-  return join4(homedir4(), ".tmux-ide");
+  return join5(homedir5(), ".tmux-ide");
 }
 function registryPath() {
-  return join4(registryDir(), "projects.json");
+  return join5(registryDir(), "projects.json");
 }
 function readDisk() {
   const path2 = registryPath();
-  if (!existsSync6(path2)) return [];
+  if (!existsSync7(path2)) return [];
   const raw = readFileSync5(path2, "utf-8");
   if (raw.trim().length === 0) return [];
   let parsed;
@@ -3184,11 +3263,11 @@ function readDisk() {
 }
 function writeDisk(projects) {
   const path2 = registryPath();
-  const dir = dirname3(path2);
-  mkdirSync(dir, { recursive: true });
+  const dir = dirname4(path2);
+  mkdirSync2(dir, { recursive: true });
   const file = { version: 1, projects };
   const tmpPath = `${path2}.tmp`;
-  writeFileSync2(tmpPath, JSON.stringify(file, null, 2) + "\n");
+  writeFileSync3(tmpPath, JSON.stringify(file, null, 2) + "\n");
   renameSync(tmpPath, path2);
 }
 function ensureCache() {
@@ -3208,7 +3287,7 @@ function getProject(name) {
   return ensureCache().find((p) => p.name === name) ?? null;
 }
 async function registerProject(input) {
-  const exists = input.exists ?? existsSync6;
+  const exists = input.exists ?? existsSync7;
   const absoluteDir = isAbsolute2(input.dir) ? input.dir : resolve7(input.dir);
   if (!exists(absoluteDir)) {
     throw new ProjectDirNotFoundError(absoluteDir);
@@ -3418,9 +3497,9 @@ __export(events_exports, {
   formatEventLine: () => formatEventLine,
   shouldRotate: () => shouldRotate
 });
-import { appendFileSync, existsSync as existsSync7, mkdirSync as mkdirSync2, renameSync as renameSync2, statSync } from "node:fs";
-import { homedir as homedir5 } from "node:os";
-import { join as join5 } from "node:path";
+import { appendFileSync, existsSync as existsSync8, mkdirSync as mkdirSync3, renameSync as renameSync2, statSync } from "node:fs";
+import { homedir as homedir6 } from "node:os";
+import { join as join6 } from "node:path";
 function diffFleet(prev, next) {
   const state = /* @__PURE__ */ new Map();
   const events = [];
@@ -3447,14 +3526,14 @@ function formatEventLine(ev, paint = (_s, t) => t) {
   return `${isoTime(ev.ts)} ${ev.session} ${from} \u2192 ${paint(ev.to, ev.to)}`;
 }
 function eventsPath() {
-  return join5(homedir5(), ".tmux-ide", "events.jsonl");
+  return join6(homedir6(), ".tmux-ide", "events.jsonl");
 }
 function appendEvents(events, now = () => (/* @__PURE__ */ new Date()).toISOString()) {
   if (events.length === 0) return;
   const path2 = eventsPath();
   try {
-    mkdirSync2(join5(homedir5(), ".tmux-ide"), { recursive: true });
-    if (existsSync7(path2) && shouldRotate(statSync(path2).size)) {
+    mkdirSync3(join6(homedir6(), ".tmux-ide"), { recursive: true });
+    if (existsSync8(path2) && shouldRotate(statSync(path2).size)) {
       renameSync2(path2, `${path2}.1`);
     }
     const ts = now();
@@ -3548,9 +3627,9 @@ var init_notify = __esm({
 });
 
 // packages/daemon/src/tui/chrome/snapshot.ts
-import { existsSync as existsSync8, mkdirSync as mkdirSync3, readFileSync as readFileSync6, renameSync as renameSync3, writeFileSync as writeFileSync3 } from "node:fs";
-import { homedir as homedir6 } from "node:os";
-import { dirname as dirname4, join as join6 } from "node:path";
+import { existsSync as existsSync9, mkdirSync as mkdirSync4, readFileSync as readFileSync6, renameSync as renameSync3, writeFileSync as writeFileSync4 } from "node:fs";
+import { homedir as homedir7 } from "node:os";
+import { dirname as dirname5, join as join7 } from "node:path";
 import { z as z11 } from "zod";
 function isBareShell(cmd) {
   return /^-?(zsh|bash|sh|fish|dash|ksh|tcsh|csh|nu)$/.test(cmd.trim());
@@ -3665,15 +3744,15 @@ function collectFleetSnapshot(io = defaultIo) {
   return buildSnapshot(rawPanes, rawSessions, io.processTable());
 }
 function snapshotPath() {
-  return join6(homedir6(), ".tmux-ide", "snapshot.json");
+  return join7(homedir7(), ".tmux-ide", "snapshot.json");
 }
 function writeSnapshot(snapshot) {
   const path2 = snapshotPath();
   try {
-    mkdirSync3(dirname4(path2), { recursive: true });
+    mkdirSync4(dirname5(path2), { recursive: true });
     const tmp = `${path2}.tmp`;
-    writeFileSync3(tmp, JSON.stringify(snapshot, null, 2) + "\n");
-    if (existsSync8(path2)) {
+    writeFileSync4(tmp, JSON.stringify(snapshot, null, 2) + "\n");
+    if (existsSync9(path2)) {
       try {
         renameSync3(path2, `${path2}.1`);
       } catch {
@@ -3686,7 +3765,7 @@ function writeSnapshot(snapshot) {
 function readSnapshot() {
   const path2 = snapshotPath();
   try {
-    if (!existsSync8(path2)) return null;
+    if (!existsSync9(path2)) return null;
     const raw = readFileSync6(path2, "utf-8");
     if (raw.trim().length === 0) return null;
     const result = FleetSnapshotSchemaZ.safeParse(JSON.parse(raw));
@@ -3985,6 +4064,7 @@ var init_updater = __esm({
 // packages/daemon/src/tui/chrome/statusline.ts
 var statusline_exports = {};
 __export(statusline_exports, {
+  HOME_KEY: () => HOME_KEY,
   MENU_KEY: () => MENU_KEY,
   MENU_PANE_KEY: () => MENU_PANE_KEY,
   MENU_STATUS_KEY: () => MENU_STATUS_KEY,
@@ -3994,6 +4074,9 @@ __export(statusline_exports, {
   adoptSession: () => adoptSession,
   adoptableSessionNames: () => adoptableSessionNames,
   buildStatusline: () => buildStatusline,
+  homeBindCommand: () => homeBindCommand,
+  homePopupCommand: () => homePopupCommand,
+  homeUnbindCommand: () => homeUnbindCommand,
   isInternalName: () => isInternalName,
   popupBindCommand: () => popupBindCommand,
   popupUnbindCommand: () => popupUnbindCommand,
@@ -4037,8 +4120,9 @@ function buildStatusline(projects, active2, maxItems = 12, theme = DEFAULT_THEME
   const body = segments.join("  ");
   const extra = extraSegment ? `${extraSegment} ` : "";
   const keysTrigger = `#[range=user|keys]#[fg=colour244][ ? keys ]#[default]#[norange]`;
+  const homeTrigger = `#[range=user|home]#[fg=colour244][ \u2302 home \u2325h ]#[default]#[norange]`;
   const trigger = `#[range=user|switcher]#[fg=${theme.accent},bold][ \u29C9 switch \u2325p ]#[default]#[norange]`;
-  return `#[fg=${theme.accent},bold] tmux-ide #[default] ${body}#[align=right]${extra}${keysTrigger} ${trigger} `;
+  return `#[fg=${theme.accent},bold] tmux-ide #[default] ${body}#[align=right]${extra}${homeTrigger} ${keysTrigger} ${trigger} `;
 }
 function switcherPopupCommand(switcherCmd = "tmux-ide switcher") {
   return `display-popup -E -w 80% -h 60% "${switcherCmd}"`;
@@ -4049,15 +4133,26 @@ function popupBindCommand(switcherCmd = "tmux-ide switcher", key = POPUP_KEY) {
 function popupUnbindCommand(key = POPUP_KEY) {
   return ["unbind-key", "-n", key];
 }
+function homePopupCommand(homeCmd = "tmux-ide team --popup") {
+  return `display-popup -E -w 95% -h 95% "${homeCmd}"`;
+}
+function homeBindCommand(homeCmd = "tmux-ide team --popup", key = HOME_KEY) {
+  return ["bind-key", "-n", key, "display-popup", "-E", "-w", "95%", "-h", "95%", homeCmd];
+}
+function homeUnbindCommand(key = HOME_KEY) {
+  return ["unbind-key", "-n", key];
+}
 function dq(cmd) {
   return `"${cmd.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 function statusClickBindCommand(switcherCmd = "tmux-ide switcher", cheatsheetCmd = "tmux-ide cheatsheet") {
   const popup = switcherPopupCommand(switcherCmd);
   const cheatsheet = cheatsheetPopupCommand(cheatsheetCmd);
+  const home = homePopupCommand();
   const switchClient = `run-shell "tmux switch-client -c '#{client_name}' -t '#{s/^sw//:mouse_status_range}'"`;
   const swBranch = `if-shell -F "#{m:sw*,#{mouse_status_range}}" ${dq(switchClient)} "select-window -t ="`;
   const keysBranch = `if-shell -F "#{==:#{mouse_status_range},keys}" ${dq(cheatsheet)} ${dq(swBranch)}`;
+  const homeBranch = `if-shell -F "#{==:#{mouse_status_range},home}" ${dq(home)} ${dq(keysBranch)}`;
   return [
     "bind-key",
     "-n",
@@ -4066,7 +4161,7 @@ function statusClickBindCommand(switcherCmd = "tmux-ide switcher", cheatsheetCmd
     "-F",
     "#{==:#{mouse_status_range},switcher}",
     popup,
-    keysBranch
+    homeBranch
   ];
 }
 function statusClickUnbindCommand() {
@@ -4106,6 +4201,7 @@ function adoptSession(session, switcherCmd = "tmux-ide switcher") {
   for (const argv of adoptOptionCommands(session)) runTmux(argv);
   const keys = getAppConfig().keys;
   runTmux(popupBindCommand(switcherCmd, keys.popup));
+  runTmux(homeBindCommand("tmux-ide team --popup", keys.home));
   runTmux(cheatsheetBindCommand("tmux-ide cheatsheet", keys.cheatsheet));
   runTmux(statusClickBindCommand(switcherCmd));
   runTmux(menuBindCommand("tmux-ide menu", keys.menu));
@@ -4117,12 +4213,17 @@ function adoptSession(session, switcherCmd = "tmux-ide switcher") {
   runTmux(sidebarToggleBindCommand("tmux-ide sidebar-toggle", keys.sidebar));
   seedSessionStatus(session);
   startUpdaterIfNeeded();
+  maybeShowWelcomePopup();
 }
 function unadoptSession(session) {
   for (const argv of unadoptOptionCommands(session)) runTmux(argv);
   const keys = getAppConfig().keys;
   try {
     runTmux(popupUnbindCommand(keys.popup));
+  } catch {
+  }
+  try {
+    runTmux(homeUnbindCommand(keys.home));
   } catch {
   }
   try {
@@ -4157,7 +4258,7 @@ function unadoptSession(session) {
   }
   if (listAdoptedSessions().length === 0) stopUpdater();
 }
-var POPUP_KEY, MENU_KEY, MENU_STATUS_KEY, MENU_PANE_KEY, STATUS_CLICK_KEY;
+var POPUP_KEY, HOME_KEY, MENU_KEY, MENU_STATUS_KEY, MENU_PANE_KEY, STATUS_CLICK_KEY;
 var init_statusline = __esm({
   "packages/daemon/src/tui/chrome/statusline.ts"() {
     "use strict";
@@ -4167,11 +4268,13 @@ var init_statusline = __esm({
     init_menu();
     init_panels();
     init_sidebar();
+    init_welcome();
     init_updater();
     POPUP_KEY = "M-p";
+    HOME_KEY = "M-h";
     MENU_KEY = "M-m";
-    MENU_STATUS_KEY = "MouseDown3Status";
-    MENU_PANE_KEY = "MouseDown3Pane";
+    MENU_STATUS_KEY = "MouseUp3Status";
+    MENU_PANE_KEY = "MouseUp3Pane";
     STATUS_CLICK_KEY = "MouseDown1Status";
   }
 });
@@ -4186,12 +4289,12 @@ __export(canonical_daemon_exports, {
   warnOnDaemonVersionSkew: () => warnOnDaemonVersionSkew,
   writeCanonicalDaemonInfo: () => writeCanonicalDaemonInfo
 });
-import { existsSync as existsSync9, mkdirSync as mkdirSync4, readFileSync as readFileSync7, renameSync as renameSync4, rmSync, writeFileSync as writeFileSync4 } from "node:fs";
-import { homedir as homedir7 } from "node:os";
-import { dirname as dirname5, join as join7 } from "node:path";
+import { existsSync as existsSync10, mkdirSync as mkdirSync5, readFileSync as readFileSync7, renameSync as renameSync4, rmSync, writeFileSync as writeFileSync5 } from "node:fs";
+import { homedir as homedir8 } from "node:os";
+import { dirname as dirname6, join as join8 } from "node:path";
 function getCanonicalDaemonInfoPath() {
-  const dir = process.env[DAEMON_INFO_DIR_ENV] ?? process.env[REGISTRY_DIR_ENV2] ?? join7(homedir7(), ".tmux-ide");
-  return join7(dir, DAEMON_INFO_FILE);
+  const dir = process.env[DAEMON_INFO_DIR_ENV] ?? process.env[REGISTRY_DIR_ENV2] ?? join8(homedir8(), ".tmux-ide");
+  return join8(dir, DAEMON_INFO_FILE);
 }
 function parseCanonicalDaemonInfo(raw) {
   if (!raw || typeof raw !== "object") return null;
@@ -4214,7 +4317,7 @@ function parseCanonicalDaemonInfo(raw) {
 }
 function writeCanonicalDaemonInfo(info) {
   const path2 = getCanonicalDaemonInfoPath();
-  mkdirSync4(dirname5(path2), { recursive: true });
+  mkdirSync5(dirname6(path2), { recursive: true });
   const tmpPath = `${path2}.${process.pid}.${Date.now()}.tmp`;
   const persisted = {
     pid: info.pid,
@@ -4224,12 +4327,12 @@ function writeCanonicalDaemonInfo(info) {
     bindHostname: info.bindHostname,
     authToken: info.authToken
   };
-  writeFileSync4(tmpPath, JSON.stringify(persisted, null, 2) + "\n", "utf-8");
+  writeFileSync5(tmpPath, JSON.stringify(persisted, null, 2) + "\n", "utf-8");
   renameSync4(tmpPath, path2);
 }
 function readCanonicalDaemonInfo() {
   const path2 = getCanonicalDaemonInfoPath();
-  if (!existsSync9(path2)) return null;
+  if (!existsSync10(path2)) return null;
   try {
     return parseCanonicalDaemonInfo(JSON.parse(readFileSync7(path2, "utf-8")));
   } catch {
@@ -4521,9 +4624,9 @@ var init_launch = __esm({
 
 // packages/daemon/src/detect.ts
 import { resolve as resolve9, basename as basename4 } from "node:path";
-import { readFileSync as readFileSync8, existsSync as existsSync10 } from "node:fs";
+import { readFileSync as readFileSync8, existsSync as existsSync11 } from "node:fs";
 function fileExists(dir, name) {
-  return existsSync10(resolve9(dir, name));
+  return existsSync11(resolve9(dir, name));
 }
 function readJson(dir, name) {
   try {
@@ -4855,8 +4958,8 @@ var init_PtyAdapter = __esm({
 });
 
 // packages/daemon/src/terminal/NodePtyAdapter.ts
-import { chmodSync, existsSync as existsSync14, statSync as statSync2 } from "node:fs";
-import { dirname as dirname7, join as join9 } from "node:path";
+import { chmodSync, existsSync as existsSync15, statSync as statSync2 } from "node:fs";
+import { dirname as dirname8, join as join10 } from "node:path";
 import { createRequire } from "node:module";
 import * as pty from "node-pty";
 function candidateSpawnHelperPaths() {
@@ -4867,11 +4970,11 @@ function candidateSpawnHelperPaths() {
   } catch {
     return [];
   }
-  const pkgDir = dirname7(pkgJsonPath);
+  const pkgDir = dirname8(pkgJsonPath);
   return [
-    join9(pkgDir, "build", "Release", "spawn-helper"),
-    join9(pkgDir, "build", "Debug", "spawn-helper"),
-    join9(pkgDir, "prebuilds", `${process.platform}-${process.arch}`, "spawn-helper")
+    join10(pkgDir, "build", "Release", "spawn-helper"),
+    join10(pkgDir, "build", "Debug", "spawn-helper"),
+    join10(pkgDir, "prebuilds", `${process.platform}-${process.arch}`, "spawn-helper")
   ];
 }
 function ensureNodePtySpawnHelperExecutable(options = {}) {
@@ -4879,7 +4982,7 @@ function ensureNodePtySpawnHelperExecutable(options = {}) {
   if (!options.force && !options.explicitPath && helperEnsured) return;
   const candidates = options.explicitPath ? [options.explicitPath] : candidateSpawnHelperPaths();
   for (const candidate of candidates) {
-    if (!existsSync14(candidate)) continue;
+    if (!existsSync15(candidate)) continue;
     try {
       chmodSync(candidate, 493);
     } catch {
@@ -5868,9 +5971,9 @@ var init_pane_comms = __esm({
 
 // packages/daemon/src/lib/workspace-registry.ts
 import { EventEmitter as EventEmitter3 } from "node:events";
-import { existsSync as existsSync15, mkdirSync as mkdirSync6, readFileSync as readFileSync10, renameSync as renameSync6, writeFileSync as writeFileSync6 } from "node:fs";
-import { homedir as homedir8 } from "node:os";
-import { dirname as dirname8, join as join10 } from "node:path";
+import { existsSync as existsSync16, mkdirSync as mkdirSync7, readFileSync as readFileSync10, renameSync as renameSync6, writeFileSync as writeFileSync7 } from "node:fs";
+import { homedir as homedir9 } from "node:os";
+import { dirname as dirname9, join as join11 } from "node:path";
 import { z as z12 } from "zod";
 function getDefaultWorkspaceRegistry() {
   if (!_default) _default = new WorkspaceRegistry();
@@ -5919,7 +6022,7 @@ var init_workspace_registry = __esm({
       workspaces = [];
       loaded = false;
       constructor(options = {}) {
-        this.dir = options.dir ?? process.env[REGISTRY_DIR_ENV3] ?? join10(homedir8(), ".tmux-ide");
+        this.dir = options.dir ?? process.env[REGISTRY_DIR_ENV3] ?? join11(homedir9(), ".tmux-ide");
         this.listSessions = options.listSessions ?? defaultListSessions;
         this.emitter.setMaxListeners(0);
       }
@@ -5986,11 +6089,11 @@ var init_workspace_registry = __esm({
       }
       // ----------------- io -----------------
       filePath() {
-        return join10(this.dir, "workspaces.json");
+        return join11(this.dir, "workspaces.json");
       }
       readDisk() {
         const path2 = this.filePath();
-        if (!existsSync15(path2)) return [];
+        if (!existsSync16(path2)) return [];
         let parsed;
         try {
           parsed = JSON.parse(readFileSync10(path2, "utf-8"));
@@ -6003,10 +6106,10 @@ var init_workspace_registry = __esm({
       }
       writeDisk() {
         const path2 = this.filePath();
-        mkdirSync6(dirname8(path2), { recursive: true });
+        mkdirSync7(dirname9(path2), { recursive: true });
         const file = { version: 1, workspaces: this.workspaces };
         const tmp = `${path2}.tmp`;
-        writeFileSync6(tmp, JSON.stringify(file, null, 2) + "\n");
+        writeFileSync7(tmp, JSON.stringify(file, null, 2) + "\n");
         renameSync6(tmp, path2);
       }
       /** @internal Test-only: assert the registry is loaded. */
@@ -6288,14 +6391,14 @@ var init_auth_token = __esm({
 });
 
 // packages/daemon/src/lib/app-settings.ts
-import { existsSync as existsSync16, mkdirSync as mkdirSync7, readFileSync as readFileSync11, renameSync as renameSync7, writeFileSync as writeFileSync7 } from "node:fs";
-import { dirname as dirname9, join as join11 } from "node:path";
-import { homedir as homedir9 } from "node:os";
+import { existsSync as existsSync17, mkdirSync as mkdirSync8, readFileSync as readFileSync11, renameSync as renameSync7, writeFileSync as writeFileSync8 } from "node:fs";
+import { dirname as dirname10, join as join12 } from "node:path";
+import { homedir as homedir10 } from "node:os";
 function settingsDir() {
-  return process.env.TMUX_IDE_SETTINGS_DIR ?? join11(homedir9(), ".tmux-ide");
+  return process.env.TMUX_IDE_SETTINGS_DIR ?? join12(homedir10(), ".tmux-ide");
 }
 function appSettingsPath() {
-  return join11(settingsDir(), "app-settings.json");
+  return join12(settingsDir(), "app-settings.json");
 }
 function normalizeSettings(value) {
   if (!value || typeof value !== "object") return structuredClone(DEFAULT_SETTINGS);
@@ -6308,7 +6411,7 @@ function normalizeSettings(value) {
 }
 function readAppSettings() {
   const path2 = appSettingsPath();
-  if (!existsSync16(path2)) return structuredClone(DEFAULT_SETTINGS);
+  if (!existsSync17(path2)) return structuredClone(DEFAULT_SETTINGS);
   try {
     return normalizeSettings(JSON.parse(readFileSync11(path2, "utf-8")));
   } catch {
@@ -6317,9 +6420,9 @@ function readAppSettings() {
 }
 function writeAppSettings(next) {
   const path2 = appSettingsPath();
-  mkdirSync7(dirname9(path2), { recursive: true });
+  mkdirSync8(dirname10(path2), { recursive: true });
   const tmp = `${path2}.${process.pid}.${Date.now()}.tmp`;
-  writeFileSync7(tmp, `${JSON.stringify(normalizeSettings(next), null, 2)}
+  writeFileSync8(tmp, `${JSON.stringify(normalizeSettings(next), null, 2)}
 `, "utf-8");
   renameSync7(tmp, path2);
 }
@@ -6509,16 +6612,16 @@ var init_active_projects = __esm({
 
 // packages/daemon/src/send.ts
 import { randomUUID } from "node:crypto";
-import { resolve as resolve16, join as join12 } from "node:path";
-import { existsSync as existsSync17, mkdirSync as mkdirSync8, writeFileSync as writeFileSync8 } from "node:fs";
+import { resolve as resolve16, join as join13 } from "node:path";
+import { existsSync as existsSync18, mkdirSync as mkdirSync9, writeFileSync as writeFileSync9 } from "node:fs";
 function writeDispatchFile(dir, paneId, message) {
   if (message.length <= LONG_MESSAGE_THRESHOLD) return null;
-  const dispatchDir = join12(dir, ".tasks", "dispatch");
-  if (!existsSync17(dispatchDir)) mkdirSync8(dispatchDir, { recursive: true });
+  const dispatchDir = join13(dir, ".tasks", "dispatch");
+  if (!existsSync18(dispatchDir)) mkdirSync9(dispatchDir, { recursive: true });
   const paneSlug = paneId.replace("%", "");
   const filename = `send-${paneSlug}-${Date.now()}-${randomUUID().slice(0, 8)}.md`;
-  const filePath = join12(dispatchDir, filename);
-  writeFileSync8(filePath, message);
+  const filePath = join13(dispatchDir, filename);
+  writeFileSync9(filePath, message);
   return { filePath, triggerCmd: `Read and execute: .tasks/dispatch/${filename}` };
 }
 function resolvePane(panes, target) {
@@ -6762,17 +6865,17 @@ var init_schemas = __esm({
 });
 
 // packages/daemon/src/lib/terminals-store.ts
-import { existsSync as existsSync18, mkdirSync as mkdirSync9, readFileSync as readFileSync12, renameSync as renameSync8, writeFileSync as writeFileSync9 } from "node:fs";
-import { dirname as dirname10, join as join13 } from "node:path";
+import { existsSync as existsSync19, mkdirSync as mkdirSync10, readFileSync as readFileSync12, renameSync as renameSync8, writeFileSync as writeFileSync10 } from "node:fs";
+import { dirname as dirname11, join as join14 } from "node:path";
 function path(dir) {
-  return join13(dir, TERMINALS_FILE);
+  return join14(dir, TERMINALS_FILE);
 }
 function ensureDir(dir) {
-  mkdirSync9(dirname10(path(dir)), { recursive: true });
+  mkdirSync10(dirname11(path(dir)), { recursive: true });
 }
 function loadTerminals(dir) {
   const file = path(dir);
-  if (!existsSync18(file)) return [];
+  if (!existsSync19(file)) return [];
   try {
     const body = readFileSync12(file, "utf-8");
     const parsed = JSON.parse(body);
@@ -6791,7 +6894,7 @@ function writeAtomic(dir, terminals) {
   ensureDir(dir);
   const file = path(dir);
   const tmp = `${file}.tmp`;
-  writeFileSync9(tmp, JSON.stringify({ terminals }, null, 2) + "\n");
+  writeFileSync10(tmp, JSON.stringify({ terminals }, null, 2) + "\n");
   renameSync8(tmp, file);
 }
 function upsertTerminal(dir, input) {
@@ -6853,9 +6956,9 @@ __export(auth_service_exports, {
   AuthService: () => AuthService
 });
 import * as crypto2 from "node:crypto";
-import { readFileSync as readFileSync13, existsSync as existsSync19 } from "node:fs";
-import { join as join14 } from "node:path";
-import { homedir as homedir10 } from "node:os";
+import { readFileSync as readFileSync13, existsSync as existsSync20 } from "node:fs";
+import { join as join15 } from "node:path";
+import { homedir as homedir11 } from "node:os";
 function base64url(buf) {
   const b = typeof buf === "string" ? Buffer.from(buf) : buf;
   return b.toString("base64url");
@@ -6997,9 +7100,9 @@ var init_auth_service = __esm({
       }
       checkSSHKeyAuthorization(userId, publicKey) {
         try {
-          const home = userId === process.env.USER ? homedir10() : `/home/${userId}`;
-          const authKeysPath = join14(home, ".ssh", "authorized_keys");
-          if (!existsSync19(authKeysPath)) return false;
+          const home = userId === process.env.USER ? homedir11() : `/home/${userId}`;
+          const authKeysPath = join15(home, ".ssh", "authorized_keys");
+          if (!existsSync20(authKeysPath)) return false;
           const authorizedKeys = readFileSync13(authKeysPath, "utf-8");
           const parts = publicKey.trim().split(" ");
           const keyData = parts.length > 1 ? parts[1] : parts[0];
@@ -7398,11 +7501,11 @@ var init_project_context = __esm({
 });
 
 // packages/daemon/src/command-center/actions/handlers/config-actions.ts
-import { existsSync as existsSync20 } from "node:fs";
-import { join as join15 } from "node:path";
+import { existsSync as existsSync21 } from "node:fs";
+import { join as join16 } from "node:path";
 function mutateConfigAction(input, deps2, fn) {
   const context = resolveProjectContext(input, deps2);
-  if (!existsSync20(join15(context.dir, "ide.yml"))) {
+  if (!existsSync21(join16(context.dir, "ide.yml"))) {
     throw new ActionError({
       code: "ide_yml_missing",
       message: "ide.yml was not found",
@@ -7670,7 +7773,7 @@ var init_dispatcher = __esm({
 });
 
 // packages/daemon/src/lib/project-init-runner.ts
-import { spawn as spawn3 } from "node:child_process";
+import { spawn as spawn4 } from "node:child_process";
 function lineStreamer(onChunk) {
   let pending = "";
   return {
@@ -7692,7 +7795,7 @@ function lineStreamer(onChunk) {
   };
 }
 async function runInit(options) {
-  const spawnFn = options.spawnFn ?? spawn3;
+  const spawnFn = options.spawnFn ?? spawn4;
   const command2 = options.command ?? "tmux-ide";
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const args = ["init"];
@@ -7825,8 +7928,8 @@ var init_inspect = __esm({
 
 // packages/daemon/src/lib/filesystem-browser.ts
 import { realpathSync, readdirSync as readdirSync3, statSync as statSync4 } from "node:fs";
-import { homedir as homedir11 } from "node:os";
-import { isAbsolute as isAbsolute3, join as join16, resolve as resolve18, sep } from "node:path";
+import { homedir as homedir12 } from "node:os";
+import { isAbsolute as isAbsolute3, join as join17, resolve as resolve18, sep } from "node:path";
 function isUnderRoot(canonical, root) {
   if (canonical === root) return true;
   const prefix = root.endsWith(sep) ? root : root + sep;
@@ -7855,7 +7958,7 @@ var init_filesystem_browser = __esm({
 });
 
 // packages/daemon/src/lib/project-inspect.ts
-import { existsSync as existsSync21 } from "node:fs";
+import { existsSync as existsSync22 } from "node:fs";
 import { isAbsolute as isAbsolute4, resolve as resolve19 } from "node:path";
 function narrowPackageManager(raw) {
   if (!raw) return null;
@@ -7866,7 +7969,7 @@ function inferTestCommand(packageManager) {
   return packageManager === "npm" ? "npm test" : `${packageManager} test`;
 }
 async function inspectProject(dir, io = {}) {
-  const exists = io.exists ?? existsSync21;
+  const exists = io.exists ?? existsSync22;
   const absoluteDir = isAbsolute4(dir) ? dir : resolve19(dir);
   if (!exists(absoluteDir)) {
     throw new InspectDirNotFoundError(absoluteDir);
@@ -7907,8 +8010,8 @@ var init_project_inspect = __esm({
 
 // packages/daemon/src/lib/project-onboard.ts
 import yaml2 from "js-yaml";
-import { existsSync as existsSync22 } from "node:fs";
-import { join as join17 } from "node:path";
+import { existsSync as existsSync23 } from "node:fs";
+import { join as join18 } from "node:path";
 function composeIdeYmlConfig(input) {
   if (!Number.isInteger(input.agents) || input.agents < 1 || input.agents > 3) {
     throw new OnboardInvalidInputError(
@@ -7966,8 +8069,8 @@ function composeIdeYmlConfig(input) {
   }
   return config2;
 }
-function assertNoExistingIdeYml(dir, exists = existsSync22) {
-  const path2 = join17(dir, "ide.yml");
+function assertNoExistingIdeYml(dir, exists = existsSync23) {
+  const path2 = join18(dir, "ide.yml");
   if (exists(path2)) {
     throw new OnboardConflictError(path2);
   }
@@ -8002,20 +8105,20 @@ __export(server_exports, {
 });
 import { execFile as execFile2 } from "node:child_process";
 import { promisify } from "node:util";
-import { existsSync as existsSync23, readFileSync as readFileSync14, readdirSync as readdirSync4 } from "node:fs";
-import { join as join18, dirname as dirname11, basename as basename8 } from "node:path";
+import { existsSync as existsSync24, readFileSync as readFileSync14, readdirSync as readdirSync4 } from "node:fs";
+import { join as join19, dirname as dirname12, basename as basename8 } from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { cors } from "hono/cors";
 import { zValidator } from "@hono/zod-validator";
 import { realpathSync as realpathSync2 } from "node:fs";
-import { homedir as homedir12 } from "node:os";
+import { homedir as homedir13 } from "node:os";
 import { isAbsolute as isAbsolute5, resolve as pathResolve } from "node:path";
 import { randomUUID as randomUUID3 } from "node:crypto";
 import { WebSocketServer } from "ws";
 function resolvePackageVersion() {
-  const candidates = [join18(__dirname4, "../../package.json"), join18(__dirname4, "../package.json")];
+  const candidates = [join19(__dirname4, "../../package.json"), join19(__dirname4, "../package.json")];
   for (const candidate of candidates) {
     try {
       const parsed = JSON.parse(readFileSync14(candidate, "utf-8"));
@@ -8082,7 +8185,7 @@ function sandboxResolveDir(rawDir) {
   if (trimmed.includes("\0")) {
     return { error: "invalid-path", message: "Path contains a null byte", status: 400 };
   }
-  const home = process.env.TMUX_IDE_HOME_OVERRIDE && process.env.TMUX_IDE_HOME_OVERRIDE.trim().length > 0 ? process.env.TMUX_IDE_HOME_OVERRIDE : homedir12();
+  const home = process.env.TMUX_IDE_HOME_OVERRIDE && process.env.TMUX_IDE_HOME_OVERRIDE.trim().length > 0 ? process.env.TMUX_IDE_HOME_OVERRIDE : homedir13();
   let candidate = trimmed;
   if (candidate === "~") {
     candidate = home;
@@ -8752,7 +8855,7 @@ function createApp(options = {}) {
     if (!parsed.success) {
       return c.json({ error: "Invalid request", details: parsed.error.issues }, 400);
     }
-    if (!existsSync23(parsed.data.dir)) {
+    if (!existsSync24(parsed.data.dir)) {
       return c.json({ error: `Directory "${parsed.data.dir}" does not exist` }, 400);
     }
     const jobId = randomUUID3();
@@ -8858,9 +8961,9 @@ function createApp(options = {}) {
 }
 function listAvailableTemplates() {
   const __filename = fileURLToPath4(import.meta.url);
-  const __dir = dirname11(__filename);
-  const templatesDir = join18(__dir, "..", "..", "..", "..", "templates");
-  if (!existsSync23(templatesDir)) return [];
+  const __dir = dirname12(__filename);
+  const templatesDir = join19(__dir, "..", "..", "..", "..", "templates");
+  if (!existsSync24(templatesDir)) return [];
   const labels = {
     default: { label: "Default", description: "Single Claude pane + dev/shell row" },
     nextjs: {
@@ -8904,11 +9007,11 @@ function listAvailableTemplates() {
 }
 function attachWsEvents(server) {
   const wss = new WebSocketServer({ noServer: true });
-  const upgradeListener = (req, socket, head2) => {
+  const upgradeListener = (req, socket, head3) => {
     const url = req.url ?? "/";
     const pathname = url.split("?")[0];
     if (pathname !== "/ws/events") return;
-    wss.handleUpgrade(req, socket, head2, (ws) => {
+    wss.handleUpgrade(req, socket, head3, (ws) => {
       handleWsEventsConnection(ws);
     });
   };
@@ -8949,7 +9052,7 @@ var init_server = __esm({
     init_filesystem_browser();
     init_project_inspect();
     init_project_onboard();
-    __dirname4 = dirname11(fileURLToPath4(import.meta.url));
+    __dirname4 = dirname12(fileURLToPath4(import.meta.url));
     pkgVersion = resolvePackageVersion();
     projectStreamConnections = 0;
     sseMetrics = {
@@ -9092,8 +9195,8 @@ function isUpgradeAuthorized(req, token, localBypassToken, bindHostname) {
   const supplied = requestToken(req);
   return supplied === token || localBypassToken != null && supplied === localBypassToken;
 }
-function rejectUpgradeWithPolicy(wss, req, socket, head2) {
-  wss.handleUpgrade(req, socket, head2, (ws) => {
+function rejectUpgradeWithPolicy(wss, req, socket, head3) {
+  wss.handleUpgrade(req, socket, head3, (ws) => {
     ws.close(1008, "Remote access token required");
   });
 }
@@ -9106,14 +9209,14 @@ function attachWebSockets(server, opts = {}) {
     ws.on("close", () => clients.delete(ws));
     ws.on("error", () => clients.delete(ws));
   };
-  const upgradeListener = (req, socket, head2) => {
+  const upgradeListener = (req, socket, head3) => {
     const pathname = (req.url ?? "/").split("?")[0] ?? "/";
     if ((pathname === "/ws/events" || pathname.startsWith("/ws/pty/")) && !isUpgradeAuthorized(req, opts.authToken, opts.localBypassToken, opts.bindHostname)) {
-      rejectUpgradeWithPolicy(pathname === "/ws/events" ? eventsWss : ptyWss, req, socket, head2);
+      rejectUpgradeWithPolicy(pathname === "/ws/events" ? eventsWss : ptyWss, req, socket, head3);
       return;
     }
     if (pathname === "/ws/events") {
-      eventsWss.handleUpgrade(req, socket, head2, (ws) => {
+      eventsWss.handleUpgrade(req, socket, head3, (ws) => {
         track(ws);
         handleWsEventsConnection(ws);
       });
@@ -9122,7 +9225,7 @@ function attachWebSockets(server, opts = {}) {
     const ptyMatch = pathname.match(/^\/ws\/pty\/([^/]+)$/);
     if (ptyMatch) {
       const id = decodeURIComponent(ptyMatch[1]);
-      ptyWss.handleUpgrade(req, socket, head2, (ws) => {
+      ptyWss.handleUpgrade(req, socket, head3, (ws) => {
         track(ws);
         handlePtyWebSocket(ws, id);
       });
@@ -10388,55 +10491,55 @@ function buildReport(target) {
 function renderReport(r, opts = {}) {
   const color2 = opts.color ?? !("NO_COLOR" in process.env);
   const c = (code, s) => color2 ? `${code}${s}\x1B[0m` : s;
-  const bold3 = (s) => c("\x1B[1m", s);
-  const dim3 = (s) => c("\x1B[2m", s);
+  const bold4 = (s) => c("\x1B[1m", s);
+  const dim4 = (s) => c("\x1B[2m", s);
   const label = (s) => c("\x1B[36m", s);
   const status2 = (s) => c(STATUS_COLOR[s] ?? "", s);
-  const yesno = (v) => v ? c("\x1B[32m", "yes") : dim3("no");
+  const yesno = (v) => v ? c("\x1B[32m", "yes") : dim4("no");
   const out = [];
-  out.push(bold3(`agent explain \u2014 ${r.pane.id}`));
-  out.push(`  ${label("command")}   ${r.pane.cmd}  ${dim3(`(pid ${r.pane.pid})`)}`);
+  out.push(bold4(`agent explain \u2014 ${r.pane.id}`));
+  out.push(`  ${label("command")}   ${r.pane.cmd}  ${dim4(`(pid ${r.pane.pid})`)}`);
   if (r.pane.title) out.push(`  ${label("title")}     ${r.pane.title}`);
   if (r.authority.raw) {
-    const age = r.authority.ageSeconds !== null ? ` ${dim3(`(${r.authority.ageSeconds}s ago)`)}` : "";
+    const age = r.authority.ageSeconds !== null ? ` ${dim4(`(${r.authority.ageSeconds}s ago)`)}` : "";
     const staleTag = r.authority.stale ? " " + c("\x1B[31m", "[STALE \u2192 ignored]") : "";
-    const verdict = r.authority.verdict ? status2(r.authority.verdict) : dim3("none (stale/malformed)");
+    const verdict = r.authority.verdict ? status2(r.authority.verdict) : dim4("none (stale/malformed)");
     out.push(`  ${label("authority")} ${r.authority.raw}${age}${staleTag} \u2192 ${verdict}`);
   } else {
-    out.push(`  ${label("authority")} ${dim3("(unset \u2014 falling back to scraping)")}`);
+    out.push(`  ${label("authority")} ${dim4("(unset \u2014 falling back to scraping)")}`);
   }
   if (r.hint.raw) {
     out.push(
       `  ${label("hint")}      @agent_hint=${r.hint.raw} \u2192 ${yesno(r.hint.applied)} applied`
     );
   } else {
-    out.push(`  ${label("hint")}      ${dim3("(unset)")}`);
+    out.push(`  ${label("hint")}      ${dim4("(unset)")}`);
   }
-  const mid = r.resolution.manifestId ?? dim3("none");
+  const mid = r.resolution.manifestId ?? dim4("none");
   out.push(
-    `  ${label("manifest")}  ${mid}  ${dim3(`via ${r.resolution.source}` + (r.resolution.matchedCommand ? ` "${r.resolution.matchedCommand}"` : ""))}`
+    `  ${label("manifest")}  ${mid}  ${dim4(`via ${r.resolution.source}` + (r.resolution.matchedCommand ? ` "${r.resolution.matchedCommand}"` : ""))}`
   );
   out.push("");
-  out.push(bold3("  state rules"));
+  out.push(bold4("  state rules"));
   if (r.states.length === 0) {
-    out.push(`    ${dim3("(no manifest resolved \u2014 nothing to evaluate)")}`);
+    out.push(`    ${dim4("(no manifest resolved \u2014 nothing to evaluate)")}`);
   } else {
     for (const s of r.states) {
-      const mark = s.matched ? c("\x1B[32m", "\u2713 matched") : dim3("\xB7 no match");
+      const mark = s.matched ? c("\x1B[32m", "\u2713 matched") : dim4("\xB7 no match");
       const win = r.winner === s.state ? "  " + c("\x1B[1m", "\u2190 winner") : "";
       out.push(`    ${s.state.padEnd(8)} ${mark}${win}`);
     }
   }
   out.push("");
   out.push(
-    `  ${bold3("classification")}  ${status2(r.classification)}  ${dim3(`(instant: ${r.instant})`)}`
+    `  ${bold4("classification")}  ${status2(r.classification)}  ${dim4(`(instant: ${r.instant})`)}`
   );
   out.push("");
-  out.push(bold3("  bottom 5 lines judged"));
+  out.push(bold4("  bottom 5 lines judged"));
   if (r.bottomLines.length === 0) {
-    out.push(`    ${dim3("(empty capture)")}`);
+    out.push(`    ${dim4("(empty capture)")}`);
   } else {
-    for (const line of r.bottomLines) out.push(`    ${dim3("\u2502")} ${line}`);
+    for (const line of r.bottomLines) out.push(`    ${dim4("\u2502")} ${line}`);
   }
   return out.join("\n");
 }
@@ -10489,14 +10592,14 @@ __export(claude_exports, {
   removeHooks: () => removeHooks,
   uninstallClaudeIntegration: () => uninstallClaudeIntegration
 });
-import { chmodSync as chmodSync2, copyFileSync as copyFileSync2, existsSync as existsSync24, mkdirSync as mkdirSync10, readFileSync as readFileSync15, writeFileSync as writeFileSync10 } from "node:fs";
-import { homedir as homedir13 } from "node:os";
-import { dirname as dirname12, join as join19 } from "node:path";
+import { chmodSync as chmodSync2, copyFileSync as copyFileSync2, existsSync as existsSync25, mkdirSync as mkdirSync11, readFileSync as readFileSync15, writeFileSync as writeFileSync11 } from "node:fs";
+import { homedir as homedir14 } from "node:os";
+import { dirname as dirname13, join as join20 } from "node:path";
 function hookScriptPath() {
-  return join19(homedir13(), HOOK_SCRIPT_RELPATH);
+  return join20(homedir14(), HOOK_SCRIPT_RELPATH);
 }
 function claudeSettingsPath() {
-  return join19(homedir13(), ".claude", "settings.json");
+  return join20(homedir14(), ".claude", "settings.json");
 }
 function isOurs(group) {
   return group.hooks?.some((h) => h.command?.includes(HOOK_SCRIPT_RELPATH)) ?? false;
@@ -10529,7 +10632,7 @@ function isInstalled(settings) {
   return Object.values(settings.hooks ?? {}).some((groups) => groups.some(isOurs));
 }
 function readSettings(path2) {
-  if (!existsSync24(path2)) return {};
+  if (!existsSync25(path2)) return {};
   try {
     return JSON.parse(readFileSync15(path2, "utf8"));
   } catch {
@@ -10538,15 +10641,15 @@ function readSettings(path2) {
 }
 function installClaudeIntegration() {
   const script = hookScriptPath();
-  mkdirSync10(dirname12(script), { recursive: true });
-  writeFileSync10(script, HOOK_SCRIPT, "utf8");
+  mkdirSync11(dirname13(script), { recursive: true });
+  writeFileSync11(script, HOOK_SCRIPT, "utf8");
   chmodSync2(script, 493);
   const settingsPath = claudeSettingsPath();
-  mkdirSync10(dirname12(settingsPath), { recursive: true });
+  mkdirSync11(dirname13(settingsPath), { recursive: true });
   const settings = readSettings(settingsPath);
   const backup = `${settingsPath}.tmux-ide.bak`;
-  if (existsSync24(settingsPath) && !existsSync24(backup)) copyFileSync2(settingsPath, backup);
-  writeFileSync10(settingsPath, `${JSON.stringify(mergeHooks(settings, script), null, 2)}
+  if (existsSync25(settingsPath) && !existsSync25(backup)) copyFileSync2(settingsPath, backup);
+  writeFileSync11(settingsPath, `${JSON.stringify(mergeHooks(settings, script), null, 2)}
 `, "utf8");
   return { scriptPath: script, settingsPath };
 }
@@ -10555,7 +10658,7 @@ function uninstallClaudeIntegration() {
   const settings = readSettings(settingsPath);
   const wasInstalled = isInstalled(settings);
   if (wasInstalled) {
-    writeFileSync10(settingsPath, `${JSON.stringify(removeHooks(settings), null, 2)}
+    writeFileSync11(settingsPath, `${JSON.stringify(removeHooks(settings), null, 2)}
 `, "utf8");
   }
   return { settingsPath, wasInstalled };
@@ -10563,7 +10666,7 @@ function uninstallClaudeIntegration() {
 function claudeIntegrationStatus() {
   return {
     installed: isInstalled(readSettings(claudeSettingsPath())),
-    scriptExists: existsSync24(hookScriptPath())
+    scriptExists: existsSync25(hookScriptPath())
   };
 }
 var HOOK_SCRIPT_RELPATH, HOOK_SCRIPT, EVENT_STATES;
@@ -10607,7 +10710,7 @@ __export(worktree_exports, {
   worktreeSessionName: () => worktreeSessionName
 });
 import { execFileSync as execFileSync10 } from "node:child_process";
-import { basename as basename9, dirname as dirname13, isAbsolute as isAbsolute6, join as join20, resolve as resolve21 } from "node:path";
+import { basename as basename9, dirname as dirname14, isAbsolute as isAbsolute6, join as join21, resolve as resolve21 } from "node:path";
 function sanitizeForTmux(part) {
   return part.replace(/[.:/\s]+/g, "-");
 }
@@ -10616,11 +10719,11 @@ function worktreeSessionName(project, branch) {
 }
 function defaultWorktreeBaseDir(repoDir) {
   const abs = resolve21(repoDir);
-  return join20(dirname13(abs), `${basename9(abs)}-worktrees`);
+  return join21(dirname14(abs), `${basename9(abs)}-worktrees`);
 }
 function worktreePath(repoDir, branch, configuredDir) {
   const base = configuredDir && configuredDir.length > 0 ? isAbsolute6(configuredDir) ? configuredDir : resolve21(repoDir, configuredDir) : defaultWorktreeBaseDir(repoDir);
-  return join20(base, branch);
+  return join21(base, branch);
 }
 function parseWorktreeList(porcelain) {
   const entries = [];
@@ -10813,7 +10916,7 @@ async function start(port) {
   const app = createApp2();
   const server = createServer3(getRequestListener2(app.fetch));
   const ptyWss = new WebSocketServer3({ noServer: true });
-  server.on("upgrade", (req, socket, head2) => {
+  server.on("upgrade", (req, socket, head3) => {
     const { pathname } = parse(req.url ?? "/", true);
     const match = pathname?.match(/^\/ws\/pty\/([^/]+)$/);
     if (!match) {
@@ -10821,7 +10924,7 @@ async function start(port) {
       return;
     }
     const id = decodeURIComponent(match[1] ?? "");
-    ptyWss.handleUpgrade(req, socket, head2, (ws) => {
+    ptyWss.handleUpgrade(req, socket, head3, (ws) => {
       handlePtyWebSocket(ws, id);
     });
   });
@@ -10855,9 +10958,9 @@ var init_server2 = __esm({
 // bin/cli.ts
 init_launch();
 import { parseArgs } from "node:util";
-import { resolve as resolve22, dirname as dirname14, join as join21 } from "node:path";
+import { resolve as resolve22, dirname as dirname15, join as join22 } from "node:path";
 import { execFileSync as execFileSync11 } from "node:child_process";
-import { existsSync as existsSync25 } from "node:fs";
+import { existsSync as existsSync26 } from "node:fs";
 import { fileURLToPath as fileURLToPath5 } from "node:url";
 
 // packages/daemon/src/tui/team/entry.ts
@@ -10869,48 +10972,48 @@ function shouldOpenCockpit(hasIdeYml, teamFlag) {
 init_detect();
 init_output();
 import {
-  existsSync as existsSync11,
+  existsSync as existsSync12,
   readFileSync as readFileSync9,
-  writeFileSync as writeFileSync5,
+  writeFileSync as writeFileSync6,
   renameSync as renameSync5,
-  mkdirSync as mkdirSync5,
+  mkdirSync as mkdirSync6,
   readdirSync as readdirSync2,
   copyFileSync
 } from "node:fs";
-import { resolve as resolve10, join as join8, basename as basename5, dirname as dirname6 } from "node:path";
+import { resolve as resolve10, join as join9, basename as basename5, dirname as dirname7 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
-var __dirname3 = dirname6(fileURLToPath3(import.meta.url));
+var __dirname3 = dirname7(fileURLToPath3(import.meta.url));
 function copyTemplateSkills(targetDir) {
   const created = [];
   const templateSkillsDir = resolve10(__dirname3, "..", "..", "..", "templates", "skills");
-  if (!existsSync11(templateSkillsDir)) return created;
-  mkdirSync5(targetDir, { recursive: true });
+  if (!existsSync12(templateSkillsDir)) return created;
+  mkdirSync6(targetDir, { recursive: true });
   for (const file of readdirSync2(templateSkillsDir)) {
     if (!file.endsWith(".md")) continue;
-    const destination = join8(targetDir, file);
-    copyFileSync(join8(templateSkillsDir, file), destination);
+    const destination = join9(targetDir, file);
+    copyFileSync(join9(templateSkillsDir, file), destination);
     created.push(destination);
   }
   return created;
 }
 function scaffoldLibraryStubs(dir) {
   const created = [];
-  const libraryDir = join8(dir, ".tmux-ide", "library");
-  if (!existsSync11(libraryDir)) {
-    mkdirSync5(libraryDir, { recursive: true });
+  const libraryDir = join9(dir, ".tmux-ide", "library");
+  if (!existsSync12(libraryDir)) {
+    mkdirSync6(libraryDir, { recursive: true });
     created.push(libraryDir);
   }
-  const archPath = join8(libraryDir, "architecture.md");
-  if (!existsSync11(archPath)) {
-    writeFileSync5(
+  const archPath = join9(libraryDir, "architecture.md");
+  if (!existsSync12(archPath)) {
+    writeFileSync6(
       archPath,
       "# Architecture\n\n<!-- Describe your project's architecture here. This context is injected into agent dispatch prompts. -->\n"
     );
     created.push(archPath);
   }
-  const learningsPath = join8(libraryDir, "learnings.md");
-  if (!existsSync11(learningsPath)) {
-    writeFileSync5(
+  const learningsPath = join9(libraryDir, "learnings.md");
+  if (!existsSync12(learningsPath)) {
+    writeFileSync6(
       learningsPath,
       "# Learnings\n\n<!-- Task summaries are automatically appended here by the orchestrator. -->\n"
     );
@@ -10920,13 +11023,13 @@ function scaffoldLibraryStubs(dir) {
 }
 function scaffoldValidationContract(dir) {
   const created = [];
-  const tasksDir = join8(dir, ".tasks");
-  if (!existsSync11(tasksDir)) {
-    mkdirSync5(tasksDir, { recursive: true });
+  const tasksDir = join9(dir, ".tasks");
+  if (!existsSync12(tasksDir)) {
+    mkdirSync6(tasksDir, { recursive: true });
   }
-  const contractPath = join8(tasksDir, "validation-contract.md");
-  if (!existsSync11(contractPath)) {
-    writeFileSync5(
+  const contractPath = join9(tasksDir, "validation-contract.md");
+  if (!existsSync12(contractPath)) {
+    writeFileSync6(
       contractPath,
       "# Validation Contract\n\n<!-- Define assertions that the validator agent will verify. Example: -->\n<!-- - VAL-001: All tests pass -->\n<!-- - VAL-002: No TypeScript errors -->\n<!-- - VAL-003: Lint passes with zero warnings -->\n"
     );
@@ -10937,11 +11040,11 @@ function scaffoldValidationContract(dir) {
 function scaffoldAgentsMd(dir, name) {
   const created = [];
   const agentsTemplatePath = resolve10(__dirname3, "..", "..", "..", "templates", "AGENTS.md");
-  if (existsSync11(agentsTemplatePath)) {
-    const agentsPath = join8(dir, "AGENTS.md");
-    if (!existsSync11(agentsPath)) {
+  if (existsSync12(agentsTemplatePath)) {
+    const agentsPath = join9(dir, "AGENTS.md");
+    if (!existsSync12(agentsPath)) {
       const content = readFileSync9(agentsTemplatePath, "utf-8").replace(/{{name}}/g, name);
-      writeFileSync5(agentsPath, content);
+      writeFileSync6(agentsPath, content);
       created.push(agentsPath);
     }
   }
@@ -10959,7 +11062,7 @@ function scaffoldTeamWorkspace(dir, name) {
 }
 function scaffoldMissionsWorkspace(dir, name) {
   const created = [];
-  const skillsDir = join8(dir, ".tmux-ide", "skills");
+  const skillsDir = join9(dir, ".tmux-ide", "skills");
   created.push(...copyTemplateSkills(skillsDir));
   created.push(...scaffoldTeamWorkspace(dir, name));
   return created;
@@ -10970,30 +11073,30 @@ async function init({
 } = {}) {
   const dir = process.cwd();
   const configPath = resolve10(dir, "ide.yml");
-  if (existsSync11(configPath)) {
+  if (existsSync12(configPath)) {
     outputError("ide.yml already exists in this directory", "EXISTS");
   }
   if (template) {
     const templatePath = resolve10(__dirname3, "..", "..", "..", "templates", `${template}.yml`);
-    if (!existsSync11(templatePath)) {
+    if (!existsSync12(templatePath)) {
       outputError(`Template "${template}" not found`, "NOT_FOUND");
     }
     let content = readFileSync9(templatePath, "utf-8");
     const name2 = basename5(dir);
     content = content.replace(/^name: .+/m, `name: ${name2}`);
     const tmpPath = configPath + ".tmp";
-    writeFileSync5(tmpPath, content);
+    writeFileSync6(tmpPath, content);
     renameSync5(tmpPath, configPath);
     let created;
     if (template === "missions") {
       created = scaffoldMissionsWorkspace(dir, name2);
     } else if (isTeamTemplate(template)) {
       created = [
-        ...copyTemplateSkills(join8(dir, ".tmux-ide", "skills")),
+        ...copyTemplateSkills(join9(dir, ".tmux-ide", "skills")),
         ...scaffoldTeamWorkspace(dir, name2)
       ];
     } else {
-      created = copyTemplateSkills(join8(dir, ".tmux-ide", "skills"));
+      created = copyTemplateSkills(join9(dir, ".tmux-ide", "skills"));
     }
     if (json2) {
       console.log(JSON.stringify({ created: true, template, name: name2, paths: created }));
@@ -11013,7 +11116,7 @@ async function init({
     const config2 = suggestConfig(dir, detected);
     const yaml3 = (await import("js-yaml")).default;
     const tmpPath2 = configPath + ".tmp";
-    writeFileSync5(tmpPath2, yaml3.dump(config2, { lineWidth: -1, noRefs: true, quotingType: '"' }));
+    writeFileSync6(tmpPath2, yaml3.dump(config2, { lineWidth: -1, noRefs: true, quotingType: '"' }));
     renameSync5(tmpPath2, configPath);
     const desc = detected.frameworks.join(" + ");
     if (json2) {
@@ -11028,7 +11131,7 @@ async function init({
     let content = readFileSync9(templatePath, "utf-8");
     content = content.replace(/^name: .+/m, `name: ${name}`);
     const tmpPath3 = configPath + ".tmp";
-    writeFileSync5(tmpPath3, content);
+    writeFileSync6(tmpPath3, content);
     renameSync5(tmpPath3, configPath);
     if (json2) {
       console.log(JSON.stringify({ created: true, template: "default", name }));
@@ -11039,8 +11142,8 @@ async function init({
       console.log("Edit it to configure your workspace, then run: tmux-ide");
     }
   }
-  const skillsDir = join8(dir, ".tmux-ide", "skills");
-  if (!existsSync11(skillsDir)) {
+  const skillsDir = join9(dir, ".tmux-ide", "skills");
+  if (!existsSync12(skillsDir)) {
     const created = copyTemplateSkills(skillsDir);
     if (created.length > 0 && !json2) {
       console.log("Copied built-in skill templates to .tmux-ide/skills/");
@@ -11124,7 +11227,7 @@ async function ls({ json: json2 } = {}) {
 
 // packages/daemon/src/doctor.ts
 import { execSync as execSync3 } from "node:child_process";
-import { existsSync as existsSync12 } from "node:fs";
+import { existsSync as existsSync13 } from "node:fs";
 import { resolve as resolve13 } from "node:path";
 function check(label, fn, { optional = false } = {}) {
   try {
@@ -11175,7 +11278,7 @@ async function doctor({
   checks.push(
     check("ide.yml exists", () => {
       const path2 = resolve13(".", "ide.yml");
-      if (!existsSync12(path2)) throw new Error("not found in current directory");
+      if (!existsSync13(path2)) throw new Error("not found in current directory");
       return "found";
     })
   );
@@ -11239,11 +11342,11 @@ init_yaml_io();
 init_src();
 init_canonical_daemon();
 import { resolve as resolve14 } from "node:path";
-import { existsSync as existsSync13 } from "node:fs";
+import { existsSync as existsSync14 } from "node:fs";
 async function status(targetDir, { json: json2 } = {}) {
   const dir = resolve14(targetDir ?? ".");
   const { name: session } = getSessionName(dir);
-  const configExists = existsSync13(resolve14(dir, "ide.yml"));
+  const configExists = existsSync14(resolve14(dir, "ide.yml"));
   const state = getSessionState(session);
   const running = state.running;
   let panes = [];
@@ -11695,7 +11798,7 @@ function reportPlan(plan, snapshot, { json: json2, dryRun, restored, launched, r
 init_send();
 init_errors2();
 init_output();
-var __dirname5 = dirname14(fileURLToPath5(import.meta.url));
+var __dirname5 = dirname15(fileURLToPath5(import.meta.url));
 var { positionals, values } = parseArgs({
   allowPositionals: true,
   strict: false,
@@ -11739,6 +11842,8 @@ var { positionals, values } = parseArgs({
     active: { type: "string" },
     // switcher: the tmux client the popup was invoked on (see `switcher` case)
     client: { type: "string" },
+    // team --popup: run the home cockpit as a popup over a tmux client (M-h)
+    popup: { type: "boolean" },
     // sidebar-toggle: the session whose nav column is toggled (see `sidebar-toggle`)
     session: { type: "string" },
     // menu: the click position (mouse binds forward #{mouse_x}/#{mouse_y}) so the
@@ -11781,6 +11886,7 @@ var knownCommands = /* @__PURE__ */ new Set([
   "integration",
   "chrome-updater",
   "cheatsheet",
+  "welcome",
   "menu",
   "popup",
   "sidebar-toggle",
@@ -11804,84 +11910,92 @@ var command = hasKnownCommand ? resolved : "start";
 var startTargetDir = hasKnownCommand ? positionals[1] : firstPositional;
 var json = values.json ?? false;
 var noColor = "NO_COLOR" in process.env;
-var bold2 = (s) => noColor ? s : `\x1B[1m${s}\x1B[22m`;
+var bold3 = (s) => noColor ? s : `\x1B[1m${s}\x1B[22m`;
 var cyan2 = (s) => noColor ? s : `\x1B[36m${s}\x1B[39m`;
-var dim2 = (s) => noColor ? s : `\x1B[2m${s}\x1B[22m`;
+var dim3 = (s) => noColor ? s : `\x1B[2m${s}\x1B[22m`;
 if (values.help) {
   printHelp();
   process.exit(0);
 }
 function printHelp() {
-  console.log(`${bold2("tmux-ide")} \u2014 Terminal IDE powered by tmux
+  console.log(`${bold3("tmux-ide")} \u2014 Terminal IDE powered by tmux
 
-${bold2("Usage:")}
-  ${cyan2("tmux-ide")}                    ${dim2("Launch ide.yml, or open the team cockpit if none")}
-  ${cyan2("tmux-ide <path>")}             ${dim2("Launch from a specific directory (cockpit if no ide.yml)")}
-  ${cyan2("tmux-ide setup")}              ${dim2("Interactive TUI setup wizard")}
-  ${cyan2("tmux-ide setup --edit")}       ${dim2("Open config tree editor")}
-  ${cyan2("tmux-ide settings")}           ${dim2("Interactive TUI config manager")}
-  ${cyan2("tmux-ide init")} [--template]  ${dim2("Scaffold a new ide.yml (auto-detects stack)")}
-  ${cyan2("tmux-ide stop")}               ${dim2("Kill the current IDE session")}
-  ${cyan2("tmux-ide restart")}            ${dim2("Stop and relaunch the IDE session")}
+${bold3("Usage:")}
+  ${cyan2("tmux-ide")}                    ${dim3("Launch ide.yml, or open the team cockpit if none")}
+  ${cyan2("tmux-ide <path>")}             ${dim3("Launch from a specific directory (cockpit if no ide.yml)")}
+  ${cyan2("tmux-ide setup")}              ${dim3("Interactive TUI setup wizard")}
+  ${cyan2("tmux-ide setup --edit")}       ${dim3("Open config tree editor")}
+  ${cyan2("tmux-ide settings")}           ${dim3("Interactive TUI config manager")}
+  ${cyan2("tmux-ide init")} [--template]  ${dim3("Scaffold a new ide.yml (auto-detects stack)")}
+  ${cyan2("tmux-ide stop")}               ${dim3("Kill the current IDE session")}
+  ${cyan2("tmux-ide restart")}            ${dim3("Stop and relaunch the IDE session")}
   ${cyan2("tmux-ide restore")} [--dry-run] [--run-commands] [--resume-agents] [--json]
-                              ${dim2("Rebuild the fleet from the last snapshot after a tmux crash")}
-                              ${dim2("(--resume-agents revives claude conversations via claude --resume)")}
-  ${cyan2("tmux-ide attach")}             ${dim2("Reattach to a running session")}
-  ${cyan2("tmux-ide team")} [--json]      ${dim2("TUI over all tmux sessions (--json prints fleet state)")}
-  ${cyan2("tmux-ide switcher")}           ${dim2("Compact session picker (opens in the M-p popup on adopted sessions)")}
+                              ${dim3("Rebuild the fleet from the last snapshot after a tmux crash")}
+                              ${dim3("(--resume-agents revives claude conversations via claude --resume)")}
+  ${cyan2("tmux-ide attach")}             ${dim3("Reattach to a running session")}
+  ${cyan2("tmux-ide team")} [--json]      ${dim3("TUI over all tmux sessions (--json prints fleet state)")}
+  ${cyan2("tmux-ide switcher")}           ${dim3("Compact session picker (opens in the M-p popup on adopted sessions)")}
   ${cyan2("tmux-ide wait agent-status")} <session> --status <s> [--timeout <ms>]
-                              ${dim2("Block until a session reaches a status (exit 0 match / 1 timeout)")}
+                              ${dim3("Block until a session reaches a status (exit 0 match / 1 timeout)")}
   ${cyan2("tmux-ide wait output")} <pane|session> --match <regex> [--timeout <ms>]
-                              ${dim2("Block until a pane's output matches a regex (exit 0 match / 1 timeout)")}
-  ${cyan2("tmux-ide events")} [--follow] [--json]  ${dim2("Stream agent-status transitions (needs an adopted session)")}
-  ${cyan2("tmux-ide adopt")} <session>    ${dim2("Add the live tmux-ide status bar to a session")}
-  ${cyan2("tmux-ide adopt --all")}        ${dim2("Adopt every live (non-internal) session")}
-  ${cyan2("tmux-ide unadopt")} <session>  ${dim2("Remove the status bar")}
-  ${cyan2("tmux-ide integration install claude")}  ${dim2("Authoritative agent status via Claude Code hooks")}
-  ${cyan2("tmux-ide agent explain")} <pane> [--json]  ${dim2("Debug how a pane's agent state is detected")}
-  ${cyan2("tmux-ide cheatsheet")}         ${dim2("Print the key cheat sheet (\u2325k / [ ? keys ] popup)")}
-  ${cyan2("tmux-ide menu")} [--client N]  ${dim2("Open the right-click actions menu (\u2325m / right-click any pane or the bar)")}
-  ${cyan2("tmux-ide popup")} <widget>     ${dim2("Open a widget as a floating panel (explorer/changes/config; \u2325e/\u2325g/\u2325,)")}
-  ${cyan2("tmux-ide sidebar-toggle")} [--session S]  ${dim2("Toggle the app nav column (\u2325b on adopted sessions)")}
+                              ${dim3("Block until a pane's output matches a regex (exit 0 match / 1 timeout)")}
+  ${cyan2("tmux-ide events")} [--follow] [--json]  ${dim3("Stream agent-status transitions (needs an adopted session)")}
+  ${cyan2("tmux-ide adopt")} <session>    ${dim3("Add the live tmux-ide status bar to a session")}
+  ${cyan2("tmux-ide adopt --all")}        ${dim3("Adopt every live (non-internal) session")}
+  ${cyan2("tmux-ide unadopt")} <session>  ${dim3("Remove the status bar")}
+  ${cyan2("tmux-ide integration install claude")}  ${dim3("Authoritative agent status via Claude Code hooks")}
+  ${cyan2("tmux-ide agent explain")} <pane> [--json]  ${dim3("Debug how a pane's agent state is detected")}
+  ${cyan2("tmux-ide cheatsheet")}         ${dim3("Print the key cheat sheet (\u2325k / [ ? keys ] popup)")}
+  ${cyan2("tmux-ide menu")} [--client N]  ${dim3("Open the right-click actions menu (\u2325m / right-click any pane or the bar)")}
+  ${cyan2("tmux-ide popup")} <widget>     ${dim3("Open a widget as a floating panel (explorer/changes/config; \u2325e/\u2325g/\u2325,)")}
+  ${cyan2("tmux-ide sidebar-toggle")} [--session S]  ${dim3("Toggle the app nav column (\u2325b on adopted sessions)")}
   ${cyan2("tmux-ide worktree create")} <branch> [--from <ref>] [--dir <path>] [--no-session]
-                              ${dim2("Add a git worktree (new branch) + open a session in it")}
-  ${cyan2("tmux-ide worktree open")} <branch>    ${dim2("Open (or switch to) the session for an existing worktree")}
-  ${cyan2("tmux-ide worktree list")} [--json]    ${dim2("List worktrees joined with their session status")}
-  ${cyan2("tmux-ide worktree remove")} <branch> [--force]  ${dim2("Kill the worktree's session + remove the worktree")}
-  ${cyan2("tmux-ide ls")}                 ${dim2("List all tmux sessions")}
-  ${cyan2("tmux-ide status")} [--json]    ${dim2("Show session status")}
-  ${cyan2("tmux-ide inspect")} [--json]   ${dim2("Show effective config and runtime state")}
-  ${cyan2("tmux-ide doctor")}             ${dim2("Check system requirements")}
-  ${cyan2("tmux-ide validate")} [--json]  ${dim2("Validate ide.yml")}
-  ${cyan2("tmux-ide detect")} [--json]    ${dim2("Detect project stack")}
-  ${cyan2("tmux-ide detect --write")}     ${dim2("Detect and write ide.yml")}
-  ${cyan2("tmux-ide config")} [--json]    ${dim2("Dump config as JSON")}
+                              ${dim3("Add a git worktree (new branch) + open a session in it")}
+  ${cyan2("tmux-ide worktree open")} <branch>    ${dim3("Open (or switch to) the session for an existing worktree")}
+  ${cyan2("tmux-ide worktree list")} [--json]    ${dim3("List worktrees joined with their session status")}
+  ${cyan2("tmux-ide worktree remove")} <branch> [--force]  ${dim3("Kill the worktree's session + remove the worktree")}
+  ${cyan2("tmux-ide ls")}                 ${dim3("List all tmux sessions")}
+  ${cyan2("tmux-ide status")} [--json]    ${dim3("Show session status")}
+  ${cyan2("tmux-ide inspect")} [--json]   ${dim3("Show effective config and runtime state")}
+  ${cyan2("tmux-ide doctor")}             ${dim3("Check system requirements")}
+  ${cyan2("tmux-ide validate")} [--json]  ${dim3("Validate ide.yml")}
+  ${cyan2("tmux-ide detect")} [--json]    ${dim3("Detect project stack")}
+  ${cyan2("tmux-ide detect --write")}     ${dim3("Detect and write ide.yml")}
+  ${cyan2("tmux-ide config")} [--json]    ${dim3("Dump config as JSON")}
   ${cyan2("tmux-ide config set")} <path> <value>
   ${cyan2("tmux-ide config add-pane")} --row <N> --title <T> [--command <C>]
   ${cyan2("tmux-ide config remove-pane")} --row <N> --pane <M>
   ${cyan2("tmux-ide config add-row")} [--size <percent>]
-  ${cyan2("tmux-ide config enable-team")} [--name <N>]   ${dim2("Enable agent teams")}
-  ${cyan2("tmux-ide config disable-team")}               ${dim2("Disable agent teams")}
+  ${cyan2("tmux-ide config enable-team")} [--name <N>]   ${dim3("Enable agent teams")}
+  ${cyan2("tmux-ide config disable-team")}               ${dim3("Disable agent teams")}
 
-${bold2("Pane Messaging:")}
-  ${cyan2("tmux-ide send")} <target> <message>     ${dim2("Send message to a pane")}
-  ${cyan2("tmux-ide send")} --to <name> <message>   ${dim2("Target by name, title, role, or ID")}
-  ${cyan2("tmux-ide send")} <target> --no-enter msg  ${dim2("Send text without pressing Enter")}
+${bold3("Pane Messaging:")}
+  ${cyan2("tmux-ide send")} <target> <message>     ${dim3("Send message to a pane")}
+  ${cyan2("tmux-ide send")} --to <name> <message>   ${dim3("Target by name, title, role, or ID")}
+  ${cyan2("tmux-ide send")} <target> --no-enter msg  ${dim3("Send text without pressing Enter")}
 
-${bold2("Server:")}
-  ${cyan2("tmux-ide command-center")} [--port N]    ${dim2("Start the command-center HTTP API")}
-  ${cyan2("tmux-ide server")} [--port N]            ${dim2("Start HTTP + PTY WebSocket server")}
+${bold3("Server:")}
+  ${cyan2("tmux-ide command-center")} [--port N]    ${dim3("Start the command-center HTTP API")}
+  ${cyan2("tmux-ide server")} [--port N]            ${dim3("Start HTTP + PTY WebSocket server")}
 
-${bold2("Flags:")}
-  ${cyan2("--json")}                      ${dim2("Output as JSON (all commands)")}
-  ${cyan2("--template <name>")}           ${dim2("Use specific template for init")}
-  ${cyan2("--write")}                     ${dim2("Write detected config to ide.yml")}
-  ${cyan2("--verbose")}                   ${dim2("Log all tmux commands (or set TMUX_IDE_DEBUG=1)")}
-  ${cyan2("-h, --help")}                  ${dim2("Show usage")}
-  ${cyan2("-v, --version")}               ${dim2("Show version number")}`);
+${bold3("Discover (in the TUI):")}
+  ${dim3("Bare")} ${cyan2("tmux-ide")} ${dim3("with no ide.yml opens the HOME cockpit \u2014 the fleet home screen.")}
+  ${dim3("Once a session is adopted, the whole UI is one keystroke away:")}
+  ${cyan2("\u2325h")}  ${dim3("home cockpit from anywhere    ")}${cyan2("\u2325p")}  ${dim3("switch session")}
+  ${cyan2("\u2325k")}  ${dim3("cheat sheet (all keys)        ")}${cyan2("\u2325m")}  ${dim3("actions menu (or right-click any pane / the bar)")}
+  ${cyan2("\u2325e \u2325g \u2325,")}  ${dim3("file / changes / config panels   ")}${cyan2("\u2325b")}  ${dim3("sidebar")}
+  ${dim3("A first-run welcome card names these keys once. Run")} ${cyan2("tmux-ide cheatsheet")} ${dim3("to see the full sheet.")}
+
+${bold3("Flags:")}
+  ${cyan2("--json")}                      ${dim3("Output as JSON (all commands)")}
+  ${cyan2("--template <name>")}           ${dim3("Use specific template for init")}
+  ${cyan2("--write")}                     ${dim3("Write detected config to ide.yml")}
+  ${cyan2("--verbose")}                   ${dim3("Log all tmux commands (or set TMUX_IDE_DEBUG=1)")}
+  ${cyan2("-h, --help")}                  ${dim3("Show usage")}
+  ${cyan2("-v, --version")}               ${dim3("Show version number")}`);
 }
 function assertBunWidgetAvailable(scriptPath, commandLabel) {
-  const widgetMissing = !existsSync25(scriptPath);
+  const widgetMissing = !existsSync26(scriptPath);
   let bunMissing = false;
   try {
     execFileSync11("bun", ["--version"], { stdio: "ignore" });
@@ -11925,7 +12039,7 @@ try {
   switch (command) {
     case "start": {
       const targetDir = resolve22(startTargetDir || ".");
-      const hasIdeYml = existsSync25(join21(targetDir, "ide.yml"));
+      const hasIdeYml = existsSync26(join22(targetDir, "ide.yml"));
       if (shouldOpenCockpit(hasIdeYml, values.team === true)) {
         if (json) {
           await printFleetJson();
@@ -12046,6 +12160,11 @@ try {
         await printFleetJson();
         break;
       }
+      if (values.popup === true) {
+        const clientArg = typeof values.client === "string" ? values.client : "";
+        execBunWidget(teamScriptPath, [], "team --popup", { TMUX_IDE_POPUP_CLIENT: clientArg });
+        break;
+      }
       launchTeamCockpit();
       break;
     }
@@ -12141,10 +12260,10 @@ try {
       }
     }
     case "events": {
-      const { readFileSync: readFileSync16, existsSync: existsSync26, statSync: statSync5, openSync, readSync, closeSync } = await import("node:fs");
+      const { readFileSync: readFileSync16, existsSync: existsSync27, statSync: statSync5, openSync, readSync, closeSync } = await import("node:fs");
       const { eventsPath: eventsPath2, formatEventLine: formatEventLine2 } = await Promise.resolve().then(() => (init_events(), events_exports));
       const path2 = eventsPath2();
-      if (!existsSync26(path2)) {
+      if (!existsSync27(path2)) {
         console.log("no events yet \u2014 is a session adopted? (the chrome updater writes events)");
         break;
       }
@@ -12329,6 +12448,29 @@ try {
       }
       break;
     }
+    case "welcome": {
+      try {
+        const { buildWelcomeText: buildWelcomeText2 } = await Promise.resolve().then(() => (init_welcome(), welcome_exports));
+        const { getAppConfig: getAppConfig2 } = await Promise.resolve().then(() => (init_app_config(), app_config_exports));
+        console.log(buildWelcomeText2(getAppConfig2().keys));
+      } catch {
+        console.log(
+          "Welcome to tmux-ide. Right-click for the menu \xB7 \u2325h home \xB7 \u2325p switch \xB7 \u2325k all keys."
+        );
+      }
+      const closeWelcome = () => process.exit(0);
+      const welcomeTimer = setTimeout(closeWelcome, 6e4);
+      welcomeTimer.unref?.();
+      try {
+        process.stdin.setRawMode?.(true);
+        process.stdin.resume();
+        process.stdin.once("data", closeWelcome);
+        process.stdin.once("end", closeWelcome);
+      } catch {
+        closeWelcome();
+      }
+      break;
+    }
     case "menu": {
       try {
         const tmuxCap = {
@@ -12490,7 +12632,7 @@ Known panels: ${POPUP_WIDGETS2.join(", ")}.`,
       const mainPath = worktrees[0]?.path ?? repoDir;
       const projectName = getSessionName2(mainPath).name;
       async function openWorktreeSession(wtPath, name) {
-        if (existsSync25(join21(wtPath, "ide.yml"))) {
+        if (existsSync26(join22(wtPath, "ide.yml"))) {
           await launch(wtPath, { attach: false, sessionName: name });
         } else {
           if (!hasSession2(name)) createDetachedSession2(name, wtPath);

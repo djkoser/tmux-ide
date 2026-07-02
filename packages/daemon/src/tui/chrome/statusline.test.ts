@@ -7,6 +7,10 @@ import {
   adoptOptionCommands,
   adoptSession,
   buildStatusline,
+  homeBindCommand,
+  homePopupCommand,
+  homeUnbindCommand,
+  HOME_KEY,
   isInternalName,
   popupBindCommand,
   popupUnbindCommand,
@@ -52,6 +56,10 @@ vi.mock("./updater.ts", async (importActual) => ({
   seedSessionStatus: () => {},
   startUpdaterIfNeeded: () => {},
 }));
+// adoptSession fires the first-run welcome (a detached `tmux display-popup` +
+// marker write) — stub it so the pure bind assertions never touch the real
+// filesystem or spawn a process. The welcome logic is tested in welcome.test.ts.
+vi.mock("./welcome.ts", () => ({ maybeShowWelcomePopup: () => {} }));
 
 function session(name: string, status: TeamSession["status"]): TeamSession {
   return { name, attached: false, windows: 1, panes: 1, status, windowList: [] };
@@ -159,6 +167,15 @@ describe("buildStatusline", () => {
     expect(bar.indexOf("range=user|keys")).toBeLessThan(bar.indexOf("range=user|switcher"));
   });
 
+  it("carries a muted `[ ⌂ home ⌥h ]` trigger as the first right-side trigger", () => {
+    const bar = buildStatusline([project("web")], null);
+    expect(bar).toContain("#[range=user|home]");
+    expect(bar).toContain("[ ⌂ home ⌥h ]");
+    // the home trigger leads the right-side triggers (home → keys → switch)
+    expect(bar.indexOf("range=user|home")).toBeLessThan(bar.indexOf("range=user|keys"));
+    expect(bar.indexOf("range=user|keys")).toBeLessThan(bar.indexOf("range=user|switcher"));
+  });
+
   it("applies a custom theme's tokens to the brand, glyph, and colors", () => {
     const bar = buildStatusline([project("hot", { status: "blocked" })], null, 12, CUSTOM_THEME);
     // brand + switch trigger use the custom accent
@@ -186,17 +203,17 @@ describe("buildStatusline", () => {
 
   it("renders the reserved extraSegment on the right before the triggers (empty by default)", () => {
     const plain = buildStatusline([project("web")], null);
-    // empty by default — no stray content before the keys trigger
-    expect(plain).toContain(`#[align=right]#[range=user|keys]`);
+    // empty by default — no stray content before the first (home) trigger
+    expect(plain).toContain(`#[align=right]#[range=user|home]`);
 
     const withExtra = buildStatusline([project("web")], null, 12, DEFAULT_THEME, "⬆ v9.9.9");
     expect(withExtra).toContain("⬆ v9.9.9");
-    // it sits after the align=right marker and before the keys trigger
+    // it sits after the align=right marker and before the first (home) trigger
     const alignAt = withExtra.indexOf("#[align=right]");
     const extraAt = withExtra.indexOf("⬆ v9.9.9");
-    const keysAt = withExtra.indexOf("#[range=user|keys]");
+    const homeAt = withExtra.indexOf("#[range=user|home]");
     expect(alignAt).toBeLessThan(extraAt);
-    expect(extraAt).toBeLessThan(keysAt);
+    expect(extraAt).toBeLessThan(homeAt);
   });
 });
 
@@ -309,6 +326,16 @@ describe("statusClickBindCommand", () => {
     expect(branch).toContain("switch-client -c '#{client_name}'");
   });
 
+  it("dispatches the `home` range to the home-cockpit display-popup, nesting the rest", () => {
+    const branch = statusClickBindCommand().at(-1)!;
+    // the home branch matches the `home` range and opens the home popup
+    expect(branch).toContain("#{==:#{mouse_status_range},home}");
+    expect(branch).toContain(`tmux-ide team --popup`);
+    // and the keys + sw* branches remain nested inside it (dispatch chain intact)
+    expect(branch).toContain("#{==:#{mouse_status_range},keys}");
+    expect(branch).toContain("#{m:sw*,#{mouse_status_range}}");
+  });
+
   it("passes a custom cheatsheet command into the keys branch", () => {
     const branch = statusClickBindCommand("tmux-ide switcher", "bun run cheatsheet").at(-1)!;
     expect(branch).toContain("bun run cheatsheet");
@@ -362,6 +389,29 @@ describe("switcherPopupCommand", () => {
   });
 });
 
+describe("homePopupCommand / homeBindCommand / homeUnbindCommand", () => {
+  it("floats the full home cockpit via `tmux-ide team --popup`", () => {
+    expect(homePopupCommand()).toBe(`display-popup -E -w 95% -h 95% "tmux-ide team --popup"`);
+  });
+
+  it("binds M-h in the root table to the home popup", () => {
+    const cmd = homeBindCommand();
+    expect(cmd.slice(0, 5)).toEqual(["bind-key", "-n", HOME_KEY, "display-popup", "-E"]);
+    expect(HOME_KEY).toBe("M-h");
+    // large (95%) popup, `tmux-ide team --popup` command last
+    expect(cmd).toContain("95%");
+    expect(cmd[cmd.length - 1]).toBe("tmux-ide team --popup");
+  });
+
+  it("passes a custom home command through as the bound command", () => {
+    expect(homeBindCommand("bun run home").at(-1)).toBe("bun run home");
+  });
+
+  it("unbinds M-h from the root table", () => {
+    expect(homeUnbindCommand()).toEqual(["unbind-key", "-n", HOME_KEY]);
+  });
+});
+
 describe("adoptSession key binds", () => {
   // adoptSession resolves keys from the app config; pin it to the defaults by
   // pointing TMUX_IDE_CONFIG at a missing file (so a real ~/.tmux-ide/config.json
@@ -378,7 +428,7 @@ describe("adoptSession key binds", () => {
     _resetForTests();
   });
 
-  it("binds M-m and the right-click menu (MouseDown3Status + MouseDown3Pane) alongside the popup/click binds", () => {
+  it("binds M-m and the right-click menu (MouseUp3Status + MouseUp3Pane) alongside the popup/click binds", () => {
     adoptSession("web");
     const calls = runTmux.mock.calls.map((c) => c[0] as string[]);
     // the menu binds are applied — key, chrome-row right-click, AND any-pane right-click
@@ -388,6 +438,12 @@ describe("adoptSession key binds", () => {
     // and the pre-existing binds are still applied (no regression)
     expect(calls).toContainEqual(popupBindCommand("tmux-ide switcher"));
     expect(calls).toContainEqual(statusClickBindCommand("tmux-ide switcher"));
+  });
+
+  it("binds the home cockpit key (M-h → tmux-ide team --popup)", () => {
+    adoptSession("web");
+    const calls = runTmux.mock.calls.map((c) => c[0] as string[]);
+    expect(calls).toContainEqual(homeBindCommand("tmux-ide team --popup", DEFAULT_KEYS.home));
   });
 
   it("binds the sidebar toggle key (M-b → tmux-ide sidebar-toggle)", () => {
