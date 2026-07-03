@@ -8,12 +8,29 @@
  * rendering, ^o pane focus cycle, ^t window cycle, ^q quits (session
  * untouched).
  *
- * TWO MODES: the main area is either the HOME panel (fleet cards + detail; the
- * bare-launch / `^h` state) or a session MIRROR (the SessionMirror canvas). One
- * `mode()` signal drives both the render (`<Show>`) and the router: `route`
- * branches on mode so a home-row click and a pane click share one entry point.
- * `switchTarget(name)` → mirror (attach); `^h` → home (dispose mirror, keep the
- * live fleet). A real `--target` starts in mirror mode; bare starts in home.
+ * THREE MODES: the main area is the HOME panel (fleet cards + detail; the
+ * bare-launch / `^h` state), a session MIRROR (the SessionMirror canvas), or the
+ * built-in file EDITOR (M18.2 — tmux stays the engine running servers/agents;
+ * files are edited natively by us). One `mode()` signal drives both the render
+ * (`<Show>`) and the router: `route` branches on mode so a home-row click, a
+ * pane click, and an editor click share one entry point. `switchTarget(name)` →
+ * mirror (attach); `^h`/`^g` → home (dispose mirror, keep the live fleet). A real
+ * `--target` starts in mirror mode; bare starts in home; `--edit <file>` opens
+ * the editor. On home, `o` opens a path prompt; `^e` toggles editor↔previous.
+ *
+ * EDITOR (M18.2): the editing ENGINE is a native `EditBuffer` (bun:ffi —
+ * insert/delete/cursor/undo, grapheme-aware). We do NOT mount OpenTUI's
+ * `<textarea>` renderable: it owns its own mouse dispatch, which would hijack
+ * events the app routes centrally and trip the late-mount landmine below. So we
+ * render the viewport OURSELVES (gutter + text runs, cursor as an inverse span)
+ * and drive the buffer from the central `useKeyboard`/`route` — same discipline
+ * as the mirror. A `editorRev()` signal bumps after each mutation to re-derive
+ * the line array (EditBuffer mutations are invisible to Solid). Pure math
+ * (binary sniff, read-only class, gutter, viewport, click→cursor) is unit-tested
+ * in editor-buffer.ts. `^s` saves atomically (temp+rename); files ≥1 MB or with
+ * a NUL byte open read-only with a banner. Syntax highlighting is SKIPPED:
+ * tree-sitter needs grammar wasm loaded + highlight→run mapping into our
+ * hand-rolled render — far more than "one flag away".
  *
  * MOUSE ARCHITECTURE (hard-won): ALL pointer events are received by the two
  * top-level REGION CONTAINERS (sidebar box / main column box) and routed by
@@ -40,16 +57,31 @@
  *   bun packages/daemon/src/tui/mirror/app.tsx --target <session>
  */
 import { parseArgs } from "node:util";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync, renameSync } from "node:fs";
+import { basename } from "node:path";
 import { render, useKeyboard, useTerminalDimensions } from "@opentui/solid";
-import { RGBA } from "@opentui/core";
-import { createSignal, onMount, onCleanup, For, Show } from "solid-js";
+import { RGBA, EditBuffer } from "@opentui/core";
+import { createSignal, createMemo, onMount, onCleanup, For, Show } from "solid-js";
 import { SessionMirror, type LivePane } from "./session-mirror.ts";
 import { execFile } from "node:child_process";
 import type { AgentStatus } from "../detect/classify.ts";
 import { rollupChips, homeFooterHints, type FleetRollup } from "../team/home.ts";
+import {
+  isBinary,
+  classifyFile,
+  readOnlyBanner,
+  sanitizeForDisplay,
+  gutterWidth,
+  formatGutter,
+  clampTop,
+  scrollToCursor,
+  clickToCursor,
+  type ReadOnlyReason,
+} from "./editor-buffer.ts";
 
-const { values } = parseArgs({ options: { target: { type: "string" } } });
+const { values } = parseArgs({
+  options: { target: { type: "string" }, edit: { type: "string" } },
+});
 const target = values.target ?? "";
 // Bare launch (no `--target`, or the explicit `home` pseudo-target) opens the
 // HOME panel instead of a session mirror; a real target boots straight to the
@@ -137,6 +169,10 @@ interface WindowTab {
 const DEFAULT_FG = RGBA.fromInts(212, 212, 216, 255);
 const DEFAULT_BG = RGBA.fromInts(16, 16, 22, 255);
 const GUTTER_BG = RGBA.fromInts(38, 40, 52, 255);
+const GUTTER_FG = RGBA.fromInts(96, 100, 120, 255);
+const MODIFIED_FG = RGBA.fromInts(235, 200, 100, 255);
+const BANNER_FG = RGBA.fromInts(240, 150, 90, 255);
+const CURSOR_BG = RGBA.fromInts(130, 170, 255, 255);
 const SIDEBAR_W = 24;
 const HEADER_ROWS = 2;
 const rgbaCache = new Map<number, RGBA>();
@@ -154,7 +190,7 @@ render(() => {
   const dims = useTerminalDimensions();
   const canvasCols = () => Math.max(20, dims().width - SIDEBAR_W);
   const canvasRows = () => Math.max(4, dims().height - HEADER_ROWS);
-  const [mode, setMode] = createSignal<"home" | "mirror">(bareHome ? "home" : "mirror");
+  const [mode, setMode] = createSignal<"home" | "mirror" | "editor">(bareHome ? "home" : "mirror");
   const [curTarget, setCurTarget] = createSignal(bareHome ? "" : target);
   const [panes, setPanes] = createSignal<LivePane[]>([]);
   const [windowTabs, setWindowTabs] = createSignal<WindowTab[]>([]);
@@ -213,6 +249,145 @@ render(() => {
     dirty = true;
   };
 
+  // ── EDITOR (M18.2) ──────────────────────────────────────────────────────
+  // The native EditBuffer holds text + cursor; Solid can't see its mutations,
+  // so `editorRev` is bumped after every edit to re-derive `editorLines`.
+  let editBuffer: EditBuffer | null = null;
+  let prevMode: "home" | "mirror" = "home";
+  const [editorPath, setEditorPath] = createSignal<string | null>(null);
+  const [editorRev, setEditorRev] = createSignal(0);
+  const [editorTop, setEditorTop] = createSignal(0);
+  const [editorModified, setEditorModified] = createSignal(false);
+  const [editorReadOnly, setEditorReadOnly] = createSignal<ReadOnlyReason>(null);
+  const [editorMsg, setEditorMsg] = createSignal("");
+  // A path-input line on HOME (`o` to open). null = not prompting.
+  const [pathPrompt, setPathPrompt] = createSignal<string | null>(null);
+
+  // Visible text rows = full height minus header (1) + rule/banner (1) + footer (1).
+  const editorRows = () => Math.max(1, dims().height - 3);
+  const editorLines = createMemo<string[]>(() => {
+    editorRev();
+    if (!editBuffer) return [""];
+    return editBuffer.getText().split("\n");
+  });
+  const editorCursor = createMemo<{ row: number; col: number }>(() => {
+    editorRev();
+    if (!editBuffer) return { row: 0, col: 0 };
+    const c = editBuffer.getCursorPosition();
+    return { row: c.row, col: c.col };
+  });
+  // The exact rows on screen, each tagged with its 1-based number and (for the
+  // cursor line) the column where the inverse cursor cell is drawn.
+  const editorVisible = createMemo<{ num: number; text: string; cursorCol: number | null }[]>(
+    () => {
+      const lines = editorLines();
+      const rows = editorRows();
+      const top = clampTop(editorTop(), lines.length, rows);
+      const cur = editorCursor();
+      const out: { num: number; text: string; cursorCol: number | null }[] = [];
+      for (let i = top; i < Math.min(lines.length, top + rows); i++) {
+        out.push({ num: i + 1, text: lines[i] ?? "", cursorCol: i === cur.row ? cur.col : null });
+      }
+      return out;
+    },
+  );
+
+  const openEditor = (rawPath: string) => {
+    const path = rawPath.startsWith("~/")
+      ? `${process.env.HOME ?? ""}${rawPath.slice(1)}`
+      : rawPath;
+    let bytes: Uint8Array;
+    try {
+      bytes = readFileSync(path);
+    } catch (e) {
+      setEditorMsg(`cannot open: ${(e as Error).message}`);
+      return;
+    }
+    const reason = classifyFile(bytes.length, isBinary(bytes));
+    const text =
+      reason === "binary" ? sanitizeForDisplay(bytes) : Buffer.from(bytes).toString("utf8");
+    editBuffer?.destroy();
+    editBuffer = EditBuffer.create("wcwidth");
+    editBuffer.setText(text);
+    editBuffer.setCursor(0, 0);
+    if (mode() !== "editor") prevMode = mode() === "mirror" ? "mirror" : "home";
+    setEditorPath(path);
+    setEditorReadOnly(reason);
+    setEditorModified(false);
+    setEditorTop(0);
+    setEditorMsg("");
+    setEditorRev((r) => r + 1);
+    setMode("editor");
+  };
+
+  const toggleEditor = () => {
+    if (!editBuffer) return; // nothing opened yet
+    if (mode() === "editor") setMode(prevMode);
+    else {
+      prevMode = mode() === "mirror" ? "mirror" : "home";
+      setMode("editor");
+    }
+  };
+
+  const saveEditor = () => {
+    const path = editorPath();
+    if (!editBuffer || !path || editorReadOnly()) return;
+    try {
+      const tmp = `${path}.zz-tmp-${process.pid}`;
+      writeFileSync(tmp, editBuffer.getText());
+      renameSync(tmp, path);
+      setEditorModified(false);
+      setEditorMsg("saved");
+    } catch (e) {
+      setEditorMsg(`save failed: ${(e as Error).message}`);
+    }
+  };
+
+  const editorSyncScroll = () => {
+    const c = editBuffer!.getCursorPosition();
+    setEditorTop((t) => scrollToCursor(c.row, t, editorRows(), editorLines().length));
+  };
+
+  /** Feed one key to the editor buffer. Ctrl combos (^s/^e/^g/^q/^z/^y) are
+   *  handled by the caller; this owns navigation + insertion. */
+  const editorKey = (evt: { name: string; ctrl: boolean; meta: boolean; shift: boolean }) => {
+    const eb = editBuffer;
+    if (!eb) return;
+    const ro = editorReadOnly() !== null;
+    const rows = editorRows();
+    const name = evt.name;
+    if (name === "up") eb.moveCursorUp();
+    else if (name === "down") eb.moveCursorDown();
+    else if (name === "left") eb.moveCursorLeft();
+    else if (name === "right") eb.moveCursorRight();
+    else if (name === "home") {
+      const c = eb.getCursorPosition();
+      eb.setCursor(c.row, 0);
+    } else if (name === "end") {
+      eb.setCursorByOffset(eb.getEOL().offset);
+    } else if (name === "pageup") {
+      for (let i = 0; i < rows; i++) eb.moveCursorUp();
+    } else if (name === "pagedown") {
+      for (let i = 0; i < rows; i++) eb.moveCursorDown();
+    } else if (!ro && name === "return") {
+      eb.newLine();
+      setEditorModified(true);
+    } else if (!ro && name === "backspace") {
+      eb.deleteCharBackward();
+      setEditorModified(true);
+    } else if (!ro && name === "delete") {
+      eb.deleteChar();
+      setEditorModified(true);
+    } else if (!ro && name.length === 1 && !evt.ctrl && !evt.meta) {
+      eb.insertText(evt.shift ? name.toUpperCase() : name);
+      setEditorModified(true);
+    } else {
+      return; // unhandled key: no re-render, no scroll churn
+    }
+    editorSyncScroll();
+    setEditorRev((r) => r + 1);
+  };
+
   let mirror: SessionMirror | null = null;
   const attach = (name: string) => {
     mirror?.dispose();
@@ -260,6 +435,9 @@ render(() => {
   };
 
   onMount(() => {
+    // `--edit <file>` boots straight into the editor (post-render so the native
+    // EditBuffer FFI is loaded).
+    if (values.edit) openEditor(values.edit);
     if (mode() === "mirror") attach(curTarget());
     const t = setInterval(() => {
       if (!dirty || !mirror) return;
@@ -301,6 +479,7 @@ render(() => {
       clearInterval(fleetTimer);
       clearInterval(sizeTimer);
       mirror?.dispose();
+      editBuffer?.destroy();
     });
   });
 
@@ -338,15 +517,59 @@ render(() => {
   useKeyboard((evt) => {
     if (evt.ctrl && evt.name === "q") {
       mirror?.dispose();
+      editBuffer?.destroy();
       process.exit(0);
     }
+    // ^e — toggle the editor against the previous mode (no-op until a file is
+    // opened via `o`/`--edit`).
+    if (evt.ctrl && evt.name === "e") {
+      toggleEditor();
+      return;
+    }
     // ^g, not ^h: legacy encoding makes ctrl+h indistinguishable from
-    // backspace (0x08), which must keep flowing to the pane.
+    // backspace (0x08), which must keep flowing to the pane. Works from mirror
+    // OR editor.
     if (evt.ctrl && (evt.name === "g" || evt.name === "h")) {
-      if (mode() === "mirror") goHome();
+      if (mode() !== "home") goHome();
+      return;
+    }
+    if (mode() === "editor") {
+      if (evt.ctrl && evt.name === "s") {
+        saveEditor();
+        return;
+      }
+      if (evt.ctrl && evt.name === "z") {
+        editBuffer?.undo();
+        editorSyncScroll();
+        setEditorRev((r) => r + 1);
+        return;
+      }
+      if (evt.ctrl && evt.name === "y") {
+        editBuffer?.redo();
+        editorSyncScroll();
+        setEditorRev((r) => r + 1);
+        return;
+      }
+      editorKey(evt);
       return;
     }
     if (mode() === "home") {
+      // Path-input line (`o` to open); while prompting, every key feeds it.
+      if (pathPrompt() !== null) {
+        if (evt.name === "escape") setPathPrompt(null);
+        else if (evt.name === "return") {
+          const p = pathPrompt()!.trim();
+          setPathPrompt(null);
+          if (p) openEditor(p);
+        } else if (evt.name === "backspace") setPathPrompt((s) => (s ?? "").slice(0, -1));
+        else if (evt.name.length === 1 && !evt.ctrl && !evt.meta)
+          setPathPrompt((s) => (s ?? "") + (evt.shift ? evt.name.toUpperCase() : evt.name));
+        return;
+      }
+      if (evt.name === "o") {
+        setPathPrompt("");
+        return;
+      }
       const rows = homeRows();
       if (evt.name === "j" || evt.name === "down") {
         setSel(Math.min(clampedSel() + 1, Math.max(0, rows.length - 1)));
@@ -409,6 +632,37 @@ render(() => {
         setSel(y - 2);
         switchTarget(r.session);
       }
+      return;
+    }
+    // EDITOR mode: header (y=0) + rule/banner (y=1), then text rows from y=2.
+    // Wheel scrolls the viewport; a click positions the cursor. All coordinate
+    // math against geometry we render ourselves — no handlers on the text rows.
+    if (mode() === "editor") {
+      if (type === "scroll") {
+        const dir = e.scroll?.direction;
+        if (dir === "up" || dir === "down") {
+          setEditorTop((t) =>
+            clampTop(
+              t + (dir === "up" ? -SCROLL_STEP : SCROLL_STEP),
+              editorLines().length,
+              editorRows(),
+            ),
+          );
+        }
+        return;
+      }
+      if (type !== "down" || !editBuffer) return;
+      const contentY = y - HEADER_ROWS;
+      if (contentY < 0 || contentY >= editorRows()) return;
+      const { line, col } = clickToCursor({
+        cx: x - SIDEBAR_W,
+        contentY,
+        gutterW: gutterWidth(editorLines().length),
+        top: editorTop(),
+        lines: editorLines(),
+      });
+      editBuffer.setCursor(line, col);
+      setEditorRev((r) => r + 1);
       return;
     }
     if (y === 1) {
@@ -518,11 +772,21 @@ render(() => {
             </For>
           </box>
           <box flexGrow={1} />
+          <Show
+            when={pathPrompt() !== null}
+            fallback={
+              <box paddingLeft={1}>
+                <text fg={ACCENT}>{detailLine()}</text>
+              </box>
+            }
+          >
+            <box paddingLeft={1} flexDirection="row">
+              <text fg={ACCENT}>{"open file: "}</text>
+              <text fg={DEFAULT_FG}>{`${pathPrompt() ?? ""}▏`}</text>
+            </box>
+          </Show>
           <box paddingLeft={1}>
-            <text fg={ACCENT}>{detailLine()}</text>
-          </box>
-          <box paddingLeft={1}>
-            <text fg={MUTED}>{homeFooter()}</text>
+            <text fg={MUTED}>{`${homeFooter()}   o open file`}</text>
           </box>
         </Show>
         <Show when={mode() === "mirror"}>
@@ -580,6 +844,58 @@ render(() => {
                 </box>
               )}
             </For>
+          </box>
+        </Show>
+        <Show when={mode() === "editor"}>
+          {/* header (y=0) · rule/banner (y=1) · text rows (y=2+). `route`
+              reverses this geometry for wheel + click. Text rows carry NO
+              onMouse handler — the main column container routes everything. */}
+          <box paddingLeft={1} flexDirection="row" gap={1}>
+            <text fg={ACCENT} attributes={1}>
+              {editorPath() ? basename(editorPath()!) : "editor"}
+            </text>
+            <Show when={editorModified()}>
+              <text fg={MODIFIED_FG}>●</text>
+            </Show>
+            <text fg={MUTED}>{`${editorCursor().row + 1}:${editorCursor().col + 1}`}</text>
+            <text fg={MUTED}>{`${editorLines().length}L`}</text>
+            <text fg={MUTED}>{editorMsg()}</text>
+          </box>
+          <Show
+            when={readOnlyBanner(editorReadOnly())}
+            fallback={<text fg={MUTED}>{"─".repeat(Math.max(4, canvasCols() - 2))}</text>}
+          >
+            <box paddingLeft={1}>
+              <text fg={BANNER_FG}>{readOnlyBanner(editorReadOnly())}</text>
+            </box>
+          </Show>
+          <box flexDirection="column">
+            <For each={editorVisible()}>
+              {(ln) => {
+                const gw = gutterWidth(editorLines().length);
+                return (
+                  <box flexDirection="row" height={1}>
+                    <text bg={GUTTER_BG} fg={GUTTER_FG}>
+                      {formatGutter(ln.num, gw)}
+                    </text>
+                    <Show
+                      when={ln.cursorCol !== null}
+                      fallback={<text fg={DEFAULT_FG}>{ln.text}</text>}
+                    >
+                      <text fg={DEFAULT_FG}>{ln.text.slice(0, ln.cursorCol!)}</text>
+                      <text fg={DEFAULT_BG} bg={CURSOR_BG}>
+                        {ln.text[ln.cursorCol!] ?? " "}
+                      </text>
+                      <text fg={DEFAULT_FG}>{ln.text.slice(ln.cursorCol! + 1)}</text>
+                    </Show>
+                  </box>
+                );
+              }}
+            </For>
+          </box>
+          <box flexGrow={1} />
+          <box paddingLeft={1}>
+            <text fg={MUTED}>{"^s save · ^z undo · ^e toggle · ^g home · ^q quit"}</text>
           </box>
         </Show>
       </box>
