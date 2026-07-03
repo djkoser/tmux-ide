@@ -24,6 +24,17 @@ export function spans(labels: string[], startX: number, gap: number): Span[] {
   return out;
 }
 
+/** Lay `labels` out left-to-right anchored to the RIGHT: the last label ends
+ *  flush at `rightEdge` (its final cell is `rightEdge - 1`), separated by `gap`.
+ *  For right-aligned header affordance buttons whose PRECEDING content is
+ *  variable-width — the layout is pinned to the (fixed) right edge, not a left
+ *  origin, so the render (a flexGrow spacer then the buttons) and the router
+ *  agree cell-for-cell. Pure. */
+export function spansFromRight(labels: string[], rightEdge: number, gap: number): Span[] {
+  const total = labels.reduce((n, l) => n + l.length, 0) + gap * Math.max(0, labels.length - 1);
+  return spans(labels, rightEdge - total, gap);
+}
+
 /** Index of the span containing column `x`, or -1. Gap cells between spans and
  *  columns past the last span resolve to -1 (no hit). */
 export function spanHit(list: Span[], x: number): number {

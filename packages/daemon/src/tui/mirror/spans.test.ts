@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { spans, spanHit } from "./spans.ts";
+import { spans, spanHit, spansFromRight } from "./spans.ts";
 
 describe("spans", () => {
   it("lays out contiguous labels from startX with gap=0 (surface tab bar)", () => {
@@ -27,6 +27,29 @@ describe("spans", () => {
       { start: 0, width: 2 },
       { start: 2, width: 3 },
     ]);
+  });
+});
+
+describe("spansFromRight", () => {
+  it("pins a single button flush to the right edge", () => {
+    // "[+ split]" is 9 cells; rightEdge 80 → starts at 71, ends at 79 (inclusive).
+    const s = spansFromRight(["[+ split]"], 80, 1);
+    expect(s).toEqual([{ start: 71, width: 9 }]);
+    expect(s[0]!.start + s[0]!.width).toBe(80);
+  });
+
+  it("packs two buttons right-aligned with a gap between them", () => {
+    // "[● save]" (8) + gap (1) + "[↻ reload]" (10) = 19; rightEdge 80 → start 61.
+    const s = spansFromRight(["[● save]", "[↻ reload]"], 80, 1);
+    expect(s).toEqual([
+      { start: 61, width: 8 },
+      { start: 70, width: 10 }, // 61 + 8 + 1 gap
+    ]);
+    expect(s[1]!.start + s[1]!.width).toBe(80);
+  });
+
+  it("handles an empty button set", () => {
+    expect(spansFromRight([], 80, 1)).toEqual([]);
   });
 });
 

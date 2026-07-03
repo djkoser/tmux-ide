@@ -144,7 +144,8 @@ import {
   type FileNode,
   type RawEntry,
 } from "./file-tree.ts";
-import { spans, spanHit } from "./spans.ts";
+import { spans, spanHit, spansFromRight, type Span } from "./spans.ts";
+import { scrollThumb, trackZone, pageTop, dragTop } from "./scrollbar-model.ts";
 import {
   MENU_ITEMS,
   CONFIRM_SUFFIX,
@@ -274,7 +275,7 @@ interface WindowTab {
 }
 /** The hoverable surfaces — each names a row/segment set the router can resolve
  *  by coordinate math and each render tints with HOVER_BG. */
-type HoverRegion = "sidebar" | "home" | "surfacetab" | "windowtab" | "files" | "diff";
+type HoverRegion = "sidebar" | "home" | "surfacetab" | "windowtab" | "files" | "diff" | "button";
 
 /** The one pointer-event shape the central `route` reads. `button` distinguishes
  *  left (0) / right (2) presses; `stopPropagation` (present on the real OpenTUI
@@ -343,6 +344,17 @@ const PALETTE_BG = RGBA.fromInts(28, 30, 42, 255);
 const PALETTE_BORDER = RGBA.fromInts(70, 78, 110, 255);
 const TABBAR_BG = RGBA.fromInts(18, 18, 26, 255);
 const DIR_FG = RGBA.fromInts(150, 180, 250, 255);
+// Scrollbar track/thumb (M19.5). The track is a faint tint over the pane bg;
+// the thumb a brighter block. Both are drawn as single-cell bg fills in the
+// always-present container's right column — never a late-mounted box.
+const SCROLL_TRACK_BG = RGBA.fromInts(34, 36, 48, 255);
+const SCROLL_THUMB_BG = RGBA.fromInts(90, 98, 130, 255);
+const SCROLL_THUMB_HOVER_BG = RGBA.fromInts(120, 130, 170, 255);
+// Header-row affordance buttons (M19.5) — coordinate-routed spans on mount-time
+// rows, styled like a subtle chip; the hovered one lifts to the accent.
+const BUTTON_FG = RGBA.fromInts(150, 160, 190, 255);
+const BUTTON_BG = RGBA.fromInts(34, 38, 54, 255);
+const BUTTON_HOVER_BG = RGBA.fromInts(52, 60, 86, 255);
 const rgbaCache = new Map<number, RGBA>();
 const packedToRgba = (packed: number | null, fallback: RGBA): RGBA => {
   if (packed === null) return fallback;
@@ -460,9 +472,26 @@ render(() => {
   // down, a border drag only from a GUTTER down, so they never fight. `originCx/
   // originCy` are the canvas-local cell the border drag began at; `lastSize`
   // dedupes identical resize commands across drag ticks.
+  // A scrollbar-thumb drag is the FOURTH drag-origin (after sidebar / border /
+  // text-selection): a "down" on a thumb cell captures the surface + the
+  // pointer's offset within the thumb, then each tick maps the pointer row to an
+  // absolute scroll top via `dragTop`. `contentLen`/`viewH`/`col` are frozen at
+  // press (stable for the drag); `top0` is the global y of the track's first row.
+  type ScrollSurface =
+    | { surface: "editor" }
+    | { surface: "diff" }
+    | { surface: "mirror"; paneId: string; scrollbackDepth: number };
   type DragState =
     | { kind: "sidebar" }
-    | { kind: "border"; sep: Separator; originCx: number; originCy: number; lastSize: number };
+    | { kind: "border"; sep: Separator; originCx: number; originCy: number; lastSize: number }
+    | {
+        kind: "scrollbar";
+        grabOffset: number;
+        top0: number;
+        contentLen: number;
+        viewH: number;
+        surface: ScrollSurface;
+      };
   let dragging: DragState | null = null;
 
   // ── RIGHT-CLICK CONTEXT MENU (M19.2) ─────────────────────────────────────
@@ -1238,6 +1267,108 @@ render(() => {
     col: Math.max(0, Math.min(pane.width - 1, gx - sidebarW() - pane.left)),
     row: Math.max(0, Math.min(pane.height - 1, gy - HEADER_ROWS - pane.top)),
   });
+
+  // ── SCROLLBARS (M19.5) ────────────────────────────────────────────────────
+  // The scroll geometry for one surface: the global column its 1-col track sits
+  // in, the global y of the track's first row, the total content length, the
+  // visible rows, and the current first-visible line. The RENDER draws the track
+  // (`scrollbarCells`) and the ROUTER hit-tests / drags it (`scrollbarHitAt`,
+  // `dragTop`, `pageTop`) from this ONE shape — the surface-bar discipline turned
+  // vertical. `applyScrollTop` writes a new top back to the owning signal (mirror
+  // scroll is an offset-from-live, so it converts top → offset).
+  interface ScrollGeom {
+    col: number; // global x of the track column
+    top0: number; // global y of the track's first row
+    contentLen: number;
+    viewH: number;
+    viewportTop: number; // first visible content line
+    surface: ScrollSurface;
+    visible: boolean;
+  }
+  const editorScrollGeom = (): ScrollGeom => {
+    const contentLen = editorLines().length;
+    const viewH = editorRows();
+    return {
+      col: dims().width - 1,
+      top0: TABBAR_H + HEADER_ROWS,
+      contentLen,
+      viewH,
+      viewportTop: clampTop(editorTop(), contentLen, viewH),
+      surface: { surface: "editor" },
+      visible: contentLen > viewH,
+    };
+  };
+  const diffScrollGeom = (): ScrollGeom => {
+    const contentLen = diffLines().length;
+    const viewH = diffBodyRows();
+    return {
+      col: dims().width - 1,
+      top0: TABBAR_H + HEADER_ROWS,
+      contentLen,
+      viewH,
+      viewportTop: clampTop(diffTop(), contentLen, viewH),
+      surface: { surface: "diff" },
+      visible: contentLen > viewH,
+    };
+  };
+  const mirrorScrollGeom = (pane: LivePane): ScrollGeom => {
+    const depth = pane.scrollbackDepth;
+    const viewH = pane.height;
+    // The pane shows the last `viewH` rows of a (depth + viewH)-line buffer, so a
+    // scroll offset of `n` lines up puts the first visible line at depth - n.
+    return {
+      col: sidebarW() + pane.left + pane.width - 1,
+      top0: TABBAR_H + HEADER_ROWS + pane.top,
+      contentLen: depth + viewH,
+      viewH,
+      viewportTop: depth - pane.snapshot.scrollOffset,
+      surface: { surface: "mirror", paneId: pane.id, scrollbackDepth: depth },
+      // Keep terminals clean: reveal only once the pane is actually scrolled up.
+      visible: pane.snapshot.scrollOffset > 0 && depth > 0,
+    };
+  };
+  /** The per-row thumb mask for a track (true = thumb cell), sized to `viewH`. */
+  const scrollbarCells = (geom: ScrollGeom): boolean[] => {
+    const t = scrollThumb(geom.viewportTop, geom.contentLen, geom.viewH);
+    const out: boolean[] = [];
+    for (let r = 0; r < geom.viewH; r++) out.push(r >= t.start && r < t.start + t.size);
+    return out;
+  };
+  /** Write a new first-visible line to the surface owning `surface`. Editor/diff
+   *  clamp to their content; the mirror converts top → offset-from-live and lets
+   *  the 16ms pane tick re-render (same path as the wheel). */
+  const applyScrollTop = (surface: ScrollSurface, top: number) => {
+    if (surface.surface === "editor") {
+      setEditorTop(clampTop(top, editorLines().length, editorRows()));
+    } else if (surface.surface === "diff") {
+      setDiffTop(clampTop(top, diffLines().length, diffBodyRows()));
+    } else {
+      const offset = Math.max(0, Math.min(surface.scrollbackDepth, surface.scrollbackDepth - top));
+      scrollOffsets.set(surface.paneId, offset);
+      markDirty();
+    }
+  };
+  /** Resolve a pointer to the scrollbar track cell under it, or null. Used in
+   *  `route` on a left "down" BEFORE region routing so a thumb/track press wins
+   *  over selection/click, and it only matches a VISIBLE track. */
+  const scrollbarHitAt = (x: number, y: number): ScrollGeom | null => {
+    const m = mode();
+    let g: ScrollGeom | null = null;
+    if (m === "editor") g = editorScrollGeom();
+    else if (m === "diff") g = diffScrollGeom();
+    else if (m === "mirror") {
+      const cx = x - sidebarW();
+      const cy = y - TABBAR_H - HEADER_ROWS;
+      const pane = panes().find(
+        (p) => cx >= p.left && cx < p.left + p.width && cy >= p.top && cy < p.top + p.height,
+      );
+      if (pane) g = mirrorScrollGeom(pane);
+    }
+    if (!g || !g.visible || x !== g.col) return null;
+    const row = y - g.top0;
+    if (row < 0 || row >= g.viewH) return null;
+    return g;
+  };
   const forwardPress = (pane: LivePane, gx: number, gy: number, release: boolean) => {
     const { col, row } = paneCell(pane, gx, gy);
     void mirror?.sendTextTo(pane.id, sgrMouse(0, col, row, release)).catch(() => {});
@@ -1720,6 +1851,101 @@ render(() => {
   const windowLabels = () => windowTabs().map((w) => ` ${w.index}:${w.name} `);
   const windowSpans = createMemo(() => spans(windowLabels(), sidebarW() + 1, 1));
 
+  // ── HEADER-ROW AFFORDANCE BUTTONS (M19.5) ────────────────────────────────
+  // Clickable chips on the always-present header rows, right-aligned so their
+  // x-spans are pinned to the (fixed) container right edge regardless of the
+  // variable-width title/status text to their left (see `spansFromRight`). Both
+  // the render (a flexGrow spacer then the button texts) and the router read the
+  // SAME memo, so a click lands exactly where it's drawn — the surface-bar
+  // pattern, on mount-time rows only (no late-mounted <For> box wrappers). The
+  // button SET is derived from live signals so render and route always agree.
+  interface HeaderButton {
+    id: string;
+    label: string;
+  }
+  // Every header row ends flush at the main column's right edge (no paddingRight
+  // anywhere on the chain), which is the terminal width.
+  const buttonRightEdge = () => dims().width;
+  /** Buttons on the header row (gy=0): the editor's save/reload and the diff's
+   *  refresh. Read-only or unopened files show only the actions that apply. */
+  const headerButtons = createMemo<{ defs: HeaderButton[]; spans: Span[] }>(() => {
+    const m = mode();
+    const defs: HeaderButton[] = [];
+    if (m === "editor" && editorPath()) {
+      if (!editorReadOnly() && editorModified()) defs.push({ id: "save", label: "[● save]" });
+      defs.push({ id: "reload", label: "[↻ reload]" });
+    } else if (m === "diff") {
+      defs.push({ id: "refresh", label: "[↻ refresh]" });
+    }
+    return {
+      defs,
+      spans: spansFromRight(
+        defs.map((d) => d.label),
+        buttonRightEdge(),
+        1,
+      ),
+    };
+  });
+  /** Buttons on the home footer (the last screen row): the two app-handled home
+   *  keys (`o` open-file, `d` diff) as clickable chips. The other footer hints
+   *  advertise tmux-chrome binds this app's keyboard doesn't own, so they stay
+   *  plain text rather than dead buttons. Right-aligned to the fixed edge. */
+  const homeButtons = createMemo<{ defs: HeaderButton[]; spans: Span[] }>(() => {
+    const defs: HeaderButton[] =
+      mode() === "home"
+        ? [
+            { id: "home-open", label: "[o open]" },
+            { id: "home-diff", label: "[d diff]" },
+          ]
+        : [];
+    return {
+      defs,
+      spans: spansFromRight(
+        defs.map((d) => d.label),
+        buttonRightEdge(),
+        1,
+      ),
+    };
+  });
+  /** Buttons on the terminal window-strip row (gy=1): a vertical split of the
+   *  focused pane. Placed on the far right, clear of the window-label cells. */
+  const stripButtons = createMemo<{ defs: HeaderButton[]; spans: Span[] }>(() => {
+    const defs: HeaderButton[] =
+      mode() === "mirror" && panes().length > 0 ? [{ id: "split", label: "[+ split]" }] : [];
+    return {
+      defs,
+      spans: spansFromRight(
+        defs.map((d) => d.label),
+        buttonRightEdge(),
+        1,
+      ),
+    };
+  });
+  /** Run a header/strip button by id. Reload re-reads the open file from disk
+   *  (discarding unsaved edits — the ● dot warns first); split forks the focused
+   *  pane via the control client, same command the context menu issues. */
+  const runButton = (id: string) => {
+    if (id === "save") saveEditor();
+    else if (id === "reload") {
+      const p = editorPath();
+      if (p) openEditor(p);
+    } else if (id === "refresh") refreshStatus();
+    else if (id === "split") {
+      const pid = mirror?.focusedPane();
+      if (pid) void mirror?.command(`split-window -h -t ${pid}`).catch(() => {});
+    } else if (id === "home-open") setPathPrompt("");
+    else if (id === "home-diff") {
+      // Mirror the home `d` key: adopt the selected session's dir as context and
+      // open its diff.
+      const r = homeRows()[clampedSel()];
+      if (r) {
+        setContextSession(r.session);
+        setContextDir(r.dir ?? process.cwd());
+      }
+      enterDiff(r?.dir ?? process.cwd());
+    }
+  };
+
   /** The strip as THREE static texts (pre/active/post) whose STRINGS update.
    *  KNOWN UPSTREAM QUIRK: clicks landing exactly ON this row's label cells
    *  are swallowed before dispatch regardless of node structure (For-of-texts,
@@ -1758,11 +1984,21 @@ render(() => {
     }
     const m = mode();
     if (m === "home") {
+      if (y === dims().height - 1) {
+        const i = spanHit(homeButtons().spans, x);
+        setHoverIf(i >= 0 ? { region: "button", index: i } : null);
+        return;
+      }
       const idx = gy - 2;
       setHoverIf(idx >= 0 && idx < homeRows().length ? { region: "home", index: idx } : null);
       return;
     }
     if (m === "editor") {
+      if (gy === 0) {
+        const i = spanHit(headerButtons().spans, x);
+        setHoverIf(i >= 0 ? { region: "button", index: i } : null);
+        return;
+      }
       const contentY = gy - HEADER_ROWS;
       const overList = x < sidebarW() + filesListW();
       if (!overList || contentY < 0) {
@@ -1775,6 +2011,11 @@ render(() => {
       return;
     }
     if (m === "diff") {
+      if (gy === 0) {
+        const i = spanHit(headerButtons().spans, x);
+        setHoverIf(i >= 0 ? { region: "button", index: i } : null);
+        return;
+      }
       const contentY = gy - HEADER_ROWS;
       const overList = x < sidebarW() + diffListW();
       if (!overList || contentY < 0) {
@@ -1786,8 +2027,14 @@ render(() => {
       setHoverIf(idx >= 0 && idx < diffFiles().length ? { region: "diff", index: idx } : null);
       return;
     }
-    // mirror mode: the per-window strip lives on gy=1.
+    // mirror mode: the per-window strip lives on gy=1, with the [+ split] button
+    // on its right (checked first, matching the click router's precedence).
     if (gy === 1) {
+      const bi = spanHit(stripButtons().spans, x);
+      if (bi >= 0) {
+        setHoverIf({ region: "button", index: bi });
+        return;
+      }
       const i = spanHit(windowSpans(), x);
       setHoverIf(i >= 0 ? { region: "windowtab", index: i } : null);
       return;
@@ -1880,6 +2127,30 @@ render(() => {
           }
         }
       }
+      // A press on a VISIBLE scrollbar cell is the fourth drag-origin. On the
+      // thumb it captures the grab offset and begins an absolute-scroll drag; on
+      // the track above/below it pages one viewport toward the click. Checked
+      // after the resize origins (a track column never coincides with a boundary
+      // or separator) and before selection/click routing so it always wins.
+      const sb = scrollbarHitAt(x, y);
+      if (sb) {
+        setHoverIf(null);
+        const row = y - sb.top0;
+        const thumb = scrollThumb(sb.viewportTop, sb.contentLen, sb.viewH);
+        if (trackZone(row, thumb) === "thumb") {
+          dragging = {
+            kind: "scrollbar",
+            grabOffset: row - thumb.start,
+            top0: sb.top0,
+            contentLen: sb.contentLen,
+            viewH: sb.viewH,
+            surface: sb.surface,
+          };
+        } else {
+          applyScrollTop(sb.surface, pageTop(row, sb.viewportTop, sb.contentLen, sb.viewH));
+        }
+        return;
+      }
     }
     // A drag while a resize gesture is live reflows the sidebar / resizes panes,
     // suppressing hover; a release ends it (and persists the sidebar width via
@@ -1893,6 +2164,12 @@ render(() => {
       if (isDrag || isEnd) {
         if (dragging.kind === "sidebar") {
           setSidebarW(clampSidebarWidth(x));
+        } else if (dragging.kind === "scrollbar") {
+          // Absolute scroll: the pointer's row within the track maps to a top,
+          // honoring the grab offset so the thumb tracks the cursor 1:1.
+          const row = y - dragging.top0;
+          const top = dragTop(row, dragging.grabOffset, dragging.contentLen, dragging.viewH);
+          applyScrollTop(dragging.surface, top);
         } else {
           const cx = x - sidebarW();
           const cy = y - TABBAR_H - HEADER_ROWS;
@@ -1960,6 +2237,14 @@ render(() => {
     // (gy=0) + rule (gy=1), so a click at row gy hits home row `gy - 2`.
     if (mode() === "home") {
       if (type !== "down") return;
+      // The footer occupies the last screen row; its right-aligned [o open] /
+      // [d diff] chips are hit-tested there before the row math below.
+      if (y === dims().height - 1) {
+        const hb = homeButtons();
+        const i = spanHit(hb.spans, x);
+        if (i >= 0) runButton(hb.defs[i]!.id);
+        return;
+      }
       const r = homeRows()[gy - 2];
       if (r) {
         setSel(gy - 2);
@@ -1983,6 +2268,13 @@ render(() => {
         return;
       }
       if (type !== "down") return;
+      // The header row (gy=0) carries the right-aligned save/reload buttons.
+      if (gy === 0) {
+        const hb = headerButtons();
+        const i = spanHit(hb.spans, x);
+        if (i >= 0) runButton(hb.defs[i]!.id);
+        return;
+      }
       const contentY = gy - HEADER_ROWS;
       if (contentY < 0 || contentY >= editorRows()) return;
       if (overList) {
@@ -2038,6 +2330,13 @@ render(() => {
         return;
       }
       if (type !== "down") return;
+      // The header row (gy=0) carries the right-aligned refresh button.
+      if (gy === 0) {
+        const hb = headerButtons();
+        const i = spanHit(hb.spans, x);
+        if (i >= 0) runButton(hb.defs[i]!.id);
+        return;
+      }
       const contentY = gy - HEADER_ROWS;
       if (contentY < 0 || !overList) return;
       const top = clampTop(diffFileTop(), diffFiles().length, diffBodyRows());
@@ -2049,6 +2348,14 @@ render(() => {
     // lays out, so the formerly-swallowed segment clicks now land.
     if (gy === 1) {
       if (type !== "down") return;
+      // The right side of the strip carries the [+ split] button (clear of the
+      // window-label cells); it wins the hit test over the window spans.
+      const sbtn = stripButtons();
+      const bi = spanHit(sbtn.spans, x);
+      if (bi >= 0) {
+        runButton(sbtn.defs[bi]!.id);
+        return;
+      }
       const i = spanHit(windowSpans(), x);
       const w = windowTabs()[i];
       if (w) mirror?.switchWindow(w.index);
@@ -2095,6 +2402,40 @@ render(() => {
       }
     }
   };
+
+  // A 1-col scrollbar drawn in an always-present container's right column: a
+  // faint track with a brighter thumb, both single-cell bg fills. Each cell is a
+  // TEXT run (not a box) so a click lands on text and bubbles to the router —
+  // the late-mount landmine only swallows hits on late-mounted BOX area. The
+  // geom accessor is read inside Show/For so the strip re-tracks scroll/resize.
+  const scrollbarOverlay = (geomFn: () => ScrollGeom) => (
+    <Show when={geomFn().visible}>
+      <box position="absolute" right={0} top={0} width={1} flexDirection="column">
+        <For each={scrollbarCells(geomFn())}>
+          {(isThumb) => (
+            <text bg={isThumb ? SCROLL_THUMB_BG : SCROLL_TRACK_BG} fg={SCROLL_TRACK_BG}>
+              {" "}
+            </text>
+          )}
+        </For>
+      </box>
+    </Show>
+  );
+  /** The right-aligned affordance-button run for a header/strip row: a flexGrow
+   *  spacer pushes the chips flush to the container right edge, matching the
+   *  `spansFromRight` layout the router hit-tests. Hover lifts the chip. */
+  const buttonRow = (buttons: () => { defs: HeaderButton[]; spans: Span[] }) => (
+    <>
+      <box flexGrow={1} />
+      <For each={buttons().defs}>
+        {(b, i) => (
+          <text fg={BUTTON_FG} bg={isHovered("button", i()) ? BUTTON_HOVER_BG : BUTTON_BG}>
+            {b.label}
+          </text>
+        )}
+      </For>
+    </>
+  );
 
   return (
     <box
@@ -2228,8 +2569,9 @@ render(() => {
                 <text fg={DEFAULT_FG}>{`${pathPrompt() ?? ""}▏`}</text>
               </box>
             </Show>
-            <box paddingLeft={1}>
-              <text fg={MUTED}>{`${homeFooter()}   o open file   d diff`}</text>
+            <box paddingLeft={1} flexDirection="row" gap={1}>
+              <text fg={MUTED}>{homeFooter()}</text>
+              {buttonRow(homeButtons)}
             </box>
           </Show>
           <Show when={mode() === "mirror"}>
@@ -2251,6 +2593,7 @@ render(() => {
                 {windowStripParts().active}
               </text>
               <text fg={MUTED}>{windowStripParts().post}</text>
+              {buttonRow(stripButtons)}
             </box>
             <box position="relative" flexGrow={1} backgroundColor={GUTTER_BG}>
               <For each={panes()}>
@@ -2288,6 +2631,9 @@ render(() => {
                         </text>
                       </box>
                     </Show>
+                    {/* Right-edge scrollbar — only while scrolled up, so a live
+                        terminal stays clean (mirrorScrollGeom gates on offset). */}
+                    {scrollbarOverlay(() => mirrorScrollGeom(pane))}
                   </box>
                 )}
               </For>
@@ -2308,6 +2654,7 @@ render(() => {
               <text fg={MUTED}>{`${editorCursor().row + 1}:${editorCursor().col + 1}`}</text>
               <text fg={MUTED}>{`${editorLines().length}L`}</text>
               <text fg={MUTED}>{editorMsg()}</text>
+              {buttonRow(headerButtons)}
             </box>
             <Show
               when={readOnlyBanner(editorReadOnly())}
@@ -2345,8 +2692,10 @@ render(() => {
                   }}
                 </For>
               </box>
-              {/* Right: the editor viewport (gutter + text runs + cursor). */}
-              <box flexGrow={1} flexDirection="column">
+              {/* Right: the editor viewport (gutter + text runs + cursor) with a
+                  right-edge scrollbar overlaid on the last column. */}
+              <box position="relative" flexGrow={1} flexDirection="column">
+                {scrollbarOverlay(editorScrollGeom)}
                 <For each={editorVisible()}>
                   {(ln) => {
                     const gw = gutterWidth(editorLines().length);
@@ -2404,6 +2753,7 @@ render(() => {
               <Show when={diffMsg()}>
                 <text fg={MUTED}>{`· ${diffMsg()}`}</text>
               </Show>
+              {buttonRow(headerButtons)}
             </box>
             <text fg={MUTED}>{"─".repeat(Math.max(4, canvasCols() - 2))}</text>
             <box flexDirection="row" flexGrow={1}>
@@ -2435,8 +2785,10 @@ render(() => {
                   )}
                 </For>
               </box>
-              {/* Right: unified diff of the selected file. */}
-              <box flexGrow={1} flexDirection="column" paddingLeft={1}>
+              {/* Right: unified diff of the selected file, with a right-edge
+                  scrollbar overlaid on the last column. */}
+              <box position="relative" flexGrow={1} flexDirection="column" paddingLeft={1}>
+                {scrollbarOverlay(diffScrollGeom)}
                 <For each={diffVisible()}>
                   {(ln) => (
                     <box height={1}>
