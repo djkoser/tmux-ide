@@ -11,7 +11,7 @@
  * SURFACE TABS (M18.4): a persistent top row — [⌂ Home][❯ Terminal][▤ Files]
  * [± Diff] — makes the app a real IDE. F1..F4 switch (F-keys encode reliably;
  * ctrl+digit/alt do NOT — measured); the tab bar is also clickable (fixed x-span
- * math in `tabSpans`). The active `tab()` is the source of truth; `mode()` is a
+ * math in `TAB_SPANS`). The active `tab()` is the source of truth; `mode()` is a
  * DERIVED view (home|mirror|editor|diff) so the per-surface render/route math is
  * unchanged. CRITICAL for the IDE feel: switching AWAY from Terminal does NOT
  * dispose the SessionMirror — it keeps streaming in the background (dirty flags
@@ -71,9 +71,13 @@
  *     So: handlers ONLY on the always-present containers.
  *  2. Event-prop values must be INLINE ARROWS — a bare function reference is
  *     invoked as a reactive getter during prop wiring.
- * Known residue: hits precisely ON late-mounted tab-strip boxes still swallow
- * (even handler-less) — the ^t cycle covers window switching until the
- * upstream quirk is fixed.
+ * Corollary (M19.1): late-mounted <For> BOXES swallow even handler-less hits,
+ * but late-mounted <For> TEXT runs bubble correctly (as the pane canvas proves).
+ * So dynamic clickable strips render as bare styled text runs, not box wrappers:
+ * the per-window strip is one text-run row hit-tested by x-span math (`spans`),
+ * so segment clicks land (^t still cycles). HOVER feedback rides the same path —
+ * every region resolves a {region,index} on motion ("over"/"move", cleared on
+ * "out") and tints the hovered row/segment with HOVER_BG.
  *
  * Fleet data arrives via an async `tmux-ide team --json` subprocess: the
  * in-process data layer is a synchronous exec chain that blocks the event
@@ -124,6 +128,7 @@ import {
   type FileNode,
   type RawEntry,
 } from "./file-tree.ts";
+import { spans, spanHit } from "./spans.ts";
 
 const { values } = parseArgs({
   options: {
@@ -179,6 +184,10 @@ const ACCENT = RGBA.fromInts(130, 170, 255, 255);
 const MUTED = RGBA.fromInts(110, 110, 130, 255);
 const BADGE_BG = RGBA.fromInts(60, 66, 92, 255);
 const TAB_ACTIVE_BG = RGBA.fromInts(40, 46, 66, 255);
+// A single subtle pointer-hover tint, one lift above both DEFAULT_BG (16,16,22)
+// and SIDEBAR_BG (22,22,30) and below TAB_ACTIVE_BG — the active/selected state
+// always wins over hover. Used on every hoverable row/segment (see `hover`).
+const HOVER_BG = RGBA.fromInts(30, 34, 48, 255);
 const STATUS_COLOR: Record<AgentStatus, RGBA> = {
   blocked: RGBA.fromInts(240, 100, 100, 255),
   working: RGBA.fromInts(235, 200, 100, 255),
@@ -217,6 +226,9 @@ interface WindowTab {
   name: string;
   active: boolean;
 }
+/** The hoverable surfaces — each names a row/segment set the router can resolve
+ *  by coordinate math and each render tints with HOVER_BG. */
+type HoverRegion = "sidebar" | "home" | "surfacetab" | "windowtab" | "files" | "diff";
 
 const DEFAULT_FG = RGBA.fromInts(212, 212, 216, 255);
 const DEFAULT_BG = RGBA.fromInts(16, 16, 22, 255);
@@ -252,7 +264,7 @@ const HEADER_ROWS = 2;
 // router subtracts it once (`gy = y - TABBAR_H`) before the per-mode math.
 const TABBAR_H = 1;
 /** The four top-level surfaces, in F-key order (F1..F4). Glyphs are all
- *  single display-width so the tab-bar x-span math (`tabSpans`) is exact. */
+ *  single display-width so the tab-bar x-span math (`TAB_SPANS`) is exact. */
 const TABS: { key: Tab; label: string; glyph: string; fkey: string }[] = [
   { key: "home", label: "Home", glyph: "⌂", fkey: "f1" },
   { key: "terminal", label: "Terminal", glyph: "❯", fkey: "f2" },
@@ -262,6 +274,10 @@ const TABS: { key: Tab; label: string; glyph: string; fkey: string }[] = [
 /** One tab cell's rendered string (leading + trailing pad); width === length
  *  because every glyph above is single-width. */
 const tabCell = (t: { glyph: string; label: string }): string => ` ${t.glyph} ${t.label} `;
+/** The surface bar's x-spans. TABS is static (mounted at initial render), so the
+ *  layout is constant — computed once and shared by the router (hit test) and,
+ *  implicitly, the render (which walks TABS with the same cell strings). */
+const TAB_SPANS = spans(TABS.map(tabCell), 0, 0);
 const PALETTE_W = 60;
 const PALETTE_ROWS = 10;
 const PALETTE_BG = RGBA.fromInts(28, 30, 42, 255);
@@ -327,6 +343,23 @@ render(() => {
   const [panes, setPanes] = createSignal<LivePane[]>([]);
   const [windowTabs, setWindowTabs] = createSignal<WindowTab[]>([]);
   const [projectsData, setProjectsData] = createSignal<FleetProject[]>([]);
+  // Pointer-hover feedback. One nullable signal names the hovered target as a
+  // {region, index}; the same coordinate math that routes clicks resolves it on
+  // motion events, and each hoverable render reads it for a subtle HOVER_BG. It
+  // must never thrash: `setHoverIf` no-ops unless region+index actually change.
+  const [hover, setHover] = createSignal<{ region: HoverRegion; index: number } | null>(null);
+  const setHoverIf = (next: { region: HoverRegion; index: number } | null) => {
+    const cur = hover();
+    if (next === null) {
+      if (cur !== null) setHover(null);
+      return;
+    }
+    if (!cur || cur.region !== next.region || cur.index !== next.index) setHover(next);
+  };
+  const isHovered = (region: HoverRegion, index: number): boolean => {
+    const h = hover();
+    return h !== null && h.region === region && h.index === index;
+  };
   const [sel, setSel] = createSignal(0);
   const [status, setStatus] = createSignal(bareHome ? "home" : "attaching…");
 
@@ -1143,18 +1176,88 @@ render(() => {
     }
   });
 
-  /** The tab bar's x-spans — one contiguous cell per tab from x=0. A fixed row
-   *  rendered at mount, so the click math is exact and never hits the late-mount
-   *  landmine. Shared by the router (hit test) and the render (cell strings). */
-  const tabSpans = createMemo(() => {
-    let start = 0;
-    return TABS.map((t) => {
-      const cell = tabCell(t);
-      const span = { key: t.key, start, width: cell.length, cell, active: false };
-      start += cell.length;
-      return span;
-    });
+  /** The per-window strip's x-spans — one segment per tmux window, laid out from
+   *  the main column's first cell (SIDEBAR_W + paddingLeft 1) with a 1-cell gap,
+   *  exactly matching the rendered `flexDirection="row" gap={1}` row. Shared by
+   *  the router (click + hover hit test) and, cell-for-cell, by the render. The
+   *  labels MUST equal the rendered segment strings for the math to hold. */
+  const windowLabels = () => windowTabs().map((w) => ` ${w.index}:${w.name} `);
+  const windowSpans = createMemo(() => spans(windowLabels(), SIDEBAR_W + 1, 1));
+
+  /** The strip as THREE static texts (pre/active/post) whose STRINGS update.
+   *  KNOWN UPSTREAM QUIRK: clicks landing exactly ON this row's label cells
+   *  are swallowed before dispatch regardless of node structure (For-of-texts,
+   *  static texts, handler-less — all tried; the surface bar with an identical
+   *  pattern takes clicks fine). Non-label cells on the row route normally.
+   *  ^t cycles windows; span routing handles whatever clicks arrive. */
+  const windowStripParts = createMemo(() => {
+    const tabs = windowTabs();
+    const activeIdx = tabs.findIndex((w) => w.active);
+    const label = (w: { index: number; name: string }) => ` ${w.index}:${w.name} `;
+    return {
+      pre: tabs.slice(0, Math.max(0, activeIdx)).map(label).join(" "),
+      active: activeIdx >= 0 ? label(tabs[activeIdx]!) : "",
+      post: tabs
+        .slice(activeIdx + 1)
+        .map(label)
+        .join(" "),
+    };
   });
+
+  /** Resolve the hovered {region, index} from pointer coords with the SAME
+   *  geometry the click router uses, then update `hover` (no-op unless changed).
+   *  Called on every motion event so the click branches below stay untouched;
+   *  any position that isn't a hoverable row/segment clears the tint. */
+  const resolveHover = (x: number, y: number) => {
+    if (y === 0) {
+      const i = spanHit(TAB_SPANS, x);
+      setHoverIf(i >= 0 ? { region: "surfacetab", index: i } : null);
+      return;
+    }
+    const gy = y - TABBAR_H;
+    if (x < SIDEBAR_W) {
+      const idx = gy - 2;
+      setHoverIf(idx >= 0 && idx < fleet().length ? { region: "sidebar", index: idx } : null);
+      return;
+    }
+    const m = mode();
+    if (m === "home") {
+      const idx = gy - 2;
+      setHoverIf(idx >= 0 && idx < homeRows().length ? { region: "home", index: idx } : null);
+      return;
+    }
+    if (m === "editor") {
+      const contentY = gy - HEADER_ROWS;
+      const overList = x < SIDEBAR_W + filesListW();
+      if (!overList || contentY < 0) {
+        setHoverIf(null);
+        return;
+      }
+      const top = clampTop(fileTop(), fileNodes().length, editorRows());
+      const idx = top + contentY;
+      setHoverIf(idx >= 0 && idx < fileNodes().length ? { region: "files", index: idx } : null);
+      return;
+    }
+    if (m === "diff") {
+      const contentY = gy - HEADER_ROWS;
+      const overList = x < SIDEBAR_W + diffListW();
+      if (!overList || contentY < 0) {
+        setHoverIf(null);
+        return;
+      }
+      const top = clampTop(diffFileTop(), diffFiles().length, diffBodyRows());
+      const idx = top + contentY;
+      setHoverIf(idx >= 0 && idx < diffFiles().length ? { region: "diff", index: idx } : null);
+      return;
+    }
+    // mirror mode: the per-window strip lives on gy=1.
+    if (gy === 1) {
+      const i = spanHit(windowSpans(), x);
+      setHoverIf(i >= 0 ? { region: "windowtab", index: i } : null);
+      return;
+    }
+    setHoverIf(null);
+  };
 
   /** One router, fed by the three always-present region containers (tab bar,
    *  sidebar, main). Geometry is ours. The tab bar is the top screen row; every
@@ -1163,15 +1266,21 @@ render(() => {
   const route = (e: { type: string; x: number; y: number; scroll?: { direction: string } }) => {
     const { type, x, y } = e;
     zzlog(`${type} ${x},${y}`);
+    // Motion (bubbled from child text runs) drives hover only; "out" clears it.
+    // Handled first so every click branch below stays a pure down/up/scroll path.
+    if (type === "out") {
+      setHoverIf(null);
+      return;
+    }
+    if (type === "move" || type === "over" || type === "drag") {
+      resolveHover(x, y);
+      return;
+    }
     // Row 0 — the surface tab bar (full width, above the sidebar).
     if (y === 0) {
       if (type !== "down") return;
-      for (const s of tabSpans()) {
-        if (x >= s.start && x < s.start + s.width) {
-          selectTab(s.key);
-          return;
-        }
-      }
+      const i = spanHit(TAB_SPANS, x);
+      if (i >= 0) selectTab(TABS[i]!.key);
       return;
     }
     const gy = y - TABBAR_H;
@@ -1256,17 +1365,13 @@ render(() => {
       if (idx >= 0 && idx < diffFiles().length) selectDiffFile(idx);
       return;
     }
+    // The per-window strip (gy=1) — resolved by the SAME x-span math the render
+    // lays out, so the formerly-swallowed segment clicks now land.
     if (gy === 1) {
       if (type !== "down") return;
-      let col = SIDEBAR_W + 1;
-      for (const w of windowTabs()) {
-        const width = ` ${w.index}:${w.name} `.length;
-        if (x >= col && x < col + width) {
-          mirror?.switchWindow(w.index);
-          return;
-        }
-        col += width + 1;
-      }
+      const i = spanHit(windowSpans(), x);
+      const w = windowTabs()[i];
+      if (w) mirror?.switchWindow(w.index);
       return;
     }
     const cx = x - SIDEBAR_W;
@@ -1293,8 +1398,9 @@ render(() => {
     <box flexDirection="column" flexGrow={1} backgroundColor={DEFAULT_BG}>
       {/* Surface tab bar — the top screen row (gy=0), full width above the
           sidebar. Rendered at mount (static <For>), so the click x-spans in
-          `tabSpans` are exact and never hit the late-mount landmine. F1..F4
-          switch; the active tab carries the accent background. */}
+          `TAB_SPANS` are exact and never hit the late-mount landmine. F1..F4
+          switch; the active tab carries the accent background, a hovered one a
+          subtle tint. */}
       <box
         height={TABBAR_H}
         flexDirection="row"
@@ -1304,8 +1410,12 @@ render(() => {
         }
       >
         <For each={TABS}>
-          {(t) => (
-            <box backgroundColor={tab() === t.key ? ACCENT : TABBAR_BG}>
+          {(t, i) => (
+            <box
+              backgroundColor={
+                tab() === t.key ? ACCENT : isHovered("surfacetab", i()) ? HOVER_BG : TABBAR_BG
+              }
+            >
               <text fg={tab() === t.key ? DEFAULT_BG : MUTED} attributes={tab() === t.key ? 1 : 0}>
                 {tabCell(t)}
               </text>
@@ -1334,11 +1444,17 @@ render(() => {
           <text fg={MUTED}>{"─".repeat(SIDEBAR_W - 2)}</text>
           <box flexDirection="column">
             <For each={fleet()}>
-              {(s) => (
+              {(s, i) => (
                 <box
                   flexDirection="row"
                   gap={1}
-                  backgroundColor={s.name === curTarget() ? TAB_ACTIVE_BG : SIDEBAR_BG}
+                  backgroundColor={
+                    s.name === curTarget()
+                      ? TAB_ACTIVE_BG
+                      : isHovered("sidebar", i())
+                        ? HOVER_BG
+                        : SIDEBAR_BG
+                  }
                 >
                   <text fg={STATUS_COLOR[s.status]}>{STATUS_GLYPH[s.status]}</text>
                   <text fg={s.name === curTarget() ? DEFAULT_FG : MUTED}>
@@ -1378,7 +1494,13 @@ render(() => {
                     flexDirection="row"
                     gap={1}
                     paddingLeft={1}
-                    backgroundColor={i() === clampedSel() ? TAB_ACTIVE_BG : DEFAULT_BG}
+                    backgroundColor={
+                      i() === clampedSel()
+                        ? TAB_ACTIVE_BG
+                        : isHovered("home", i())
+                          ? HOVER_BG
+                          : DEFAULT_BG
+                    }
                   >
                     <text fg={STATUS_COLOR[r.status]}>{STATUS_GLYPH[r.status]}</text>
                     <text fg={i() === clampedSel() ? DEFAULT_FG : MUTED} attributes={1}>
@@ -1415,14 +1537,18 @@ render(() => {
               </text>
               <text fg={MUTED}>{status()}</text>
             </box>
+            {/* The per-window strip (gy=1). Rendered as bare styled TEXT runs (no
+                per-window <box> wrapper) so the late-mounted segments bubble
+                clicks to the main-column router instead of swallowing them the
+                way late-mounted boxes do; `route` hit-tests `windowSpans`, whose
+                labels equal these run strings. Active = accent+tint, hover =
+                subtle tint. */}
             <box paddingLeft={1} flexDirection="row" gap={1}>
-              <For each={windowTabs()}>
-                {(w) => (
-                  <box backgroundColor={w.active ? TAB_ACTIVE_BG : DEFAULT_BG}>
-                    <text fg={w.active ? ACCENT : MUTED}>{` ${w.index}:${w.name} `}</text>
-                  </box>
-                )}
-              </For>
+              <text fg={MUTED}>{windowStripParts().pre}</text>
+              <text fg={ACCENT} bg={TAB_ACTIVE_BG}>
+                {windowStripParts().active}
+              </text>
+              <text fg={MUTED}>{windowStripParts().post}</text>
             </box>
             <box position="relative" flexGrow={1} backgroundColor={GUTTER_BG}>
               <For each={panes()}>
@@ -1495,7 +1621,7 @@ render(() => {
                 <For each={fileListVisible()}>
                   {(row) => {
                     const n = row.node;
-                    const sel = row.index === fileSel() && filesFocus() === "list";
+                    const selected = () => row.index === fileSel() && filesFocus() === "list";
                     const prefix =
                       "  ".repeat(n.depth) + (n.isDir ? (n.expanded ? "▾ " : "▸ ") : "  ");
                     const label = (prefix + n.name).slice(0, filesListW() - 1);
@@ -1503,9 +1629,15 @@ render(() => {
                       <box
                         paddingLeft={1}
                         height={1}
-                        backgroundColor={sel ? TAB_ACTIVE_BG : GUTTER_BG}
+                        backgroundColor={
+                          selected()
+                            ? TAB_ACTIVE_BG
+                            : isHovered("files", row.index)
+                              ? HOVER_BG
+                              : GUTTER_BG
+                        }
                       >
-                        <text fg={n.isDir ? DIR_FG : sel ? DEFAULT_FG : MUTED}>{label}</text>
+                        <text fg={n.isDir ? DIR_FG : selected() ? DEFAULT_FG : MUTED}>{label}</text>
                       </box>
                     );
                   }}
@@ -1566,7 +1698,13 @@ render(() => {
                       flexDirection="row"
                       gap={1}
                       paddingLeft={1}
-                      backgroundColor={row.index === diffSel() ? TAB_ACTIVE_BG : GUTTER_BG}
+                      backgroundColor={
+                        row.index === diffSel()
+                          ? TAB_ACTIVE_BG
+                          : isHovered("diff", row.index)
+                            ? HOVER_BG
+                            : GUTTER_BG
+                      }
                     >
                       <text fg={STATUS_LETTER_FG[row.entry.status] ?? DEFAULT_FG}>
                         {row.entry.status}
