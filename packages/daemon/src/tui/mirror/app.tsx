@@ -98,8 +98,8 @@ import {
   writeSync,
   closeSync,
 } from "node:fs";
-import { readdir } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { readdir, writeFile, rename, rm } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { render, useKeyboard, usePaste, useTerminalDimensions } from "@opentui/solid";
 import { RGBA, EditBuffer, decodePasteBytes } from "@opentui/core";
 import { createSignal, createMemo, createEffect, onMount, onCleanup, For, Show } from "solid-js";
@@ -137,6 +137,16 @@ import {
   type RawEntry,
 } from "./file-tree.ts";
 import { spans, spanHit } from "./spans.ts";
+import {
+  MENU_ITEMS,
+  CONFIRM_SUFFIX,
+  menuDims,
+  clampMenuPos,
+  menuItemAt,
+  pointInMenu,
+  type MenuRegion,
+  type MenuItem,
+} from "./menu-model.ts";
 import {
   orderCells,
   rowSelectionRange,
@@ -257,6 +267,20 @@ interface WindowTab {
 /** The hoverable surfaces — each names a row/segment set the router can resolve
  *  by coordinate math and each render tints with HOVER_BG. */
 type HoverRegion = "sidebar" | "home" | "surfacetab" | "windowtab" | "files" | "diff";
+
+/** The one pointer-event shape the central `route` reads. `button` distinguishes
+ *  left (0) / right (2) presses; `stopPropagation` (present on the real OpenTUI
+ *  MouseEvent) halts the parent-chain walk so the FIRST handler in the bubble
+ *  owns the event — a leaf container for normal clicks, the root box for the
+ *  late-mounted menu overlay whose only ancestor handler is root. */
+type RouteEvent = {
+  type: string;
+  button?: number;
+  x: number;
+  y: number;
+  scroll?: { direction: string };
+  stopPropagation?: () => void;
+};
 
 const DEFAULT_FG = RGBA.fromInts(212, 212, 216, 255);
 const DEFAULT_BG = RGBA.fromInts(16, 16, 22, 255);
@@ -412,6 +436,40 @@ render(() => {
     selecting = null;
     if (selection() !== null) setSelection(null);
   };
+
+  // ── RIGHT-CLICK CONTEXT MENU (M19.2) ─────────────────────────────────────
+  // A small overlay opened at the pointer on a right-button press (SGR button
+  // 2). Late-mounted inside <Show>, so — per the mouse landmine laws — it
+  // carries NO per-item handlers; `route` checks `menu()` FIRST and maps clicks
+  // to item rows by the same coordinate math the render lays out (menu-model).
+  // Keyboard drives j/k+enter; destructive items rearm into a `menuConfirm`
+  // (press y) state; input items (`rename`/`new file`) open an inline line via
+  // `menuInput`. The concrete payload for the resolved region rides on the
+  // state object; the side effects live in `runMenuAction`.
+  interface MenuState {
+    region: MenuRegion;
+    title: string;
+    items: MenuItem[];
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+    session?: string;
+    sessionDir?: string | null;
+    fileIndex?: number;
+    filePath?: string;
+    fileIsDir?: boolean;
+    fileParent?: string;
+    diffPath?: string;
+    paneId?: string;
+  }
+  const [menu, setMenu] = createSignal<MenuState | null>(null);
+  const [menuSel, setMenuSel] = createSignal(0);
+  const [menuConfirm, setMenuConfirm] = createSignal<number | null>(null);
+  const [menuInput, setMenuInput] = createSignal<string | null>(null);
+  // Assigned in onMount so a menu action (kill/rename session) can force an
+  // early fleet re-poll instead of waiting out the 3s interval.
+  let fleetRefresh: (() => void) | null = null;
 
   // Derived, io-free views over the one async fleet payload. `fleet` is the
   // sidebar's flat, deduped session list; `homeRows` is the HOME panel's
@@ -1026,6 +1084,7 @@ render(() => {
         }
       });
     };
+    fleetRefresh = refreshFleet;
     refreshFleet();
     const fleetTimer = setInterval(refreshFleet, 3000);
     // While the diff panel is up, re-poll git so external edits surface.
@@ -1168,11 +1227,261 @@ render(() => {
     markDirty();
   };
 
+  /** Resolve the right-click target under (x,y) into a menu context — the SAME
+   *  coordinate math the hover/click router uses. Returns null where a menu makes
+   *  no sense (the tab bar, empty rows, the diff/editor body columns). */
+  const resolveMenuTarget = (
+    x: number,
+    y: number,
+  ): Omit<MenuState, "left" | "top" | "width" | "height"> | null => {
+    if (y === 0) return null; // the surface tab bar owns row 0
+    const gy = y - TABBAR_H;
+    if (x < SIDEBAR_W) {
+      const s = fleet()[gy - 2];
+      if (!s) return null;
+      return {
+        region: "session",
+        title: s.name,
+        items: MENU_ITEMS.session,
+        session: s.name,
+        sessionDir: dirForSession(s.name),
+      };
+    }
+    const m = mode();
+    if (m === "home") {
+      const r = homeRows()[gy - 2];
+      if (!r) return null;
+      return {
+        region: "session",
+        title: r.session,
+        items: MENU_ITEMS.session,
+        session: r.session,
+        sessionDir: r.dir,
+      };
+    }
+    if (m === "editor") {
+      const overList = x < SIDEBAR_W + filesListW();
+      const contentY = gy - HEADER_ROWS;
+      if (!overList || contentY < 0) return null;
+      const top = clampTop(fileTop(), fileNodes().length, editorRows());
+      const idx = top + contentY;
+      const node = fileNodes()[idx];
+      if (!node) return null;
+      return {
+        region: "file",
+        title: node.name,
+        items: MENU_ITEMS.file,
+        fileIndex: idx,
+        filePath: node.path,
+        fileIsDir: node.isDir,
+        fileParent: node.isDir ? node.path : dirname(node.path),
+      };
+    }
+    if (m === "diff") {
+      const overList = x < SIDEBAR_W + diffListW();
+      const contentY = gy - HEADER_ROWS;
+      if (!overList || contentY < 0) return null;
+      const top = clampTop(diffFileTop(), diffFiles().length, diffBodyRows());
+      const idx = top + contentY;
+      const entry = diffFiles()[idx];
+      if (!entry) return null;
+      return {
+        region: "difffile",
+        title: basename(entry.path),
+        items: MENU_ITEMS.difffile,
+        diffPath: join(diffDir(), entry.path),
+      };
+    }
+    // mirror: the pane canvas lives below the header (gy=0) + window strip (gy=1).
+    if (gy < HEADER_ROWS) return null;
+    const cx = x - SIDEBAR_W;
+    const cy = gy - HEADER_ROWS;
+    const pane = panes().find(
+      (p) => cx >= p.left && cx < p.left + p.width && cy >= p.top && cy < p.top + p.height,
+    );
+    if (!pane) return null;
+    return { region: "pane", title: pane.id, items: MENU_ITEMS.pane, paneId: pane.id };
+  };
+
+  const closeMenu = () => {
+    setMenuConfirm(null);
+    setMenuInput(null);
+    if (menu() !== null) setMenu(null);
+  };
+
+  /** Open the context menu at the pointer, clamped fully on-screen. */
+  const openMenu = (x: number, y: number) => {
+    const t = resolveMenuTarget(x, y);
+    if (!t) {
+      closeMenu();
+      return;
+    }
+    const { width, height } = menuDims(t.title, t.items);
+    const { left, top } = clampMenuPos(x, y, width, height, dims().width, dims().height);
+    clearSelection();
+    setMenuSel(0);
+    setMenuConfirm(null);
+    setMenuInput(null);
+    setMenu({ ...t, left, top, width, height });
+  };
+
+  /** Run the menu item's side effect. Destructive io (kill/rename/delete) goes
+   *  through ASYNC execFile/fs — never a sync exec near the render loop. */
+  const runMenuAction = (id: string, input?: string) => {
+    const m = menu();
+    if (!m) return;
+    const val = (input ?? "").trim();
+    if (m.region === "session") {
+      const name = m.session!;
+      if (id === "attach") {
+        closeMenu();
+        openWorkspace(name, m.sessionDir ?? null);
+        return;
+      }
+      if (id === "kill") {
+        execFile("tmux", ["kill-session", "-t", name], () =>
+          setTimeout(() => fleetRefresh?.(), 200),
+        );
+        setStatusNote(`killed ${name}`);
+        closeMenu();
+        return;
+      }
+      if (id === "rename" && val) {
+        execFile("tmux", ["rename-session", "-t", name, val], () =>
+          setTimeout(() => fleetRefresh?.(), 200),
+        );
+        setStatusNote(`renamed ${name} → ${val}`);
+      }
+      closeMenu();
+      return;
+    }
+    if (m.region === "file") {
+      if (id === "open") {
+        closeMenu();
+        setFilesFocus("list");
+        if (m.fileIndex !== undefined) activateFile(m.fileIndex);
+        return;
+      }
+      if (id === "newfile" && val) {
+        const p = join(m.fileParent ?? workspaceDir(), val);
+        void writeFile(p, "", { flag: "wx" })
+          .then(() => {
+            setStatusNote(`created ${val}`);
+            loadFileList(workspaceDir());
+          })
+          .catch((e) => setStatusNote(`create failed: ${(e as Error).message}`));
+      } else if (id === "rename" && val && m.filePath) {
+        const p = join(dirname(m.filePath), val);
+        void rename(m.filePath, p)
+          .then(() => {
+            setStatusNote(`renamed → ${val}`);
+            loadFileList(workspaceDir());
+          })
+          .catch((e) => setStatusNote(`rename failed: ${(e as Error).message}`));
+      } else if (id === "delete" && m.filePath) {
+        void rm(m.filePath, { recursive: true, force: false })
+          .then(() => {
+            setStatusNote(`deleted ${basename(m.filePath!)}`);
+            loadFileList(workspaceDir());
+          })
+          .catch((e) => setStatusNote(`delete failed: ${(e as Error).message}`));
+      }
+      closeMenu();
+      return;
+    }
+    if (m.region === "difffile") {
+      if (id === "open" && m.diffPath) {
+        closeMenu();
+        openEditor(m.diffPath);
+        return;
+      }
+      if (id === "copypath" && m.diffPath) copyText(m.diffPath);
+      closeMenu();
+      return;
+    }
+    if (m.region === "pane") {
+      const pid = m.paneId!;
+      const cmd =
+        id === "split-h"
+          ? `split-window -h -t ${pid}`
+          : id === "split-v"
+            ? `split-window -v -t ${pid}`
+            : id === "zoom"
+              ? `resize-pane -Z -t ${pid}`
+              : id === "kill"
+                ? `kill-pane -t ${pid}`
+                : "";
+      if (cmd) void mirror?.command(cmd).catch(() => {});
+      closeMenu();
+      return;
+    }
+  };
+
+  /** Activate the item at `index`: input items open the inline line, danger items
+   *  rearm to confirm (or fire when already armed), the rest run immediately. */
+  const activateMenuItem = (index: number) => {
+    const m = menu();
+    if (!m) return;
+    const item = m.items[index];
+    if (!item) return;
+    setMenuSel(index);
+    if (item.input !== undefined) {
+      setMenuConfirm(null);
+      setMenuInput(item.id === "rename" ? m.title : "");
+      return;
+    }
+    if (item.danger) {
+      if (menuConfirm() === index) runMenuAction(item.id);
+      else setMenuConfirm(index);
+      return;
+    }
+    runMenuAction(item.id);
+  };
+
+  /** Feed one key to the open menu. */
+  const menuKey = (evt: { name: string; ctrl: boolean; meta: boolean; shift: boolean }) => {
+    const m = menu();
+    if (!m) return;
+    // Inline-input mode (rename / new file): type the value, enter confirms.
+    if (menuInput() !== null) {
+      if (evt.name === "escape") setMenuInput(null);
+      else if (evt.name === "return")
+        runMenuAction(m.items[menuSel()]?.id ?? "", menuInput() ?? "");
+      else if (evt.name === "backspace") setMenuInput((s) => (s ?? "").slice(0, -1));
+      else if (evt.name.length === 1 && !evt.ctrl && !evt.meta)
+        setMenuInput((s) => (s ?? "") + (evt.shift ? evt.name.toUpperCase() : evt.name));
+      return;
+    }
+    if (evt.name === "escape") {
+      if (menuConfirm() !== null) setMenuConfirm(null);
+      else closeMenu();
+      return;
+    }
+    if (evt.name === "y" && menuConfirm() !== null) {
+      runMenuAction(m.items[menuConfirm()!]?.id ?? "");
+      return;
+    }
+    if (evt.name === "j" || evt.name === "down") {
+      setMenuConfirm(null);
+      setMenuSel((s) => Math.min(m.items.length - 1, s + 1));
+    } else if (evt.name === "k" || evt.name === "up") {
+      setMenuConfirm(null);
+      setMenuSel((s) => Math.max(0, s - 1));
+    } else if (evt.name === "return") {
+      activateMenuItem(menuSel());
+    }
+  };
+
   useKeyboard((evt) => {
     if (evt.ctrl && evt.name === "q") {
       mirror?.dispose();
       editBuffer?.destroy();
       process.exit(0);
+    }
+    // The context menu owns the keyboard while open (before the palette).
+    if (menu()) {
+      menuKey(evt);
+      return;
     }
     // The palette owns the keyboard while open (keyboard-only overlay); esc/enter
     // inside close it.
@@ -1481,9 +1790,38 @@ render(() => {
     }
   };
 
-  const route = (e: { type: string; x: number; y: number; scroll?: { direction: string } }) => {
+  const route = (e: RouteEvent) => {
     const { type, x, y } = e;
-    zzlog(`${type} ${x},${y}`);
+    zzlog(`${type} ${x},${y}${e.button !== undefined ? ` b${e.button}` : ""}`);
+    // The FIRST handler in the bubble chain owns the event — stop here so a click
+    // on a leaf container isn't re-processed by the root catch-all (and the
+    // late-mounted menu overlay, whose only ancestor handler is root, is handled
+    // exactly once there). Idempotent on the real MouseEvent; a no-op in tests.
+    e.stopPropagation?.();
+    // While the context menu is open it OWNS pointer routing: a down on an item
+    // runs it, a down elsewhere inside the box is a no-op (stays open), a down
+    // OUTSIDE closes it. Motion/releases are swallowed (keyboard drives nav).
+    const openMenuState = menu();
+    if (openMenuState) {
+      if (type !== "down") return;
+      const geom = {
+        left: openMenuState.left,
+        top: openMenuState.top,
+        width: openMenuState.width,
+        height: openMenuState.height,
+        itemCount: openMenuState.items.length,
+      };
+      const idx = menuItemAt(geom, x, y);
+      if (idx >= 0) activateMenuItem(idx);
+      else if (!pointInMenu(geom, x, y)) closeMenu();
+      return;
+    }
+    // A right-button press (SGR button 2) opens the context menu at the pointer.
+    // Left/middle presses fall through to the normal click routing below.
+    if (type === "down" && e.button === 2) {
+      openMenu(x, y);
+      return;
+    }
     // Motion (bubbled from child text runs) drives hover only; "out" clears it.
     // Handled first so every click branch below stays a pure down/up/scroll path.
     if (type === "out") {
@@ -1668,7 +2006,12 @@ render(() => {
   };
 
   return (
-    <box flexDirection="column" flexGrow={1} backgroundColor={DEFAULT_BG}>
+    <box
+      flexDirection="column"
+      flexGrow={1}
+      backgroundColor={DEFAULT_BG}
+      onMouse={(e: RouteEvent) => route(e)}
+    >
       {/* Surface tab bar — the top screen row (gy=0), full width above the
           sidebar. Rendered at mount (static <For>), so the click x-spans in
           `TAB_SPANS` are exact and never hit the late-mount landmine. F1..F4
@@ -1678,9 +2021,7 @@ render(() => {
         height={TABBAR_H}
         flexDirection="row"
         backgroundColor={TABBAR_BG}
-        onMouse={(e: { type: string; x: number; y: number; scroll?: { direction: string } }) =>
-          route(e)
-        }
+        onMouse={(e: RouteEvent) => route(e)}
       >
         <For each={TABS}>
           {(t, i) => (
@@ -1710,9 +2051,7 @@ render(() => {
           flexDirection="column"
           backgroundColor={SIDEBAR_BG}
           paddingLeft={1}
-          onMouse={(e: { type: string; x: number; y: number; scroll?: { direction: string } }) =>
-            route(e)
-          }
+          onMouse={(e: RouteEvent) => route(e)}
         >
           <text fg={ACCENT} attributes={1}>
             tmux-ide
@@ -1743,11 +2082,7 @@ render(() => {
           <box flexGrow={1} />
           <text fg={MUTED}>{"F1-4 tabs · F5 palette · ^q quit"}</text>
         </box>
-        <box
-          flexDirection="column"
-          flexGrow={1}
-          onMouse={(e: { type: string; x: number; y: number }) => route(e)}
-        >
+        <box flexDirection="column" flexGrow={1} onMouse={(e: RouteEvent) => route(e)}>
           <Show when={mode() === "home"}>
             {/* HOME header (y=0) + rule (y=1); rows below start at y=2 — the
               coordinate `route` reverses for a home-row click. */}
@@ -2063,6 +2398,56 @@ render(() => {
           <Show when={paletteActions().length === 0}>
             <text fg={MUTED}>{"  no matches"}</text>
           </Show>
+        </box>
+      </Show>
+      {/* RIGHT-CLICK CONTEXT MENU overlay (M19.2) — opened at the pointer,
+          clamped on-screen. Late-mounted inside <Show>, so it carries NO mouse
+          handler: clicks route via the root box's `route`, which checks `menu()`
+          first and hit-tests item rows by `menuItemAt` (matching this layout —
+          top border, one header row, then the item rows). Each item row is a
+          FULL-WIDTH text run so a click anywhere on it lands on text and bubbles
+          (bare box area on a late-mounted node is swallowed). j/k+enter navigate;
+          danger items rearm to a red "confirm: y"; input items show an inline
+          line. */}
+      <Show when={menu()}>
+        <box
+          position="absolute"
+          left={menu()!.left}
+          top={menu()!.top}
+          width={menu()!.width}
+          flexDirection="column"
+          backgroundColor={PALETTE_BG}
+          border
+          borderColor={PALETTE_BORDER}
+          paddingLeft={1}
+          paddingRight={1}
+        >
+          <text fg={ACCENT} attributes={1}>
+            {menu()!
+              .title.slice(0, menu()!.width - 4)
+              .padEnd(menu()!.width - 4)}
+          </text>
+          <For each={menu()!.items}>
+            {(it, i) => {
+              const innerW = () => menu()!.width - 4;
+              const selected = () => menuSel() === i();
+              const armed = () => menuConfirm() === i();
+              const inputting = () => menuInput() !== null && menuSel() === i();
+              const body = () => {
+                if (inputting()) return `${it.input}: ${menuInput()}▏`;
+                if (armed()) return `${it.label}${CONFIRM_SUFFIX}`;
+                return `${selected() ? "› " : "  "}${it.label}`;
+              };
+              const fg = () =>
+                armed() ? DIFF_DEL_FG : selected() || inputting() ? DEFAULT_FG : MUTED;
+              const bg = () => (selected() || armed() || inputting() ? TAB_ACTIVE_BG : PALETTE_BG);
+              return (
+                <box height={1} backgroundColor={bg()}>
+                  <text fg={fg()}>{body().slice(0, innerW()).padEnd(innerW())}</text>
+                </box>
+              );
+            }}
+          </For>
         </box>
       </Show>
     </box>
