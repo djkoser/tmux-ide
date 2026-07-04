@@ -82,7 +82,10 @@
       "@parcel/watcher",
       "esbuild",
       "node-pty"
-    ]
+    ],
+    "overrides": {
+      "zod": "^4.3.6"
+    }
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
