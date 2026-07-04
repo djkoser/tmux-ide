@@ -20,12 +20,16 @@ export type MenuRegion = "session" | "file" | "difffile" | "pane" | "window";
 
 /** One menu entry. `id` is what the app dispatches on; `danger` items rearm to
  *  a "confirm: y" state instead of firing immediately; `input` items open an
- *  inline text line (the string is the prompt) before firing. */
+ *  inline text line (the string is the prompt) before firing; `children` items
+ *  open a SUBMENU column beside the row (one nesting level); `checkbox` items
+ *  carry a live ✓/✗ state the app supplies (the toggle keeps the menu open). */
 export interface MenuItem {
   id: string;
   label: string;
   danger?: boolean;
   input?: string;
+  children?: MenuItem[];
+  checkbox?: boolean;
 }
 
 /** PURE — the fixed item list for each region. The app supplies the context. */
@@ -49,6 +53,21 @@ export const MENU_ITEMS: Record<MenuRegion, MenuItem[]> = {
     { id: "split-h", label: "Split horizontal" },
     { id: "split-v", label: "Split vertical" },
     { id: "zoom", label: "Zoom toggle" },
+    { id: "swap-next", label: "Swap with next" },
+    { id: "break", label: "Break to window" },
+    { id: "rotate", label: "Rotate panes" },
+    {
+      id: "layouts",
+      label: "Layouts",
+      children: [
+        { id: "layout:even-horizontal", label: "even-horizontal" },
+        { id: "layout:even-vertical", label: "even-vertical" },
+        { id: "layout:main-horizontal", label: "main-horizontal" },
+        { id: "layout:main-vertical", label: "main-vertical" },
+        { id: "layout:tiled", label: "tiled" },
+      ],
+    },
+    { id: "sync-toggle", label: "Synchronize panes", checkbox: true },
     { id: "kill", label: "Kill pane", danger: true },
   ],
   window: [
@@ -67,6 +86,10 @@ const MIN_INNER = 16;
 /** The suffix a destructive item rearms to (label + this). Reserved in the
  *  width so "confirm: y" is never clipped — the render appends the SAME string. */
 export const CONFIRM_SUFFIX = "  confirm: y";
+/** The caret a `children` item renders flush-right ("› Layouts        ▸"): a
+ *  leading space + the glyph, reserved in the width so a submenu row's caret is
+ *  never clipped. The base "› " prefix (2) already sits on every row. */
+export const SUBMENU_CARET = " ▸";
 
 /** PURE — the overlay's cell dimensions for `title` + `items`. Width fits the
  *  longest of the title and item rows (each item reserves 2 cells for the "› "
@@ -77,9 +100,15 @@ export function menuDims(title: string, items: MenuItem[]): { width: number; hei
   const inner = Math.max(
     MIN_INNER,
     title.length,
-    // A danger item's rearmed "label  confirm: y" must fit; others reserve 2
-    // cells for the "› " selection prefix.
-    ...items.map((it) => it.label.length + (it.danger ? CONFIRM_SUFFIX.length : 2)),
+    // A danger item's rearmed "label  confirm: y" must fit; a `children` item
+    // reserves the "› " prefix AND the flush-right submenu caret; a `checkbox`
+    // item's ✓/✗ mark is the same width as the "› " prefix it replaces. Others
+    // reserve 2 cells for the "› " selection prefix.
+    ...items.map((it) => {
+      if (it.danger) return it.label.length + CONFIRM_SUFFIX.length;
+      if (it.children) return it.label.length + 2 + SUBMENU_CARET.length;
+      return it.label.length + 2;
+    }),
   );
   return { width: inner + PAD * 2 + BORDER * 2, height: items.length + 3 };
 }
@@ -122,4 +151,24 @@ export function menuItemAt(m: MenuGeom, x: number, y: number): number {
  *  closes the menu. */
 export function pointInMenu(m: MenuGeom, x: number, y: number): boolean {
   return x >= m.left && x < m.left + m.width && y >= m.top && y < m.top + m.height;
+}
+
+/** PURE — the on-screen top-left for the SUBMENU column that opens beside the
+ *  `parent` item at `parentItemIndex`. It opens to the RIGHT of the parent, its
+ *  top border aligned with the parent item's row, then clamps fully on-screen
+ *  (sliding left over the parent if the right edge would overflow — acceptable
+ *  since the keyboard/coordinate router owns whichever column is focused). */
+export function submenuPos(
+  parent: MenuGeom,
+  parentItemIndex: number,
+  width: number,
+  height: number,
+  screenW: number,
+  screenH: number,
+): { left: number; top: number } {
+  const x = parent.left + parent.width;
+  // The parent item renders at y = parent.top + BORDER + header(1) + index; put
+  // the submenu's top border on that same row so the columns read as connected.
+  const y = parent.top + BORDER + 1 + parentItemIndex;
+  return clampMenuPos(x, y, width, height, screenW, screenH);
 }

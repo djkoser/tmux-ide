@@ -26,7 +26,23 @@ export type PaletteAction =
   | { kind: "rename-window"; name: string; label: string }
   | { kind: "kill-window"; label: string }
   | { kind: "zoom-pane"; label: string }
+  | { kind: "swap-pane"; label: string }
+  | { kind: "break-pane"; label: string }
+  | { kind: "rotate-window"; label: string }
+  | { kind: "select-layout"; layout: string; label: string }
+  | { kind: "sync-toggle"; label: string }
   | { kind: "quit"; label: string };
+
+/** The five tmux `select-layout` presets, offered one palette action each so the
+ *  fuzzy filter finds "tiled" / "main-vertical" directly. Shared with the pane
+ *  context menu's Layouts submenu (menu-model). */
+export const LAYOUT_PRESETS = [
+  "even-horizontal",
+  "even-vertical",
+  "main-horizontal",
+  "main-vertical",
+  "tiled",
+] as const;
 
 /** Context the palette needs beyond the fuzzy query. `terminal` gates the
  *  window/pane verbs (New/Rename/Kill window, Zoom pane) to the Terminal surface
@@ -63,6 +79,13 @@ export function staticPaletteActions(
     actions.push({ kind: "new-window", label: "New window" });
     actions.push({ kind: "kill-window", label: "Kill window" });
     actions.push({ kind: "zoom-pane", label: "Zoom pane" });
+    actions.push({ kind: "swap-pane", label: "Swap pane with next" });
+    actions.push({ kind: "break-pane", label: "Break pane to window" });
+    actions.push({ kind: "rotate-window", label: "Rotate panes" });
+    actions.push({ kind: "sync-toggle", label: "Synchronize panes (toggle)" });
+    for (const layout of LAYOUT_PRESETS) {
+      actions.push({ kind: "select-layout", layout, label: `Layout: ${layout}` });
+    }
   }
   actions.push({ kind: "quit", label: "Quit" });
   return actions;

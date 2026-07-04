@@ -213,20 +213,24 @@ export class SessionMirror {
     return this.client.command(cmd);
   }
 
-  /** Windows (tabs) of the mirrored session, for the app's tab strip. */
-  async windows(): Promise<Array<{ index: number; name: string; active: boolean }>> {
+  /** Windows (tabs) of the mirrored session, for the app's tab strip. `sync` is
+   *  the window's `synchronize-panes` option (`#{?synchronize-panes,1,0}`) — a
+   *  window property, so it rides here alongside index/name/active and the app
+   *  reads the active window's value to drive the `[SYNC]` chip. */
+  async windows(): Promise<Array<{ index: number; name: string; active: boolean; sync: boolean }>> {
     const lines = await this.client
       .command(
-        `list-windows -t ${this.opts.target} -F "#{window_index}\t#{window_name}\t#{window_active}"`,
+        `list-windows -t ${this.opts.target} -F "#{window_index}\t#{window_name}\t#{window_active}\t#{?synchronize-panes,1,0}"`,
       )
       .catch(() => [] as string[]);
     return lines
       .map((l) => l.split("\t"))
       .filter((p) => p.length >= 3)
-      .map(([i = "", name = "", active = ""]) => ({
+      .map(([i = "", name = "", active = "", sync = ""]) => ({
         index: Number(i),
         name,
         active: active === "1",
+        sync: sync === "1",
       }))
       .filter((w) => Number.isInteger(w.index));
   }

@@ -50,6 +50,25 @@ describe("filterPaletteActions", () => {
     expect(on).toEqual(expect.arrayContaining(["new-window", "kill-window", "zoom-pane"]));
   });
 
+  it("offers the M20.2 pane-op + layout verbs only in terminal context", () => {
+    const off = staticPaletteActions(["a"]).map((x) => x.kind);
+    expect(off).not.toContain("select-layout");
+    expect(off).not.toContain("sync-toggle");
+    const on = staticPaletteActions(["a"], { terminal: true });
+    expect(on.map((x) => x.kind)).toEqual(
+      expect.arrayContaining(["swap-pane", "break-pane", "rotate-window", "sync-toggle"]),
+    );
+    // One select-layout action per preset, carrying the layout name.
+    const layouts = on.filter((x) => x.kind === "select-layout");
+    expect(layouts.map((x) => (x.kind === "select-layout" ? x.layout : ""))).toEqual([
+      "even-horizontal",
+      "even-vertical",
+      "main-horizontal",
+      "main-vertical",
+      "tiled",
+    ]);
+  });
+
   it("appends a rename-window verb for a non-empty terminal query", () => {
     const actions = filterPaletteActions("build", ["a"], { terminal: true });
     expect(actions.some((x) => x.kind === "rename-window" && x.name === "build")).toBe(true);

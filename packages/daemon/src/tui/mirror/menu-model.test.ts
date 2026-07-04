@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   MENU_ITEMS,
+  SUBMENU_CARET,
   menuDims,
   clampMenuPos,
   menuItemAt,
   pointInMenu,
+  submenuPos,
   type MenuGeom,
 } from "./menu-model.ts";
 
@@ -13,8 +15,30 @@ describe("MENU_ITEMS", () => {
     expect(MENU_ITEMS.session.map((i) => i.id)).toEqual(["attach", "rename", "kill"]);
     expect(MENU_ITEMS.file.map((i) => i.id)).toEqual(["open", "newfile", "rename", "delete"]);
     expect(MENU_ITEMS.difffile.map((i) => i.id)).toEqual(["open", "copypath"]);
-    expect(MENU_ITEMS.pane.map((i) => i.id)).toEqual(["split-h", "split-v", "zoom", "kill"]);
+    expect(MENU_ITEMS.pane.map((i) => i.id)).toEqual([
+      "split-h",
+      "split-v",
+      "zoom",
+      "swap-next",
+      "break",
+      "rotate",
+      "layouts",
+      "sync-toggle",
+      "kill",
+    ]);
     expect(MENU_ITEMS.window.map((i) => i.id)).toEqual(["new", "rename", "kill"]);
+  });
+
+  it("gives the pane menu a Layouts submenu and a sync checkbox", () => {
+    const layouts = MENU_ITEMS.pane.find((i) => i.id === "layouts");
+    expect(layouts?.children?.map((c) => c.id)).toEqual([
+      "layout:even-horizontal",
+      "layout:even-vertical",
+      "layout:main-horizontal",
+      "layout:main-vertical",
+      "layout:tiled",
+    ]);
+    expect(MENU_ITEMS.pane.find((i) => i.id === "sync-toggle")?.checkbox).toBe(true);
   });
 
   it("marks destructive items danger and text-entry items input", () => {
@@ -31,7 +55,18 @@ describe("MENU_ITEMS", () => {
 describe("menuDims", () => {
   it("heights to top border + header + items + bottom border", () => {
     expect(menuDims("s", MENU_ITEMS.difffile).height).toBe(2 + 3); // 2 items
-    expect(menuDims("s", MENU_ITEMS.pane).height).toBe(4 + 3); // 4 items
+    expect(menuDims("s", MENU_ITEMS.pane).height).toBe(9 + 3); // 9 items
+  });
+
+  it("reserves the submenu caret width for a children item", () => {
+    const items = [{ id: "x", label: "abcdefghijklmnopqrst", children: [] }]; // 20 chars
+    // 20 + 2 (prefix) + SUBMENU_CARET.length inner, + 2 pad + 2 border.
+    expect(menuDims("t", items).width).toBe(20 + 2 + SUBMENU_CARET.length + 2 + 2);
+  });
+
+  it("reserves only the base prefix for a checkbox item (mark replaces it)", () => {
+    const items = [{ id: "x", label: "abcdefghijklmnopqrst", checkbox: true }]; // 20 chars
+    expect(menuDims("t", items).width).toBe(20 + 2 + 2 + 2);
   });
 
   it("widths to fit the longest non-danger row (label + 2 for the prefix)", () => {
@@ -106,5 +141,19 @@ describe("pointInMenu", () => {
     expect(pointInMenu(m, 30, 7)).toBe(false);
     expect(pointInMenu(m, 12, 4)).toBe(false);
     expect(pointInMenu(m, 12, 11)).toBe(false);
+  });
+});
+
+describe("submenuPos", () => {
+  const parent: MenuGeom = { left: 10, top: 5, width: 20, itemCount: 5, height: 8 };
+
+  it("opens to the right, top border aligned with the parent item row", () => {
+    // parent item 2 renders at y = 5 + BORDER(1) + header(1) + 2 = 9.
+    expect(submenuPos(parent, 2, 18, 8, 100, 40)).toEqual({ left: 30, top: 9 });
+  });
+
+  it("clamps back on-screen when the column would overflow the right edge", () => {
+    // left 30 + width 18 = 48 fits at screenW 45? no → slides to 45 - 18 = 27.
+    expect(submenuPos(parent, 0, 18, 8, 45, 40).left).toBe(27);
   });
 });

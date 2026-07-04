@@ -149,12 +149,15 @@ import { scrollThumb, trackZone, pageTop, dragTop } from "./scrollbar-model.ts";
 import {
   MENU_ITEMS,
   CONFIRM_SUFFIX,
+  SUBMENU_CARET,
   menuDims,
   clampMenuPos,
   menuItemAt,
   pointInMenu,
+  submenuPos,
   type MenuRegion,
   type MenuItem,
+  type MenuGeom,
 } from "./menu-model.ts";
 import {
   orderCells,
@@ -272,6 +275,8 @@ interface WindowTab {
   index: number;
   name: string;
   active: boolean;
+  /** The window's `synchronize-panes` option — drives the `[SYNC]` chip. */
+  sync: boolean;
 }
 /** The hoverable surfaces — each names a row/segment set the router can resolve
  *  by coordinate math and each render tints with HOVER_BG. */
@@ -533,6 +538,11 @@ render(() => {
   const [menuSel, setMenuSel] = createSignal(0);
   const [menuConfirm, setMenuConfirm] = createSignal<number | null>(null);
   const [menuInput, setMenuInput] = createSignal<string | null>(null);
+  // The SUBMENU nesting level (M20.2): `menuSub` is the parent item index whose
+  // `children` column is open (null = no submenu, keyboard drives the parent);
+  // `menuSubSel` is the selection within that column. One level only.
+  const [menuSub, setMenuSub] = createSignal<number | null>(null);
+  const [menuSubSel, setMenuSubSel] = createSignal(0);
   // Assigned in onMount so a menu action (kill/rename session) can force an
   // early fleet re-poll instead of waiting out the 3s interval.
   let fleetRefresh: (() => void) | null = null;
@@ -885,6 +895,13 @@ render(() => {
       })
       .catch((e) => setStatus(`error: ${(e as Error).message}`));
   };
+  /** Re-query the mirrored session's windows into `windowTabs` — used after a
+   *  NON-structural change tmux won't notify us about (a `synchronize-panes`
+   *  toggle) so the `[SYNC]` chip and the menu checkbox reflect it promptly. */
+  const refreshWindows = () => void mirror?.windows().then(setWindowTabs);
+  /** The active window's `synchronize-panes` state (the toggle's live value). */
+  const syncOn = () => windowTabs().find((w) => w.active)?.sync ?? false;
+
   /** Switch the Terminal tab's target. CRITICAL for the IDE feel: attaching the
    *  SAME session we're already mirroring must NOT re-create the control client
    *  — that would drop scrollback and blink the pane. So a same-target switch is
@@ -1072,6 +1089,43 @@ render(() => {
       case "zoom-pane": {
         const pid = mirror?.focusedPane();
         if (pid) void mirror?.command(`resize-pane -Z -t ${pid}`).catch(() => {});
+        break;
+      }
+      case "swap-pane": {
+        const pid = mirror?.focusedPane();
+        if (pid) void mirror?.command(`swap-pane -D -t ${pid}`).catch(() => {});
+        setStatusNote("swapped pane");
+        break;
+      }
+      case "break-pane": {
+        const pid = mirror?.focusedPane();
+        // Explicit destination session — see the pane menu's break note.
+        if (pid) void mirror?.command(`break-pane -s ${pid} -t ${curTarget()}:`).catch(() => {});
+        setStatusNote("broke pane to window");
+        break;
+      }
+      case "rotate-window": {
+        const pid = mirror?.focusedPane();
+        if (pid) void mirror?.command(`rotate-window -t ${pid}`).catch(() => {});
+        setStatusNote("rotated panes");
+        break;
+      }
+      case "select-layout": {
+        const pid = mirror?.focusedPane();
+        if (pid) void mirror?.command(`select-layout -t ${pid} ${a.layout}`).catch(() => {});
+        setStatusNote(`layout: ${a.layout}`);
+        break;
+      }
+      case "sync-toggle": {
+        const pid = mirror?.focusedPane();
+        if (pid) {
+          const next = syncOn() ? "off" : "on";
+          void mirror
+            ?.command(`set-window-option -t ${pid} synchronize-panes ${next}`)
+            .then(() => setTimeout(refreshWindows, 60))
+            .catch(() => {});
+          setStatusNote(`synchronize-panes ${next}`);
+        }
         break;
       }
       case "quit":
@@ -1523,7 +1577,47 @@ render(() => {
   const closeMenu = () => {
     setMenuConfirm(null);
     setMenuInput(null);
+    setMenuSub(null);
+    setMenuSubSel(0);
     if (menu() !== null) setMenu(null);
+  };
+
+  /** The open submenu's items (the focused parent item's `children`), or null. */
+  const submenuItems = (): MenuItem[] | null => {
+    const m = menu();
+    const si = menuSub();
+    if (!m || si === null) return null;
+    return m.items[si]?.children ?? null;
+  };
+  /** The open submenu column's placed geometry, or null — the same math the
+   *  render lays out, so the click router hit-tests exactly what's drawn. */
+  const submenuGeom = createMemo<MenuGeom | null>(() => {
+    const m = menu();
+    const si = menuSub();
+    const kids = submenuItems();
+    if (!m || si === null || !kids) return null;
+    const { width, height } = menuDims(m.items[si]!.label, kids);
+    const parent: MenuGeom = {
+      left: m.left,
+      top: m.top,
+      width: m.width,
+      height: m.height,
+      itemCount: m.items.length,
+    };
+    const { left, top } = submenuPos(parent, si, width, height, dims().width, dims().height);
+    return { left, top, width, height, itemCount: kids.length };
+  });
+  /** Open the submenu for the parent item at `index` (must have children). */
+  const openSubmenu = (index: number) => {
+    setMenuSel(index);
+    setMenuConfirm(null);
+    setMenuInput(null);
+    setMenuSub(index);
+    setMenuSubSel(0);
+  };
+  const closeSubmenu = () => {
+    setMenuSub(null);
+    setMenuSubSel(0);
   };
 
   /** Open the context menu at the pointer, clamped fully on-screen. */
@@ -1539,6 +1633,8 @@ render(() => {
     setMenuSel(0);
     setMenuConfirm(null);
     setMenuInput(null);
+    setMenuSub(null);
+    setMenuSubSel(0);
     setMenu({ ...t, left, top, width, height });
   };
 
@@ -1634,6 +1730,25 @@ render(() => {
     }
     if (m.region === "pane") {
       const pid = m.paneId!;
+      // Synchronize-panes is a WINDOW option tmux won't notify us about, so we
+      // flip it explicitly and re-query the strip. Keep the menu OPEN so the
+      // ✓/✗ checkbox visibly flips (every other pane verb closes on fire).
+      if (id === "sync-toggle") {
+        const next = syncOn() ? "off" : "on";
+        void mirror
+          ?.command(`set-window-option -t ${pid} synchronize-panes ${next}`)
+          .then(() => setTimeout(refreshWindows, 60))
+          .catch(() => {});
+        setStatusNote(`synchronize-panes ${next}`);
+        return;
+      }
+      if (id.startsWith("layout:")) {
+        const name = id.slice("layout:".length);
+        void mirror?.command(`select-layout -t ${pid} ${name}`).catch(() => {});
+        setStatusNote(`layout: ${name}`);
+        closeMenu();
+        return;
+      }
       const cmd =
         id === "split-h"
           ? `split-window -h -t ${pid}`
@@ -1641,9 +1756,18 @@ render(() => {
             ? `split-window -v -t ${pid}`
             : id === "zoom"
               ? `resize-pane -Z -t ${pid}`
-              : id === "kill"
-                ? `kill-pane -t ${pid}`
-                : "";
+              : id === "swap-next"
+                ? `swap-pane -D -t ${pid}`
+                : id === "break"
+                  ? // Pin the destination to THIS session — break-pane's default
+                    // `-t` resolves to the globally-active client's session, which
+                    // could fling the pane into an unrelated session.
+                    `break-pane -s ${pid} -t ${curTarget()}:`
+                  : id === "rotate"
+                    ? `rotate-window -t ${pid}`
+                    : id === "kill"
+                      ? `kill-pane -t ${pid}`
+                      : "";
       if (cmd) void mirror?.command(cmd).catch(() => {});
       closeMenu();
       return;
@@ -1658,6 +1782,10 @@ render(() => {
     const item = m.items[index];
     if (!item) return;
     setMenuSel(index);
+    if (item.children) {
+      openSubmenu(index);
+      return;
+    }
     if (item.input !== undefined) {
       setMenuConfirm(null);
       setMenuInput(item.id === "rename" ? m.title : "");
@@ -1669,6 +1797,16 @@ render(() => {
       return;
     }
     runMenuAction(item.id);
+  };
+
+  /** Activate the submenu child at `childIndex` — the leaf verbs (layouts) run
+   *  immediately and close the whole menu. */
+  const activateSubItem = (childIndex: number) => {
+    const kids = submenuItems();
+    const child = kids?.[childIndex];
+    if (!child) return;
+    setMenuSubSel(childIndex);
+    runMenuAction(child.id);
   };
 
   /** Feed one key to the open menu. */
@@ -1685,6 +1823,17 @@ render(() => {
         setMenuInput((s) => (s ?? "") + (evt.shift ? evt.name.toUpperCase() : evt.name));
       return;
     }
+    // SUBMENU level: the children column owns the keyboard until esc/left backs
+    // out one level (the parent column stays open behind it).
+    if (menuSub() !== null) {
+      const kids = submenuItems() ?? [];
+      if (evt.name === "escape" || evt.name === "left" || evt.name === "h") closeSubmenu();
+      else if (evt.name === "j" || evt.name === "down")
+        setMenuSubSel((s) => Math.min(kids.length - 1, s + 1));
+      else if (evt.name === "k" || evt.name === "up") setMenuSubSel((s) => Math.max(0, s - 1));
+      else if (evt.name === "return") activateSubItem(menuSubSel());
+      return;
+    }
     if (evt.name === "escape") {
       if (menuConfirm() !== null) setMenuConfirm(null);
       else closeMenu();
@@ -1692,6 +1841,11 @@ render(() => {
     }
     if (evt.name === "y" && menuConfirm() !== null) {
       runMenuAction(m.items[menuConfirm()!]?.id ?? "");
+      return;
+    }
+    // right/l opens the submenu when the selected item has one (esc/left back out).
+    if (evt.name === "right" || evt.name === "l") {
+      if (m.items[menuSel()]?.children) openSubmenu(menuSel());
       return;
     }
     if (evt.name === "j" || evt.name === "down") {
@@ -2164,21 +2318,48 @@ render(() => {
     // exactly once there). Idempotent on the real MouseEvent; a no-op in tests.
     e.stopPropagation?.();
     // While the context menu is open it OWNS pointer routing: a down on an item
-    // runs it, a down elsewhere inside the box is a no-op (stays open), a down
-    // OUTSIDE closes it. Motion/releases are swallowed (keyboard drives nav).
+    // runs it (a submenu row wins over the parent), a down elsewhere inside a box
+    // is a no-op (stays open), a down OUTSIDE both closes it. Motion CASCADES the
+    // submenu the way a native menu does — hovering a parent item with children
+    // opens its column; hovering a submenu row moves its selection.
     const openMenuState = menu();
     if (openMenuState) {
-      if (type !== "down") return;
-      const geom = {
+      const parentGeom: MenuGeom = {
         left: openMenuState.left,
         top: openMenuState.top,
         width: openMenuState.width,
         height: openMenuState.height,
         itemCount: openMenuState.items.length,
       };
-      const idx = menuItemAt(geom, x, y);
+      const sub = submenuGeom();
+      if (type === "move" || type === "over" || type === "drag") {
+        if (sub) {
+          const si = menuItemAt(sub, x, y);
+          if (si >= 0) {
+            setMenuSubSel(si);
+            return;
+          }
+        }
+        const pi = menuItemAt(parentGeom, x, y);
+        if (pi >= 0) {
+          setMenuSel(pi);
+          if (openMenuState.items[pi]?.children) openSubmenu(pi);
+          else closeSubmenu();
+        }
+        return;
+      }
+      if (type !== "down") return;
+      if (sub) {
+        const si = menuItemAt(sub, x, y);
+        if (si >= 0) {
+          activateSubItem(si);
+          return;
+        }
+        if (pointInMenu(sub, x, y)) return; // inside the submenu frame, no-op
+      }
+      const idx = menuItemAt(parentGeom, x, y);
       if (idx >= 0) activateMenuItem(idx);
-      else if (!pointInMenu(geom, x, y)) closeMenu();
+      else if (!pointInMenu(parentGeom, x, y)) closeMenu();
       return;
     }
     // A right-button press (SGR button 2) opens the context menu at the pointer.
@@ -2695,6 +2876,15 @@ render(() => {
                   {` ${focusedLivePane()?.id ?? ""} [Z] `}
                 </text>
               </Show>
+              {/* Synchronize-panes indicator (M20.2): shown while the active
+                  window's synchronize-panes option is on. Left-aligned after the
+                  labels like [Z]; the button row's flexGrow spacer keeps the
+                  right-pinned chips and their spans unaffected. */}
+              <Show when={syncOn()}>
+                <text fg={BUTTON_FG} bg={BUTTON_ACTIVE_BG} attributes={1}>
+                  {" [SYNC] "}
+                </text>
+              </Show>
               {buttonRow(stripButtons)}
             </box>
             <box position="relative" flexGrow={1} backgroundColor={GUTTER_BG}>
@@ -2979,9 +3169,20 @@ render(() => {
               const armed = () => menuConfirm() === i();
               const inputting = () => menuInput() !== null && menuSel() === i();
               const body = () => {
+                const w = innerW();
                 if (inputting()) return `${it.input}: ${menuInput()}▏`;
                 if (armed()) return `${it.label}${CONFIRM_SUFFIX}`;
-                return `${selected() ? "› " : "  "}${it.label}`;
+                // A checkbox item (Synchronize panes) shows its live ✓/✗ in place
+                // of the "› " prefix; a children item (Layouts) shows a flush-right
+                // caret so it reads as "opens a column".
+                if (it.checkbox) return `${syncOn() ? "✓ " : "✗ "}${it.label}`;
+                const base = `${selected() ? "› " : "  "}${it.label}`;
+                if (it.children)
+                  return (
+                    base.slice(0, w - SUBMENU_CARET.length).padEnd(w - SUBMENU_CARET.length) +
+                    SUBMENU_CARET
+                  );
+                return base;
               };
               const fg = () =>
                 armed() ? DIFF_DEL_FG : selected() || inputting() ? DEFAULT_FG : MUTED;
@@ -2989,6 +3190,43 @@ render(() => {
               return (
                 <box height={1} backgroundColor={bg()}>
                   <text fg={fg()}>{body().slice(0, innerW()).padEnd(innerW())}</text>
+                </box>
+              );
+            }}
+          </For>
+        </box>
+      </Show>
+      {/* SUBMENU column (M20.2) — the open parent item's `children`, opened to the
+          right and top-aligned with that item. Same late-mount discipline: NO
+          per-item handler; `route` hit-tests `submenuGeom` before the parent so a
+          click on a child lands. j/k move the column selection, esc/left back up. */}
+      <Show when={submenuGeom()}>
+        <box
+          position="absolute"
+          left={submenuGeom()!.left}
+          top={submenuGeom()!.top}
+          width={submenuGeom()!.width}
+          flexDirection="column"
+          backgroundColor={PALETTE_BG}
+          border
+          borderColor={PALETTE_BORDER}
+          paddingLeft={1}
+          paddingRight={1}
+        >
+          <text fg={ACCENT} attributes={1}>
+            {(menu()!.items[menuSub()!]?.label ?? "")
+              .slice(0, submenuGeom()!.width - 4)
+              .padEnd(submenuGeom()!.width - 4)}
+          </text>
+          <For each={submenuItems() ?? []}>
+            {(it, i) => {
+              const innerW = () => submenuGeom()!.width - 4;
+              const selected = () => menuSubSel() === i();
+              return (
+                <box height={1} backgroundColor={selected() ? TAB_ACTIVE_BG : PALETTE_BG}>
+                  <text fg={selected() ? DEFAULT_FG : MUTED}>
+                    {`${selected() ? "› " : "  "}${it.label}`.slice(0, innerW()).padEnd(innerW())}
+                  </text>
                 </box>
               );
             }}
