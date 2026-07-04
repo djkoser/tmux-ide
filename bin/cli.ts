@@ -1351,6 +1351,19 @@ try {
     }
 
     case "update": {
+      // `--tui-binary`: download the per-platform TUI binary (the fallback that
+      // lets an npm install with no bun run the full cockpit). Explicit opt-in —
+      // never auto-fetched on install (it's ~70MB). See lib/tui-binary.ts.
+      if (values["tui-binary"] === true) {
+        const { downloadTuiBinary } = await import("../packages/daemon/src/lib/tui-binary.ts");
+        const { path } = await downloadTuiBinary({ log: (m) => console.error(m) });
+        if (json) {
+          console.log(JSON.stringify({ ok: true, path }, null, 2));
+        } else {
+          console.log(`TUI binary ready: ${path}`);
+        }
+        break;
+      }
       // Detect how tmux-ide was installed and act on the pending update: a dev
       // checkout prints the `git pull` hint; a global install prints (with
       // --dry-run) or runs its package manager's update command. `__dirname` is
