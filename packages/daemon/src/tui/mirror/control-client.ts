@@ -12,6 +12,7 @@
  * intact; `parseControlLine`/`decodeControlBytes` do the pure protocol work.
  */
 import { spawn, type ChildProcess } from "node:child_process";
+import { appendFileSync } from "node:fs";
 import { parseControlLine, textToHexKeys } from "./control.ts";
 
 interface PendingReply {
@@ -97,6 +98,7 @@ export class ControlModeClient {
   }
 
   private feed(chunk: string): void {
+    const t0 = process.env.TMUX_IDE_ZZ_PERF ? performance.now() : 0;
     this.buffer += chunk;
     let nl: number;
     while ((nl = this.buffer.indexOf("\n")) !== -1) {
@@ -105,6 +107,16 @@ export class ControlModeClient {
       if (line.endsWith("\r")) line = line.slice(0, -1);
       this.buffer = this.buffer.slice(nl + 1);
       this.handleLine(line);
+    }
+    if (t0) {
+      try {
+        appendFileSync(
+          "/tmp/zz-feed.log",
+          `${chunk.length} ${(performance.now() - t0).toFixed(2)}\n`,
+        );
+      } catch {
+        /* perf tap */
+      }
     }
   }
 
