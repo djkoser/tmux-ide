@@ -55,7 +55,7 @@ function blit(
   full = false,
 ): number[] {
   const dirtyRows: number[] = [];
-  m.blit(buffers, w, h, 0, false, 0xd4d4d8, 0x101016, { full, dirtyRows });
+  m.blit(buffers, w, h, 0, 0xd4d4d8, 0x101016, { full, dirtyRows });
   return dirtyRows;
 }
 
@@ -122,7 +122,7 @@ describe("PaneMirror.blit — incremental (M21.4)", () => {
     const buffers = arrays(W, H);
     blit(m, buffers, W, H, true);
     const dirtyRows: number[] = [];
-    m.blit(buffers, W, H, 0, false, 0xd4d4d8, 0x101016, { full: false, forceRows: [2], dirtyRows });
+    m.blit(buffers, W, H, 0, 0xd4d4d8, 0x101016, { full: false, forceRows: [2], dirtyRows });
     expect(dirtyRows).toEqual([2]);
     m.dispose();
   });

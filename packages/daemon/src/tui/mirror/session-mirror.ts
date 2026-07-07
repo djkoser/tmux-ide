@@ -17,7 +17,12 @@
 import { appendFileSync } from "node:fs";
 import { ControlModeClient } from "./control-client.ts";
 import { InputCoalescer } from "./input-coalescer.ts";
-import { PaneMirror, type MirrorSnapshot, type BlitOptions } from "./pane-mirror.ts";
+import {
+  PaneMirror,
+  type MirrorSnapshot,
+  type BlitOptions,
+  type CursorState,
+} from "./pane-mirror.ts";
 import type { CellArrays } from "./blit.ts";
 import { tapInputOutput } from "./perf-tap.ts";
 
@@ -217,20 +222,23 @@ export class SessionMirror {
     width: number,
     height: number,
     scrollOffset: number,
-    withCursor: boolean,
     defaultFg: number,
     defaultBg: number,
     opts: BlitOptions,
   ): void {
-    this.mirrors
-      .get(id)
-      ?.blit(buffers, width, height, scrollOffset, withCursor, defaultFg, defaultBg, opts);
+    this.mirrors.get(id)?.blit(buffers, width, height, scrollOffset, defaultFg, defaultBg, opts);
   }
 
   /** A pane's visible rows as plain text — the on-demand OSC52 copy read for the
    *  blit path (which omits styled rows). Empty for an unknown pane. */
   visibleRowTexts(id: string, scrollOffset = 0): string[] {
     return this.mirrors.get(id)?.visibleRowTexts(scrollOffset) ?? [];
+  }
+
+  /** A pane's live cursor state (position + DECTCEM/DECSCUSR), for the hardware
+   *  cursor (M21.6). Null for an unknown pane. */
+  cursorState(id: string): CursorState | null {
+    return this.mirrors.get(id)?.cursorState() ?? null;
   }
 
   focusedPane(): string {

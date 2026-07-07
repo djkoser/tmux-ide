@@ -29,6 +29,7 @@ import {
 import { extend } from "@opentui/solid";
 import { appendFileSync } from "node:fs";
 import type { SessionMirror } from "./session-mirror.ts";
+import type { CursorState } from "./pane-mirror.ts";
 import { swapCells, paintBg, type GraphemeOverride } from "./blit.ts";
 import { rowSelectionRange, type Cell } from "./selection.ts";
 import type { SearchMatch } from "./search-model.ts";
@@ -75,6 +76,10 @@ function packedRgba(packed: number): RGBA {
 }
 
 const PERF = !!process.env.TMUX_IDE_ZZ_PERF;
+/** Quiet marker background for an unfocused pane's cursor cell (M21.6) — a muted
+ *  slate that reads as "the cursor is here" without competing with the focused
+ *  pane's real hardware cursor. */
+const MARKER_BG = 0x3b4250;
 /** Log the rows-blitted count per walk (M21.4 acceptance: flood repaints only
  *  dirty rows). Env-gated so it costs nothing in production. */
 const ROW_TAP = !!process.env.TMUX_IDE_FB_ROWS;
@@ -119,6 +124,9 @@ class PaneSurfaceRenderable extends FrameBufferRenderable {
   private _prevSearchRows: number[] = [];
   /** Reused out-array for the rows the blit wrote (its content-dirty ∪ forced). */
   private readonly _dirtyRows: number[] = [];
+  /** The row an unfocused cursor marker last painted on, so a move/clear repaints
+   *  the vacated row (M21.6). */
+  private _lastMarkerRow = -1;
 
   constructor(ctx: RenderContext, options: PaneSurfaceOptions) {
     // Default 1×1 — the real size arrives as the width/height layout props (base
@@ -226,12 +234,29 @@ class PaneSurfaceRenderable extends FrameBufferRenderable {
 
     const newSelRows = this.selRows(h);
     const newSearchRows = this.searchRows(h);
-    // Rows that must repaint so their swap/highlight is cleared then re-applied.
-    const forceRows = full ? null : unionRows(this._prevSelRows, newSelRows, this._prevSearchRows, newSearchRows);
+    // The live cursor (M21.6): the focused pane drives the hardware cursor; an
+    // unfocused pane paints a quiet marker on its cursor cell. Read once.
+    const cur = this._mirror.cursorState(this._paneId);
+    const markerRow =
+      cur && !this._focusedPane && !cur.hidden && this._scrollOffset === 0 && cur.x < w && cur.y < h
+        ? cur.y
+        : -1;
+    // Rows that must repaint so their swap/highlight/marker is cleared then
+    // re-applied (old ∪ new selection/search + old ∪ new marker row).
+    const forceRows = full
+      ? null
+      : unionRows(
+          this._prevSelRows,
+          newSelRows,
+          this._prevSearchRows,
+          newSearchRows,
+          markerRow >= 0 ? [markerRow] : [],
+          this._lastMarkerRow >= 0 ? [this._lastMarkerRow] : [],
+        );
 
     this._graphemes.length = 0;
     this._dirtyRows.length = 0;
-    this._mirror.blitPane(this._paneId, buffers, w, h, this._scrollOffset, this._focusedPane, this._defaultFg, this._defaultBg, {
+    this._mirror.blitPane(this._paneId, buffers, w, h, this._scrollOffset, this._defaultFg, this._defaultBg, {
       full,
       forceRows,
       dirtyRows: this._dirtyRows,
@@ -270,8 +295,16 @@ class PaneSurfaceRenderable extends FrameBufferRenderable {
         if (r) swapCells(buffers, w, y, r.from, r.to);
       }
     }
+    // Unfocused quiet cursor marker — a muted block on the cursor cell (its row
+    // is in forceRows, so it was freshly repainted this walk).
+    if (markerRow >= 0 && cur) {
+      paintBg(buffers, w, markerRow, cur.x, cur.x, MARKER_BG);
+    }
+    this._lastMarkerRow = markerRow;
     this._prevSelRows = newSelRows;
     this._prevSearchRows = newSearchRows;
+
+    this.updateHardwareCursor(cur, w, h);
 
     if (PERF) {
       try {
@@ -286,6 +319,32 @@ class PaneSurfaceRenderable extends FrameBufferRenderable {
       } catch {
         /* debug tap only */
       }
+    }
+  }
+
+  /**
+   * Drive the REAL terminal cursor (M21.6). Only the focused, live pane owns the
+   * single hardware cursor: it positions it at the pane's cursor cell (absolute
+   * screen coords), honoring the app's DECTCEM hide and DECSCUSR shape/blink, so
+   * vim/claude/htop cursors behave natively. A focused pane that is scrolled up
+   * or whose app hid the cursor hides it; unfocused panes never touch it (they
+   * carry a painted marker instead).
+   */
+  private updateHardwareCursor(c: CursorState | null, w: number, h: number): void {
+    if (!this._focusedPane || !c) return;
+    const inBounds = c.x >= 0 && c.x < w && c.y >= 0 && c.y < h;
+    const live = this._scrollOffset === 0;
+    const visible = live && inBounds && !c.hidden;
+    // Absolute screen position of the pane's cursor cell. setCursorPosition is
+    // 1-based (matches OpenTUI's own editor: screenX + visualCol + 1).
+    const gx = this.x + Math.min(c.x, w - 1) + 1;
+    const gy = this.y + Math.min(c.y, h - 1) + 1;
+    this._ctx.setCursorPosition(gx, gy, visible);
+    if (visible) {
+      this._ctx.setCursorStyle({
+        style: c.style === "bar" ? "line" : c.style,
+        blinking: c.blink,
+      });
     }
   }
 

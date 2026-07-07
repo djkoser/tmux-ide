@@ -7,11 +7,24 @@
  * bytes in and read the grid out; the TUI draws the snapshot. This is the
  * seam between "tmux owns the PTYs" and "tmux-ide owns the pixels".
  *
- * Fidelity notes:
+ * Fidelity notes (M21.6 — the current truth):
  *  - Colors resolve to packed 0xRRGGBB here (256-palette + truecolor + the
  *    16 base colors), so the renderer never needs a palette.
- *  - Attributes map onto OpenTUI's TextAttributes bitmask (bold/dim/italic/
- *    underline/inverse/strikethrough) — inverse also carries the cursor.
+ *  - Attributes carried, mapped onto OpenTUI's TextAttributes bitmask:
+ *    bold, dim, italic, underline, blink, strikethrough. INVERSE is NOT set as
+ *    an attribute — it renders as a fg/bg SWAP in the blit (a framebuffer cell
+ *    carrying the INVERSE bit does not flush as reverse; see blit.ts), so it
+ *    composes with the selection/cursor swaps.
+ *  - Attributes DROPPED (no representation downstream): overline (xterm exposes
+ *    `isOverline()`, OpenTUI has no overline attribute); extended underline
+ *    STYLES (curly/double/dotted) and underline COLOR (not on xterm-headless's
+ *    public cell API, and OpenTUI has only a single underline). Blink is passed
+ *    through as the BLINK attribute — the real terminal decides whether to honor
+ *    it (most modern terminals ignore or soften it); we don't down-map it.
+ *  - CURSOR: not painted into the grid. The focused pane drives the REAL
+ *    hardware cursor via the renderer (position + DECTCEM hide/show + DECSCUSR
+ *    shape/blink, read through {@link cursorState}); unfocused panes get a quiet
+ *    painted marker. See pane-surface.tsx.
  *  - Wide glyphs (CJK, emoji) occupy one cell + a zero-width spacer; the
  *    spacer is skipped so runs stay grid-aligned.
  *  - `scrollback` is real (5000 lines): `snapshot(offset)` renders `offset`
@@ -33,6 +46,7 @@ const ATTR_BOLD = 1;
 const ATTR_DIM = 2;
 const ATTR_ITALIC = 4;
 const ATTR_UNDERLINE = 8;
+const ATTR_BLINK = 16;
 const ATTR_INVERSE = 32;
 const ATTR_STRIKETHROUGH = 128;
 
@@ -77,6 +91,25 @@ function buildXtermPalette(): number[] {
     palette.push((v << 16) | (v << 8) | v);
   }
   return palette;
+}
+
+/** The live cursor state a surface needs to drive the hardware cursor (M21.6). */
+export interface CursorState {
+  /** Grid column/row of the cursor within the visible viewport. */
+  x: number;
+  y: number;
+  /** DECTCEM — the app hid the cursor (`CSI ?25 l`). */
+  hidden: boolean;
+  /** DECSCUSR shape, xterm's vocabulary. */
+  style: "block" | "underline" | "bar";
+  /** DECSCUSR blink flag. */
+  blink: boolean;
+}
+
+/** The slice of xterm's internal coreService we read for cursor mode state. */
+interface CoreServiceInternal {
+  isCursorHidden?: boolean;
+  decPrivateModes?: { cursorStyle?: "block" | "underline" | "bar"; cursorBlink?: boolean };
 }
 
 /** Per-call inputs for the incremental {@link PaneMirror.blit} (M21.4). */
@@ -141,9 +174,6 @@ export class PaneMirror {
    *  the blit degrades to a full repaint every walk — correct, just not
    *  incremental. */
   private _incremental = true;
-  /** The visible row the cursor last painted on, so a cursor move re-blits the
-   *  vacated row (the shadow tracks `_data`, which has no cursor overlay). */
-  private _lastCursorRow = -1;
 
   constructor(cols: number, rows: number) {
     this.cols = cols;
@@ -164,6 +194,28 @@ export class PaneMirror {
   /** The per-pane content version (M21.4) — see {@link _version}. */
   contentVersion(): number {
     return this._version;
+  }
+
+  /**
+   * The live cursor: grid position + the app-driven DECTCEM visibility and
+   * DECSCUSR shape/blink (M21.6). Position is public (`cursorX/Y`); the mode
+   * state lives on xterm's internal coreService (no public getter), reached
+   * defensively — if the internal is absent the cursor stays visible as a block,
+   * which is the terminal default anyway. `style` is xterm's vocabulary
+   * (`block`/`underline`/`bar`); the renderer maps it.
+   */
+  cursorState(): CursorState {
+    const buf = this.term.buffer.active;
+    const core = (this.term as unknown as { _core?: { coreService?: CoreServiceInternal } })._core;
+    const cs = core?.coreService;
+    const dec = cs?.decPrivateModes;
+    return {
+      x: buf.cursorX,
+      y: buf.cursorY,
+      hidden: cs?.isCursorHidden === true,
+      style: dec?.cursorStyle ?? this.term.options.cursorStyle ?? "block",
+      blink: dec?.cursorBlink ?? this.term.options.cursorBlink ?? false,
+    };
   }
 
   /** Feed raw pane bytes (UTF-8) from a control-mode %output event. */
@@ -257,6 +309,7 @@ export class PaneMirror {
           if (cell.isDim()) cellAttrs |= ATTR_DIM;
           if (cell.isItalic()) cellAttrs |= ATTR_ITALIC;
           if (cell.isUnderline()) cellAttrs |= ATTR_UNDERLINE;
+          if (cell.isBlink()) cellAttrs |= ATTR_BLINK;
           if (cell.isInverse()) cellAttrs |= ATTR_INVERSE;
           if (cell.isStrikethrough()) cellAttrs |= ATTR_STRIKETHROUGH;
           // The cursor renders as an inverse cell in the focused, live pane.
@@ -285,9 +338,10 @@ export class PaneMirror {
   /**
    * Blit the visible grid into a framebuffer's packed typed arrays — the
    * native-feel render path, now INCREMENTAL (M21.4). Same cell semantics as
-   * {@link snapshot} (colors → `0xRRGGBB`, the OpenTUI attribute bitmask,
-   * wide-glyph spacers, focused cursor as a reverse-video cell) but only the rows
-   * that actually changed are rewritten:
+   * {@link snapshot} (colors → `0xRRGGBB`, the OpenTUI attribute bitmask incl.
+   * blink, wide-glyph spacers). The cursor is NOT painted here (M21.6): the
+   * focused pane drives the real hardware cursor and the surface paints any
+   * unfocused marker. Only the rows that actually changed are rewritten:
    *
    *  - A **scroll fast path** (xterm `onScroll` counted forward-scroll lines)
    *    shifts the already-correct pixels up with `copyWithin`, so a flood repaints
@@ -309,7 +363,6 @@ export class PaneMirror {
     width: number,
     height: number,
     scrollOffset: number,
-    withCursor: boolean,
     defaultFg: number,
     defaultBg: number,
     opts: BlitOptions,
@@ -365,15 +418,12 @@ export class PaneMirror {
     const dbG = (defaultBg >> 8) & 0xff;
     const dbB = defaultBg & 0xff;
     const forceRows = opts.forceRows && opts.forceRows.length ? opts.forceRows : null;
-    const cursorRow = withCursor && live ? buf.cursorY : -1;
 
     for (let y = 0; y < height; y++) {
       const data = this._incremental ? this.rowData(baseY, y) : null;
       let dirty =
         full ||
         y >= bottomDirtyFrom ||
-        y === cursorRow ||
-        y === this._lastCursorRow ||
         data === null; // no shadow info for this row → always repaint
       if (!dirty && this._shadow) dirty = !shadowMatches(this._shadow, y * rowLen, data!);
       if (!dirty && forceRows) {
@@ -385,11 +435,10 @@ export class PaneMirror {
       }
       if (!dirty) continue;
 
-      this.blitRow(cell, buffers, y, baseY, width, cols, live, withCursor, dfR, dfG, dfB, dbR, dbG, dbB, defaultFg, defaultBg, opts.graphemes);
+      this.blitRow(cell, buffers, y, baseY, width, cols, dfR, dfG, dfB, dbR, dbG, dbB, defaultFg, defaultBg, opts.graphemes);
       if (this._shadow && data) this._shadow.set(data, y * rowLen);
       opts.dirtyRows.push(y);
     }
-    this._lastCursorRow = cursorRow;
     if (this._incremental && this._shadow) this._shadowValid = true;
   }
 
@@ -413,8 +462,6 @@ export class PaneMirror {
     baseY: number,
     width: number,
     cols: number,
-    live: boolean,
-    withCursor: boolean,
     dfR: number,
     dfG: number,
     dfB: number,
@@ -427,7 +474,6 @@ export class PaneMirror {
   ): void {
     const buf = this.term.buffer.active;
     const line = y < this.rows ? buf.getLine(baseY + y) : null;
-    const isCursorRow = withCursor && live && line !== null && y === buf.cursorY;
     for (let x = 0; x < width; x++) {
       const idx = y * width + x;
       if (!line || x >= cols) {
@@ -454,12 +500,13 @@ export class PaneMirror {
       if (cell.isDim()) attrs |= ATTR_DIM;
       if (cell.isItalic()) attrs |= ATTR_ITALIC;
       if (cell.isUnderline()) attrs |= ATTR_UNDERLINE;
+      if (cell.isBlink()) attrs |= ATTR_BLINK;
       if (cell.isStrikethrough()) attrs |= ATTR_STRIKETHROUGH;
-      // Reverse video (app INVERSE ^ the focused cursor cell) renders as a fg/bg
-      // SWAP, not the INVERSE attribute bit — a framebuffer cell carrying that bit
-      // does not flush as reverse (see blit.ts). Resolve nulls to the defaults
-      // first so default-on-default inverts to defaultBg-on-defaultFg.
-      const inverted = !!cell.isInverse() !== (isCursorRow && x === buf.cursorX);
+      // Reverse video (app INVERSE) renders as a fg/bg SWAP, not the INVERSE
+      // attribute bit — a framebuffer cell carrying that bit does not flush as
+      // reverse (see blit.ts). Resolve nulls to the defaults first so
+      // default-on-default inverts to defaultBg-on-defaultFg.
+      const inverted = !!cell.isInverse();
 
       const chars = cell.getChars();
       const codepoint = chars ? (chars.codePointAt(0) ?? SPACE_CODE) : SPACE_CODE;
