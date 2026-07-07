@@ -421,10 +421,7 @@ export class PaneMirror {
 
     for (let y = 0; y < height; y++) {
       const data = this._incremental ? this.rowData(baseY, y) : null;
-      let dirty =
-        full ||
-        y >= bottomDirtyFrom ||
-        data === null; // no shadow info for this row → always repaint
+      let dirty = full || y >= bottomDirtyFrom || data === null; // no shadow info for this row → always repaint
       if (!dirty && this._shadow) dirty = !shadowMatches(this._shadow, y * rowLen, data!);
       if (!dirty && forceRows) {
         for (let i = 0; i < forceRows.length; i++)
@@ -435,7 +432,23 @@ export class PaneMirror {
       }
       if (!dirty) continue;
 
-      this.blitRow(cell, buffers, y, baseY, width, cols, dfR, dfG, dfB, dbR, dbG, dbB, defaultFg, defaultBg, opts.graphemes);
+      this.blitRow(
+        cell,
+        buffers,
+        y,
+        baseY,
+        width,
+        cols,
+        dfR,
+        dfG,
+        dfB,
+        dbR,
+        dbG,
+        dbB,
+        defaultFg,
+        defaultBg,
+        opts.graphemes,
+      );
       if (this._shadow && data) this._shadow.set(data, y * rowLen);
       opts.dirtyRows.push(y);
     }

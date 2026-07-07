@@ -176,7 +176,9 @@ async function scenarioFlood() {
   truncate(FEED_LOG);
   truncate(SNAP_LOG);
   // ~200 lines/sec — a busy build/test log, not a fork bomb.
-  runInTarget("i=0; while true; do echo \"flood line $i $(date +%s%N)\"; i=$((i+1)); sleep 0.005; done");
+  runInTarget(
+    'i=0; while true; do echo "flood line $i $(date +%s%N)"; i=$((i+1)); sleep 0.005; done',
+  );
   await sleep(cfg.floodMs);
   const out = { feed: readCol(FEED_LOG, 1), snap: readCol(SNAP_LOG, 0) };
   calmTarget();
@@ -242,9 +244,7 @@ function machineInfo() {
   }
   let opentui = "unknown";
   try {
-    const pkg = JSON.parse(
-      readFileSync(resolve(REPO, "packages/daemon/package.json"), "utf8"),
-    );
+    const pkg = JSON.parse(readFileSync(resolve(REPO, "packages/daemon/package.json"), "utf8"));
     opentui =
       pkg.dependencies?.["@opentui/core"] ?? pkg.dependencies?.["@opentui/solid"] ?? "unknown";
   } catch {
@@ -306,7 +306,8 @@ try {
   cleanup();
   // Best-effort confirmation the zz-perf-* sessions are gone.
   const leftover = [HOST, TARGET].filter(sessionExists);
-  if (leftover.length) process.stderr.write(`  WARNING leftover sessions: ${leftover.join(", ")}\n`);
+  if (leftover.length)
+    process.stderr.write(`  WARNING leftover sessions: ${leftover.join(", ")}\n`);
   else process.stdout.write("\n  cleanup: zz-perf-* sessions removed.\n");
 }
 process.exit(exitCode);

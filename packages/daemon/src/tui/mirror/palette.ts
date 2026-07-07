@@ -151,7 +151,11 @@ export interface PaletteGeom {
 /** PURE — the overlay's placement for a terminal size: horizontally centered,
  *  top at a sixth of the height (min 1 — below the surface tab bar). MUST match
  *  the render's `left`/`top` props (the render calls this). */
-export function palettePos(termW: number, termH: number, width: number): { left: number; top: number } {
+export function palettePos(
+  termW: number,
+  termH: number,
+  width: number,
+): { left: number; top: number } {
   return {
     left: Math.max(0, Math.floor((termW - width) / 2)),
     top: Math.max(1, Math.floor(termH / 6)),
@@ -177,7 +181,9 @@ export function paletteRowAt(g: PaletteGeom, x: number, y: number): number {
 /** PURE — whether (x, y) falls anywhere on the palette box (border included).
  *  A press outside dismisses the overlay; inside-but-not-a-row is a no-op. */
 export function paletteContains(g: PaletteGeom, x: number, y: number): boolean {
-  return x >= g.left && x < g.left + g.width && y >= g.top && y < g.top + paletteHeight(g.visibleRows);
+  return (
+    x >= g.left && x < g.left + g.width && y >= g.top && y < g.top + paletteHeight(g.visibleRows)
+  );
 }
 
 /** PURE — clamp a wheel-scrolled list top into [0, count - pageRows]. */

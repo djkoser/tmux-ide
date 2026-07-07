@@ -227,7 +227,9 @@ class PaneSurfaceRenderable extends FrameBufferRenderable {
 
     // View-wide changes force a full repaint; content dirtiness is the mirror's job.
     const full =
-      this._forceFull || this._scrollOffset !== this._lastScroll || this._focusedPane !== this._lastFocused;
+      this._forceFull ||
+      this._scrollOffset !== this._lastScroll ||
+      this._focusedPane !== this._lastFocused;
     this._forceFull = false;
     this._lastScroll = this._scrollOffset;
     this._lastFocused = this._focusedPane;
@@ -256,12 +258,21 @@ class PaneSurfaceRenderable extends FrameBufferRenderable {
 
     this._graphemes.length = 0;
     this._dirtyRows.length = 0;
-    this._mirror.blitPane(this._paneId, buffers, w, h, this._scrollOffset, this._defaultFg, this._defaultBg, {
-      full,
-      forceRows,
-      dirtyRows: this._dirtyRows,
-      graphemes: this._graphemes,
-    });
+    this._mirror.blitPane(
+      this._paneId,
+      buffers,
+      w,
+      h,
+      this._scrollOffset,
+      this._defaultFg,
+      this._defaultBg,
+      {
+        full,
+        forceRows,
+        dirtyRows: this._dirtyRows,
+        graphemes: this._graphemes,
+      },
+    );
 
     // Multi-codepoint graphemes (ZWJ/flag emoji, combining marks) — the native
     // setCell handles the full string + its width; rare, so the RGBA is fine.
@@ -284,7 +295,14 @@ class PaneSurfaceRenderable extends FrameBufferRenderable {
         const m = s.matches[i]!;
         const row = m.line - s.baseY;
         if (row < 0 || row >= h) continue;
-        paintBg(buffers, w, row, m.col, m.col + s.len - 1, i === s.current ? this._searchCur : this._searchHl);
+        paintBg(
+          buffers,
+          w,
+          row,
+          m.col,
+          m.col + s.len - 1,
+          i === s.current ? this._searchCur : this._searchHl,
+        );
       }
     }
     const sel = this._sel;
@@ -315,7 +333,10 @@ class PaneSurfaceRenderable extends FrameBufferRenderable {
     }
     if (ROW_TAP) {
       try {
-        appendFileSync("/tmp/zz-fb-rows.log", `${this._paneId} ${this._dirtyRows.length}/${h}${full ? " full" : ""}\n`);
+        appendFileSync(
+          "/tmp/zz-fb-rows.log",
+          `${this._paneId} ${this._dirtyRows.length}/${h}${full ? " full" : ""}\n`,
+        );
       } catch {
         /* debug tap only */
       }

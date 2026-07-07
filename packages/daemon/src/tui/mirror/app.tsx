@@ -3452,9 +3452,7 @@ render(
                       when={it.kind !== "header"}
                       fallback={
                         <box height={1} paddingLeft={1}>
-                          <text fg={MUTED}>
-                            {it.kind === "header" ? `· ${it.label}` : ""}
-                          </text>
+                          <text fg={MUTED}>{it.kind === "header" ? `· ${it.label}` : ""}</text>
                         </box>
                       }
                     >
@@ -3475,7 +3473,11 @@ render(
                           {it.kind === "session" ? STATUS_GLYPH[it.status] : "▸"}
                         </text>
                         <text fg={i() === clampedSel() ? DEFAULT_FG : MUTED} attributes={1}>
-                          {it.kind === "session" ? it.session : it.kind === "project" ? it.name : ""}
+                          {it.kind === "session"
+                            ? it.session
+                            : it.kind === "project"
+                              ? it.name
+                              : ""}
                         </text>
                         <text fg={MUTED}>{homeRowMeta(it)}</text>
                         <box flexGrow={1} />
