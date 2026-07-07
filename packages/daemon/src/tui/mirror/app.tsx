@@ -19,13 +19,20 @@
  * likewise survive tab round trips. One WORKSPACE CONTEXT per session
  * (`openWorkspace`): choosing a session on Home/sidebar/palette points the
  * terminal target AND the files/diff dir at it; the header shows the context
- * name. A command PALETTE (F5, or ^p when it arrives) opens a centered,
- * keyboard-only overlay of fuzzy-filtered actions (switch tab / attach session /
- * open file / save / refresh diff / quit). App state — { lastTab, contextSession,
+ * name. A command PALETTE (F5 / ^p, or clicking the tab bar's palette chip)
+ * opens a centered overlay of fuzzy-filtered actions (switch tab / attach
+ * session / open file / save / refresh diff / quit) — keyboard as before, and
+ * (M21.9) mouse-complete: motion moves the selection, click runs the row, the
+ * wheel scrolls the list, a press outside dismisses (geometry is pure math in
+ * palette.ts, shared render/router). App state — { lastTab, contextSession,
  * openFile, diffFile } — persists to `~/.tmux-ide/app-state.json`
  * (TMUX_IDE_HOME override), debounced, restored on launch.
  *
- * The main area is the HOME panel (fleet cards + detail), a session MIRROR (the
+ * The main area is the HOME panel (fleet rows, then — M21.9 — the project
+ * REGISTRY: registered-but-not-running projects as launchable rows; a row click
+ * or enter spins up a detached session in the project dir and opens it; the
+ * footer gains [n new session] and every row a right-aligned verb chip), a
+ * session MIRROR (the
  * SessionMirror canvas), the built-in FILES tab (M18.2 editor + a one-level file
  * list; tmux stays the engine running servers/agents while files are edited
  * natively by us), or the git DIFF panel (M18.3 — the working-tree diff of the
@@ -154,9 +161,22 @@ import { separatorAt, resizedSize, resizeCommand, type Separator } from "./resiz
 import {
   filterPaletteActions,
   parseBufferList,
+  palettePos,
+  paletteRowAt,
+  paletteContains,
+  clampPaletteTop,
   type PaletteAction,
+  type PaletteGeom,
   type TmuxBuffer,
 } from "./palette.ts";
+import {
+  buildHomeItems,
+  clampSelectable,
+  stepSelectable,
+  sessionNameFor,
+  isValidSessionName,
+  type HomeItem,
+} from "./home-model.ts";
 import {
   findMatches,
   visitOrder,
@@ -235,14 +255,6 @@ interface FleetProject {
   status: AgentStatus;
   sessions: FleetSession[];
 }
-/** One selectable HOME row: a live session, carrying its project context. */
-interface HomeRow {
-  project: string;
-  session: string;
-  status: AgentStatus;
-  windows: number;
-  dir: string | null;
-}
 const zzlog = (m: string) => {
   if (!process.env.TMUX_IDE_ZZ_LOG) return;
   try {
@@ -307,8 +319,21 @@ interface WindowTab {
   sync: boolean;
 }
 /** The hoverable surfaces — each names a row/segment set the router can resolve
- *  by coordinate math and each render tints with HOVER_BG. */
-type HoverRegion = "sidebar" | "home" | "surfacetab" | "windowtab" | "files" | "diff" | "button";
+ *  by coordinate math and each render tints with HOVER_BG (chips lift to
+ *  BUTTON_HOVER_BG). M21.9 adds: `tabbtn` (the tab bar's right-aligned context/
+ *  palette chips), `homechip` (a home row's right-aligned verb chip, index =
+ *  row), and `sidebtn` (the sidebar footer's clickable "F5 palette" segment). */
+type HoverRegion =
+  | "sidebar"
+  | "home"
+  | "surfacetab"
+  | "windowtab"
+  | "files"
+  | "diff"
+  | "button"
+  | "tabbtn"
+  | "homechip"
+  | "sidebtn";
 
 /** The one pointer-event shape the central `route` reads. `button` distinguishes
  *  left (0) / right (2) presses; `stopPropagation` (present on the real OpenTUI
@@ -382,6 +407,20 @@ const tabCell = (t: { glyph: string; label: string }): string => ` ${t.glyph} ${
 const TAB_SPANS = spans(TABS.map(tabCell), 0, 0);
 const PALETTE_W = 60;
 const PALETTE_ROWS = 10;
+// ── M21.9 clickable-chip labels ─────────────────────────────────────────────
+// Fixed strings so the x-span math is constant (every glyph single-width). The
+// home chips sit flush right on their row (trailing space = a 1-cell inset);
+// the tab-bar labels are the EXACT strings the bar renders, so `spansFromRight`
+// lands cell-for-cell on what's drawn.
+const HOME_CHIP_SESSION = "[± diff] ";
+const HOME_CHIP_PROJECT = "[▸ launch] ";
+const TABBAR_PALETTE_LABEL = "F5 ⌘ palette ";
+// The sidebar footer hint, split so its "F5 palette" segment is a chip: the
+// span starts after paddingLeft (1) + the pre text.
+const SIDEBAR_HINT_PRE = "F1-4 tabs · ";
+const SIDEBAR_HINT_BTN = "F5 palette";
+const SIDEBAR_HINT_POST = " · ^q quit";
+const SIDEBAR_HINT_SPAN = { start: 1 + SIDEBAR_HINT_PRE.length, width: SIDEBAR_HINT_BTN.length };
 // Scrollback-search highlight backgrounds (M20.3), packed 0xRRGGBB to sit in a
 // run's `bg` (search paints a bg, distinct from selection's inverse video, so
 // the two coexist). Every visible match gets the dim accent; the CURRENT match
@@ -633,22 +672,14 @@ render(
     let fleetRefresh: (() => void) | null = null;
 
     // Derived, io-free views over the one async fleet payload. `fleet` is the
-    // sidebar's flat, deduped session list; `homeRows` is the HOME panel's
-    // selectable session rows; `rollup` is the header tally.
+    // sidebar's flat, deduped session list; `homeItems` is the HOME panel's row
+    // list — live sessions first, then the registered-but-not-running projects
+    // section (home-model.ts, pure); `rollup` is the header tally.
     const fleet = (): Array<{ name: string; status: AgentStatus }> =>
       projectsData()
         .flatMap((p) => p.sessions.map((s) => ({ name: s.name, status: s.status })))
         .filter((x, i, a) => a.findIndex((y) => y.name === x.name) === i);
-    const homeRows = (): HomeRow[] =>
-      projectsData().flatMap((p) =>
-        p.sessions.map((s) => ({
-          project: p.name,
-          session: s.name,
-          status: s.status,
-          windows: s.windows.length,
-          dir: p.dir,
-        })),
-      );
+    const homeItems = createMemo<HomeItem[]>(() => buildHomeItems(projectsData()));
     const rollup = (): FleetRollup => {
       const r: FleetRollup = {
         blocked: 0,
@@ -666,10 +697,20 @@ render(
         }
       return r;
     };
-    const clampedSel = () => Math.min(sel(), Math.max(0, homeRows().length - 1));
+    const clampedSel = () => clampSelectable(homeItems(), sel());
+    /** The selected home item (never a header — clampSelectable skips them). */
+    const selectedHomeItem = (): HomeItem | undefined => homeItems()[clampedSel()];
+    /** The selected item's project dir, for the diff/new-session verbs. */
+    const selectedHomeDir = (): string | null => {
+      const it = selectedHomeItem();
+      return it && it.kind !== "header" ? it.dir : null;
+    };
     const detailLine = (): string => {
-      const r = homeRows()[clampedSel()];
+      const r = selectedHomeItem();
       if (!r) return "no live sessions — launch one, then it appears here";
+      if (r.kind === "project")
+        return `${r.dir ?? "no dir"} · registered, not running — enter/click launches it`;
+      if (r.kind === "header") return "";
       const w = `${r.windows} window${r.windows === 1 ? "" : "s"}`;
       return `${r.project}${r.dir ? ` · ${r.dir}` : ""} · ${w} · ${r.status}`;
     };
@@ -696,6 +737,8 @@ render(
     const [editorMsg, setEditorMsg] = createSignal("");
     // A path-input line on HOME (`o` to open). null = not prompting.
     const [pathPrompt, setPathPrompt] = createSignal<string | null>(null);
+    // A session-name input line on HOME (`n` / the [n new session] chip).
+    const [sessionPrompt, setSessionPrompt] = createSignal<string | null>(null);
 
     // Visible text rows = full height minus tab bar (1) + header (1) + rule/banner
     // (1) + footer (1).
@@ -1095,6 +1138,66 @@ render(
       switchTarget(session);
     };
 
+    /** Create a detached session named `name` in `dir` and open it as the
+     *  workspace (M21.9 — the home "launch project" / "new session" verbs).
+     *  ASYNC execFile only (the render-loop law); an already-existing session
+     *  simply opens. `TMUX_IDE=1` marks the session the way the cockpit's
+     *  launcher does, so agents inside can detect tmux-ide. */
+    const createSession = (name: string, dir: string | null) => {
+      const wd = dir ?? process.cwd();
+      execFile("tmux", ["new-session", "-d", "-s", name, "-c", wd], (err) => {
+        if (err && !/duplicate session/.test(err.message)) {
+          setStatusNote(`launch failed: ${name}`);
+          return;
+        }
+        if (!err) {
+          execFile("tmux", ["set-environment", "-t", name, "TMUX_IDE", "1"], () => {});
+          setStatusNote(`launched ${name}`);
+        }
+        fleetRefresh?.();
+        openWorkspace(name, dir);
+      });
+    };
+
+    /** A home row's PRIMARY verb: open a session as the workspace, or launch a
+     *  registered project (its sanitized name becomes the session). Shared by
+     *  the row click and the enter key. */
+    const activateHomeItem = (index: number) => {
+      const it = homeItems()[index];
+      if (!it || it.kind === "header") return;
+      setSel(index);
+      if (it.kind === "session") openWorkspace(it.session, it.dir);
+      else createSession(sessionNameFor(it.name), it.dir);
+    };
+
+    /** A home row's CHIP verb: sessions get [± diff] (adopt the row as context
+     *  and open its diff — the `d` key's mouse twin); projects get [▸ launch]
+     *  (same as the primary, spelled out for discoverability). */
+    const runHomeChip = (index: number) => {
+      const it = homeItems()[index];
+      if (!it || it.kind === "header") return;
+      setSel(index);
+      if (it.kind === "session") {
+        setContextSession(it.session);
+        setContextDir(it.dir ?? process.cwd());
+        enterDiff(it.dir ?? process.cwd());
+      } else {
+        createSession(sessionNameFor(it.name), it.dir);
+      }
+    };
+
+    /** Submit the home new-session prompt: validate, create, open. */
+    const submitSessionPrompt = () => {
+      const raw = (sessionPrompt() ?? "").trim();
+      setSessionPrompt(null);
+      if (!raw) return;
+      if (!isValidSessionName(raw)) {
+        setStatusNote("session names cannot contain ':', '.' or spaces");
+        return;
+      }
+      createSession(raw, selectedHomeDir());
+    };
+
     /** Switch tabs preserving each surface's state: the editor buffer and diff
      *  selection SURVIVE a round trip (only lazily initialized when a surface is
      *  first shown empty). The Terminal tab never re-attaches here — the mirror is
@@ -1110,14 +1213,24 @@ render(
       setTab(t);
     };
 
-    // ── COMMAND PALETTE (M18.4) ──────────────────────────────────────────────
-    // A centered overlay (F5 / ^p) — a fuzzy input line + result list over the
-    // action model in palette.ts. Keyboard-only for v1 (the overlay is late-
-    // mounted inside <Show>, so per-node mouse handlers would trip the landmine);
-    // the router never touches it.
+    // ── COMMAND PALETTE (M18.4, mouse-complete M21.9) ───────────────────────
+    // A centered overlay (F5 / ^p / the tab bar's palette chip) — a fuzzy input
+    // line + result list over the action model in palette.ts. The overlay is
+    // late-mounted inside <Show> and carries NO per-node handlers (central-
+    // routing discipline): `route` checks `paletteOpen()` right after the menu
+    // and hit-tests rows with the pure palette geometry (palettePos/paletteRowAt
+    // — the same math the render places the box with). Motion moves the
+    // selection (the selection highlight IS the hover feedback, like the context
+    // menu), a left press on a row runs it, the wheel scrolls `paletteTop`, and
+    // a press outside dismisses. Keyboard behavior is unchanged.
     const [paletteOpen, setPaletteOpen] = createSignal(false);
     const [paletteQuery, setPaletteQuery] = createSignal("");
     const [paletteSel, setPaletteSel] = createSignal(0);
+    // The wheel-scrolled window top of the result list (0 unless scrolled — the
+    // keyboard never moves it, so keyboard-only sessions render exactly as
+    // before). Reset wherever the list identity changes (query edits, level
+    // swaps, reopen).
+    const [paletteTop, setPaletteTop] = createSignal(0);
     const paletteActions = createMemo(() =>
       filterPaletteActions(
         paletteQuery(),
@@ -1125,10 +1238,24 @@ render(
         { terminal: mode() === "mirror" },
       ),
     );
+    /** The current palette LIST length — buffers level when open, else actions. */
+    const paletteCount = () => paletteBuffers()?.length ?? paletteActions().length;
+    /** The palette box geometry as placed by the render, for the router. */
+    const paletteGeom = (): PaletteGeom => {
+      const { left, top } = palettePos(dims().width, dims().height, PALETTE_W);
+      return {
+        left,
+        top,
+        width: PALETTE_W,
+        visibleRows: Math.min(PALETTE_ROWS, Math.max(0, paletteCount() - paletteTop())),
+      };
+    };
     const openPalette = () => {
       setPaletteQuery("");
       setPaletteSel(0);
+      setPaletteTop(0);
       setPaletteBuffers(null); // always open on the action list, never mid-picker
+      setHoverIf(null); // the overlay owns the pointer; drop any underlying tint
       setPaletteOpen(true);
     };
     const runPaletteAction = (a: PaletteAction) => {
@@ -1136,6 +1263,7 @@ render(
       // dispatching — keep the palette open and load the buffer list.
       if (a.kind === "paste-buffer") {
         setPaletteSel(0);
+        setPaletteTop(0);
         loadBuffers();
         return;
       }
@@ -1243,6 +1371,7 @@ render(
         if (evt.name === "escape") {
           setPaletteBuffers(null);
           setPaletteSel(0);
+          setPaletteTop(0);
         } else if (evt.name === "return") {
           const b = bufs[Math.min(paletteSel(), bufs.length - 1)];
           if (b) pasteBuffer(b.name);
@@ -1266,9 +1395,11 @@ render(
       } else if (evt.name === "backspace") {
         setPaletteQuery((q) => q.slice(0, -1));
         setPaletteSel(0);
+        setPaletteTop(0);
       } else if (evt.name.length === 1 && !evt.ctrl && !evt.meta) {
         setPaletteQuery((q) => q + (evt.shift ? evt.name.toUpperCase() : evt.name));
         setPaletteSel(0);
+        setPaletteTop(0);
       }
     };
 
@@ -1530,6 +1661,7 @@ render(
       const done = (lines: string[]) => {
         setPaletteBuffers(parseBufferList(lines));
         setPaletteSel(0);
+        setPaletteTop(0);
       };
       if (mirror) {
         void mirror
@@ -1550,6 +1682,7 @@ render(
       setPaletteOpen(false);
       setPaletteBuffers(null);
       setPaletteSel(0);
+      setPaletteTop(0);
       if (mirror) {
         void mirror
           .command(`show-buffer -b ${tmuxQuote(name)}`)
@@ -1851,8 +1984,10 @@ render(
       }
       const m = mode();
       if (m === "home") {
-        const r = homeRows()[gy - 2];
-        if (!r) return null;
+        // Only live-session rows carry the session menu; the registry section's
+        // project/header rows have no context verbs (left-click launches).
+        const r = homeItems()[gy - 2];
+        if (!r || r.kind !== "session") return null;
         return {
           region: "session",
           title: r.session,
@@ -2327,29 +2462,41 @@ render(
             setPathPrompt((s) => (s ?? "") + (evt.shift ? evt.name.toUpperCase() : evt.name));
           return;
         }
+        // Session-name input line (`n` / the [n new session] chip) — same shape.
+        if (sessionPrompt() !== null) {
+          if (evt.name === "escape") setSessionPrompt(null);
+          else if (evt.name === "return") submitSessionPrompt();
+          else if (evt.name === "backspace") setSessionPrompt((s) => (s ?? "").slice(0, -1));
+          else if (evt.name.length === 1 && !evt.ctrl && !evt.meta)
+            setSessionPrompt((s) => (s ?? "") + (evt.shift ? evt.name.toUpperCase() : evt.name));
+          return;
+        }
         if (evt.name === "o") {
           setPathPrompt("");
           return;
         }
-        // `d` — open the diff panel for the selected session's project dir (the
-        // home row carries it via the team payload), adopting it as the context.
+        // `n` — the [n new session] chip's keyboard twin.
+        if (evt.name === "n") {
+          setSessionPrompt("");
+          return;
+        }
+        // `d` — open the diff panel for the selected row's project dir (the
+        // home item carries it via the team payload), adopting it as context.
         if (evt.name === "d") {
-          const r = homeRows()[clampedSel()];
-          if (r) {
+          const r = selectedHomeItem();
+          if (r && r.kind === "session") {
             setContextSession(r.session);
             setContextDir(r.dir ?? process.cwd());
           }
-          enterDiff(r?.dir ?? process.cwd());
+          enterDiff(selectedHomeDir() ?? process.cwd());
           return;
         }
-        const rows = homeRows();
         if (evt.name === "j" || evt.name === "down") {
-          setSel(Math.min(clampedSel() + 1, Math.max(0, rows.length - 1)));
+          setSel(stepSelectable(homeItems(), clampedSel(), 1));
         } else if (evt.name === "k" || evt.name === "up") {
-          setSel(Math.max(clampedSel() - 1, 0));
+          setSel(stepSelectable(homeItems(), clampedSel(), -1));
         } else if (evt.name === "return") {
-          const r = rows[clampedSel()];
-          if (r) openWorkspace(r.session, r.dir);
+          activateHomeItem(clampedSel());
         }
         return;
       }
@@ -2458,14 +2605,16 @@ render(
         ),
       };
     });
-    /** Buttons on the home footer (the last screen row): the two app-handled home
-     *  keys (`o` open-file, `d` diff) as clickable chips. The other footer hints
-     *  advertise tmux-chrome binds this app's keyboard doesn't own, so they stay
-     *  plain text rather than dead buttons. Right-aligned to the fixed edge. */
+    /** Buttons on the home footer (the last screen row): the app-handled home
+     *  keys (`n` new session, `o` open-file, `d` diff) as clickable chips. The
+     *  other footer hints advertise tmux-chrome binds this app's keyboard
+     *  doesn't own, so they stay plain text rather than dead buttons.
+     *  Right-aligned to the fixed edge. */
     const homeButtons = createMemo<{ defs: HeaderButton[]; spans: Span[] }>(() => {
       const defs: HeaderButton[] =
         mode() === "home"
           ? [
+              { id: "home-new", label: "[n new session]" },
               { id: "home-open", label: "[o open]" },
               { id: "home-diff", label: "[d diff]" },
             ]
@@ -2520,15 +2669,16 @@ render(
         const pid = mirror?.focusedPane();
         if (pid) void mirror?.command(`resize-pane -Z -t ${pid}`).catch(() => {});
       } else if (id === "home-open") setPathPrompt("");
+      else if (id === "home-new") setSessionPrompt("");
       else if (id === "home-diff") {
         // Mirror the home `d` key: adopt the selected session's dir as context and
         // open its diff.
-        const r = homeRows()[clampedSel()];
-        if (r) {
+        const r = selectedHomeItem();
+        if (r && r.kind === "session") {
           setContextSession(r.session);
           setContextDir(r.dir ?? process.cwd());
         }
-        enterDiff(r?.dir ?? process.cwd());
+        enterDiff(selectedHomeDir() ?? process.cwd());
       }
     };
 
@@ -2552,18 +2702,71 @@ render(
       };
     });
 
+    // ── M21.9 tab-bar / sidebar / home-row chips ─────────────────────────────
+    /** The tab bar's right-aligned clickable chips: the workspace-context chip
+     *  (when set — click shows its Terminal) and the palette hint (click opens
+     *  the palette). Right-anchored so the variable note text to their left
+     *  never shifts them — the render walks the SAME defs, so spans match. */
+    const tabbarButtons = createMemo<{ defs: HeaderButton[]; spans: Span[] }>(() => {
+      const defs: HeaderButton[] = [];
+      if (contextSession()) defs.push({ id: "tab-context", label: `⧉ ${contextSession()} ` });
+      defs.push({ id: "tab-palette", label: TABBAR_PALETTE_LABEL });
+      return {
+        defs,
+        spans: spansFromRight(
+          defs.map((d) => d.label),
+          buttonRightEdge(),
+          0,
+        ),
+      };
+    });
+    const runTabbarButton = (id: string) => {
+      if (id === "tab-palette") openPalette();
+      else if (id === "tab-context" && contextSession()) switchTarget(contextSession());
+    };
+    /** A home row's right-aligned verb chip span (sessions/projects only). The
+     *  row box runs flush to the terminal's right edge, so the span anchors
+     *  there — same for every row of a kind. */
+    const homeChipLabel = (it: HomeItem | undefined): string =>
+      it?.kind === "session" ? HOME_CHIP_SESSION : it?.kind === "project" ? HOME_CHIP_PROJECT : "";
+    const homeChipHit = (it: HomeItem | undefined, x: number): boolean => {
+      const label = homeChipLabel(it);
+      if (!label) return false;
+      return spanHit(spansFromRight([label], buttonRightEdge(), 0), x) === 0;
+    };
+    /** A home row's muted meta text — sessions keep the exact `3w · project`
+     *  string the panel always showed; projects show their dir + origin. */
+    const homeRowMeta = (it: HomeItem): string =>
+      it.kind === "session"
+        ? `${it.windows}w${it.project === it.session ? "" : ` · ${it.project}`}`
+        : it.kind === "project"
+          ? `${it.dir ?? ""} · registered`
+          : "";
+
     /** Resolve the hovered {region, index} from pointer coords with the SAME
      *  geometry the click router uses, then update `hover` (no-op unless changed).
      *  Called on every motion event so the click branches below stay untouched;
      *  any position that isn't a hoverable row/segment clears the tint. */
     const resolveHover = (x: number, y: number) => {
       if (y === 0) {
+        const bi = spanHit(tabbarButtons().spans, x);
+        if (bi >= 0) {
+          setHoverIf({ region: "tabbtn", index: bi });
+          return;
+        }
         const i = spanHit(TAB_SPANS, x);
         setHoverIf(i >= 0 ? { region: "surfacetab", index: i } : null);
         return;
       }
       const gy = y - TABBAR_H;
       if (x < sidebarW()) {
+        // The sidebar footer's "F5 palette" segment is a chip (last screen row).
+        if (y === dims().height - 1) {
+          setHoverIf(
+            spanHit([SIDEBAR_HINT_SPAN], x) === 0 ? { region: "sidebtn", index: 0 } : null,
+          );
+          return;
+        }
         const idx = gy - 2;
         setHoverIf(idx >= 0 && idx < fleet().length ? { region: "sidebar", index: idx } : null);
         return;
@@ -2576,7 +2779,12 @@ render(
           return;
         }
         const idx = gy - 2;
-        setHoverIf(idx >= 0 && idx < homeRows().length ? { region: "home", index: idx } : null);
+        const it = homeItems()[idx];
+        if (idx < 0 || !it || it.kind === "header") {
+          setHoverIf(null);
+          return;
+        }
+        setHoverIf({ region: homeChipHit(it, x) ? "homechip" : "home", index: idx });
         return;
       }
       if (m === "editor") {
@@ -2707,6 +2915,47 @@ render(
         else if (!pointInMenu(parentGeom, x, y)) closeMenu();
         return;
       }
+      // While the PALETTE is open it owns pointer routing (M21.9), mirroring the
+      // menu above: motion over a result row moves the selection (the selection
+      // highlight is the hover feedback), the wheel scrolls the visible window,
+      // a left press on a row runs it (action list or paste-buffer level), a
+      // press anywhere else inside the box is a no-op, and a press OUTSIDE
+      // dismisses. Geometry comes from the same pure math the render places the
+      // box with (palettePos/paletteRowAt/paletteContains).
+      if (paletteOpen()) {
+        const g = paletteGeom();
+        if (type === "scroll") {
+          const dir = e.scroll?.direction;
+          if (dir === "up" || dir === "down") {
+            const step = dir === "up" ? -1 : 1;
+            setPaletteTop((t) => clampPaletteTop(t + step, paletteCount(), PALETTE_ROWS));
+          }
+          return;
+        }
+        if (type === "move" || type === "over" || type === "drag") {
+          const ri = paletteRowAt(g, x, y);
+          if (ri >= 0) setPaletteSel(paletteTop() + ri);
+          return;
+        }
+        if (type !== "down") return;
+        const ri = paletteRowAt(g, x, y);
+        if (ri >= 0) {
+          if (e.button === 2) return; // right press on a row: no-op, stay open
+          const abs = paletteTop() + ri;
+          setPaletteSel(abs);
+          const bufs = paletteBuffers();
+          if (bufs !== null) {
+            const b = bufs[abs];
+            if (b) pasteBuffer(b.name);
+          } else {
+            const a = paletteActions()[abs];
+            if (a) runPaletteAction(a);
+          }
+          return;
+        }
+        if (!paletteContains(g, x, y)) setPaletteOpen(false);
+        return;
+      }
       // A right-button press (SGR button 2) opens the context menu at the pointer.
       // Left/middle presses fall through to the normal click routing below.
       if (type === "down" && e.button === 2) {
@@ -2720,7 +2969,10 @@ render(
       // starts a border drag. Neither fights selection: selection begins only from
       // an in-pane down, never a boundary/gutter cell.
       if (type === "down" && e.button !== 2) {
-        if (x === sidebarW() - 1 || x === sidebarW()) {
+        // The boundary only exists BELOW the tab bar (row 0 is the full-width
+        // surface bar — a press there must reach the tab spans, found live:
+        // the Files tab's left cells sat exactly on the boundary columns).
+        if (y >= TABBAR_H && (x === sidebarW() - 1 || x === sidebarW())) {
           setHoverIf(null);
           dragging = { kind: "sidebar" };
           setStatusNote("resizing…");
@@ -2833,9 +3085,17 @@ render(
           return;
         }
       }
-      // Row 0 — the surface tab bar (full width, above the sidebar).
+      // Row 0 — the surface tab bar (full width, above the sidebar). Its right
+      // side carries the context/palette chips (checked first; they never
+      // overlap the left-anchored tab spans at sane widths).
       if (y === 0) {
         if (type !== "down") return;
+        const tb = tabbarButtons();
+        const bi = spanHit(tb.spans, x);
+        if (bi >= 0) {
+          runTabbarButton(tb.defs[bi]!.id);
+          return;
+        }
         const i = spanHit(TAB_SPANS, x);
         if (i >= 0) selectTab(TABS[i]!.key);
         return;
@@ -2843,27 +3103,34 @@ render(
       const gy = y - TABBAR_H;
       if (x < sidebarW()) {
         if (type !== "down") return;
+        // The footer hint's "F5 palette" segment is a chip (last screen row).
+        if (y === dims().height - 1) {
+          if (spanHit([SIDEBAR_HINT_SPAN], x) === 0) openPalette();
+          return;
+        }
         const s = fleet()[gy - 2];
         if (s) openWorkspace(s.name, dirForSession(s.name));
         return;
       }
       // HOME mode: the main area is the fleet panel. Rows render below the header
-      // (gy=0) + rule (gy=1), so a click at row gy hits home row `gy - 2`.
+      // (gy=0) + rule (gy=1), so a click at row gy hits home item `gy - 2`.
       if (mode() === "home") {
         if (type !== "down") return;
-        // The footer occupies the last screen row; its right-aligned [o open] /
-        // [d diff] chips are hit-tested there before the row math below.
+        // The footer occupies the last screen row; its right-aligned chips
+        // ([n new session] / [o open] / [d diff]) are hit-tested there first.
         if (y === dims().height - 1) {
           const hb = homeButtons();
           const i = spanHit(hb.spans, x);
           if (i >= 0) runButton(hb.defs[i]!.id);
           return;
         }
-        const r = homeRows()[gy - 2];
-        if (r) {
-          setSel(gy - 2);
-          openWorkspace(r.session, r.dir);
-        }
+        // A row click: the right-aligned verb chip wins over the row body;
+        // header rows are inert. Sessions open, projects launch (M21.9).
+        const idx = gy - 2;
+        const it = homeItems()[idx];
+        if (!it || it.kind === "header") return;
+        if (homeChipHit(it, x)) runHomeChip(idx);
+        else activateHomeItem(idx);
         return;
       }
       // FILES (editor) mode: header (gy=0) + rule/banner (gy=1), then a two-column
@@ -3094,10 +3361,20 @@ render(
           <Show when={note()}>
             <text fg={ACCENT} attributes={1}>{`${note()} `}</text>
           </Show>
-          <Show when={contextSession()}>
-            <text fg={ACCENT}>{`⧉ ${contextSession()} `}</text>
-          </Show>
-          <text fg={MUTED}>{"F5 ⌘ palette "}</text>
+          {/* Right-aligned CHIPS (M21.9): the workspace-context chip (click →
+            its Terminal) and the palette hint (click → open the palette). The
+            router hit-tests `tabbarButtons().spans` — the same defs walked
+            here, right-anchored, so the cells match exactly. */}
+          <For each={tabbarButtons().defs}>
+            {(b, i) => (
+              <text
+                fg={b.id === "tab-context" ? ACCENT : MUTED}
+                bg={isHovered("tabbtn", i()) ? BUTTON_HOVER_BG : TABBAR_BG}
+              >
+                {b.label}
+              </text>
+            )}
+          </For>
         </box>
         <box flexDirection="row" flexGrow={1} backgroundColor={DEFAULT_BG}>
           <box
@@ -3134,7 +3411,16 @@ render(
               </For>
             </box>
             <box flexGrow={1} />
-            <text fg={MUTED}>{"F1-4 tabs · F5 palette · ^q quit"}</text>
+            {/* Footer hint — its "F5 palette" segment is a CHIP (M21.9): the
+              router hit-tests SIDEBAR_HINT_SPAN on the last screen row, and
+              these three runs render the exact same cells. */}
+            <box flexDirection="row">
+              <text fg={MUTED}>{SIDEBAR_HINT_PRE}</text>
+              <text fg={MUTED} bg={isHovered("sidebtn", 0) ? BUTTON_HOVER_BG : SIDEBAR_BG}>
+                {SIDEBAR_HINT_BTN}
+              </text>
+              <text fg={MUTED}>{SIDEBAR_HINT_POST}</text>
+            </box>
           </box>
           <box flexDirection="column" flexGrow={1} onMouse={(e: RouteEvent) => route(e)}>
             <Show when={mode() === "home"}>
@@ -3154,43 +3440,78 @@ render(
                 </For>
               </box>
               <text fg={MUTED}>{"─".repeat(Math.max(4, canvasCols() - 2))}</text>
+              {/* HOME items (M21.9): live-session rows, then the registry
+                section (header + launchable project rows). One uniform
+                selectable-row layout — status glyph / title / meta — plus a
+                right-aligned verb CHIP the router hit-tests by the same
+                right-anchored span math (homeChipHit). Headers are inert. */}
               <box flexDirection="column">
-                <For each={homeRows()}>
-                  {(r, i) => (
-                    <box
-                      flexDirection="row"
-                      gap={1}
-                      paddingLeft={1}
-                      backgroundColor={
-                        i() === clampedSel()
-                          ? TAB_ACTIVE_BG
-                          : isHovered("home", i())
-                            ? HOVER_BG
-                            : DEFAULT_BG
+                <For each={homeItems()}>
+                  {(it, i) => (
+                    <Show
+                      when={it.kind !== "header"}
+                      fallback={
+                        <box height={1} paddingLeft={1}>
+                          <text fg={MUTED}>
+                            {it.kind === "header" ? `· ${it.label}` : ""}
+                          </text>
+                        </box>
                       }
                     >
-                      <text fg={STATUS_COLOR[r.status]}>{STATUS_GLYPH[r.status]}</text>
-                      <text fg={i() === clampedSel() ? DEFAULT_FG : MUTED} attributes={1}>
-                        {r.session}
-                      </text>
-                      <text fg={MUTED}>{`${r.windows}w`}</text>
-                      <text fg={MUTED}>{r.project === r.session ? "" : `· ${r.project}`}</text>
-                    </box>
+                      <box
+                        flexDirection="row"
+                        gap={1}
+                        paddingLeft={1}
+                        height={1}
+                        backgroundColor={
+                          i() === clampedSel()
+                            ? TAB_ACTIVE_BG
+                            : isHovered("home", i())
+                              ? HOVER_BG
+                              : DEFAULT_BG
+                        }
+                      >
+                        <text fg={it.kind === "session" ? STATUS_COLOR[it.status] : DIR_FG}>
+                          {it.kind === "session" ? STATUS_GLYPH[it.status] : "▸"}
+                        </text>
+                        <text fg={i() === clampedSel() ? DEFAULT_FG : MUTED} attributes={1}>
+                          {it.kind === "session" ? it.session : it.kind === "project" ? it.name : ""}
+                        </text>
+                        <text fg={MUTED}>{homeRowMeta(it)}</text>
+                        <box flexGrow={1} />
+                        <text
+                          fg={BUTTON_FG}
+                          bg={isHovered("homechip", i()) ? BUTTON_HOVER_BG : BUTTON_BG}
+                        >
+                          {homeChipLabel(it)}
+                        </text>
+                      </box>
+                    </Show>
                   )}
                 </For>
               </box>
               <box flexGrow={1} />
               <Show
-                when={pathPrompt() !== null}
+                when={sessionPrompt() !== null}
                 fallback={
-                  <box paddingLeft={1}>
-                    <text fg={ACCENT}>{detailLine()}</text>
-                  </box>
+                  <Show
+                    when={pathPrompt() !== null}
+                    fallback={
+                      <box paddingLeft={1}>
+                        <text fg={ACCENT}>{detailLine()}</text>
+                      </box>
+                    }
+                  >
+                    <box paddingLeft={1} flexDirection="row">
+                      <text fg={ACCENT}>{"open file: "}</text>
+                      <text fg={DEFAULT_FG}>{`${pathPrompt() ?? ""}▏`}</text>
+                    </box>
+                  </Show>
                 }
               >
                 <box paddingLeft={1} flexDirection="row">
-                  <text fg={ACCENT}>{"open file: "}</text>
-                  <text fg={DEFAULT_FG}>{`${pathPrompt() ?? ""}▏`}</text>
+                  <text fg={ACCENT}>{"new session: "}</text>
+                  <text fg={DEFAULT_FG}>{`${sessionPrompt() ?? ""}▏`}</text>
                 </box>
               </Show>
               <box paddingLeft={1} flexDirection="row" gap={1}>
@@ -3525,14 +3846,18 @@ render(
             </Show>
           </box>
         </box>
-        {/* COMMAND PALETTE overlay (M18.4) — centered, keyboard-only. Late-mounted
-          inside <Show>, so it carries NO mouse handlers (the router never sees
-          it); type to fuzzy-filter, up/down to move, enter to run, esc to close. */}
+        {/* COMMAND PALETTE overlay (M18.4; mouse-complete M21.9) — centered.
+          Late-mounted inside <Show> and still carries NO per-node handlers:
+          clicks bubble to the root box, whose `route` checks `paletteOpen()`
+          and hit-tests rows against the SAME pure geometry placing this box
+          (palettePos). Type to fuzzy-filter; up/down or pointer motion move;
+          enter or a row click runs; wheel scrolls (`paletteTop` windows the
+          slice); esc or an outside click closes. */}
         <Show when={paletteOpen()}>
           <box
             position="absolute"
-            left={Math.max(0, Math.floor((dims().width - PALETTE_W) / 2))}
-            top={Math.max(1, Math.floor(dims().height / 6))}
+            left={palettePos(dims().width, dims().height, PALETTE_W).left}
+            top={palettePos(dims().width, dims().height, PALETTE_W).top}
             width={PALETTE_W}
             flexDirection="column"
             backgroundColor={PALETTE_BG}
@@ -3555,14 +3880,16 @@ render(
                     <text fg={DEFAULT_FG}>{`${paletteQuery()}▏`}</text>
                   </box>
                   <text fg={MUTED}>{"─".repeat(PALETTE_W - 4)}</text>
-                  <For each={paletteActions().slice(0, PALETTE_ROWS)}>
+                  <For each={paletteActions().slice(paletteTop(), paletteTop() + PALETTE_ROWS)}>
                     {(a, i) => (
                       <box
                         height={1}
-                        backgroundColor={i() === paletteSel() ? TAB_ACTIVE_BG : PALETTE_BG}
+                        backgroundColor={
+                          paletteTop() + i() === paletteSel() ? TAB_ACTIVE_BG : PALETTE_BG
+                        }
                       >
-                        <text fg={i() === paletteSel() ? DEFAULT_FG : MUTED}>
-                          {(i() === paletteSel() ? "› " : "  ") + a.label}
+                        <text fg={paletteTop() + i() === paletteSel() ? DEFAULT_FG : MUTED}>
+                          {(paletteTop() + i() === paletteSel() ? "› " : "  ") + a.label}
                         </text>
                       </box>
                     )}
@@ -3581,15 +3908,17 @@ render(
                 <text fg={MUTED}>{"esc back"}</text>
               </box>
               <text fg={MUTED}>{"─".repeat(PALETTE_W - 4)}</text>
-              <For each={paletteBuffers()!.slice(0, PALETTE_ROWS)}>
+              <For each={paletteBuffers()!.slice(paletteTop(), paletteTop() + PALETTE_ROWS)}>
                 {(b, i) => (
                   <box
                     height={1}
                     flexDirection="row"
-                    backgroundColor={i() === paletteSel() ? TAB_ACTIVE_BG : PALETTE_BG}
+                    backgroundColor={
+                      paletteTop() + i() === paletteSel() ? TAB_ACTIVE_BG : PALETTE_BG
+                    }
                   >
-                    <text fg={i() === paletteSel() ? DEFAULT_FG : MUTED}>
-                      {`${i() === paletteSel() ? "› " : "  "}${b.name}  `}
+                    <text fg={paletteTop() + i() === paletteSel() ? DEFAULT_FG : MUTED}>
+                      {`${paletteTop() + i() === paletteSel() ? "› " : "  "}${b.name}  `}
                     </text>
                     <text fg={MUTED}>{b.preview}</text>
                   </box>
