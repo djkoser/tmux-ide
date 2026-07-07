@@ -26,6 +26,7 @@ import {
   type CellArrays,
   type GraphemeOverride,
 } from "./blit.ts";
+import { AckWriter } from "./ack-writer.ts";
 
 /** OpenTUI TextAttributes bit values (kept literal to avoid the dep here). */
 const ATTR_BOLD = 1;
@@ -80,6 +81,18 @@ function buildXtermPalette(): number[] {
 
 export class PaneMirror {
   private readonly term: Terminal;
+  /** Ack-paced writes (M21.5): xterm's `write` is async with a completion
+   *  callback; chunks arriving mid-parse buffer here and follow as ONE joined
+   *  write from the callback, so parser backpressure never queues unbounded
+   *  entries — and never stalls the control-channel reader loop feeding us. */
+  /** Fires when a paced write has actually PARSED into the grid — the dirty
+   *  signal the render tick must re-arm on (enqueue-time dirty can be consumed
+   *  before the parse lands, dropping the final frame; see AckWriter.onAck). */
+  onParsed?: () => void;
+  private readonly writer = new AckWriter(
+    (data, done) => this.term.write(data, done),
+    () => this.onParsed?.(),
+  );
   cols: number;
   rows: number;
 
@@ -91,7 +104,9 @@ export class PaneMirror {
 
   /** Feed raw pane bytes (UTF-8) from a control-mode %output event. */
   write(data: Uint8Array | string): void {
-    this.term.write(data);
+    // Normalize to bytes so the pacer coalesces freely; a JS string encodes to
+    // the same UTF-8 xterm would have decoded it from.
+    this.writer.write(typeof data === "string" ? new TextEncoder().encode(data) : data);
   }
 
   resize(cols: number, rows: number): void {
