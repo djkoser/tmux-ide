@@ -17,6 +17,7 @@
 import { appendFileSync } from "node:fs";
 import { ControlModeClient } from "./control-client.ts";
 import { PaneMirror, type MirrorSnapshot } from "./pane-mirror.ts";
+import { tapInputOutput } from "./perf-tap.ts";
 
 /** One pane's geometry inside the window, in cells (tmux coordinates). */
 export interface PaneGeometry {
@@ -135,6 +136,7 @@ export class SessionMirror {
     this.client = new ControlModeClient({
       attachTarget: opts.target,
       onOutput: (pane, data) => {
+        tapInputOutput(pane); // t1: first echo back for a key we just forwarded
         this.mirrors.get(pane)?.write(data);
         opts.onDirty?.();
       },

@@ -104,6 +104,7 @@ import { render, useKeyboard, usePaste, useTerminalDimensions } from "@opentui/s
 import { RGBA, EditBuffer, decodePasteBytes } from "@opentui/core";
 import { createSignal, createMemo, createEffect, onMount, onCleanup, For, Show } from "solid-js";
 import { SessionMirror, type LivePane } from "./session-mirror.ts";
+import { tapInputSent, tapInputTick } from "./perf-tap.ts";
 import { execFile, spawn } from "node:child_process";
 import type { AgentStatus } from "../detect/classify.ts";
 import { rollupChips, homeFooterHints, type FleetRollup } from "../team/home.ts";
@@ -1283,6 +1284,7 @@ render(
             /* perf tap only */
           }
         }
+        tapInputTick(); // t2: this paint consumed the dirty flag — close open input samples
       }, 8);
       // Fleet via an ASYNC subprocess — the in-process data layer is a chain of
       // synchronous execs that blocks the event loop for seconds and swallows
@@ -1700,7 +1702,7 @@ render(
     };
     /** Write a new first-visible line to the surface owning `surface`. Editor/diff
      *  clamp to their content; the mirror converts top → offset-from-live and lets
-     *  the 16ms pane tick re-render (same path as the wheel). */
+     *  the 8ms pane tick re-render (same path as the wheel). */
     const applyScrollTop = (surface: ScrollSurface, top: number) => {
       if (surface.surface === "editor") {
         setEditorTop(clampTop(top, editorLines().length, editorRows()));
@@ -2316,6 +2318,7 @@ render(
       // Any key that reaches the pane retires a stale selection highlight.
       clearSelection();
       snapLive(mirror.focusedPane());
+      tapInputSent(mirror.focusedPane()); // t0: keystroke dispatched to the pane
       if (evt.ctrl && evt.name.length === 1) {
         void mirror.sendKey(`C-${evt.name}`).catch(() => {});
         return;
