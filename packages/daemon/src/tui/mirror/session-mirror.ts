@@ -17,6 +17,7 @@
 import { appendFileSync } from "node:fs";
 import { ControlModeClient } from "./control-client.ts";
 import { PaneMirror, type MirrorSnapshot } from "./pane-mirror.ts";
+import type { CellArrays, GraphemeOverride } from "./blit.ts";
 import { tapInputOutput } from "./perf-tap.ts";
 
 /** One pane's geometry inside the window, in cells (tmux coordinates). */
@@ -171,8 +172,11 @@ export class SessionMirror {
    * @param scrollOffsets Per-pane scrollback offsets (lines above live view);
    *   panes absent from the map render live. The focused pane gets its cursor
    *   painted.
+   * @param includeRows Serialize each pane's styled rows. `false` (the
+   *   framebuffer-blit path, M21.3) returns geometry + cursor/offset only and
+   *   skips the run rebuild — the `<pane_surface>` reads cells via {@link blitPane}.
    */
-  panes(scrollOffsets?: ReadonlyMap<string, number>): LivePane[] {
+  panes(scrollOffsets?: ReadonlyMap<string, number>, includeRows = true): LivePane[] {
     const focused = this.focusedPane();
     return this.geometry.map((g) => {
       const mirror = this.mirrors.get(g.id);
@@ -182,10 +186,35 @@ export class SessionMirror {
         active: g.id === this.focused || (this.focused === "" && g.active),
         scrollbackDepth: mirror?.scrollbackDepth() ?? 0,
         snapshot:
-          mirror?.snapshot(offset, g.id === focused) ??
+          mirror?.snapshot(offset, g.id === focused, includeRows) ??
           ({ rows: [], cursorX: 0, cursorY: 0, scrollOffset: 0 } as const),
       };
     });
+  }
+
+  /** Blit a pane's visible grid into a framebuffer's packed arrays (M21.3) — the
+   *  `<pane_surface>` render path. No-op for an unknown pane. See
+   *  {@link PaneMirror.blit}. */
+  blitPane(
+    id: string,
+    buffers: CellArrays,
+    width: number,
+    height: number,
+    scrollOffset: number,
+    withCursor: boolean,
+    defaultFg: number,
+    defaultBg: number,
+    graphemes?: GraphemeOverride[],
+  ): void {
+    this.mirrors
+      .get(id)
+      ?.blit(buffers, width, height, scrollOffset, withCursor, defaultFg, defaultBg, graphemes);
+  }
+
+  /** A pane's visible rows as plain text — the on-demand OSC52 copy read for the
+   *  blit path (which omits styled rows). Empty for an unknown pane. */
+  visibleRowTexts(id: string, scrollOffset = 0): string[] {
+    return this.mirrors.get(id)?.visibleRowTexts(scrollOffset) ?? [];
   }
 
   focusedPane(): string {

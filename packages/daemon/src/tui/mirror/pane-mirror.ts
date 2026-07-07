@@ -19,6 +19,13 @@
  *    a pane can go.
  */
 import { Terminal } from "@xterm/headless";
+import {
+  writeCell,
+  writeContinuation,
+  SPACE_CODE,
+  type CellArrays,
+  type GraphemeOverride,
+} from "./blit.ts";
 
 /** OpenTUI TextAttributes bit values (kept literal to avoid the dep here). */
 const ATTR_BOLD = 1;
@@ -124,10 +131,16 @@ export class PaneMirror {
    * @param scrollOffset Render this many lines above the live viewport
    *   (clamped to the available scrollback). 0 = live view.
    * @param withCursor Paint the cursor cell inverse (the focused pane).
+   * @param includeRows Serialize the styled rows. `false` returns only the
+   *   cursor/offset metadata (rows `[]`) — the framebuffer-blit path (M21.3)
+   *   reads cells via {@link blit} instead, so it skips the run rebuild entirely.
    */
-  snapshot(scrollOffset = 0, withCursor = false): MirrorSnapshot {
+  snapshot(scrollOffset = 0, withCursor = false, includeRows = true): MirrorSnapshot {
     const buf = this.term.buffer.active;
     const offset = Math.max(0, Math.min(scrollOffset, buf.viewportY));
+    if (!includeRows) {
+      return { rows: [], cursorX: buf.cursorX, cursorY: buf.cursorY, scrollOffset: offset };
+    }
     const baseY = buf.viewportY - offset;
     const live = offset === 0;
     const rows: StyledRun[][] = [];
@@ -182,6 +195,116 @@ export class PaneMirror {
       rows.push(runs);
     }
     return { rows, cursorX: buf.cursorX, cursorY: buf.cursorY, scrollOffset: offset };
+  }
+
+  /**
+   * Blit the visible grid straight into a framebuffer's packed typed arrays —
+   * the native-feel render path (M21.3). Same cell semantics as {@link snapshot}
+   * (colors resolved to `0xRRGGBB`, the OpenTUI attribute bitmask, wide-glyph
+   * spacers, focused-pane cursor as an inverse cell) but with no `StyledRun[]`
+   * rebuild and no per-run `RGBA` — each cell is a handful of typed-array stores.
+   *
+   * `buffers` are `OptimizedBuffer.buffers` (or a plain-array stand-in). Cells
+   * beyond the pane content or below the last row fill with a default-styled
+   * space. `defaultFg`/`defaultBg` are packed `0xRRGGBB` for the terminal
+   * default (a cell whose fg/bg is `null`). Multi-codepoint graphemes get their
+   * base codepoint here and are pushed to `graphemes` (cleared by the caller) for
+   * the owner to re-write via `setCell` — see {@link GraphemeOverride}.
+   */
+  blit(
+    buffers: CellArrays,
+    width: number,
+    height: number,
+    scrollOffset: number,
+    withCursor: boolean,
+    defaultFg: number,
+    defaultBg: number,
+    graphemes?: GraphemeOverride[],
+  ): void {
+    const buf = this.term.buffer.active;
+    const offset = Math.max(0, Math.min(scrollOffset, buf.viewportY));
+    const baseY = buf.viewportY - offset;
+    const live = offset === 0;
+    const cell = buf.getNullCell();
+    const cols = Math.min(this.cols, width);
+    const dfR = (defaultFg >> 16) & 0xff;
+    const dfG = (defaultFg >> 8) & 0xff;
+    const dfB = defaultFg & 0xff;
+    const dbR = (defaultBg >> 16) & 0xff;
+    const dbG = (defaultBg >> 8) & 0xff;
+    const dbB = defaultBg & 0xff;
+
+    for (let y = 0; y < height; y++) {
+      const line = y < this.rows ? buf.getLine(baseY + y) : null;
+      const isCursorRow = withCursor && live && line !== null && y === buf.cursorY;
+      for (let x = 0; x < width; x++) {
+        const idx = y * width + x;
+        if (!line || x >= cols) {
+          writeCell(buffers, idx, SPACE_CODE, null, null, 0, dfR, dfG, dfB, dbR, dbG, dbB);
+          continue;
+        }
+        line.getCell(x, cell);
+        if (cell.getWidth() === 0) {
+          // Spacer half of the preceding wide glyph — inherit its colors.
+          writeContinuation(buffers, idx);
+          continue;
+        }
+
+        let fg: number | null = null;
+        if (cell.isFgRGB()) fg = cell.getFgColor();
+        else if (cell.isFgPalette()) fg = XTERM_PALETTE[cell.getFgColor()] ?? null;
+
+        let bg: number | null = null;
+        if (cell.isBgRGB()) bg = cell.getBgColor();
+        else if (cell.isBgPalette()) bg = XTERM_PALETTE[cell.getBgColor()] ?? null;
+
+        let attrs = 0;
+        if (cell.isBold()) attrs |= ATTR_BOLD;
+        if (cell.isDim()) attrs |= ATTR_DIM;
+        if (cell.isItalic()) attrs |= ATTR_ITALIC;
+        if (cell.isUnderline()) attrs |= ATTR_UNDERLINE;
+        if (cell.isStrikethrough()) attrs |= ATTR_STRIKETHROUGH;
+        // Reverse video (app INVERSE ^ the focused cursor cell) renders as a
+        // fg/bg SWAP, not the INVERSE attribute bit — a framebuffer cell carrying
+        // that bit does not flush as reverse (see blit.ts). Resolve nulls to the
+        // defaults first so default-on-default inverts to defaultBg-on-defaultFg.
+        const inverted = !!cell.isInverse() !== (isCursorRow && x === buf.cursorX);
+
+        const chars = cell.getChars();
+        const codepoint = chars ? (chars.codePointAt(0) ?? SPACE_CODE) : SPACE_CODE;
+        if (inverted) {
+          const rFg = fg === null ? defaultFg : fg;
+          const rBg = bg === null ? defaultBg : bg;
+          writeCell(buffers, idx, codepoint, rBg, rFg, attrs, dfR, dfG, dfB, dbR, dbG, dbB);
+        } else {
+          writeCell(buffers, idx, codepoint, fg, bg, attrs, dfR, dfG, dfB, dbR, dbG, dbB);
+        }
+        // A grapheme wider than its base codepoint (ZWJ/flag emoji, combining
+        // marks) can't live in a single u32 — record it for the native setCell
+        // re-write. The unit-count test is allocation-free (no spread) on the
+        // common path: a lone BMP char or a single astral emoji falls through.
+        if (graphemes && chars.length > (codepoint > 0xffff ? 2 : 1)) {
+          graphemes.push({ x, y, chars, fg, bg, attrs });
+        }
+      }
+    }
+  }
+
+  /**
+   * The visible rows as plain text (trailing blanks trimmed, wide spacers
+   * collapsed) — the on-demand read the OSC52 copy path uses when the blit path
+   * has omitted the styled rows. `scrollOffset` matches {@link snapshot}.
+   */
+  visibleRowTexts(scrollOffset = 0): string[] {
+    const buf = this.term.buffer.active;
+    const offset = Math.max(0, Math.min(scrollOffset, buf.viewportY));
+    const baseY = buf.viewportY - offset;
+    const out: string[] = [];
+    for (let y = 0; y < this.rows; y++) {
+      const line = buf.getLine(baseY + y);
+      out.push(line ? line.translateToString(true) : "");
+    }
+    return out;
   }
 
   dispose(): void {

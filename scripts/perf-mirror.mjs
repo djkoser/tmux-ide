@@ -129,7 +129,9 @@ async function setup() {
     "220",
     "-y",
     "60",
-    `cd ${REPO} && TMUX_IDE_ZZ_PERF=1 exec bun ${APP} --target=${TARGET}`,
+    // M21.3: forward TMUX_IDE_FB_PANES so the flagged framebuffer-blit path can
+    // be measured against the default StyledRun path (same harness, same taps).
+    `cd ${REPO} && TMUX_IDE_ZZ_PERF=1 ${process.env.TMUX_IDE_FB_PANES === "1" ? "TMUX_IDE_FB_PANES=1 " : ""}exec bun ${APP} --target=${TARGET}`,
   ]);
 
   process.stdout.write(`  warming up (${cfg.warmupMs}ms) — app attaching + seeding…\n`);

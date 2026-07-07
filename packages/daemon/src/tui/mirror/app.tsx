@@ -117,6 +117,7 @@ import { render, useKeyboard, usePaste, useTerminalDimensions } from "@opentui/s
 import { RGBA, EditBuffer, decodePasteBytes } from "@opentui/core";
 import { createSignal, createMemo, createEffect, onMount, onCleanup, For, Show } from "solid-js";
 import { SessionMirror, type LivePane } from "./session-mirror.ts";
+import { registerPaneSurface, type PaneSearchHighlight } from "./pane-surface.tsx";
 import { tapInputSent, tapInputTick } from "./perf-tap.ts";
 import { execFile, spawn } from "node:child_process";
 import type { AgentStatus } from "../detect/classify.ts";
@@ -325,6 +326,13 @@ type RouteEvent = {
 
 const DEFAULT_FG = RGBA.fromInts(212, 212, 216, 255);
 const DEFAULT_BG = RGBA.fromInts(16, 16, 22, 255);
+// Packed 0xRRGGBB twins of the defaults, for the framebuffer-blit path (M21.3):
+// the blit writes packed channels straight into the buffer, no RGBA per cell.
+const DEFAULT_FG_PACKED = 0xd4d4d8;
+const DEFAULT_BG_PACKED = 0x101016;
+// A/B flag: the <pane_surface> framebuffer blit vs. the default StyledRun <For>.
+// The flag flip + old-path deletion are the NEXT card; this one keeps both.
+const FB_PANES = process.env.TMUX_IDE_FB_PANES === "1";
 const GUTTER_BG = RGBA.fromInts(38, 40, 52, 255);
 const GUTTER_FG = RGBA.fromInts(96, 100, 120, 255);
 const MODIFIED_FG = RGBA.fromInts(235, 200, 100, 255);
@@ -414,6 +422,9 @@ const packedToRgba = (packed: number | null, fallback: RGBA): RGBA => {
 
 render(
   () => {
+    // Register <pane_surface> before any is created (M21.3). An explicit call —
+    // a bare side-effect import of the module gets DCE'd by the transpiler.
+    if (FB_PANES) registerPaneSurface();
     const dims = useTerminalDimensions();
     const canvasCols = () => Math.max(20, dims().width - sidebarW());
     const canvasRows = () => Math.max(4, dims().height - HEADER_ROWS - TABBAR_H);
@@ -468,6 +479,18 @@ render(
       bareHome ? (persisted.contextSession ?? "") : target,
     );
     const [panes, setPanes] = createSignal<LivePane[]>([]);
+    // ── FRAMEBUFFER-BLIT PLUMBING (M21.3, flagged) ───────────────────────────
+    // Under FB_PANES the 8ms tick fetches geometry-only panes (no styled rows)
+    // and bumps this epoch; each <pane_surface> reads it as `contentVersion` and
+    // re-blits only when it changes — coalesced content-dirty, not per-%output.
+    const [contentEpoch, setContentEpoch] = createSignal(0);
+    // The <For> that maps panes to surfaces keys on the id list (stable identity),
+    // NOT the freshly-rebuilt panes() array — so a content tick REUSES each
+    // pane_surface (and its framebuffer) instead of tearing it down and back up.
+    const paneIds = createMemo(() => panes().map((p) => p.id), undefined, {
+      equals: (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
+    });
+    const panesById = createMemo(() => new Map(panes().map((p) => [p.id, p])));
     const [windowTabs, setWindowTabs] = createSignal<WindowTab[]>([]);
     const [projectsData, setProjectsData] = createSignal<FleetProject[]>([]);
     // Pointer-hover feedback. One nullable signal names the hovered target as a
@@ -1289,8 +1312,15 @@ render(
         if (!dirty || !mirror) return;
         dirty = false;
         const t0 = performance.now();
-        setPanes(mirror.panes(scrollOffsets));
-        if (process.env.TMUX_IDE_ZZ_PERF) {
+        // FB path: fetch geometry + cursor/offset only (no styled-row rebuild) —
+        // the <pane_surface> reads cells via the blit. Bump the content epoch so
+        // each surface re-blits even when geometry is unchanged (pure content).
+        setPanes(mirror.panes(scrollOffsets, !FB_PANES));
+        if (FB_PANES) setContentEpoch((e) => e + 1);
+        // Under FB the real per-tick cost moved to the blit (tapped in the
+        // renderable → same zz-perf.log); this tick is now geometry-only, so
+        // don't pollute the "snapshot ms/tick" samples with its ~0ms.
+        if (process.env.TMUX_IDE_ZZ_PERF && !FB_PANES) {
           try {
             appendFileSync("/tmp/zz-perf.log", `${(performance.now() - t0).toFixed(2)}\n`);
           } catch {
@@ -1577,7 +1607,14 @@ render(
      *  the source of truth for a mirror copy (not capture-pane). */
     const paneRowTexts = (paneId: string): string[] => {
       const p = panes().find((x) => x.id === paneId);
-      return p ? p.snapshot.rows.map((runs) => runs.map((r) => r.text).join("")) : [];
+      if (!p) return [];
+      // FB path omits the styled rows (the blit reads cells directly), so read the
+      // visible row text on demand from the mirror — same trim/collapse as the run
+      // join, so extractSelection copies identically.
+      if (p.snapshot.rows.length === 0) {
+        return mirror?.visibleRowTexts(paneId, p.snapshot.scrollOffset) ?? [];
+      }
+      return p.snapshot.rows.map((runs) => runs.map((r) => r.text).join(""));
     };
     const commitMirrorCopy = (paneId: string, anchor: Cell, head: Cell) => {
       const { start, end } = orderCells(anchor, head);
@@ -1640,6 +1677,26 @@ render(
         });
       }
       return rows;
+    };
+
+    // FB-path twins of the two paneSelRows passes, shaped as <pane_surface> props
+    // (cell-column based; the renderable applies them over the blitted cells).
+    // Reading selection()/paneSearches() here subscribes the surface so the prop
+    // re-sets — and the blit re-runs — only when they actually change.
+    const mirrorSelForPane = (paneId: string): { start: Cell; end: Cell } | null => {
+      const s = selection();
+      if (!s || s.surface !== "mirror" || s.paneId !== paneId) return null;
+      return orderCells(s.anchor, s.head);
+    };
+    const mirrorSearchForPane = (pane: LivePane): PaneSearchHighlight | null => {
+      const ps = paneSearches().get(pane.id);
+      if (!ps || ps.matches.length === 0 || ps.query.length === 0) return null;
+      return {
+        matches: ps.matches,
+        current: ps.current,
+        len: ps.query.length,
+        baseY: pane.scrollbackDepth - pane.snapshot.scrollOffset,
+      };
     };
 
     const paneCell = (pane: LivePane, gx: number, gy: number) => ({
@@ -3179,47 +3236,100 @@ render(
                 {buttonRow(stripButtons)}
               </box>
               <box position="relative" flexGrow={1} backgroundColor={GUTTER_BG}>
-                <For each={panes()}>
-                  {(pane) => (
-                    <box
-                      position="absolute"
-                      left={pane.left}
-                      top={pane.top}
-                      width={pane.width}
-                      height={pane.height}
-                      flexDirection="column"
-                      backgroundColor={DEFAULT_BG}
-                    >
-                      <For each={paneSelRows(pane)}>
-                        {(runs) => (
-                          <box flexDirection="row" height={1}>
-                            <For each={runs}>
-                              {(run) => (
-                                <text
-                                  fg={packedToRgba(run.fg, DEFAULT_FG)}
-                                  bg={packedToRgba(run.bg, DEFAULT_BG)}
-                                  attributes={run.attributes}
-                                >
-                                  {run.text}
-                                </text>
-                              )}
-                            </For>
-                          </box>
-                        )}
-                      </For>
-                      <Show when={pane.snapshot.scrollOffset > 0}>
-                        <box position="absolute" right={1} top={0} backgroundColor={BADGE_BG}>
-                          <text fg={DEFAULT_FG}>
-                            {` ↑${pane.snapshot.scrollOffset}/${pane.scrollbackDepth} `}
-                          </text>
+                {/* M21.3 — framebuffer blit (flagged). ONE <pane_surface> per
+                  pane blits the grid straight into packed buffers; the For keys
+                  on the stable id list so a content tick reuses each surface (and
+                  its framebuffer) instead of tearing it down. Chrome (badge +
+                  scrollbar) stays Solid JSX layered over the surface. The old
+                  StyledRun path is the fallback, unchanged, default for A/B. */}
+                <Show
+                  when={FB_PANES}
+                  fallback={
+                    <For each={panes()}>
+                      {(pane) => (
+                        <box
+                          position="absolute"
+                          left={pane.left}
+                          top={pane.top}
+                          width={pane.width}
+                          height={pane.height}
+                          flexDirection="column"
+                          backgroundColor={DEFAULT_BG}
+                        >
+                          <For each={paneSelRows(pane)}>
+                            {(runs) => (
+                              <box flexDirection="row" height={1}>
+                                <For each={runs}>
+                                  {(run) => (
+                                    <text
+                                      fg={packedToRgba(run.fg, DEFAULT_FG)}
+                                      bg={packedToRgba(run.bg, DEFAULT_BG)}
+                                      attributes={run.attributes}
+                                    >
+                                      {run.text}
+                                    </text>
+                                  )}
+                                </For>
+                              </box>
+                            )}
+                          </For>
+                          <Show when={pane.snapshot.scrollOffset > 0}>
+                            <box position="absolute" right={1} top={0} backgroundColor={BADGE_BG}>
+                              <text fg={DEFAULT_FG}>
+                                {` ↑${pane.snapshot.scrollOffset}/${pane.scrollbackDepth} `}
+                              </text>
+                            </box>
+                          </Show>
+                          {/* Right-edge scrollbar — only while scrolled up, so a live
+                            terminal stays clean (mirrorScrollGeom gates on offset). */}
+                          {scrollbarOverlay(() => mirrorScrollGeom(pane))}
                         </box>
-                      </Show>
-                      {/* Right-edge scrollbar — only while scrolled up, so a live
-                        terminal stays clean (mirrorScrollGeom gates on offset). */}
-                      {scrollbarOverlay(() => mirrorScrollGeom(pane))}
-                    </box>
-                  )}
-                </For>
+                      )}
+                    </For>
+                  }
+                >
+                  <For each={paneIds()}>
+                    {(id) => {
+                      const pane = () => panesById().get(id);
+                      return (
+                        <Show when={pane()}>
+                          <box
+                            position="absolute"
+                            left={pane()!.left}
+                            top={pane()!.top}
+                            width={pane()!.width}
+                            height={pane()!.height}
+                            backgroundColor={DEFAULT_BG}
+                          >
+                            <pane_surface
+                              width={pane()!.width}
+                              height={pane()!.height}
+                              mirror={mirror!}
+                              paneId={id}
+                              defaultFg={DEFAULT_FG_PACKED}
+                              defaultBg={DEFAULT_BG_PACKED}
+                              searchHl={SEARCH_HL}
+                              searchCur={SEARCH_CUR}
+                              scrollOffset={pane()!.snapshot.scrollOffset}
+                              paneFocused={pane()!.active}
+                              contentVersion={contentEpoch()}
+                              selRange={mirrorSelForPane(id)}
+                              search={mirrorSearchForPane(pane()!)}
+                            />
+                            <Show when={pane()!.snapshot.scrollOffset > 0}>
+                              <box position="absolute" right={1} top={0} backgroundColor={BADGE_BG}>
+                                <text fg={DEFAULT_FG}>
+                                  {` ↑${pane()!.snapshot.scrollOffset}/${pane()!.scrollbackDepth} `}
+                                </text>
+                              </box>
+                            </Show>
+                            {scrollbarOverlay(() => mirrorScrollGeom(pane()!))}
+                          </box>
+                        </Show>
+                      );
+                    }}
+                  </For>
+                </Show>
               </box>
               {/* Scrollback-search input (M20.3) — a bottom-of-canvas line, like the
                 palette's input but inline. A normal-flow row after the pane canvas
