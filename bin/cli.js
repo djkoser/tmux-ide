@@ -2121,7 +2121,8 @@ function normalizeStates(m) {
   if (m.states.blocked) states.blocked = m.states.blocked;
   if (m.states.working) states.working = m.states.working;
   if (m.states.done) states.done = m.states.done;
-  return { id: m.id, commands: m.commands, states };
+  const confidence = m.confidence === "tuned" ? "tuned" : "conservative";
+  return { id: m.id, commands: m.commands, states, confidence };
 }
 function warnOnce(path2, reason) {
   if (warned.has(path2)) return;
@@ -11625,9 +11626,7 @@ function renderReport(r, opts = {}) {
   } else {
     const saw = r.resolution.subtree.length > 0 ? r.resolution.subtree.join(", ") : r.pane.cmd || "(nothing)";
     out.push(`  ${label("manifest")}  ${dim4("none matched")} \u2014 ${dim4(`process-tree saw: ${saw}`)}`);
-    out.push(
-      `            ${dim4("set `tmux set-option -p @agent_hint <agent>` to force one")}`
-    );
+    out.push(`            ${dim4("set `tmux set-option -p @agent_hint <agent>` to force one")}`);
   }
   out.push("");
   out.push(bold4("  state rules"));
