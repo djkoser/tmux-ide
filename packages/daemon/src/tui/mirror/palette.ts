@@ -126,6 +126,65 @@ export function parseBufferList(lines: readonly string[], previewLen = 40): Tmux
   return out;
 }
 
+// ── Overlay geometry (M21.9 — palette mouse support) ────────────────────────
+// The palette overlay is app-rendered (a centered <box border paddingLeft=1>),
+// so its full geometry is knowable by pure math. These helpers are shared by
+// the RENDER (placement) and the central mouse ROUTER (row hit-test / inside-
+// vs-outside), so a click can never land where a row isn't drawn. Layout, in
+// screen rows from `top`: border (top+0) · input/header line (top+1) · rule
+// (top+2) · result rows (top+3 …) · an optional "no matches" row when empty ·
+// border. Rows span the box interior in x: [left+1, left+width-1).
+
+/** Rows of chrome above the first result row: top border + input line + rule. */
+export const PALETTE_HEADER_ROWS = 3;
+
+/** The palette box geometry the router hit-tests: the placed box plus how many
+ *  result rows are currently visible (min(count - top, pageRows)). */
+export interface PaletteGeom {
+  left: number;
+  top: number;
+  width: number;
+  /** Result rows on screen right now (0 when the list is empty). */
+  visibleRows: number;
+}
+
+/** PURE — the overlay's placement for a terminal size: horizontally centered,
+ *  top at a sixth of the height (min 1 — below the surface tab bar). MUST match
+ *  the render's `left`/`top` props (the render calls this). */
+export function palettePos(termW: number, termH: number, width: number): { left: number; top: number } {
+  return {
+    left: Math.max(0, Math.floor((termW - width) / 2)),
+    top: Math.max(1, Math.floor(termH / 6)),
+  };
+}
+
+/** PURE — total box height for `visibleRows` results: header chrome + the rows
+ *  (an empty list still shows one "no matches"/"no buffers" row) + the bottom
+ *  border. Used for inside/outside containment. */
+export function paletteHeight(visibleRows: number): number {
+  return PALETTE_HEADER_ROWS + Math.max(1, visibleRows) + 1;
+}
+
+/** PURE — the VISIBLE result-row index under (x, y), or -1. Only real rows hit
+ *  (the "no matches" placeholder row is not clickable); x must be inside the
+ *  box interior (borders excluded). */
+export function paletteRowAt(g: PaletteGeom, x: number, y: number): number {
+  if (x < g.left + 1 || x >= g.left + g.width - 1) return -1;
+  const row = y - (g.top + PALETTE_HEADER_ROWS);
+  return row >= 0 && row < g.visibleRows ? row : -1;
+}
+
+/** PURE — whether (x, y) falls anywhere on the palette box (border included).
+ *  A press outside dismisses the overlay; inside-but-not-a-row is a no-op. */
+export function paletteContains(g: PaletteGeom, x: number, y: number): boolean {
+  return x >= g.left && x < g.left + g.width && y >= g.top && y < g.top + paletteHeight(g.visibleRows);
+}
+
+/** PURE — clamp a wheel-scrolled list top into [0, count - pageRows]. */
+export function clampPaletteTop(top: number, count: number, pageRows: number): number {
+  return Math.max(0, Math.min(top, count - pageRows));
+}
+
 /** A typed query "looks like a path" when it carries a separator or dot — then
  *  the Open-file action is worth pinning to the top of the results. */
 function looksLikePath(q: string): boolean {
