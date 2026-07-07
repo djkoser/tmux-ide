@@ -63,21 +63,34 @@
  * MOUSE ARCHITECTURE (hard-won): ALL pointer events are received by the two
  * top-level REGION CONTAINERS (sidebar box / main column box) and routed by
  * coordinate math (routeMouse) against geometry we render ourselves.
- * Two OpenTUI landmines dictate this design — measured empirically, see
- * M17.2 notes:
- *  1. `onMouse` handlers on LATE-MOUNTED nodes (children created by a <For>
- *     AFTER initial render) break dispatch for hits on those nodes entirely;
- *     handler-less late nodes bubble correctly to early-mounted ancestors.
- *     So: handlers ONLY on the always-present containers.
- *  2. Event-prop values must be INLINE ARROWS — a bare function reference is
- *     invoked as a reactive getter during prop wiring.
- * Corollary (M19.1): late-mounted <For> BOXES swallow even handler-less hits,
- * but late-mounted <For> TEXT runs bubble correctly (as the pane canvas proves).
- * So dynamic clickable strips render as bare styled text runs, not box wrappers:
- * the per-window strip is one text-run row hit-tested by x-span math (`spans`),
- * so segment clicks land (^t still cycles). HOVER feedback rides the same path —
- * every region resolves a {region,index} on motion ("over"/"move", cleared on
- * "out") and tints the hovered row/segment with HOVER_BG.
+ * This design was DICTATED by three OpenTUI landmines measured on 0.1.x
+ * (M17.2/M19.1). ALL THREE were re-measured on @opentui 0.4.3 (M21.2) with a
+ * throwaway SGR-injection probe (late-mounted <For> boxes/text with and without
+ * inline-arrow vs bare-ref onMouse handlers) and NONE still reproduce:
+ *  1. `onMouse` on LATE-MOUNTED <For> nodes (children created AFTER initial
+ *     render). 0.1.x: dispatch broke for hits on those nodes entirely, so
+ *     handlers lived ONLY on always-present containers. 0.4.3: the late-node
+ *     handler FIRES and the hit also bubbles to the ancestor (probe: clicking a
+ *     late <For> box logged both `A0 down` AND `ROOT down`). FIXED.
+ *  2. Event-prop values had to be INLINE ARROWS — a bare function reference was
+ *     invoked as a reactive getter during prop wiring. 0.4.3: a bare `onMouse`
+ *     ref is NOT called at wiring (no phantom event logged at mount) and fires
+ *     correctly with a real event on click. FIXED.
+ *  3. (M19.1 corollary) late-mounted <For> BOXES swallowed even handler-less
+ *     hits while late <For> TEXT runs bubbled. 0.4.3: handler-less late boxes
+ *     BUBBLE to the ancestor too (probe: clicking a late no-handler box logged
+ *     `ROOT down`), matching text. FIXED.
+ * We KEEP the central-routing architecture as-is: it is proven, correct, and
+ * still the cheapest hit-test path (one coordinate math pass vs. per-node
+ * dispatch); the upgrade only REMOVES the constraint that forced it. Retiring it
+ * — moving handlers onto per-node <For> children, dropping the bare-ref rule —
+ * is a real refactor, deferred to its own card, NOT part of the 0.4.3 bump.
+ * Until then keep new handlers on the containers and prefer inline arrows.
+ * Dynamic clickable strips still render as bare styled text runs hit-tested by
+ * x-span math (`spans`) — the per-window strip is one text-run row, so segment
+ * clicks land (^t still cycles). HOVER feedback rides the same path — every
+ * region resolves a {region,index} on motion ("over"/"move", cleared on "out")
+ * and tints the hovered row/segment with HOVER_BG.
  *
  * Fleet data arrives via an async `tmux-ide team --json` subprocess: the
  * in-process data layer is a synchronous exec chain that blocks the event
@@ -3577,5 +3590,7 @@ render(
       </box>
     );
   },
+  // targetFps stays EXPLICIT: @opentui 0.4.3 still silently defaults it to 30
+  // (maxFps already defaults to 60). Re-confirmed on the 0.4.3 bump (M21.2).
   { targetFps: 60, maxFps: 60 },
 );

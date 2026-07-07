@@ -11407,15 +11407,15 @@ var require_package = __commonJS({
       dependencies: {
         "@hono/node-server": "^1.19.11",
         "@hono/zod-validator": "^0.7.6",
-        "@opentui/core": "^0.1.88",
-        "@opentui/solid": "^0.1.88",
+        "@opentui/core": "^0.4.3",
+        "@opentui/solid": "^0.4.3",
         "@parcel/watcher": "^2.5.6",
         "@types/ws": "^8.18.1",
         hono: "^4.12.8",
         ignore: "^7.0.5",
         "js-yaml": "^4.1.1",
         "node-pty": "1.2.0-beta.12",
-        "solid-js": "^1.9.11",
+        "solid-js": "1.9.12",
         ws: "^8.20.0",
         zod: "^4.3.6"
       },
@@ -11445,7 +11445,7 @@ var require_package = __commonJS({
         vitest: "^4.1.0"
       },
       optionalDependencies: {
-        "@opentui/core-darwin-arm64": "^0.1.88"
+        "@opentui/core-darwin-arm64": "^0.4.3"
       }
     };
   }
