@@ -100,6 +100,25 @@ export function tapInputTick(): void {
   }
 }
 
+// ── size re-pin tap (M22.8) ─────────────────────────────────────────────────
+// Every canvas-area change (terminal resize, sidebar drag) funnels through the
+// mirror's `resize()` — the ONE re-pin chokepoint. This tap records each re-pin
+// so a live drag/resize burst can be asserted to collapse to the expected count
+// (the 200ms size poll coalesces a burst to one re-pin per settled size). Gated
+// behind TMUX_IDE_ZZ_PERF, appending `cols rows` lines to /tmp/zz-repin.log.
+
+const REPIN_LOG = "/tmp/zz-repin.log";
+
+/** Record one re-pin (a `refresh-client -C cols x rows`). No-op unless the flag. */
+export function tapRepin(cols: number, rows: number): void {
+  if (!process.env.TMUX_IDE_ZZ_PERF) return;
+  try {
+    appendFileSync(REPIN_LOG, `${cols} ${rows}\n`);
+  } catch {
+    /* perf tap only */
+  }
+}
+
 // ── pure reporting helpers (used by scripts/perf-mirror.mjs) ────────────────
 
 /** A percentile of an ASCENDING-sorted array, linearly interpolated. Empty → 0. */

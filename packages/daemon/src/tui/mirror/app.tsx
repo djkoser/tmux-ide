@@ -159,6 +159,13 @@ import {
 } from "./app-state.ts";
 import { separatorAt, resizedSize, resizeCommand, type Separator } from "./resize-model.ts";
 import {
+  effectiveWindowSize,
+  detectSizeMismatch,
+  letterboxOffset,
+  formatSizeHint,
+  type Size,
+} from "./size-truth.ts";
+import {
   filterPaletteActions,
   parseBufferList,
   palettePos,
@@ -533,6 +540,11 @@ render(
       bareHome ? (persisted.contextSession ?? "") : target,
     );
     const [panes, setPanes] = createSignal<LivePane[]>([]);
+    // Size truth (M22.8): the actual tmux window size when a co-attached terminal
+    // has shrunk it below our pinned canvas (else null). Set in the tick from the
+    // RAW pane geometry (before the letterbox offset is baked into `panes()`), it
+    // drives the honest hint badge and gates the palette's reclaim action.
+    const [windowMismatch, setWindowMismatch] = createSignal<Size | null>(null);
     // ── FRAMEBUFFER-BLIT PLUMBING (M21.3/M21.4) ──────────────────────────────
     // Under FB_PANES the 8ms tick fetches geometry-only panes (no styled rows).
     // Each <pane_surface> reads its pane's PER-PANE version (`LivePane.version`)
@@ -1279,7 +1291,11 @@ render(
       filterPaletteActions(
         paletteQuery(),
         fleet().map((s) => s.name),
-        { terminal: mode() === "mirror", agents: fleetAgents() },
+        {
+          terminal: mode() === "mirror",
+          agents: fleetAgents(),
+          sizeMismatch: windowMismatch() !== null,
+        },
       ),
     );
     /** The current palette LIST length — buffers level when open, else actions. */
@@ -1396,6 +1412,14 @@ render(
           }
           break;
         }
+        case "resize-window": {
+          // Reclaim the window at our canvas size (M22.8). The mirror flips to the
+          // manual policy — the only mechanism that holds against a bigger real
+          // client (measured) — and reverts it on detach.
+          void mirror?.resizeToFit().catch(() => {});
+          setStatusNote("resized window to fit");
+          break;
+        }
         case "quit":
           mirror?.dispose();
           editBuffer?.destroy();
@@ -1495,7 +1519,23 @@ render(
         // FB path: fetch geometry + cursor/offset + per-pane version only (no
         // styled-row rebuild) — the <pane_surface> reads cells via the blit and
         // gates its walk on the version, so unchanged panes cost nothing.
-        setPanes(mirror.panes(scrollOffsets, !FB_PANES));
+        const raw = mirror.panes(scrollOffsets, !FB_PANES);
+        // Size truth (M22.8): the RAW pane bounding box is the effective window
+        // size. When a co-attached terminal shrank it below our pinned canvas we
+        // surface the honest hint AND center the grid — the offset is baked into
+        // pane.left/top HERE (one place), so every render and pointer-routing
+        // read (all expressed relative to pane.left/top or `inside(pane,…)`)
+        // stays consistent for free without touching the mouse math.
+        const pinned: Size = { cols: canvasCols(), rows: canvasRows() };
+        const effective = effectiveWindowSize(raw);
+        const mm = effective ? detectSizeMismatch(pinned, effective) : null;
+        setWindowMismatch(mm);
+        const off = mm ? letterboxOffset(pinned, mm) : { x: 0, y: 0 };
+        setPanes(
+          off.x || off.y
+            ? raw.map((p) => ({ ...p, left: p.left + off.x, top: p.top + off.y }))
+            : raw,
+        );
         // Under FB the real per-tick cost moved to the blit (tapped in the
         // renderable → same zz-perf.log); this tick is now geometry-only, so
         // don't pollute the "snapshot ms/tick" samples with its ~0ms.
@@ -3839,6 +3879,17 @@ render(
                     />
                   )}
                 </For>
+                {/* Size-truth hint (M22.8): quiet, dismiss-free, shown ONLY while
+                  a co-attached terminal has sized the window away from our canvas
+                  (the letterboxed grid is centered beneath it). It states the
+                  honest actual size — the iTerm2-style answer — and disappears the
+                  moment the sizes agree. A handler-less box in the top gutter, so
+                  no pointer routing changes. */}
+                <Show when={windowMismatch()}>
+                  <box position="absolute" left={1} top={0} backgroundColor={BADGE_BG}>
+                    <text fg={MUTED}>{` ${formatSizeHint(windowMismatch()!)} `}</text>
+                  </box>
+                </Show>
               </box>
               {/* Scrollback-search input (M20.3) — a bottom-of-canvas line, like the
                 palette's input but inline. A normal-flow row after the pane canvas

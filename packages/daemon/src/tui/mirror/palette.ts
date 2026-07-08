@@ -34,6 +34,7 @@ export type PaletteAction =
   | { kind: "rotate-window"; label: string }
   | { kind: "select-layout"; layout: string; label: string }
   | { kind: "sync-toggle"; label: string }
+  | { kind: "resize-window"; label: string }
   | { kind: "quit"; label: string };
 
 /** The five tmux `select-layout` presets, offered one palette action each so the
@@ -56,6 +57,10 @@ export interface PaletteContext {
    *  each, the keyboard twin of the sidebar's clickable agent rows. Already
    *  sorted attention-first by the caller (fleetAgents). */
   agents?: AgentRowInput[];
+  /** A co-attached terminal has sized the tmux window away from our canvas
+   *  (M22.8). Only then is the "Resize to fit this window" reclaim action worth
+   *  offering — otherwise it is a no-op that clutters the list. */
+  sizeMismatch?: boolean;
 }
 
 const TAB_LABELS: { tab: Tab; label: string }[] = [
@@ -108,6 +113,11 @@ export function staticPaletteActions(
     actions.push({ kind: "sync-toggle", label: "Synchronize panes (toggle)" });
     for (const layout of LAYOUT_PRESETS) {
       actions.push({ kind: "select-layout", layout, label: `Layout: ${layout}` });
+    }
+    // Only when a co-attached terminal is dictating the window size — the reclaim
+    // is a no-op otherwise, and we never fight the other terminal unasked.
+    if (ctx.sizeMismatch) {
+      actions.push({ kind: "resize-window", label: "Resize to fit this window" });
     }
   }
   actions.push({ kind: "quit", label: "Quit" });

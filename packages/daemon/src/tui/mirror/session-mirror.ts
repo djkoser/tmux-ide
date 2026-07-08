@@ -15,6 +15,7 @@
  * unit-tested without tmux.
  */
 import { appendFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { ControlModeClient } from "./control-client.ts";
 import { InputCoalescer } from "./input-coalescer.ts";
 import {
@@ -24,7 +25,7 @@ import {
   type CursorState,
 } from "./pane-mirror.ts";
 import type { CellArrays } from "./blit.ts";
-import { tapInputOutput } from "./perf-tap.ts";
+import { tapInputOutput, tapRepin } from "./perf-tap.ts";
 
 /** One pane's geometry inside the window, in cells (tmux coordinates). */
 export interface PaneGeometry {
@@ -139,6 +140,15 @@ export class SessionMirror {
   private geometry: PaneGeometry[] = [];
   private focused = "";
   private syncQueued = false;
+  /** Size policy (M22.8). "auto" (default): we pin our virtual client size via
+   *  `refresh-client -C` and let tmux's `window-size latest` cooperate — a
+   *  co-attached terminal may win, which we surface honestly rather than fight.
+   *  "manual": the user asked us to reclaim the window ({@link resizeToFit}), so
+   *  we set `window-size manual` + `resize-window` (the ONLY mechanism that holds
+   *  against a bigger real client — measured; plain `refresh-client -C` does not
+   *  re-win once another client is latest). Manual is a WINDOW option that
+   *  lingers past our detach, so {@link dispose} reverts it. */
+  private sizeMode: "auto" | "manual" = "auto";
   private readonly opts: SessionMirrorOptions;
   /** The input fast path (M21.5): literals coalesce per pane and flush on a
    *  microtask (same macrotask as the keystroke — no added latency); named
@@ -317,12 +327,60 @@ export class SessionMirror {
   async resize(cols: number, rows: number): Promise<void> {
     this.opts.cols = cols;
     this.opts.rows = rows;
+    tapRepin(cols, rows); // debug tap: assert one re-pin per settled size change
     await this.client.command(`refresh-client -C ${cols}x${rows}`).catch(() => {});
+    // Under the manual policy `refresh-client -C` no longer drives the window
+    // size, so a terminal/sidebar resize after a reclaim must resize the window
+    // directly to keep it matched to our canvas.
+    if (this.sizeMode === "manual") {
+      await this.client.command(`resize-window -t ${this.opts.target} -x ${cols} -y ${rows}`).catch(
+        () => {},
+      );
+    }
+    this.queueSync();
+  }
+
+  /**
+   * Reclaim the window at our current canvas size (M22.8 — the palette's "Resize
+   * to fit this window"). A co-attached smaller terminal wins `window-size
+   * latest`; the ONLY mechanism that overrides it and HOLDS is `window-size
+   * manual` + `resize-window` (measured — a bare `refresh-client -C` re-issue
+   * does not re-win). We flip to the manual policy so subsequent resizes keep the
+   * window matched, and {@link dispose} reverts the option on detach.
+   */
+  async resizeToFit(): Promise<void> {
+    const { cols, rows } = this.opts;
+    this.sizeMode = "manual";
+    await this.client.command(`refresh-client -C ${cols}x${rows}`).catch(() => {});
+    await this.client
+      .command(`set-window-option -t ${this.opts.target} window-size manual`)
+      .catch(() => {});
+    await this.client
+      .command(`resize-window -t ${this.opts.target} -x ${cols} -y ${rows}`)
+      .catch(() => {});
     this.queueSync();
   }
 
   dispose(): void {
     this.input.flush(); // last typed bytes leave before the detach
+    // Detach cleanliness (M22.8): a `window-size manual` override we set to
+    // reclaim the window lingers on the session past our client's death — it
+    // would leave a still-attached real terminal permanently letterboxed. Revert
+    // it out-of-band (a plain tmux call, independent of the control client we are
+    // about to tear down) so the remaining clients reclaim their own size. The
+    // "auto" policy needs no cleanup: tmux drops our size vote when the control
+    // client dies (measured). Sync + guarded — dispose runs at shutdown/re-attach,
+    // not the render loop, and correctness here outranks the brief block.
+    if (this.sizeMode === "manual") {
+      try {
+        execFileSync("tmux", ["set-window-option", "-t", this.opts.target, "-u", "window-size"], {
+          stdio: "ignore",
+        });
+      } catch {
+        // best-effort revert; the session may already be gone
+      }
+      this.sizeMode = "auto";
+    }
     this.client.dispose();
     for (const m of this.mirrors.values()) m.dispose();
     this.mirrors.clear();

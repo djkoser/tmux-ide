@@ -96,6 +96,23 @@ describe("filterPaletteActions", () => {
     ]);
   });
 
+  it("offers the reclaim action only on a terminal WITH a size mismatch (M22.8)", () => {
+    // Not offered without a mismatch, even on the terminal surface…
+    expect(
+      staticPaletteActions(["a"], { terminal: true }).some((x) => x.kind === "resize-window"),
+    ).toBe(false);
+    // …nor off the terminal surface even if a mismatch is flagged…
+    expect(
+      staticPaletteActions(["a"], { sizeMismatch: true }).some((x) => x.kind === "resize-window"),
+    ).toBe(false);
+    // …only when both hold.
+    expect(
+      staticPaletteActions(["a"], { terminal: true, sizeMismatch: true }).some(
+        (x) => x.kind === "resize-window",
+      ),
+    ).toBe(true);
+  });
+
   it("appends a rename-window verb for a non-empty terminal query", () => {
     const actions = filterPaletteActions("build", ["a"], { terminal: true });
     expect(actions.some((x) => x.kind === "rename-window" && x.name === "build")).toBe(true);
