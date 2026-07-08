@@ -192,6 +192,7 @@ import {
   type RawEntry,
 } from "./file-tree.ts";
 import { spans, spanHit, spansFromRight, type Span } from "./spans.ts";
+import { agentsByPane, chipLabel, type ChipAgent } from "./agent-chip.ts";
 import { scrollThumb, trackZone, pageTop, dragTop } from "./scrollbar-model.ts";
 import {
   MENU_ITEMS,
@@ -246,6 +247,9 @@ interface FleetSession {
   panes: number;
   attached: boolean;
   windows: Array<{ index: number; name: string; active: boolean }>;
+  /** Per-pane agent entries (M22.1) — optional so older payloads still parse;
+   *  the Terminal surface's pane chips (M22.3) join these by paneId. */
+  agents?: ChipAgent[];
 }
 interface FleetProject {
   name: string;
@@ -360,6 +364,9 @@ const DEFAULT_BG_PACKED = 0x101016;
 // <For> path below. The kill switch's removal + the StyledRun deletion are the
 // follow-up card.
 const FB_PANES = process.env.TMUX_IDE_FB_PANES !== "0";
+// The blocked pane-chip's attention background (M22.3) — a red-leaning lift of
+// BADGE_BG so a blocked agent's chip pops without tinting any terminal cells.
+const CHIP_ATTN_BG = RGBA.fromInts(92, 44, 48, 255);
 const GUTTER_BG = RGBA.fromInts(38, 40, 52, 255);
 const GUTTER_FG = RGBA.fromInts(96, 100, 120, 255);
 const MODIFIED_FG = RGBA.fromInts(235, 200, 100, 255);
@@ -3284,6 +3291,50 @@ render(
       }
     };
 
+    // ── Per-pane agent chips (M22.3) ─────────────────────────────────────────
+    // The fleet payload's per-pane agent entries (M22.1), joined by tmux pane id
+    // (the mirror's pane ids are the same %N ids). Consumes the 3s fleet poll's
+    // signal as-is; staleness is already applied by the report, and a missing
+    // `agents` field (older payload) degrades to an empty map.
+    const agentByPane = createMemo(() => agentsByPane(projectsData()));
+    // A pane's agent chip: glyph + kind at the pane's TOP-LEFT (the scroll badge
+    // owns the top-right), colored by the app's status grammar — reference sites:
+    // STATUS_GLYPH + STATUS_COLOR (this file). PASSIVE by design: no handler, and
+    // the label is a TEXT run covering its wrapper box, so a press lands on text
+    // and bubbles to the router (same law as the scrollbar cells above) — pane
+    // forwarding and the right-click menu are untouched. Blocked is the only
+    // attention state: bold, attention bg, and the label spells `blocked` plus
+    // the authority age ("blocked 4m"). The label re-derives on every fleet tick;
+    // width changes re-truncate (chipLabel degrades label → glyph → hidden). The
+    // chip is anchored to the pane box, so zoom/resize/focus moves ride along.
+    const agentChipOverlay = (pane: () => { id: string; width: number } | undefined) => {
+      const entry = () => {
+        const p = pane();
+        return p ? agentByPane().get(p.id) : undefined;
+      };
+      const label = () => {
+        const e = entry();
+        const p = pane();
+        if (!e || !p) return null;
+        // Budget: pane width minus the left inset (1) + padding (2), capped so a
+        // wide pane's chip stays a chip (and clears the top-right scroll badge).
+        return chipLabel(e, STATUS_GLYPH[e.state], Date.now(), Math.min(p.width - 3, 28));
+      };
+      return (
+        <Show when={label()}>
+          <box position="absolute" left={1} top={0} flexDirection="row">
+            <text
+              fg={STATUS_COLOR[entry()!.state]}
+              bg={entry()!.state === "blocked" ? CHIP_ATTN_BG : BADGE_BG}
+              attributes={entry()!.state === "blocked" ? 1 : 0}
+            >
+              {` ${label()} `}
+            </text>
+          </box>
+        </Show>
+      );
+    };
+
     // A 1-col scrollbar drawn in an always-present container's right column: a
     // faint track with a brighter thumb, both single-cell bg fills. Each cell is a
     // TEXT run (not a box) so a click lands on text and bubbles to the router —
@@ -3606,6 +3657,7 @@ render(
                               </text>
                             </box>
                           </Show>
+                          {agentChipOverlay(() => pane)}
                           {/* Right-edge scrollbar — only while scrolled up, so a live
                             terminal stays clean (mirrorScrollGeom gates on offset). */}
                           {scrollbarOverlay(() => mirrorScrollGeom(pane))}
@@ -3649,6 +3701,7 @@ render(
                                 </text>
                               </box>
                             </Show>
+                            {agentChipOverlay(pane)}
                             {scrollbarOverlay(() => mirrorScrollGeom(pane()!))}
                           </box>
                         </Show>
