@@ -14,6 +14,7 @@
 import { fuzzyFilter } from "../team/fuzzy.ts";
 import type { Tab } from "./app-state.ts";
 import type { AgentRowInput } from "./agent-rows.ts";
+import { SETTINGS_PALETTE_COMMANDS, type SettingsCommandId } from "./settings-model.ts";
 
 /** One runnable palette entry. `label` is what the list shows and what the
  *  fuzzy filter scores; `kind` (+ payload) is what the app dispatches on. */
@@ -34,6 +35,7 @@ export type PaletteAction =
   | { kind: "rotate-window"; label: string }
   | { kind: "select-layout"; layout: string; label: string }
   | { kind: "sync-toggle"; label: string }
+  | { kind: "settings"; id: SettingsCommandId; label: string }
   | { kind: "quit"; label: string };
 
 /** The five tmux `select-layout` presets, offered one palette action each so the
@@ -98,6 +100,11 @@ export function staticPaletteActions(
   // is offered on every surface — selecting it opens a second-level list of the
   // tmux paste buffers rather than dispatching directly.
   actions.push({ kind: "paste-buffer", label: "Paste buffer…" });
+  // The SETTINGS category (M22.4) — every setting is a command; "Settings…" is
+  // the categorized umbrella over the same dialogs. Offered on every surface.
+  for (const c of SETTINGS_PALETTE_COMMANDS) {
+    actions.push({ kind: "settings", id: c.id, label: c.label });
+  }
   if (ctx.terminal) {
     actions.push({ kind: "new-window", label: "New window" });
     actions.push({ kind: "kill-window", label: "Kill window" });

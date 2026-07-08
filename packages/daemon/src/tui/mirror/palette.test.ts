@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { staticPaletteActions, filterPaletteActions, parseBufferList } from "./palette.ts";
 
 describe("staticPaletteActions", () => {
-  it("offers the four tab switches, one attach per session, then save/refresh/paste/quit", () => {
+  it("offers the four tab switches, one attach per session, then save/refresh/paste/settings/quit", () => {
     const actions = staticPaletteActions(["alpha", "beta"]);
     expect(actions.map((a) => a.label)).toEqual([
       "Switch tab: Home",
@@ -14,8 +14,22 @@ describe("staticPaletteActions", () => {
       "Save file",
       "Refresh diff",
       "Paste buffer…",
+      // the settings category (M22.4) — every setting is a palette command
+      "Settings…",
+      "Settings: Accent color",
+      "Settings: Notifications",
+      "Settings: Quiet hours",
+      "Settings: Updates & background refresh",
+      "Settings: Crash restore",
+      "Settings: Keyboard shortcuts (view)",
+      "Settings: Reset to defaults",
       "Quit",
     ]);
+  });
+
+  it("typing 'set' surfaces the settings umbrella (the battery's palette entry)", () => {
+    const filtered = filterPaletteActions("set", []);
+    expect(filtered.some((a) => a.kind === "settings" && a.id === "settings")).toBe(true);
   });
 
   it("offers the paste-buffer action on every surface (no terminal gate)", () => {
@@ -49,14 +63,16 @@ describe("filterPaletteActions", () => {
   it("returns every static action for an empty query, no open-file entry", () => {
     const actions = filterPaletteActions("", ["alpha"]);
     expect(actions.some((a) => a.kind === "open-file")).toBe(false);
-    expect(actions).toHaveLength(9);
+    expect(actions).toHaveLength(17);
   });
 
   it("fuzzy-ranks matches and appends an open-file action for a plain word", () => {
-    const actions = filterPaletteActions("ses", ["alpha"]);
+    // "sess" (not "ses"): since M22.4 "ses" is a contiguous prefix of
+    // "Settings…", which out-scores the subsequence hit in "Attach session".
+    const actions = filterPaletteActions("sess", ["alpha"]);
     expect(actions[0]).toMatchObject({ kind: "attach", session: "alpha" });
     const last = actions[actions.length - 1];
-    expect(last).toMatchObject({ kind: "open-file", path: "ses", label: "Open file: ses" });
+    expect(last).toMatchObject({ kind: "open-file", path: "sess", label: "Open file: sess" });
   });
 
   it("pins the open-file action first when the query looks like a path", () => {

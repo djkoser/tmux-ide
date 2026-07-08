@@ -28,6 +28,18 @@
  * openFile, diffFile } — persists to `~/.tmux-ide/app-state.json`
  * (TMUX_IDE_HOME override), debounced, restored on launch.
  *
+ * SETTINGS (M22.4): no settings screen — every setting is a palette COMMAND
+ * ("Settings…" is the categorized umbrella) executed via three DIALOG
+ * primitives on ONE global stack (dialog-stack.ts; pure model in
+ * dialog-model.ts; the item lists/patches in settings-model.ts). One overlay
+ * mount renders the stack top; the keyboard handler and `route` both check the
+ * stack FIRST, so keys/clicks never leak beneath an open dialog; Escape and a
+ * click outside pop ONE level. Persistence is the typed app-config layer
+ * (atomic raw-merge writes, TMUX_IDE_CONFIG honored); the theme picker
+ * live-previews the dialog chrome accent on cursor move (the app's other
+ * surface colors are const RGBAs; chrome + widgets re-read config on their
+ * next build — each dialog's footer says where a change lands).
+ *
  * The main area is the HOME panel (fleet rows, then — M21.9 — the project
  * REGISTRY: registered-but-not-running projects as launchable rows; a row click
  * or enter spins up a detached session in the project dir and opens it; the
@@ -169,6 +181,56 @@ import {
   type PaletteGeom,
   type TmuxBuffer,
 } from "./palette.ts";
+import {
+  DIALOG_W,
+  DIALOG_ROWS,
+  dialogPos,
+  dialogHeaderRows,
+  dialogRowAt,
+  dialogContains,
+  dialogInnerW,
+  dialogMarker,
+  dialogRowText,
+  selectFooter,
+  promptFooter,
+  confirmFooter,
+  confirmOptions,
+  wrapText,
+  type DialogGeom,
+  type DialogSelectSpec,
+  type DialogPromptSpec,
+  type DialogConfirmSpec,
+} from "./dialog-model.ts";
+import { dialogStack, dialogKey, DialogSelect, DialogPrompt, DialogConfirm } from "./dialog-stack.ts";
+import {
+  HINT_CHROME_RESTART,
+  HINT_LIVE,
+  HINT_READOPT,
+  keybindingItems,
+  notificationItems,
+  notificationTogglePatch,
+  presetRgb,
+  quietHoursItems,
+  quietHoursOffPatch,
+  quietHoursPatch,
+  resetSettingsPatch,
+  restoreItems,
+  restorePatch,
+  settingsRootItems,
+  snapshotEveryPatch,
+  themeItems,
+  themePatch,
+  tickMsPatch,
+  updatesCheckPatch,
+  updatesItems,
+  validateQuietTime,
+  validateSnapshotEvery,
+  validateTickMs,
+  type NotificationToggleId,
+  type SettingsCommandId,
+} from "./settings-model.ts";
+import { loadAppConfig, loadRawAppConfig, updateAppConfig } from "../../lib/app-config.ts";
+import { parseNotificationPrefs } from "../chrome/notify.ts";
 import {
   buildHomeItems,
   clampSelectable,
@@ -1396,6 +1458,11 @@ render(
           }
           break;
         }
+        case "settings":
+          // The settings surface (M22.4): every setting is a command running on
+          // the global dialog stack; flows live below with the stack wiring.
+          void runSettingsCommand(a.id);
+          break;
         case "quit":
           mirror?.dispose();
           editBuffer?.destroy();
@@ -1447,6 +1514,291 @@ render(
         setPaletteQuery((q) => q + (evt.shift ? evt.name.toUpperCase() : evt.name));
         setPaletteSel(0);
         setPaletteTop(0);
+      }
+    };
+
+    // ── DIALOG STACK (M22.4) — the settings surface's primitives ────────────
+    // ONE overlay mount renders whatever is on top of the global dialog stack
+    // (dialog-stack.ts); flows are sequential awaits over the Promise one-shots
+    // (DialogSelect/DialogPrompt/DialogConfirm.show). The stack is not reactive,
+    // so a `dialogRev` signal bumps on every stack notification (the editorRev
+    // idiom) and every derived accessor reads it first. INPUT SUPPRESSION: while
+    // the stack is non-empty the keyboard handler and `route` both hand the
+    // event to the dialog FIRST and return — nothing reaches panes/editor.
+    const [dialogRev, setDialogRev] = createSignal(0);
+    onCleanup(dialogStack.subscribe(() => setDialogRev((r) => r + 1)));
+    const dialogTop = () => {
+      dialogRev();
+      return dialogStack.top();
+    };
+    // Live-preview accent (the theme picker's onMove) — tints the DIALOG chrome
+    // only: the app's own surface colors are const RGBAs and the config theme
+    // drives the tmux chrome + widgets, which re-read config on their next
+    // build. The picker says so in its footer (scoped honestly, M22.4).
+    const [previewAccent, setPreviewAccent] = createSignal<RGBA | null>(null);
+    const dlgAccent = () => previewAccent() ?? ACCENT;
+    const dlgSelect = () => {
+      const e = dialogTop();
+      return e && e.spec.kind === "select" ? e : null;
+    };
+    const dlgPrompt = () => {
+      const e = dialogTop();
+      return e && e.spec.kind === "prompt" ? e : null;
+    };
+    const dlgConfirm = () => {
+      const e = dialogTop();
+      return e && e.spec.kind === "confirm" ? e : null;
+    };
+    // Narrowed spec accessors for the render (each used only inside its <Show>).
+    const dlgSelectSpec = () => dlgSelect()!.spec as DialogSelectSpec;
+    const dlgPromptSpec = () => dlgPrompt()!.spec as DialogPromptSpec;
+    const dlgConfirmSpec = () => dlgConfirm()!.spec as DialogConfirmSpec;
+    const DLG_INNER_W = dialogInnerW(DIALOG_W);
+    /** The visible window of the top select's filtered rows (render + router). */
+    const dlgVisibleItems = () => {
+      dialogRev();
+      const e = dialogStack.top();
+      if (!e || e.spec.kind !== "select") return [];
+      return dialogStack.filtered().slice(e.state.top, e.state.top + DIALOG_ROWS);
+    };
+    /** The top dialog's box geometry — the SAME math places the render and
+     *  hit-tests the router (the palette's law). */
+    const dialogGeomNow = (): DialogGeom => {
+      const e = dialogStack.top()!;
+      const { left, top } = dialogPos(dims().width, dims().height, DIALOG_W);
+      const visibleRows =
+        e.spec.kind === "select"
+          ? Math.min(DIALOG_ROWS, Math.max(0, dialogStack.filtered().length - e.state.top))
+          : e.spec.kind === "confirm"
+            ? 2
+            : 1;
+      return {
+        left,
+        top,
+        width: DIALOG_W,
+        headerRows: dialogHeaderRows(e.spec),
+        visibleRows,
+        footerRows: 1,
+      };
+    };
+
+    // ── SETTINGS AS COMMANDS (M22.4) ─────────────────────────────────────────
+    // No settings screen: each palette "Settings…" command runs one of these
+    // flows. Reads are FRESH (loadAppConfig / raw prefs — never the process
+    // cache) and writes go through the typed updateAppConfig (atomic, raw-merge,
+    // TMUX_IDE_CONFIG honored). Leaf flows return true when they COMMITTED;
+    // a cancelled leaf returns false so the umbrella loop reopens one level up.
+    const freshCfg = () => loadAppConfig();
+    const freshPrefs = () => parseNotificationPrefs(loadRawAppConfig());
+
+    const runThemePicker = async (): Promise<boolean> => {
+      const cfg = freshCfg();
+      const before = cfg.theme.accent;
+      const items = themeItems(cfg);
+      const rgbOf = (accent: string) => {
+        const rgb = presetRgb(accent);
+        return rgb ? RGBA.fromInts(rgb[0], rgb[1], rgb[2], 255) : null;
+      };
+      setPreviewAccent(rgbOf(before)); // the dialog opens in the saved accent
+      const choice = await DialogSelect.show({
+        title: "Accent color",
+        items,
+        footerHint: "previews here · chrome + widgets: after re-adopt",
+        onMove: (item) => setPreviewAccent(rgbOf(item.id)),
+      });
+      setPreviewAccent(null); // Escape reverts; a commit re-themes via config
+      if (!choice) return false;
+      if (choice.item.id !== before) {
+        updateAppConfig(themePatch(choice.item.id));
+        setStatusNote(`accent saved — ${HINT_READOPT}`);
+      }
+      return true;
+    };
+
+    const runQuietHours = async (): Promise<boolean> => {
+      const prefs = freshPrefs();
+      const choice = await DialogSelect.show({
+        title: "Quiet hours",
+        items: quietHoursItems(prefs),
+        footerHint: "silences macOS banners during the window",
+      });
+      if (!choice) return false;
+      if (choice.item.id === "off") {
+        updateAppConfig(quietHoursOffPatch());
+        setStatusNote(`quiet hours off — ${HINT_LIVE}`);
+        return true;
+      }
+      const start = await DialogPrompt.show({
+        title: "Quiet hours — start time",
+        placeholder: "22:00",
+        initial: prefs.quietHours?.start ?? "",
+        validate: validateQuietTime,
+        footerHint: "24-hour clock, HH:MM",
+      });
+      if (start === null) return false;
+      const end = await DialogPrompt.show({
+        title: "Quiet hours — end time",
+        placeholder: "08:00",
+        initial: prefs.quietHours?.end ?? "",
+        validate: validateQuietTime,
+        footerHint: "24-hour clock, HH:MM",
+      });
+      if (end === null) return false;
+      updateAppConfig(quietHoursPatch(start, end));
+      setStatusNote(`quiet hours ${start.trim()}–${end.trim()} — ${HINT_LIVE}`);
+      return true;
+    };
+
+    const runNotificationToggles = async (): Promise<boolean> => {
+      let sel: number | undefined;
+      for (;;) {
+        const prefs = freshPrefs();
+        const items = notificationItems(prefs);
+        const choice = await DialogSelect.show({
+          title: "Notifications",
+          items,
+          initialSel: sel,
+          footerHint: `enter toggles · ${HINT_LIVE}`,
+        });
+        if (!choice) return false; // esc — done toggling, back one level
+        sel = items.findIndex((i) => i.id === choice.item.id);
+        if (choice.item.id === "quietHours") {
+          await runQuietHours();
+          continue; // back to the list with fresh details either way
+        }
+        const id = choice.item.id as NotificationToggleId;
+        updateAppConfig(notificationTogglePatch(id, prefs));
+        setStatusNote(`${choice.item.label}: ${prefs[id] ? "off" : "on"} — ${HINT_LIVE}`);
+      }
+    };
+
+    const runUpdatesSettings = async (): Promise<boolean> => {
+      let sel: number | undefined;
+      for (;;) {
+        const cfg = freshCfg();
+        const items = updatesItems(cfg);
+        const choice = await DialogSelect.show({
+          title: "Updates & background refresh",
+          items,
+          initialSel: sel,
+          footerHint: HINT_CHROME_RESTART,
+        });
+        if (!choice) return false;
+        sel = items.findIndex((i) => i.id === choice.item.id);
+        if (choice.item.id === "check") {
+          updateAppConfig(updatesCheckPatch(cfg));
+          setStatusNote(
+            `update checks ${cfg.updates.check ? "off" : "on"} — ${HINT_CHROME_RESTART}`,
+          );
+          continue;
+        }
+        if (choice.item.id === "tickMs") {
+          const v = await DialogPrompt.show({
+            title: "Background refresh interval (ms)",
+            initial: String(cfg.updater.tickMs),
+            validate: validateTickMs,
+            footerHint: HINT_CHROME_RESTART,
+          });
+          if (v !== null) {
+            updateAppConfig(tickMsPatch(v));
+            setStatusNote(`refresh every ${v.trim()} ms — ${HINT_CHROME_RESTART}`);
+          }
+          continue;
+        }
+        if (choice.item.id === "snapshotEvery") {
+          const v = await DialogPrompt.show({
+            title: "Save a crash snapshot every … refreshes",
+            initial: String(cfg.updater.snapshotEvery),
+            validate: validateSnapshotEvery,
+            footerHint: HINT_CHROME_RESTART,
+          });
+          if (v !== null) {
+            updateAppConfig(snapshotEveryPatch(v));
+            setStatusNote(`snapshot every ${v.trim()} refreshes — ${HINT_CHROME_RESTART}`);
+          }
+          continue;
+        }
+      }
+    };
+
+    const runRestoreSetting = async (): Promise<boolean> => {
+      const choice = await DialogSelect.show({
+        title: "Crash restore",
+        items: restoreItems(freshCfg()),
+        footerHint: "used by tmux-ide restore — takes effect next restore",
+      });
+      if (!choice) return false;
+      updateAppConfig(restorePatch(choice.item.id));
+      setStatusNote(
+        choice.item.id === "on"
+          ? "restore will revive agents — takes effect next restore"
+          : "restore rebuilds sessions only — takes effect next restore",
+      );
+      return true;
+    };
+
+    const runKeybindViewer = async (): Promise<boolean> => {
+      await DialogSelect.show({
+        title: "Keyboard shortcuts",
+        items: keybindingItems(freshCfg().keys),
+        footerHint: "read-only — edit keys.* in ~/.tmux-ide/config.json",
+      });
+      return false; // viewing commits nothing; the umbrella reopens
+    };
+
+    const runSettingsReset = async (): Promise<boolean> => {
+      const ok = await DialogConfirm.show({
+        title: "Reset settings to defaults?",
+        body:
+          "Theme, notifications, updates and restore go back to their defaults. " +
+          "Your key bindings and anything else in config.json stay as they are.",
+        yesLabel: "Reset settings",
+        noLabel: "Keep my settings",
+        defaultNo: true,
+      });
+      if (!ok) return false;
+      updateAppConfig(resetSettingsPatch());
+      setStatusNote(`settings reset to defaults — ${HINT_READOPT}`);
+      return true;
+    };
+
+    const runSettingsLeaf = (id: SettingsCommandId): Promise<boolean> => {
+      switch (id) {
+        case "settings-theme":
+          return runThemePicker();
+        case "settings-notifications":
+          return runNotificationToggles();
+        case "settings-quiet-hours":
+          return runQuietHours();
+        case "settings-updates":
+          return runUpdatesSettings();
+        case "settings-restore":
+          return runRestoreSetting();
+        case "settings-keys":
+          return runKeybindViewer();
+        case "settings-reset":
+          return runSettingsReset();
+        default:
+          return Promise.resolve(true);
+      }
+    };
+
+    const runSettingsCommand = async (id: SettingsCommandId): Promise<void> => {
+      setHoverIf(null); // the overlay owns the pointer, like the palette
+      if (id !== "settings") {
+        await runSettingsLeaf(id);
+        return;
+      }
+      // The umbrella: a categorized select over every command. A cancelled leaf
+      // loops back here — Escape reads as "one level up" all the way out.
+      for (;;) {
+        const choice = await DialogSelect.show({
+          title: "Settings",
+          items: settingsRootItems(freshCfg(), freshPrefs()),
+          footerHint: "type to filter",
+        });
+        if (!choice) return;
+        if (await runSettingsLeaf(choice.item.id as SettingsCommandId)) return;
       }
     };
 
@@ -2401,6 +2753,14 @@ render(
         editBuffer?.destroy();
         process.exit(0);
       }
+      // A DIALOG owns the keyboard while open (M22.4) — topmost overlay, so it
+      // is checked before the menu and the palette. EVERY key is consumed here
+      // (escape pops one stack level inside dialogKey): nothing may leak to the
+      // pane/editor beneath while a settings flow is on screen.
+      if (dialogStack.depth() > 0) {
+        dialogKey(dialogStack, evt);
+        return;
+      }
       // The context menu owns the keyboard while open (before the palette).
       if (menu()) {
         menuKey(evt);
@@ -2924,6 +3284,43 @@ render(
       // late-mounted menu overlay, whose only ancestor handler is root, is handled
       // exactly once there). Idempotent on the real MouseEvent; a no-op in tests.
       e.stopPropagation?.();
+      // While a DIALOG is open it OWNS pointer routing (M22.4) — topmost, so
+      // checked before the menu and the palette, with the SAME pure geometry the
+      // render places the box with (dialogGeomNow / dialogRowAt / dialogContains
+      // — the central-routing law; the overlay carries NO per-node handlers).
+      // Motion over a row moves the selection (firing a select's onMove preview
+      // hook), the wheel scrolls the select window, a left press on a row
+      // activates it (select rows arm-then-confirm when destructive; confirm
+      // rows choose), a press inside-but-not-a-row is a no-op, and a press
+      // OUTSIDE pops ONE stack level — exactly what Escape does.
+      if (dialogStack.depth() > 0) {
+        const entry = dialogStack.top()!;
+        const g = dialogGeomNow();
+        if (type === "scroll") {
+          const dir = e.scroll?.direction;
+          if (dir === "up" || dir === "down") dialogStack.scrollBy(dir === "up" ? -1 : 1);
+          return;
+        }
+        if (type === "move" || type === "over" || type === "drag") {
+          const ri = dialogRowAt(g, x, y);
+          if (ri >= 0) {
+            if (entry.spec.kind === "select") dialogStack.setSel(entry.state.top + ri);
+            else if (entry.spec.kind === "confirm") dialogStack.setSel(ri);
+          }
+          return;
+        }
+        if (type !== "down") return;
+        const ri = dialogRowAt(g, x, y);
+        if (ri >= 0) {
+          if (e.button === 2) return; // right press on a row: no-op, stay open
+          if (entry.spec.kind === "select") dialogStack.activate(entry.state.top + ri);
+          else if (entry.spec.kind === "confirm") dialogStack.choose(ri);
+          // prompt: the input row — a click is a no-op (typing has focus)
+          return;
+        }
+        if (!dialogContains(g, x, y)) dialogStack.dismiss();
+        return;
+      }
       // While the context menu is open it OWNS pointer routing: a down on an item
       // runs it (a submenu row wins over the parent), a down elsewhere inside a box
       // is a no-op (stays open), a down OUTSIDE both closes it. Motion CASCADES the
@@ -4212,6 +4609,162 @@ render(
                 );
               }}
             </For>
+          </box>
+        </Show>
+        {/* DIALOG overlay (M22.4) — the ONE mount for the global dialog stack;
+          only the TOP entry renders (a nested push visually replaces until it
+          pops). Rendered LAST so it sits above the palette and the menus. Same
+          late-mount discipline: NO per-node handlers — `route` checks
+          `dialogStack.depth()` FIRST and hit-tests rows with the same pure
+          geometry placing this box (dialogPos/dialogHeaderRows). Layout per
+          kind must match dialog-model's headerRows math EXACTLY: border ·
+          title · [filter input] · rule · [confirm body] · rows · footer ·
+          border. The border/title accents read `dlgAccent()` — the theme
+          picker's live preview surface. */}
+        <Show when={dlgSelect()}>
+          <box
+            position="absolute"
+            left={dialogPos(dims().width, dims().height, DIALOG_W).left}
+            top={dialogPos(dims().width, dims().height, DIALOG_W).top}
+            width={DIALOG_W}
+            flexDirection="column"
+            backgroundColor={PALETTE_BG}
+            border
+            borderColor={previewAccent() ?? PALETTE_BORDER}
+            paddingLeft={1}
+            paddingRight={1}
+          >
+            <text fg={dlgAccent()} attributes={1}>
+              {dlgSelectSpec().title.slice(0, DLG_INNER_W).padEnd(DLG_INNER_W)}
+            </text>
+            <Show when={dlgSelectSpec().filterable !== false}>
+              <box flexDirection="row">
+                <text fg={dlgAccent()} attributes={1}>
+                  {"▸ "}
+                </text>
+                <text fg={DEFAULT_FG}>{`${dlgSelect()!.state.query}▏`}</text>
+              </box>
+            </Show>
+            <text fg={MUTED}>{"─".repeat(DLG_INNER_W)}</text>
+            <For each={dlgVisibleItems()}>
+              {(item, i) => {
+                const abs = () => dlgSelect()!.state.top + i();
+                const selected = () => abs() === dlgSelect()!.state.sel;
+                const armed = () => dlgSelect()!.state.armed === abs();
+                // The marker renders as its own run (current ● in accent); a
+                // swatch row adds a colored ● run, so its body is 2 cells
+                // narrower — dialogRowText pads to exactly the remaining width.
+                const body = () =>
+                  dialogRowText(item, {
+                    selected: selected(),
+                    armed: armed(),
+                    innerW: item.swatch ? DLG_INNER_W - 2 : DLG_INNER_W,
+                  }).slice(2);
+                const markerFg = () =>
+                  item.current ? dlgAccent() : selected() ? DEFAULT_FG : MUTED;
+                const bodyFg = () =>
+                  armed() ? DIFF_DEL_FG : selected() ? DEFAULT_FG : MUTED;
+                return (
+                  <box
+                    height={1}
+                    flexDirection="row"
+                    backgroundColor={selected() || armed() ? TAB_ACTIVE_BG : PALETTE_BG}
+                  >
+                    <text fg={markerFg()}>{dialogMarker(item, selected())}</text>
+                    <Show when={item.swatch}>
+                      <text
+                        fg={RGBA.fromInts(
+                          item.swatch![0],
+                          item.swatch![1],
+                          item.swatch![2],
+                          255,
+                        )}
+                      >
+                        {"● "}
+                      </text>
+                    </Show>
+                    <text fg={bodyFg()}>{body()}</text>
+                  </box>
+                );
+              }}
+            </For>
+            <Show when={dlgVisibleItems().length === 0}>
+              <text fg={MUTED}>{"  no matches"}</text>
+            </Show>
+            <text fg={MUTED}>{selectFooter(dlgSelectSpec()).slice(0, DLG_INNER_W)}</text>
+          </box>
+        </Show>
+        <Show when={dlgPrompt()}>
+          <box
+            position="absolute"
+            left={dialogPos(dims().width, dims().height, DIALOG_W).left}
+            top={dialogPos(dims().width, dims().height, DIALOG_W).top}
+            width={DIALOG_W}
+            flexDirection="column"
+            backgroundColor={PALETTE_BG}
+            border
+            borderColor={PALETTE_BORDER}
+            paddingLeft={1}
+            paddingRight={1}
+          >
+            <text fg={ACCENT} attributes={1}>
+              {dlgPromptSpec().title.slice(0, DLG_INNER_W).padEnd(DLG_INNER_W)}
+            </text>
+            <text fg={MUTED}>{"─".repeat(DLG_INNER_W)}</text>
+            <box flexDirection="row">
+              <text fg={ACCENT} attributes={1}>
+                {"▸ "}
+              </text>
+              <Show
+                when={dlgPrompt()!.state.input.length === 0 && dlgPromptSpec().placeholder}
+                fallback={<text fg={DEFAULT_FG}>{`${dlgPrompt()!.state.input}▏`}</text>}
+              >
+                <text fg={DEFAULT_FG}>{"▏"}</text>
+                <text fg={MUTED}>{` ${dlgPromptSpec().placeholder}`}</text>
+              </Show>
+            </box>
+            <text
+              fg={
+                promptFooter(dlgPromptSpec(), dlgPrompt()!.state).error ? DIFF_DEL_FG : MUTED
+              }
+            >
+              {promptFooter(dlgPromptSpec(), dlgPrompt()!.state).text.slice(0, DLG_INNER_W)}
+            </text>
+          </box>
+        </Show>
+        <Show when={dlgConfirm()}>
+          <box
+            position="absolute"
+            left={dialogPos(dims().width, dims().height, DIALOG_W).left}
+            top={dialogPos(dims().width, dims().height, DIALOG_W).top}
+            width={DIALOG_W}
+            flexDirection="column"
+            backgroundColor={PALETTE_BG}
+            border
+            borderColor={PALETTE_BORDER}
+            paddingLeft={1}
+            paddingRight={1}
+          >
+            <text fg={ACCENT} attributes={1}>
+              {dlgConfirmSpec().title.slice(0, DLG_INNER_W).padEnd(DLG_INNER_W)}
+            </text>
+            <text fg={MUTED}>{"─".repeat(DLG_INNER_W)}</text>
+            <For each={dlgConfirmSpec().body ? wrapText(dlgConfirmSpec().body!, DLG_INNER_W) : []}>
+              {(line) => <text fg={MUTED}>{line || " "}</text>}
+            </For>
+            <For each={confirmOptions(dlgConfirmSpec())}>
+              {(label, i) => {
+                const selected = () => dlgConfirm()!.state.sel === i();
+                return (
+                  <box height={1} backgroundColor={selected() ? TAB_ACTIVE_BG : PALETTE_BG}>
+                    <text fg={selected() ? DEFAULT_FG : MUTED}>
+                      {`${selected() ? "› " : "  "}${label}`.slice(0, DLG_INNER_W)}
+                    </text>
+                  </box>
+                );
+              }}
+            </For>
+            <text fg={MUTED}>{confirmFooter()}</text>
           </box>
         </Show>
       </box>
