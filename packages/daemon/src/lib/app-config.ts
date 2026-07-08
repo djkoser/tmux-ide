@@ -20,9 +20,9 @@
  * per-concern readers ({@link ../tui/chrome/notify.ts}, {@link ../restore.ts})
  * now delegate here.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { AgentStatus } from "../tui/detect/classify.ts";
 
 // ---------------------------------------------------------------------------
@@ -333,4 +333,80 @@ export function getAppConfig(): AppConfig {
 /** Drop the cache so the next {@link getAppConfig} re-reads. Test-only. */
 export function _resetForTests(): void {
   cached = null;
+}
+
+// ---------------------------------------------------------------------------
+// Writes (M22.4 — the settings surface persists through here)
+// ---------------------------------------------------------------------------
+
+/**
+ * io — the RAW parsed config file as the user wrote it (`{}` when missing or
+ * malformed). Writers merge over THIS, not over {@link parseAppConfig}'s output:
+ * round-tripping through the parser would materialize every default into the
+ * hand-editable file and silently DROP fields the typed shape doesn't model yet
+ * (e.g. the notification polish fields `notifications.enabled` /
+ * `notifications.quietHours` that {@link ../tui/chrome/notify.ts} reads raw).
+ */
+export function loadRawAppConfig(): Record<string, unknown> {
+  const path = appConfigPath();
+  if (!existsSync(path)) return {};
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(path, "utf-8"));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+/** A partial config write: plain objects merge recursively, scalars/arrays
+ *  replace, and an explicit `undefined` DELETES the key (how "reset to
+ *  defaults" removes a block so the parser's defaults take over). */
+export type AppConfigPatch = { [key: string]: unknown };
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * PURE — merge `patch` into `raw` without touching either input. Objects merge
+ * key-by-key (recursively), anything else replaces, and a key whose patch value
+ * is `undefined` is REMOVED from the result. Unknown user fields survive — the
+ * merge only visits keys the patch names.
+ */
+export function mergeConfigPatch(
+  raw: Record<string, unknown>,
+  patch: AppConfigPatch,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...raw };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) {
+      delete out[key];
+    } else if (isPlainObject(value) && isPlainObject(out[key])) {
+      out[key] = mergeConfigPatch(out[key] as Record<string, unknown>, value as AppConfigPatch);
+    } else if (isPlainObject(value)) {
+      out[key] = mergeConfigPatch({}, value as AppConfigPatch);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+/**
+ * io — apply a patch to the config file ATOMICALLY (temp + rename, the same
+ * discipline as the editor save): read raw → {@link mergeConfigPatch} → write.
+ * Busts the {@link getAppConfig} process cache and returns the new parsed
+ * config. Honors `TMUX_IDE_CONFIG`, so tests never touch the real file.
+ */
+export function updateAppConfig(patch: AppConfigPatch): AppConfig {
+  const path = appConfigPath();
+  const merged = mergeConfigPatch(loadRawAppConfig(), patch);
+  mkdirSync(dirname(path), { recursive: true });
+  const tmp = `${path}.${process.pid}.${Date.now()}.tmp`;
+  writeFileSync(tmp, `${JSON.stringify(merged, null, 2)}\n`, "utf-8");
+  renameSync(tmp, path);
+  cached = null;
+  return parseAppConfig(merged);
 }
