@@ -178,6 +178,16 @@ import {
   type HomeItem,
 } from "./home-model.ts";
 import {
+  sortAgentRows,
+  agentRowLabel,
+  agentsHeaderLabel,
+  agentAgeLabel,
+  sidebarHit,
+  AGENTS_EMPTY_LINE,
+  AGENTS_GAP_ROWS,
+  type AgentRowInput,
+} from "./agent-rows.ts";
+import {
   findMatches,
   visitOrder,
   stepMatch,
@@ -246,6 +256,10 @@ interface FleetSession {
   panes: number;
   attached: boolean;
   windows: Array<{ index: number; name: string; active: boolean }>;
+  /** Per-pane agent detail (M22.1) — the sidebar AGENTS section flattens these
+   *  across the fleet. A structural superset of {@link AgentRowInput}; the extra
+   *  report fields (title/command/dir/confidence) ride along unused here. */
+  agents: AgentRowInput[];
 }
 interface FleetProject {
   name: string;
@@ -325,6 +339,7 @@ interface WindowTab {
  *  row), and `sidebtn` (the sidebar footer's clickable "F5 palette" segment). */
 type HoverRegion =
   | "sidebar"
+  | "sidebaragent"
   | "home"
   | "surfacetab"
   | "windowtab"
@@ -679,6 +694,18 @@ render(
       projectsData()
         .flatMap((p) => p.sessions.map((s) => ({ name: s.name, status: s.status })))
         .filter((x, i, a) => a.findIndex((y) => y.name === x.name) === i);
+    // The sidebar AGENTS section (M22.2): every agent across the fleet, flattened
+    // and sorted attention-first (blocked → working → done → idle). Deduped by
+    // paneId in case a session surfaces under two projects (as `fleet` dedups by
+    // name). Drives BOTH the sidebar rows and the palette's jump-agent actions,
+    // so the two lists always agree on order. Pure logic lives in agent-rows.ts.
+    const fleetAgents = createMemo<AgentRowInput[]>(() =>
+      sortAgentRows(
+        projectsData()
+          .flatMap((p) => p.sessions.flatMap((s) => s.agents ?? []))
+          .filter((a, i, arr) => arr.findIndex((b) => b.paneId === a.paneId) === i),
+      ),
+    );
     const homeItems = createMemo<HomeItem[]>(() => buildHomeItems(projectsData()));
     const rollup = (): FleetRollup => {
       const r: FleetRollup = {
@@ -1138,6 +1165,25 @@ render(
       switchTarget(session);
     };
 
+    /** Jump to a fleet agent (M22.2 — a sidebar row click or a palette
+     *  jump-agent action): switch the workspace to its session, select its
+     *  window, focus its exact pane. `openWorkspace` points the terminal at the
+     *  session (attaching a fresh SessionMirror when it differs from the current
+     *  one). The window/pane targeting goes through tmux DIRECTLY (async execFile,
+     *  the render-loop law) rather than the live mirror: `select-window` /
+     *  `select-pane` are exactly what `mirror.switchWindow`/`focus` run under the
+     *  hood, but issuing them straight to tmux works BOTH for the already-attached
+     *  session and for a just-requested attach whose control client hasn't started
+     *  yet (its mirror only lists the active window's panes, so `mirror.focus`
+     *  would no-op on a pane in another window). tmux becomes authoritative and
+     *  the live control client converges via its own notification stream. */
+    const jumpToAgent = (a: Pick<AgentRowInput, "session" | "windowIndex" | "paneId">) => {
+      openWorkspace(a.session, dirForSession(a.session));
+      execFile("tmux", ["select-window", "-t", `${a.session}:${a.windowIndex}`], () => {
+        execFile("tmux", ["select-pane", "-t", a.paneId], () => {});
+      });
+    };
+
     /** Create a detached session named `name` in `dir` and open it as the
      *  workspace (M21.9 — the home "launch project" / "new session" verbs).
      *  ASYNC execFile only (the render-loop law); an already-existing session
@@ -1235,7 +1281,7 @@ render(
       filterPaletteActions(
         paletteQuery(),
         fleet().map((s) => s.name),
-        { terminal: mode() === "mirror" },
+        { terminal: mode() === "mirror", agents: fleetAgents() },
       ),
     );
     /** The current palette LIST length — buffers level when open, else actions. */
@@ -1274,6 +1320,9 @@ render(
           break;
         case "attach":
           openWorkspace(a.session, dirForSession(a.session));
+          break;
+        case "jump-agent":
+          jumpToAgent(a);
           break;
         case "open-file":
           openEditor(a.path);
@@ -2767,8 +2816,10 @@ render(
           );
           return;
         }
-        const idx = gy - 2;
-        setHoverIf(idx >= 0 && idx < fleet().length ? { region: "sidebar", index: idx } : null);
+        const hit = sidebarHit(gy, fleet().length, fleetAgents().length);
+        if (hit?.kind === "session") setHoverIf({ region: "sidebar", index: hit.index });
+        else if (hit?.kind === "agent") setHoverIf({ region: "sidebaragent", index: hit.index });
+        else setHoverIf(null);
         return;
       }
       const m = mode();
@@ -3108,8 +3159,16 @@ render(
           if (spanHit([SIDEBAR_HINT_SPAN], x) === 0) openPalette();
           return;
         }
-        const s = fleet()[gy - 2];
-        if (s) openWorkspace(s.name, dirForSession(s.name));
+        // Session rows switch the workspace; agent rows JUMP to their exact pane
+        // (M22.2). The agents-header row and the empty-state line are inert.
+        const hit = sidebarHit(gy, fleet().length, fleetAgents().length);
+        if (hit?.kind === "session") {
+          const s = fleet()[hit.index];
+          if (s) openWorkspace(s.name, dirForSession(s.name));
+        } else if (hit?.kind === "agent") {
+          const a = fleetAgents()[hit.index];
+          if (a) jumpToAgent(a);
+        }
         return;
       }
       // HOME mode: the main area is the fleet panel. Rows render below the header
@@ -3409,6 +3468,55 @@ render(
                   </box>
                 )}
               </For>
+            </box>
+            {/* AGENTS section (M22.2): the fleet's agents at a glance, one row
+              per agent, sorted attention-first (fleetAgents), each a JUMP target
+              (click → its session/window/pane). REUSES the session rows' glyph +
+              state-color grammar (STATUS_GLYPH/STATUS_COLOR by state). Row
+              y-accounting for the router is pure in `sidebarHit`: this section
+              starts right after the session <For>, one header row then the agent
+              rows (or one quiet empty-state line). Hover reveals the state age. */}
+            <box flexDirection="column" marginTop={AGENTS_GAP_ROWS}>
+              <text fg={MUTED} attributes={1}>
+                {agentsHeaderLabel(fleetAgents().length, sidebarW() - 2)}
+              </text>
+              <Show
+                when={fleetAgents().length > 0}
+                fallback={<text fg={MUTED}>{AGENTS_EMPTY_LINE.slice(0, sidebarW() - 2)}</text>}
+              >
+                <For each={fleetAgents()}>
+                  {(a, i) => {
+                    const age = () => agentAgeLabel(a.state, a.since, Math.floor(Date.now() / 1000));
+                    const hovered = () => isHovered("sidebaragent", i());
+                    const ageShown = () => (hovered() ? age() : null);
+                    const labelBudget = () => {
+                      const a2 = ageShown();
+                      return sidebarW() - 5 - (a2 ? a2.length + 1 : 0);
+                    };
+                    // Blocked is the attention state: bold, matching the
+                    // statusline's grammar (`blocked` reads bold there too).
+                    const attn = () => (a.state === "blocked" ? 1 : 0);
+                    return (
+                      <box
+                        flexDirection="row"
+                        gap={1}
+                        backgroundColor={hovered() ? HOVER_BG : SIDEBAR_BG}
+                      >
+                        <text fg={STATUS_COLOR[a.state]} attributes={attn()}>
+                          {STATUS_GLYPH[a.state]}
+                        </text>
+                        <text fg={a.state === "blocked" ? STATUS_COLOR.blocked : MUTED} attributes={attn()}>
+                          {agentRowLabel(a.kind, a.session, labelBudget())}
+                        </text>
+                        <Show when={ageShown()}>
+                          <box flexGrow={1} />
+                          <text fg={MUTED}>{ageShown()}</text>
+                        </Show>
+                      </box>
+                    );
+                  }}
+                </For>
+              </Show>
             </box>
             <box flexGrow={1} />
             {/* Footer hint — its "F5 palette" segment is a CHIP (M21.9): the

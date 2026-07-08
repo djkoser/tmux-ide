@@ -13,12 +13,14 @@
  */
 import { fuzzyFilter } from "../team/fuzzy.ts";
 import type { Tab } from "./app-state.ts";
+import type { AgentRowInput } from "./agent-rows.ts";
 
 /** One runnable palette entry. `label` is what the list shows and what the
  *  fuzzy filter scores; `kind` (+ payload) is what the app dispatches on. */
 export type PaletteAction =
   | { kind: "tab"; tab: Tab; label: string }
   | { kind: "attach"; session: string; label: string }
+  | { kind: "jump-agent"; paneId: string; session: string; windowIndex: number; label: string }
   | { kind: "open-file"; path: string; label: string }
   | { kind: "save"; label: string }
   | { kind: "refresh-diff"; label: string }
@@ -50,6 +52,10 @@ export const LAYOUT_PRESETS = [
  *  — they are no-ops on Home/Files/Diff, so they only clutter the list there. */
 export interface PaletteContext {
   terminal?: boolean;
+  /** The fleet's agents (M22.2) — the palette offers one "Agent: …" jump action
+   *  each, the keyboard twin of the sidebar's clickable agent rows. Already
+   *  sorted attention-first by the caller (fleetAgents). */
+  agents?: AgentRowInput[];
 }
 
 const TAB_LABELS: { tab: Tab; label: string }[] = [
@@ -73,6 +79,18 @@ export function staticPaletteActions(
   }));
   for (const s of sessions) {
     actions.push({ kind: "attach", session: s, label: `Attach session: ${s}` });
+  }
+  // One jump per fleet agent (M22.2) — the sidebar rows' keyboard twin. Labeled
+  // "Agent: <kind> · <session> (<state>)" so the fuzzy filter finds it by kind,
+  // session, or state (typing "agent", "claude", or "blocked" all narrow to it).
+  for (const a of ctx.agents ?? []) {
+    actions.push({
+      kind: "jump-agent",
+      paneId: a.paneId,
+      session: a.session,
+      windowIndex: a.windowIndex,
+      label: `Agent: ${a.kind} · ${a.session} (${a.state})`,
+    });
   }
   actions.push({ kind: "save", label: "Save file" });
   actions.push({ kind: "refresh-diff", label: "Refresh diff" });
