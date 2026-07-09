@@ -42,6 +42,51 @@ interface SendOptions {
   noEnter?: boolean;
 }
 
+/** Roles that mark a pane as an addressable agent (excludes widget/shell/untyped panes like the input REPL). */
+const AGENT_ROLES = new Set(["lead", "teammate", "planner", "validator", "researcher"]);
+
+/** A target containing glob metacharacters fans out to every matching agent pane. */
+export function isWildcardTarget(target: string): boolean {
+  return target.includes("*") || target.includes("?");
+}
+
+function isAgentPane(pane: PaneInfo): boolean {
+  return pane.type === "agent" || (pane.role !== null && AGENT_ROLES.has(pane.role));
+}
+
+/**
+ * Resolve a glob target ("cw*", "*") to all matching agent panes.
+ * Matches case-insensitively against @ide_name and pane title; only agent
+ * panes are eligible, so "*" broadcasts to every agent while widget/shell/
+ * input panes are never typed into.
+ */
+export function resolvePanesByWildcard(panes: PaneInfo[], pattern: string): PaneInfo[] {
+  const regex = new RegExp(
+    "^" +
+      pattern
+        .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+        .replace(/\*/g, ".*")
+        .replace(/\?/g, ".") +
+      "$",
+    "i",
+  );
+  return panes.filter(
+    (p) => isAgentPane(p) && ((p.name !== null && regex.test(p.name)) || regex.test(p.title)),
+  );
+}
+
+/**
+ * Resolve a send target to its pane list: glob targets fan out to every
+ * matching agent pane; exact targets keep single-pane resolvePane behavior.
+ */
+export function resolveSendTargets(panes: PaneInfo[], target: string): PaneInfo[] {
+  if (isWildcardTarget(target)) {
+    return resolvePanesByWildcard(panes, target);
+  }
+  const pane = resolvePane(panes, target);
+  return pane ? [pane] : [];
+}
+
 /**
  * Resolve a target string to a pane. Priority:
  * 1. Exact pane ID (%N)
@@ -113,57 +158,77 @@ export async function send(targetDir: string | undefined, opts: SendOptions): Pr
   }
 
   const panes = listSessionPanes(session);
-  const pane = resolvePane(panes, target);
-  if (!pane) {
+  const targets = resolveSendTargets(panes, target);
+  if (targets.length === 0) {
     const available = panes
       .map((p) => {
         const label = p.name ?? p.title;
         return `  ${p.id}  ${label}${p.role ? ` (${p.role})` : ""}`;
       })
       .join("\n");
-    throw new IdeError(`Pane "${target}" not found.\n\nAvailable panes:\n${available}`, {
+    const problem = isWildcardTarget(target)
+      ? `Wildcard "${target}" matched no agent panes.`
+      : `Pane "${target}" not found.`;
+    throw new IdeError(`${problem}\n\nAvailable panes:\n${available}`, {
       code: "PANE_NOT_FOUND",
     });
   }
 
-  const busyStatus = getPaneBusyStatus(session, pane.id);
-  const message = prepareMessage(rawMessage, busyStatus);
+  const deliveries = targets.map((pane) => {
+    const busyStatus = getPaneBusyStatus(session, pane.id);
+    const message = prepareMessage(rawMessage, busyStatus);
 
-  let sentViaFile = false;
-  if (noEnter) {
-    sendText(session, pane.id, message);
-  } else {
-    const dispatch = writeDispatchFile(dir, pane.id, message);
-    if (dispatch) {
-      sendCommand(session, pane.id, dispatch.triggerCmd);
-      sentViaFile = true;
+    let sentViaFile = false;
+    if (noEnter) {
+      sendText(session, pane.id, message);
     } else {
-      sendCommand(session, pane.id, message);
+      const dispatch = writeDispatchFile(dir, pane.id, message);
+      if (dispatch) {
+        sendCommand(session, pane.id, dispatch.triggerCmd);
+        sentViaFile = true;
+      } else {
+        sendCommand(session, pane.id, message);
+      }
     }
-  }
 
-  // Log send event
-  appendEvent(dir, {
-    timestamp: new Date().toISOString(),
-    type: "send",
-    target: pane.name ?? pane.title,
-    paneId: pane.id,
-    message: message.length > 100 ? message.slice(0, 100) + "..." : message,
+    // Log send event
+    appendEvent(dir, {
+      timestamp: new Date().toISOString(),
+      type: "send",
+      target: pane.name ?? pane.title,
+      paneId: pane.id,
+      message: message.length > 100 ? message.slice(0, 100) + "..." : message,
+    });
+
+    return { pane, message, busyStatus, sentViaFile };
   });
 
+  const [first] = deliveries;
   const result = {
     ok: true,
     session,
     target: {
-      paneId: pane.id,
-      name: pane.name,
-      title: pane.title,
-      role: pane.role,
+      paneId: first!.pane.id,
+      name: first!.pane.name,
+      title: first!.pane.title,
+      role: first!.pane.role,
     },
-    message,
-    busyStatus,
-    sentViaFile,
-    ...(busyStatus === "agent" ? { warning: "agent_busy" } : {}),
+    ...(deliveries.length > 1
+      ? {
+          targets: deliveries.map((d) => ({
+            paneId: d.pane.id,
+            name: d.pane.name,
+            title: d.pane.title,
+            role: d.pane.role,
+            busyStatus: d.busyStatus,
+            sentViaFile: d.sentViaFile,
+          })),
+        }
+      : {}),
+    message: first!.message,
+    busyStatus: first!.busyStatus,
+    sentViaFile: first!.sentViaFile,
+    ...(deliveries.some((d) => d.busyStatus === "agent") ? { warning: "agent_busy" } : {}),
   };
 
   if (json) {
@@ -171,11 +236,13 @@ export async function send(targetDir: string | undefined, opts: SendOptions): Pr
     return;
   }
 
-  const label = pane.name ?? pane.title;
-  const preview = message.length > 60 ? message.slice(0, 60) + "..." : message;
-  console.log(`Sent to "${label}" (${pane.id}): ${preview}`);
+  for (const { pane, message, busyStatus } of deliveries) {
+    const label = pane.name ?? pane.title;
+    const preview = message.length > 60 ? message.slice(0, 60) + "..." : message;
+    console.log(`Sent to "${label}" (${pane.id}): ${preview}`);
 
-  if (busyStatus === "agent") {
-    console.log("Warning: agent appears busy. Message sent anyway.");
+    if (busyStatus === "agent") {
+      console.log("Warning: agent appears busy. Message sent anyway.");
+    }
   }
 }

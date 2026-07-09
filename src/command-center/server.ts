@@ -21,7 +21,7 @@ import {
   sendText,
   getPaneBusyStatus,
 } from "../widgets/lib/pane-comms.ts";
-import { resolvePane } from "../send.ts";
+import { resolveSendTargets } from "../send.ts";
 import { getSessionState, killSession, stopSessionMonitor } from "../lib/tmux.ts";
 import { readConfig } from "../lib/yaml-io.ts";
 import {
@@ -1086,8 +1086,8 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     const { target, message, noEnter } = c.req.valid("json");
 
     const panes = listSessionPanes(name);
-    const pane = resolvePane(panes, target);
-    if (!pane) {
+    const targets = resolveSendTargets(panes, target);
+    if (targets.length === 0) {
       const available = panes.map((p) => ({
         id: p.id,
         title: p.title,
@@ -1097,35 +1097,51 @@ export function createApp(options: CreateAppOptions = {}): Hono {
       return c.json({ error: "Pane not found", target, available }, 404);
     }
 
-    const busyStatus = getPaneBusyStatus(name, pane.id);
+    const deliveries = targets.map((pane) => {
+      const busyStatus = getPaneBusyStatus(name, pane.id);
 
-    // Collapse multiline for agent panes
-    const prepared = busyStatus === "agent" ? message.replace(/\n+/g, " ").trim() : message;
+      // Collapse multiline for agent panes
+      const prepared = busyStatus === "agent" ? message.replace(/\n+/g, " ").trim() : message;
 
-    if (noEnter) {
-      sendText(name, pane.id, prepared);
-    } else {
-      sendCommand(name, pane.id, prepared);
-    }
+      if (noEnter) {
+        sendText(name, pane.id, prepared);
+      } else {
+        sendCommand(name, pane.id, prepared);
+      }
 
-    appendEvent(session.dir, {
-      timestamp: new Date().toISOString(),
-      type: "send",
-      target: pane.name ?? pane.title,
-      paneId: pane.id,
-      message: prepared.length > 100 ? prepared.slice(0, 100) + "..." : prepared,
+      appendEvent(session.dir, {
+        timestamp: new Date().toISOString(),
+        type: "send",
+        target: pane.name ?? pane.title,
+        paneId: pane.id,
+        message: prepared.length > 100 ? prepared.slice(0, 100) + "..." : prepared,
+      });
+
+      return { pane, busyStatus };
     });
 
+    const [first] = deliveries;
     return c.json({
       ok: true,
       session: name,
       target: {
-        paneId: pane.id,
-        name: pane.name,
-        title: pane.title,
-        role: pane.role,
+        paneId: first!.pane.id,
+        name: first!.pane.name,
+        title: first!.pane.title,
+        role: first!.pane.role,
       },
-      busyStatus,
+      ...(deliveries.length > 1
+        ? {
+            targets: deliveries.map((d) => ({
+              paneId: d.pane.id,
+              name: d.pane.name,
+              title: d.pane.title,
+              role: d.pane.role,
+              busyStatus: d.busyStatus,
+            })),
+          }
+        : {}),
+      busyStatus: first!.busyStatus,
     });
   });
 
