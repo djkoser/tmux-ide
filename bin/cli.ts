@@ -59,6 +59,7 @@ const { positionals, values } = parseArgs({
     hard: { type: "boolean" },
     "include-plans": { type: "boolean" },
     "dry-run": { type: "boolean" },
+    out: { type: "string" },
     port: { type: "string" },
     // tunnel command flags
     provider: { type: "string" },
@@ -102,6 +103,7 @@ const knownCommands = new Set([
   "send",
   "recv",
   "dispatch",
+  "boot-docs",
   "notify",
   "orchestrator",
   "settings",
@@ -474,6 +476,12 @@ try {
     case "recv": {
       const { recv } = await import("../src/recv.ts");
       await recv(null, { json, msgId: positionals[1] });
+      break;
+    }
+
+    case "boot-docs": {
+      const { bootDocs } = await import("../src/boot-docs.ts");
+      await bootDocs(startTargetDir, { json, out: values.out });
       break;
     }
 
