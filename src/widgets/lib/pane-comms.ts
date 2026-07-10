@@ -77,6 +77,22 @@ export function listSessionPanes(session: string): PaneInfo[] {
     });
 }
 
+/** Window dimensions in cells, or null if the window can't be queried. */
+export function getWindowSize(target: string): { width: number; height: number } | null {
+  const out = tmux("display-message", "-p", "-t", target, "#{window_width}\t#{window_height}");
+  if (!out) return null;
+  const [w, h] = out.split("\t");
+  const width = parseInt(w ?? "", 10);
+  const height = parseInt(h ?? "", 10);
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
+  return { width, height };
+}
+
+/** Resize a pane along one axis: "y" sets rows (height), "x" sets columns (width). */
+export function resizePane(paneId: string, axis: "x" | "y", size: number): void {
+  tmux("resize-pane", "-t", paneId, axis === "y" ? "-y" : "-x", String(size));
+}
+
 export function findPaneByTitle(session: string, title: string): string | null {
   const panes = listSessionPanes(session);
   const match = panes.find((p) => p.title === title);

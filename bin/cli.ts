@@ -105,6 +105,7 @@ const knownCommands = new Set([
   "dispatch",
   "boot-docs",
   "tasks",
+  "relayout",
   "notify",
   "orchestrator",
   "settings",
@@ -489,6 +490,12 @@ try {
     case "tasks": {
       const { tasksCommand } = await import("../src/tasks-link.ts");
       await tasksCommand(null, { json, sub: positionals[1], args: positionals.slice(2) });
+      break;
+    }
+
+    case "relayout": {
+      const { relayout } = await import("../src/relayout.ts");
+      await relayout(startTargetDir, { json });
       break;
     }
 
