@@ -482,6 +482,82 @@ describe("POST /api/project/:name/validation/contract (text editor + I5)", () =>
   });
 });
 
+describe("POST /api/project/:name/mission/wipe (kill-switch)", () => {
+  function seedMission(title: string) {
+    saveMission(tmpDir, {
+      title,
+      description: "",
+      status: "active",
+      milestones: [
+        {
+          id: "M1",
+          title: "One",
+          description: "",
+          status: "active",
+          order: 1,
+          created: "",
+          updated: "",
+        },
+      ],
+      created: "",
+      updated: "",
+    });
+  }
+
+  it("no-ops when the confirmation name does not match (409, nothing wiped)", async () => {
+    seedMission("Real Mission");
+    saveTask(tmpDir, makeTask({ id: "001" }));
+    let bounced = false;
+    const app = createApp({ bounceDaemon: () => (bounced = true) });
+    const res = await app.request("/api/project/test-project/mission/wipe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: "wrong name" }),
+    });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { wiped: boolean }).wiped).toBe(false);
+    // Nothing erased, no bounce, no override event.
+    expect(loadMission(tmpDir)?.title).toBe("Real Mission");
+    expect(loadTask(tmpDir, "001")).not.toBeNull();
+    expect(bounced).toBe(false);
+    expect(readEvents(tmpDir).filter((e) => e.type === "override").length).toBe(0);
+  });
+
+  it("stands down agents, wipes the tracker, logs the override, and bounces the daemon", async () => {
+    seedMission("Real Mission");
+    saveTask(tmpDir, makeTask({ id: "001" }));
+    mockPanes = [
+      makePane({ id: "%1", title: "cw1", name: "cw1", role: "teammate", currentCommand: "claude" }),
+    ];
+    let bounced = false;
+    const delivered: string[] = [];
+    const app = createApp({
+      bounceDaemon: () => (bounced = true),
+      deliver: async (_dir, _session, pane) => {
+        delivered.push(pane.id);
+        return { outcome: "delivered", attempts: 1 };
+      },
+    });
+    const res = await app.request("/api/project/test-project/mission/wipe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: "Real Mission" }),
+    });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { wiped: boolean }).wiped).toBe(true);
+    // Stand-down broadcast reached the agent pane before the wipe.
+    expect(delivered).toEqual(["%1"]);
+    // Tracker erased + daemon bounced.
+    expect(loadMission(tmpDir)).toBeNull();
+    expect(loadTask(tmpDir, "001")).toBeNull();
+    expect(bounced).toBe(true);
+    // Operator-attributed audit entry.
+    const overrides = readEvents(tmpDir).filter((e) => e.type === "override");
+    expect(overrides.length).toBe(1);
+    expect(overrides[0]!.message).toContain("kill-switch");
+  });
+});
+
 describe("POST /api/project/:name/send (composer)", () => {
   const tick = () => new Promise((r) => setTimeout(r, 0));
 

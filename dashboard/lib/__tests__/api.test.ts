@@ -419,3 +419,42 @@ describe("federated workspaces", () => {
     expect(b.detail).toBeNull();
   });
 });
+
+describe("stopAndWipeMission", () => {
+  beforeEach(() => vi.unstubAllGlobals());
+
+  it("returns ok on a successful wipe", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, wiped: true }) }),
+    );
+    const { stopAndWipeMission } = await import("../api");
+    const r = await stopAndWipeMission("s", "Real Mission");
+    expect(r.ok).toBe(true);
+  });
+
+  it("surfaces the 409 reason on a name mismatch", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 409,
+        json: async () => ({
+          error: "Confirmation does not match the mission title",
+          wiped: false,
+        }),
+      }),
+    );
+    const { stopAndWipeMission } = await import("../api");
+    const r = await stopAndWipeMission("s", "wrong");
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain("does not match");
+  });
+
+  it("treats a dropped connection (daemon bounce) as success in flight", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNRESET")));
+    const { stopAndWipeMission } = await import("../api");
+    const r = await stopAndWipeMission("s", "Real Mission");
+    expect(r.ok).toBe(true);
+  });
+});

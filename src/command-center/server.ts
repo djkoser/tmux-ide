@@ -39,6 +39,8 @@ import {
   type Task,
 } from "../lib/task-store.ts";
 import { canMarkDone } from "../lib/review-flow.ts";
+import { wipeMission } from "../lib/mission-wipe.ts";
+import { resetClaims } from "../lib/orchestrator.ts";
 import { readEvents, appendEvent } from "../lib/event-log.ts";
 import { extractMarks, calculateStats, tagContent } from "../lib/authorship.ts";
 import {
@@ -78,6 +80,7 @@ import {
   updateMilestoneSchema,
   insertMilestoneSchema,
   saveContractSchema,
+  missionWipeSchema,
   updateAssertionSchema,
   triggerResearchSchema,
 } from "./schemas.ts";
@@ -111,6 +114,9 @@ export interface CreateAppOptions {
   deliver?: ComposerDeliver;
   /** Override the workspace-registry path (defaults to ~/.tmux-ide/workspaces.json). */
   registryPath?: string;
+  /** Bounce the daemon after a mission wipe (defaults to a deferred process exit;
+   *  the watchdog respawns it, so the console reconnects). Injectable for tests. */
+  bounceDaemon?: () => void;
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -144,6 +150,15 @@ export function createApp(options: CreateAppOptions = {}): Hono {
       deliverReliably(dir, session, pane, body, batchId, DEFAULT_TIMING));
 
   const registryPath = options.registryPath ?? defaultRegistryPath();
+
+  // After a mission wipe, bounce the daemon so it drops its in-memory claim lock;
+  // the watchdog respawns it (non-zero exit) and the console reconnects. Deferred
+  // so the HTTP response flushes first.
+  const bounceDaemon =
+    options.bounceDaemon ??
+    (() => {
+      setTimeout(() => process.exit(1), 300);
+    });
 
   // In-memory per-batch receipt tracker. `/send` seeds a batch and returns its id
   // immediately; the UI polls `/send/batch/:id` for live per-recipient status.
@@ -1231,6 +1246,53 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     mission.updated = new Date().toISOString();
     saveMission(session.dir, mission);
     return c.json({ ok: true, mission });
+  });
+
+  // Mission kill-switch: stand the team down, then wipe the tracker to a clean
+  // slate and bounce the daemon. `confirm` must equal the mission title.
+  app.post("/api/project/:name/mission/wipe", zValidator("json", missionWipeSchema), async (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const mission = loadMission(session.dir);
+    if (!mission) return c.json({ error: "No mission" }, 404);
+
+    const { confirm } = c.req.valid("json");
+    if (confirm !== mission.title) {
+      // Type-the-name gate: a mismatch is a no-op (nothing wiped, no bounce).
+      return c.json({ error: "Confirmation does not match the mission title", wiped: false }, 409);
+    }
+
+    // 1. Stand-down broadcast to every agent pane via the reliable-send '*' path,
+    //    before the wipe clears the messaging store. Best-effort + bounded.
+    const panes = listSessionPanes(name);
+    const targets = resolveSendTargets(panes, "*").filter(
+      (p) => getPaneBusyStatus(name, p.id) === "agent",
+    );
+    const standDown = `STAND DOWN — the operator wiped mission "${mission.title}". Stop all in-flight work; the tracker (tasks/milestones/validation) is cleared and the daemon is bouncing.`;
+    const batchId = randomUUID().slice(0, 8);
+    await Promise.all(
+      targets.map((pane) =>
+        deliver(session.dir, name, pane, standDown, batchId).catch(() => undefined),
+      ),
+    );
+
+    // 2. Operator-attributed audit entry (like the done override).
+    appendEvent(session.dir, {
+      timestamp: new Date().toISOString(),
+      type: "override",
+      agent: "operator",
+      message: `operator kill-switch: stood down ${targets.length} agent pane(s) and wiped mission "${mission.title}" (tasks/milestones/validation/claim-lock reset)`,
+    });
+
+    // 3. Native wipe (same code path as `tmux-ide mission wipe`, incl. claim-lock
+    //    reset), then bounce the daemon so it reloads the cleared state.
+    const summary = wipeMission(session.dir);
+    resetClaims(session.dir);
+    bounceDaemon();
+
+    return c.json({ ok: true, wiped: true, summary });
   });
 
   // --- Metrics endpoints ---

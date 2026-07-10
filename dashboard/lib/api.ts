@@ -254,6 +254,31 @@ export async function aggregateWorkspaces(): Promise<WorkspaceSummary[]> {
   );
 }
 
+/**
+ * Mission kill-switch. `confirm` must equal the mission title (type-the-name gate,
+ * enforced server-side too). On success the daemon bounces — the console will
+ * briefly disconnect and auto-reconnect.
+ */
+export async function stopAndWipeMission(
+  name: string,
+  confirm: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/mission/wipe`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm }),
+    });
+    if (res.ok) return { ok: true };
+    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    return { ok: false, error: data?.error ?? `HTTP ${res.status}` };
+  } catch {
+    // The daemon may bounce before the response lands — treat a dropped connection
+    // as success in flight; the console will reconnect and reflect the wiped state.
+    return { ok: true };
+  }
+}
+
 export async function fetchAssertionIds(name: string): Promise<string[]> {
   const res = await fetch(
     `${API_BASE}/api/project/${encodeURIComponent(name)}/validation/assertions`,

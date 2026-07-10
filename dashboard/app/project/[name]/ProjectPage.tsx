@@ -29,6 +29,7 @@ import { ComposerDock } from "@/components/ComposerDock";
 import { MilestonesEditor } from "@/components/MilestonesEditor";
 import { ContractEditor } from "@/components/ContractEditor";
 import { FederationView } from "@/components/FederationView";
+import { MissionWipeDialog } from "@/components/MissionWipeDialog";
 import type { ProjectDetail } from "@/lib/types";
 
 type Tab =
@@ -59,6 +60,7 @@ export default function ProjectPage() {
   // the build-time placeholder "__fallback" in static exports)
   const name = decodeURIComponent(pathname.replace(/^\/project\//, "").replace(/\/$/, ""));
   const [activeTab, setActiveTab] = useState<Tab>("kanban");
+  const [showWipe, setShowWipe] = useState(false);
 
   const fetcher = useCallback(() => fetchProject(name) as Promise<ProjectDetail | null>, [name]);
   const {
@@ -81,7 +83,10 @@ export default function ProjectPage() {
   const skillsFetcher = useCallback(() => fetchSkills(name), [name]);
   const { data: skills } = usePolling<SkillData[]>(skillsFetcher, 10000);
 
-  if (error) {
+  // Only hard-fail when we've never connected. A transient error while we still
+  // hold prior data (e.g. the daemon bouncing after a mission wipe) keeps the
+  // last-known UI and auto-reconnects on the next poll — no error screen.
+  if (error && !project) {
     return (
       <div className="h-screen flex items-center justify-center text-[var(--red)]">
         failed to load project
@@ -129,8 +134,29 @@ export default function ProjectPage() {
             <span className="text-[var(--green)]">{doneTasks}</span>/{totalTasks} tasks
           </span>
           <ProgressBar percent={pct} width={10} />
+          {project.mission && (
+            <button
+              onClick={() => setShowWipe(true)}
+              className="text-[var(--red)] border border-[var(--border)] hover:border-[var(--red)] px-2 py-0.5 transition-colors"
+              title="Stop & wipe mission"
+            >
+              stop &amp; wipe
+            </button>
+          )}
         </div>
       </div>
+
+      {showWipe && project.mission && (
+        <MissionWipeDialog
+          sessionName={project.session}
+          missionTitle={project.mission.title}
+          onClose={() => setShowWipe(false)}
+          onWiped={() => {
+            setShowWipe(false);
+            refresh();
+          }}
+        />
+      )}
 
       {/* Agents bar */}
       {project.agents.length > 0 && (

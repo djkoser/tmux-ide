@@ -35,6 +35,13 @@ export const saveContractSchema = z.object({
   content: z.string(),
 });
 
+// Mission kill-switch. `confirm` must equal the mission title (the type-the-name
+// gate is enforced server-side too, not just in the dialog) so a stray API call
+// can't wipe the tracker.
+export const missionWipeSchema = z.object({
+  confirm: z.string(),
+});
+
 export const sendCommandSchema = z.object({
   target: z.string().min(1, "Target pane is required"),
   message: z.string().min(1, "Message is required"),
