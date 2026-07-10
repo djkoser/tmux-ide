@@ -55,6 +55,7 @@ const { positionals, values } = parseArgs({
     summary: { type: "string" },
     sequence: { type: "string" },
     evidence: { type: "string" },
+    max: { type: "string" },
     port: { type: "string" },
     // tunnel command flags
     provider: { type: "string" },
@@ -387,6 +388,7 @@ try {
           milestone: values.milestone,
           fulfills: values.fulfills,
           summary: values.summary,
+          max: values.max,
         },
       });
       break;

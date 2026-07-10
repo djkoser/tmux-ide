@@ -15,6 +15,7 @@ import {
   loadTask,
   saveTask,
   deleteTask,
+  reopenTask,
   nextTaskId,
   loadTasksForGoal,
   detectCycle,
@@ -91,6 +92,7 @@ interface TaskCommandValues {
   summary?: string;
   sequence?: string;
   evidence?: string;
+  max?: string;
 }
 
 export async function taskCommand(
@@ -1104,6 +1106,27 @@ function handleTask(
         console.log(JSON.stringify(task, null, 2));
       } else {
         console.log(`Task ${id} unassigned, status reset to todo: ${task.title}`);
+      }
+      break;
+    }
+    case "reopen": {
+      const id = args[0];
+      if (!id) outputError("Usage: tmux-ide task reopen <id> [--max <n>]", "USAGE");
+      const maxOverride = values.max ? parseInt(values.max, 10) : undefined;
+      const result = reopenTask(dir, id, maxOverride);
+      if (!result) outputError(`Task ${id} not found. Run: tmux-ide task list`, "NOT_FOUND");
+      const { action, task, retryCount, maxRetries } = result!;
+      const assignee = task.assignee ?? "UNASSIGNED";
+      if (json) {
+        console.log(JSON.stringify({ action, retryCount, maxRetries, task }, null, 2));
+      } else if (action === "escalate") {
+        console.log(
+          `ESCALATE task ${id}: retry cap (${maxRetries}) reached — left in '${task.status}' for the Lead (assignee ${assignee}). No further auto-bounce.`,
+        );
+      } else {
+        console.log(
+          `REOPEN task ${id} -> todo (assignee ${assignee} preserved, lastError cleared, retry ${retryCount}/${maxRetries}).`,
+        );
       }
       break;
     }

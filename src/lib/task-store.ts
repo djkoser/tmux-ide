@@ -311,6 +311,46 @@ export function deleteTask(dir: string, id: string): boolean {
   return true;
 }
 
+export type ReopenAction = "reopen" | "escalate";
+
+export interface ReopenResult {
+  action: ReopenAction;
+  task: Task;
+  retryCount: number;
+  maxRetries: number;
+}
+
+/**
+ * Reopen a task after a failed review, preserving ownership.
+ *
+ * Increments retryCount and clears lastError + nextRetryAt (so the daemon's
+ * in-progress→review completion path does not fire a second retry that would
+ * strip the assignee and misroute the worktree). Under the retry cap the task
+ * returns to `todo` with its assignee intact; at/over the cap it is left in
+ * `review` for manual escalation. Returns null if the task does not exist.
+ */
+export function reopenTask(dir: string, id: string, maxOverride?: number): ReopenResult | null {
+  const task = loadTask(dir, id);
+  if (!task) return null;
+
+  const maxRetries = maxOverride ?? task.maxRetries ?? 5;
+  const retryCount = (task.retryCount ?? 0) + 1;
+
+  task.retryCount = retryCount;
+  task.lastError = null;
+  task.nextRetryAt = null;
+  task.updated = new Date().toISOString();
+
+  const action: ReopenAction = retryCount >= maxRetries ? "escalate" : "reopen";
+  if (action === "reopen") {
+    task.status = "todo"; // assignee deliberately preserved
+  }
+  // escalate: leave status ("review") and assignee untouched
+
+  saveTask(dir, task);
+  return { action, task, retryCount, maxRetries };
+}
+
 export function loadTasksForGoal(dir: string, goalId: string): Task[] {
   return loadTasks(dir).filter((t) => t.goal === goalId);
 }
