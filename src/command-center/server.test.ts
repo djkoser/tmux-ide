@@ -12,7 +12,7 @@ import {
   type Task,
 } from "../lib/task-store.ts";
 import { saveValidationState } from "../lib/validation.ts";
-import { appendEvent } from "../lib/event-log.ts";
+import { appendEvent, readEvents } from "../lib/event-log.ts";
 import { loadResearchState, saveResearchState } from "../lib/research.ts";
 import { _setExecutor, type PaneInfo } from "../widgets/lib/pane-comms.ts";
 import { _setTmuxRunner } from "./discovery.ts";
@@ -160,6 +160,47 @@ describe("POST /api/project/:name/task/:id", () => {
       body: JSON.stringify({ status: "invalid-status" }),
     });
     expect(res.status).toBe(400);
+  });
+
+  it("operator override marks a review task done and logs an override event", async () => {
+    saveTask(tmpDir, makeTask({ id: "001", status: "review" }));
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/task/001", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "done", override: true }),
+    });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { task: Task }).task.status).toBe("done");
+    const overrideEvents = readEvents(tmpDir).filter((e) => e.type === "override");
+    expect(overrideEvents.length).toBe(1);
+    expect(overrideEvents[0]!.message).toContain("001");
+  });
+
+  it("refuses a non-override done from review with the reviewer reason (409)", async () => {
+    saveTask(tmpDir, makeTask({ id: "001", status: "review" }));
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/task/001", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "done" }),
+    });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toContain("validator/reviewer");
+    expect(loadTask(tmpDir, "001")?.status).toBe("review");
+    expect(readEvents(tmpDir).filter((e) => e.type === "override").length).toBe(0);
+  });
+
+  it("refuses a non-override done that skips review with the review reason (409)", async () => {
+    saveTask(tmpDir, makeTask({ id: "001", status: "todo" }));
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/task/001", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "done" }),
+    });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toContain("must be in 'review'");
   });
 });
 

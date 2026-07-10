@@ -80,6 +80,8 @@ export async function fetchEvents(name: string): Promise<EventData[]> {
   return data.events;
 }
 
+export type UpdateTaskResult = { ok: true; task: Task } | { ok: false; error: string };
+
 export async function updateTask(
   sessionName: string,
   taskId: string,
@@ -89,8 +91,9 @@ export async function updateTask(
     title?: string;
     description?: string;
     priority?: number;
+    override?: boolean;
   },
-): Promise<Task | null> {
+): Promise<UpdateTaskResult> {
   const res = await fetch(
     `${API_BASE}/api/project/${encodeURIComponent(sessionName)}/task/${encodeURIComponent(taskId)}`,
     {
@@ -99,9 +102,15 @@ export async function updateTask(
       body: JSON.stringify(fields),
     },
   );
-  if (!res.ok) return null;
-  const data = (await res.json()) as { ok: boolean; task: Task };
-  return data.task;
+  const data = (await res.json().catch(() => null)) as
+    | { ok: boolean; task: Task }
+    | { error: string }
+    | null;
+  if (!res.ok || !data || !("task" in data)) {
+    // Surface the refusal reason (e.g. the review-flow guard) — never a silent no-op.
+    return { ok: false, error: data && "error" in data ? data.error : `HTTP ${res.status}` };
+  }
+  return { ok: true, task: data.task };
 }
 
 export interface CreateTaskFields {

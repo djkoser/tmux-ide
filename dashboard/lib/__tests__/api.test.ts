@@ -167,18 +167,28 @@ describe("updateTask", () => {
     const { updateTask } = await import("../api");
     const result = await updateTask("session", "001", { status: "in-progress" });
 
-    expect(result).not.toBeNull();
-    expect(result!.id).toBe("001");
-    expect(result!.status).toBe("in-progress");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.task.id).toBe("001");
+      expect(result.task.status).toBe("in-progress");
+    }
   });
 
-  it("returns null on failure", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
+  it("surfaces the refusal reason on a 409 (no silent no-op)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 409,
+        json: () => Promise.resolve({ error: "Only the validator/reviewer may mark a task done" }),
+      }),
+    );
 
     const { updateTask } = await import("../api");
     const result = await updateTask("session", "001", { status: "done" });
 
-    expect(result).toBeNull();
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("validator/reviewer");
   });
 });
 

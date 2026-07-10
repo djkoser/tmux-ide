@@ -6,6 +6,10 @@ export const updateTaskSchema = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
   priority: z.number().optional(),
+  // Human-operator override for the review-flow gate (VAL-017). The console is a
+  // human surface with no reviewer @ide_role, so marking a task done requires this
+  // explicit flag; it logs an `override` event. Agents/CLI never set it.
+  override: z.boolean().optional(),
 });
 
 export const createTaskSchema = z.object({

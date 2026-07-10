@@ -124,6 +124,7 @@ export function KanbanBoard({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [overColumn, setOverColumn] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [dragError, setDragError] = useState("");
 
   const selectedTask = selectedTaskId ? (tasks.find((t) => t.id === selectedTaskId) ?? null) : null;
 
@@ -160,12 +161,29 @@ export function KanbanBoard({
     if (!task || task.status === newStatus) return;
     if (!COLUMNS.some((c) => c.status === newStatus)) return;
 
-    await updateTask(sessionName, taskId, { status: newStatus });
-    onRefresh();
+    setDragError("");
+    // A drag to `done` hits the review-flow gate (VAL-017): the console operator
+    // isn't a reviewer, so it's refused with a reason — use a task's mark-done
+    // button (operator override) instead. Surface the reason, never fail silently.
+    const r = await updateTask(sessionName, taskId, { status: newStatus });
+    if (r.ok) onRefresh();
+    else setDragError(`${taskId}: ${r.error}`);
   }
 
   return (
     <>
+      {dragError && (
+        <div className="flex items-center justify-between px-3 py-1 text-[11px] text-[var(--red)] bg-[var(--surface)] border border-[var(--red)]">
+          <span>{dragError}</span>
+          <button
+            type="button"
+            onClick={() => setDragError("")}
+            className="text-[var(--dim)] hover:text-[var(--fg)]"
+          >
+            ×
+          </button>
+        </div>
+      )}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}

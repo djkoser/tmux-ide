@@ -43,30 +43,57 @@ export function TaskDetail({
   const [editDesc, setEditDesc] = useState(t.description);
   const [editPriority, setEditPriority] = useState(t.priority);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmDone, setConfirmDone] = useState(false);
+  const [error, setError] = useState("");
 
   async function changeStatus(status: string) {
+    // done is the review-flow gate (VAL-017): route it through the operator-override
+    // confirm rather than transitioning silently.
+    if (status === "done") {
+      setConfirmDone(true);
+      return;
+    }
     setSaving(true);
-    await updateTask(sessionName, t.id, { status });
-    onUpdated();
+    setError("");
+    const r = await updateTask(sessionName, t.id, { status });
     setSaving(false);
+    if (r.ok) onUpdated();
+    else setError(r.error);
+  }
+
+  async function confirmMarkDone() {
+    setSaving(true);
+    setError("");
+    const r = await updateTask(sessionName, t.id, { status: "done", override: true });
+    setSaving(false);
+    setConfirmDone(false);
+    if (r.ok) onUpdated();
+    else setError(r.error);
   }
 
   async function changeAssignee(assignee: string) {
     setSaving(true);
-    await updateTask(sessionName, t.id, { assignee: assignee || undefined });
-    onUpdated();
+    setError("");
+    const r = await updateTask(sessionName, t.id, { assignee: assignee || undefined });
     setSaving(false);
+    if (r.ok) onUpdated();
+    else setError(r.error);
   }
 
   async function handleSaveEdit() {
     setSaving(true);
-    await updateTask(sessionName, t.id, {
+    setError("");
+    const r = await updateTask(sessionName, t.id, {
       title: editTitle.trim(),
       description: editDesc.trim(),
       priority: editPriority,
     });
-    onUpdated();
     setSaving(false);
+    if (!r.ok) {
+      setError(r.error);
+      return;
+    }
+    onUpdated();
     setEditing(false);
   }
 
@@ -201,6 +228,39 @@ export function TaskDetail({
                   </button>
                 ))}
               </div>
+
+              {/* Operator-override confirm for marking done (VAL-017 human override). */}
+              {confirmDone && (
+                <div className="mt-2 p-2 border border-[var(--yellow)] bg-[var(--surface)] text-[12px] space-y-2">
+                  <div className="text-[var(--fg)]">
+                    Mark {t.id} done as a human operator? This BYPASSES the reviewer gate.
+                  </div>
+                  <div className="text-[var(--dim)]">
+                    {t.status === "review"
+                      ? "This task is mid-review — the reviewer has not signed off."
+                      : `This task is '${t.status}', not in review — you are forcing it straight to done.`}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={confirmMarkDone}
+                      className="px-2 py-0.5 text-[var(--bg)] bg-[var(--yellow)] hover:opacity-90 disabled:opacity-50"
+                    >
+                      {saving ? "…" : "override & mark done"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDone(false)}
+                      className="px-2 py-0.5 text-[var(--dim)] border border-[var(--border)]"
+                    >
+                      cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {error && <div className="mt-2 text-[var(--red)] text-[11px]">{error}</div>}
             </div>
           )}
 

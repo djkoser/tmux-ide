@@ -35,8 +35,10 @@ import {
   loadMission,
   saveMission,
   loadTasks,
+  loadTask,
   type Task,
 } from "../lib/task-store.ts";
+import { canMarkDone } from "../lib/review-flow.ts";
 import { readEvents, appendEvent } from "../lib/event-log.ts";
 import { extractMarks, calculateStats, tagContent } from "../lib/authorship.ts";
 import {
@@ -293,8 +295,31 @@ export function createApp(options: CreateAppOptions = {}): Hono {
       return c.json({ error: "Session not found" }, 404);
     }
 
-    const body = c.req.valid("json");
-    const updated = updateTask(session.dir, taskId, body);
+    const { override, ...fields } = c.req.valid("json");
+
+    // Review-flow gate (VAL-017): done is reachable only from review by a
+    // reviewer, OR via an explicit human-operator override. The console has no
+    // reviewer @ide_role, so a done transition here needs override=true; a
+    // refusal returns its reason (the UI renders it — no silent dead button).
+    if (fields.status === "done") {
+      const task = loadTask(session.dir, taskId);
+      if (!task) return c.json({ error: "Task not found" }, 404);
+      const guard = canMarkDone(task, { name: "operator", role: null }, override ?? false);
+      if (!guard.ok) {
+        return c.json({ error: guard.error }, 409);
+      }
+      if (override) {
+        appendEvent(session.dir, {
+          timestamp: new Date().toISOString(),
+          type: "override",
+          taskId,
+          agent: "operator",
+          message: `operator override: marked ${taskId} done, bypassing the reviewer gate (was '${task.status}')`,
+        });
+      }
+    }
+
+    const updated = updateTask(session.dir, taskId, fields);
     if (!updated) {
       return c.json({ error: "Task not found" }, 404);
     }
