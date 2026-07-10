@@ -1,12 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  createMilestone,
-  updateMilestone,
-  insertMilestone,
-  type MilestoneData,
-} from "@/lib/api";
+import { createMilestone, updateMilestone, insertMilestone, type MilestoneData } from "@/lib/api";
 
 interface MilestonesEditorProps {
   sessionName: string;

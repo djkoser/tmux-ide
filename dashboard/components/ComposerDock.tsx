@@ -1,12 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import {
-  sendToTargets,
-  fetchSendBatch,
-  type SendRecipient,
-  type ReceiptStatus,
-} from "@/lib/api";
+import { sendToTargets, fetchSendBatch, type SendRecipient, type ReceiptStatus } from "@/lib/api";
 
 interface ComposerDockProps {
   sessionName: string;

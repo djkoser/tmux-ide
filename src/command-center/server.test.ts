@@ -300,8 +300,24 @@ describe("POST /api/project/:name/milestones/insert (renumber + cascade)", () =>
       description: "",
       status: "active",
       milestones: [
-        { id: "M1", title: "One", description: "", status: "active", order: 1, created: "", updated: "" },
-        { id: "M2", title: "Two", description: "", status: "locked", order: 2, created: "", updated: "" },
+        {
+          id: "M1",
+          title: "One",
+          description: "",
+          status: "active",
+          order: 1,
+          created: "",
+          updated: "",
+        },
+        {
+          id: "M2",
+          title: "Two",
+          description: "",
+          status: "locked",
+          order: 2,
+          created: "",
+          updated: "",
+        },
       ],
       created: "",
       updated: "",
@@ -367,7 +383,10 @@ describe("POST /api/project/:name/validation/contract (text editor + I5)", () =>
   });
 
   it("rejects dropping an assertion a task still claims (409)", async () => {
-    writeFileSync(join(tmpDir, ".tasks", "validation-contract.md"), "- **VAL-A** a\n- **VAL-B** b\n");
+    writeFileSync(
+      join(tmpDir, ".tasks", "validation-contract.md"),
+      "- **VAL-A** a\n- **VAL-B** b\n",
+    );
     saveTask(tmpDir, makeTask({ id: "001", fulfills: ["VAL-B"] }));
     const app = createApp();
     const res = await app.request("/api/project/test-project/validation/contract", {
@@ -429,7 +448,9 @@ describe("POST /api/project/:name/send (composer)", () => {
   });
 
   it("pastes directly (no reliable delivery) to a non-agent pane", async () => {
-    mockPanes = [makePane({ id: "%2", title: "team-input", name: "team-input", currentCommand: "zsh" })];
+    mockPanes = [
+      makePane({ id: "%2", title: "team-input", name: "team-input", currentCommand: "zsh" }),
+    ];
     let delivered = false;
     const app = createApp({
       deliver: async () => {

@@ -202,7 +202,9 @@ export async function insertMilestone(
 }
 
 export async function fetchContract(name: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/validation/contract`);
+  const res = await fetch(
+    `${API_BASE}/api/project/${encodeURIComponent(name)}/validation/contract`,
+  );
   if (!res.ok) return "";
   const data = (await res.json()) as { content: string };
   return data.content ?? "";
@@ -212,16 +214,24 @@ export async function saveContract(
   name: string,
   content: string,
 ): Promise<{ ok: boolean; error?: string; stillClaimed?: Record<string, string[]> }> {
-  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/validation/contract`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content }),
-  });
+  const res = await fetch(
+    `${API_BASE}/api/project/${encodeURIComponent(name)}/validation/contract`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    },
+  );
   if (res.ok) return { ok: true };
-  const data = (await res.json().catch(() => null)) as
-    | { error?: string; stillClaimed?: Record<string, string[]> }
-    | null;
-  return { ok: false, error: data?.error ?? `HTTP ${res.status}`, stillClaimed: data?.stillClaimed };
+  const data = (await res.json().catch(() => null)) as {
+    error?: string;
+    stillClaimed?: Record<string, string[]>;
+  } | null;
+  return {
+    ok: false,
+    error: data?.error ?? `HTTP ${res.status}`,
+    stillClaimed: data?.stillClaimed,
+  };
 }
 
 export type ReceiptStatus = "retrying" | "delivered" | "duplicate" | "superseded" | "failed";
