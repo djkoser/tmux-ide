@@ -100,6 +100,7 @@ export const EventTypeSchemaZ = z.enum([
   "milestone_complete",
   "validation_dispatch",
   "review_dispatch",
+  "override",
   "remediation",
   "validation_failed",
   "planning",
@@ -357,7 +358,7 @@ export const PaneInfoSchemaZ = z.object({
   height: z.number(),
   active: z.boolean(),
   role: z
-    .enum(["lead", "teammate", "planner", "validator", "researcher", "widget", "shell"])
+    .enum(["lead", "teammate", "planner", "validator", "reviewer", "researcher", "widget", "shell"])
     .nullable(),
   name: z.string().nullable(),
   type: z.string().nullable(),

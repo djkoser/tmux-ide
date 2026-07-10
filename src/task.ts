@@ -37,6 +37,8 @@ import { listSessionPanes } from "./widgets/lib/pane-comms.ts";
 import { dispatchResearch, loadResearchState, type ResearchTrigger } from "./lib/research.ts";
 import { type OrchestratorState } from "./lib/orchestrator.ts";
 import { wipeMission } from "./lib/mission-wipe.ts";
+import { canMarkDone, canReopen, type TransitionActor } from "./lib/review-flow.ts";
+import { appendEvent } from "./lib/event-log.ts";
 
 export function parseProof(raw: string, existing: ProofSchema | null): ProofSchema {
   // Try parsing as JSON first
@@ -97,6 +99,7 @@ interface TaskCommandValues {
   hard?: boolean;
   includePlans?: boolean;
   dryRun?: boolean;
+  override?: boolean;
 }
 
 export async function taskCommand(
@@ -142,6 +145,24 @@ function emptyOrchestratorState(): OrchestratorState {
     claimedTasks: new Set(),
     taskClaimTimes: new Map(),
   };
+}
+
+/**
+ * Identify the actor invoking a transition from the current tmux pane, reading
+ * its @ide_role/@ide_name. Returns null role when not run inside a known pane
+ * (scripts, CI) — such callers must pass --override to force a gated transition.
+ */
+function resolveActor(dir: string): TransitionActor {
+  const paneId = process.env.TMUX_PANE;
+  if (!paneId) return { name: null, role: null };
+  try {
+    const { name: session } = getSessionName(dir);
+    const pane = listSessionPanes(session).find((p) => p.id === paneId);
+    if (pane) return { name: pane.name ?? pane.title, role: pane.role };
+  } catch {
+    // Not resolvable — treat as an unidentified actor.
+  }
+  return { name: null, role: null };
 }
 
 function handleResearch(dir: string, sub: string | undefined, args: string[], json: boolean): void {
@@ -968,6 +989,23 @@ function handleTask(
       if (!id) outputError("Usage: tmux-ide task update <id>", "USAGE");
       const task = loadTask(dir, id);
       if (!task) outputError(`Task ${id} not found`, "NOT_FOUND");
+      if (values.status === "done") {
+        // Same review-flow gate as `task done`: done is reachable only from
+        // review, and only by a validator/reviewer actor (or an override).
+        const actor = resolveActor(dir);
+        const override = values.override ?? false;
+        const guard = canMarkDone(task, actor, override);
+        if (!guard.ok) outputError(guard.error!, "FORBIDDEN");
+        if (override) {
+          appendEvent(dir, {
+            timestamp: new Date().toISOString(),
+            type: "override",
+            taskId: id,
+            agent: actor.name ?? "operator",
+            message: `OVERRIDE: ${actor.name ?? "operator"} (role ${actor.role ?? "none"}) forced task ${id} '${task.status}' -> done`,
+          });
+        }
+      }
       if (values.status) task.status = values.status as Task["status"];
       if (values.assign) task.assignee = values.assign;
       if (values.description) task.description = values.description;
@@ -1001,6 +1039,19 @@ function handleTask(
       if (!id) outputError("Usage: tmux-ide task done <id>", "USAGE");
       const task = loadTask(dir, id);
       if (!task) outputError(`Task ${id} not found`, "NOT_FOUND");
+      const actor = resolveActor(dir);
+      const override = values.override ?? false;
+      const guard = canMarkDone(task, actor, override);
+      if (!guard.ok) outputError(guard.error!, "FORBIDDEN");
+      if (override) {
+        appendEvent(dir, {
+          timestamp: new Date().toISOString(),
+          type: "override",
+          taskId: id,
+          agent: actor.name ?? "operator",
+          message: `OVERRIDE: ${actor.name ?? "operator"} (role ${actor.role ?? "none"}) forced task ${id} '${task.status}' -> done`,
+        });
+      }
       task.status = "done";
       if (values.proof) task.proof = parseProof(values.proof, task.proof);
       if (values.summary) task.salientSummary = values.summary;
@@ -1142,6 +1193,19 @@ function handleTask(
     case "reopen": {
       const id = args[0];
       if (!id) outputError("Usage: tmux-ide task reopen <id> [--max <n>]", "USAGE");
+      const actor = resolveActor(dir);
+      const override = values.override ?? false;
+      const guard = canReopen(actor, override);
+      if (!guard.ok) outputError(guard.error!, "FORBIDDEN");
+      if (override) {
+        appendEvent(dir, {
+          timestamp: new Date().toISOString(),
+          type: "override",
+          taskId: id,
+          agent: actor.name ?? "operator",
+          message: `OVERRIDE: ${actor.name ?? "operator"} (role ${actor.role ?? "none"}) forced reopen of task ${id}`,
+        });
+      }
       const maxOverride = values.max ? parseInt(values.max, 10) : undefined;
       const result = reopenTask(dir, id, maxOverride);
       if (!result) outputError(`Task ${id} not found. Run: tmux-ide task list`, "NOT_FOUND");

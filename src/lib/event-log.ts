@@ -28,6 +28,7 @@ export type EventType =
   | "milestone_complete"
   | "validation_dispatch"
   | "review_dispatch"
+  | "override"
   | "remediation"
   | "validation_failed"
   | "planning"

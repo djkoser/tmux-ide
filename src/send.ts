@@ -157,7 +157,7 @@ interface SendOptions {
 }
 
 /** Roles that mark a pane as an addressable agent (excludes widget/shell/untyped panes like the input REPL). */
-const AGENT_ROLES = new Set(["lead", "teammate", "planner", "validator", "researcher"]);
+const AGENT_ROLES = new Set(["lead", "teammate", "planner", "validator", "reviewer", "researcher"]);
 
 /** A target containing glob metacharacters fans out to every matching agent pane. */
 export function isWildcardTarget(target: string): boolean {

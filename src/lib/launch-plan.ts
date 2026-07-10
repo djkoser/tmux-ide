@@ -33,7 +33,11 @@ export function collectPaneStartupPlan(
         paneRole = "lead";
       } else if (pane.role === "teammate" || pane.role === "planner") {
         paneRole = "teammate";
-      } else if (pane.role === "validator" || pane.role === "researcher") {
+      } else if (
+        pane.role === "validator" ||
+        pane.role === "reviewer" ||
+        pane.role === "researcher"
+      ) {
         paneRole = pane.role;
       } else if (pane.type) {
         paneRole = "widget";

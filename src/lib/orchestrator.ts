@@ -58,6 +58,7 @@ import {
   type PaneInfo,
 } from "../widgets/lib/pane-comms.ts";
 import { appendEvent, readEvents, type OrchestratorEvent } from "./event-log.ts";
+import { isReviewerRole } from "./review-flow.ts";
 import { loadSkill } from "./skill-registry.ts";
 import { isGhAvailable, createMissionPr } from "./github-pr.ts";
 import { computeAndSaveMetrics, appendMissionHistory } from "./metrics.ts";
@@ -496,9 +497,9 @@ export function dispatchValidation(
   completedTasks: Task[],
   panes: PaneInfo[],
 ): boolean {
-  // Find validator pane, fall back to any idle non-lead agent
+  // Find validator/reviewer pane, fall back to any idle non-lead agent
   const validatorPane =
-    panes.find((p) => p.role === "validator" && isIdleForDispatch(p)) ??
+    panes.find((p) => isReviewerRole(p.role) && isIdleForDispatch(p)) ??
     panes.find((p) => {
       if (p.role === "lead") return false;
       if (config.masterPane && normalizePaneTitle(p.title) === config.masterPane) return false;
@@ -606,7 +607,7 @@ export function dispatchReviews(
   }
   if (reviewTasks.length === 0) return;
 
-  const validatorPane = panes.find((p) => p.role === "validator");
+  const validatorPane = panes.find((p) => isReviewerRole(p.role));
   if (!validatorPane || !isIdleForDispatch(validatorPane)) return;
 
   const dispatchDir = join(config.dir, ".tasks", "dispatch");

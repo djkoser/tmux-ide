@@ -59,6 +59,7 @@ const { positionals, values } = parseArgs({
     hard: { type: "boolean" },
     "include-plans": { type: "boolean" },
     "dry-run": { type: "boolean" },
+    override: { type: "boolean" },
     out: { type: "string" },
     port: { type: "string" },
     // tunnel command flags
@@ -401,6 +402,7 @@ try {
           fulfills: values.fulfills,
           summary: values.summary,
           max: values.max,
+          override: values.override,
         },
       });
       break;
