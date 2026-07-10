@@ -8,7 +8,12 @@ import {
   isWildcardTarget,
   resolvePanesByWildcard,
   resolveSendTargets,
+  buildRecvTrigger,
+  deliverReliably,
+  type ReliableSendTiming,
+  type DeliveryDeps,
 } from "./send.ts";
+import { receiveMessage, readReceipt } from "./lib/messaging.ts";
 import type { PaneInfo } from "./widgets/lib/pane-comms.ts";
 
 let tmpDir: string;
@@ -170,5 +175,150 @@ describe("resolveSendTargets", () => {
   it("returns empty for unknown exact names and unmatched globs", () => {
     expect(resolveSendTargets(TEAM_PANES, "nope")).toEqual([]);
     expect(resolveSendTargets(TEAM_PANES, "nope*")).toEqual([]);
+  });
+});
+
+const FAST_TIMING: ReliableSendTiming = {
+  timeoutMs: 100,
+  retryIntervalMs: 20,
+  pollIntervalMs: 10,
+  maxRetries: 2,
+};
+
+function agentPane(id: string, name: string): PaneInfo {
+  return {
+    id,
+    index: 0,
+    title: name,
+    currentCommand: "claude",
+    width: 100,
+    height: 40,
+    active: false,
+    role: "teammate",
+    name,
+    type: "agent",
+  };
+}
+
+describe("buildRecvTrigger", () => {
+  it("produces a short single-line trigger carrying the msg id", () => {
+    const t = buildRecvTrigger("abc-123");
+    expect(t).toContain("tmux-ide recv abc-123");
+    expect(t.length).toBeLessThan(200);
+    expect(t.includes("\n")).toBe(false);
+  });
+});
+
+describe("deliverReliably", () => {
+  it("delivers on the first attempt when the recipient acks (recv writes a receipt)", async () => {
+    // Faithful simulation: the paste handler extracts the msg id and runs recv,
+    // exactly as an agent pane would, which writes the receipt.
+    const pastes: string[] = [];
+    const deps: DeliveryDeps = {
+      paste: (_s, _p, trigger) => {
+        pastes.push(trigger);
+        const id = trigger.split(" ").pop()!;
+        receiveMessage(tmpDir, id);
+      },
+      receiptStatus: (dir, msgId) => readReceipt(dir, msgId)?.status ?? null,
+      sleep: async () => {},
+    };
+
+    const res = await deliverReliably(
+      tmpDir,
+      "sess",
+      agentPane("%2", "cw3"),
+      "do the thing",
+      undefined,
+      FAST_TIMING,
+      deps,
+    );
+    expect(res.outcome).toBe("delivered");
+    expect(res.attempts).toBe(1);
+    expect(pastes.length).toBe(1);
+    expect(readReceipt(tmpDir, res.msgId)!.status).toBe("delivered");
+  });
+
+  it("retries with bounded attempts then surfaces failure for a non-receiving pane", async () => {
+    const pastes: string[] = [];
+    const deps: DeliveryDeps = {
+      paste: (_s, _p, trigger) => pastes.push(trigger), // never acks
+      receiptStatus: () => null,
+      sleep: async () => {},
+    };
+
+    const res = await deliverReliably(
+      tmpDir,
+      "sess",
+      agentPane("%2", "cw3"),
+      "unreachable",
+      undefined,
+      FAST_TIMING,
+      deps,
+    );
+    expect(res.outcome).toBe("failed");
+    // initial paste + maxRetries re-pastes
+    expect(pastes.length).toBe(FAST_TIMING.maxRetries + 1);
+    expect(res.attempts).toBe(FAST_TIMING.maxRetries + 1);
+  });
+
+  it("re-pastes and succeeds when the ack lands after the first window", async () => {
+    let polls = 0;
+    const pastes: string[] = [];
+    const deps: DeliveryDeps = {
+      paste: (_s, _p, trigger) => pastes.push(trigger),
+      receiptStatus: () => (++polls >= 4 ? "delivered" : null),
+      sleep: async () => {},
+    };
+
+    const res = await deliverReliably(
+      tmpDir,
+      "sess",
+      agentPane("%2", "cw3"),
+      "eventually",
+      undefined,
+      FAST_TIMING,
+      deps,
+    );
+    expect(res.outcome).toBe("delivered");
+    expect(pastes.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("surfaces a superseded outcome (stale directive) without failing", async () => {
+    const deps: DeliveryDeps = {
+      paste: () => {},
+      receiptStatus: () => "superseded",
+      sleep: async () => {},
+    };
+    const res = await deliverReliably(
+      tmpDir,
+      "sess",
+      agentPane("%2", "cw3"),
+      "stale",
+      undefined,
+      FAST_TIMING,
+      deps,
+    );
+    expect(res.outcome).toBe("superseded");
+  });
+
+  it("reports per-recipient outcomes across a wildcard fan-out (some ack, some fail)", async () => {
+    // cw3 acks; cw4 never does. Mirrors send()'s per-recipient fan-out reporting.
+    const deps: DeliveryDeps = {
+      paste: (_s, paneId, trigger) => {
+        if (paneId === "%2") receiveMessage(tmpDir, trigger.split(" ").pop()!);
+      },
+      receiptStatus: (dir, msgId) => readReceipt(dir, msgId)?.status ?? null,
+      sleep: async () => {},
+    };
+    const batchId = "batch01";
+    const results = await Promise.all(
+      [agentPane("%2", "cw3"), agentPane("%3", "cw4")].map((p) =>
+        deliverReliably(tmpDir, "sess", p, "fan-out", batchId, FAST_TIMING, deps),
+      ),
+    );
+    const byName = Object.fromEntries(results.map((r) => [r.pane.name, r.outcome]));
+    expect(byName.cw3).toBe("delivered");
+    expect(byName.cw4).toBe("failed");
   });
 });

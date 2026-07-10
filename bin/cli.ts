@@ -69,6 +69,7 @@ const { positionals, values } = parseArgs({
     // send command flags
     to: { type: "string" },
     "no-enter": { type: "boolean" },
+    "fire-and-forget": { type: "boolean" },
   },
 });
 
@@ -95,6 +96,7 @@ const knownCommands = new Set([
   "metrics",
   "setup",
   "send",
+  "recv",
   "dispatch",
   "notify",
   "orchestrator",
@@ -449,7 +451,19 @@ try {
         const { readFileSync } = await import("node:fs");
         message = readFileSync(0, "utf-8").trim();
       }
-      await send(null, { json, to: target, message, noEnter: values["no-enter"] });
+      await send(null, {
+        json,
+        to: target,
+        message,
+        noEnter: values["no-enter"],
+        fireAndForget: values["fire-and-forget"],
+      });
+      break;
+    }
+
+    case "recv": {
+      const { recv } = await import("../src/recv.ts");
+      await recv(null, { json, msgId: positionals[1] });
       break;
     }
 

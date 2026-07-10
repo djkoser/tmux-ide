@@ -205,3 +205,55 @@ export function captureLastLine(paneId: string): string {
     return "";
   }
 }
+
+/** Capture the last `lines` rows of a pane (best-effort; "" on failure). */
+export function captureTail(paneId: string, lines = 6): string {
+  try {
+    return _executor("tmux", ["capture-pane", "-t", paneId, "-p", "-S", `-${lines}`], {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return "";
+  }
+}
+
+export type PaneReadiness = "idle" | "busy" | "unknown";
+
+/**
+ * Markers a Claude/Codex TUI prints while actively working. Their presence in
+ * the pane tail means a paste now would likely be dropped or land in a preview
+ * buffer. Absence is not a firm idle signal (TUIs vary), so the caller treats
+ * "unknown" as "may paste, but rely on receipt/retry for correctness".
+ */
+const AGENT_BUSY_MARKERS = [
+  "esc to interrupt",
+  "tokens)",
+  "⠋",
+  "⠙",
+  "⠹",
+  "⠸",
+  "⠼",
+  "⠴",
+  "⠦",
+  "⠧",
+  "⠇",
+  "⠏",
+];
+
+/**
+ * Best-effort readiness of a pane for receiving a paste. Shell panes at a
+ * prompt are "idle"; an agent pane showing a working marker is "busy";
+ * otherwise "unknown". This is an optimization to avoid pasting into a
+ * mid-turn agent — delivery correctness rests on the receipt/retry loop, not
+ * on this heuristic.
+ */
+export function getPaneReadiness(session: string, paneId: string): PaneReadiness {
+  const status = getPaneBusyStatus(session, paneId);
+  if (status === "idle") return "idle";
+  if (status === "busy") return "unknown";
+  // agent pane: inspect the tail for an active-work marker
+  const tail = captureTail(paneId).toLowerCase();
+  if (!tail) return "unknown";
+  return AGENT_BUSY_MARKERS.some((m) => tail.includes(m)) ? "busy" : "unknown";
+}
