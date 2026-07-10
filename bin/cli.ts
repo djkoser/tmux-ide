@@ -104,6 +104,7 @@ const knownCommands = new Set([
   "recv",
   "dispatch",
   "boot-docs",
+  "tasks",
   "notify",
   "orchestrator",
   "settings",
@@ -482,6 +483,12 @@ try {
     case "boot-docs": {
       const { bootDocs } = await import("../src/boot-docs.ts");
       await bootDocs(startTargetDir, { json, out: values.out });
+      break;
+    }
+
+    case "tasks": {
+      const { tasksCommand } = await import("../src/tasks-link.ts");
+      await tasksCommand(null, { json, sub: positionals[1], args: positionals.slice(2) });
       break;
     }
 
