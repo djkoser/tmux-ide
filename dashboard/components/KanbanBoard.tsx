@@ -18,7 +18,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { TaskCard } from "./TaskCard";
 import { TaskDetail } from "./TaskDetail";
 import { CreateTaskModal } from "./CreateTaskModal";
-import { updateTask } from "@/lib/api";
+import { updateTask, type MilestoneData } from "@/lib/api";
 import type { Task, AgentDetail, Goal } from "@/lib/types";
 
 interface KanbanBoardProps {
@@ -26,6 +26,7 @@ interface KanbanBoardProps {
   sessionName: string;
   agents: AgentDetail[];
   goals?: Goal[];
+  milestones?: MilestoneData[];
   onRefresh: () => void;
 }
 
@@ -116,6 +117,7 @@ export function KanbanBoard({
   sessionName,
   agents,
   goals = [],
+  milestones = [],
   onRefresh,
 }: KanbanBoardProps) {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -228,6 +230,8 @@ export function KanbanBoard({
         <CreateTaskModal
           sessionName={sessionName}
           goals={goals}
+          milestones={milestones}
+          tasks={tasks}
           onClose={() => setShowCreate(false)}
           onCreated={onRefresh}
         />

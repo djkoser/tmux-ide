@@ -41,6 +41,7 @@ import {
   loadValidationContract,
   saveValidationState,
   checkCoverage,
+  parseAssertionIds,
 } from "../lib/validation.ts";
 import { loadSkills, loadSkill } from "../lib/skill-registry.ts";
 import { computeMetrics, loadMissionHistory } from "../lib/metrics.ts";
@@ -254,6 +255,30 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     const body = c.req.valid("json");
 
     ensureTasksDir(session.dir);
+
+    // Invariant guards (VAL-016): create-only fields must reference real entities,
+    // else the task can never dispatch or its coverage never resolves.
+    const mission = loadMission(session.dir);
+    const contract = loadValidationContract(session.dir);
+    const assertionIds = contract ? parseAssertionIds(contract) : [];
+    const existingTaskIds = new Set(loadTasks(session.dir).map((t) => t.id));
+
+    if (body.fulfills?.length) {
+      const unknownAssertions = body.fulfills.filter((a) => !assertionIds.includes(a));
+      if (unknownAssertions.length > 0) {
+        return c.json({ error: "Unknown assertion(s) in fulfills", unknownAssertions }, 409);
+      }
+    }
+    if (body.depends?.length) {
+      const unknownTasks = body.depends.filter((d) => !existingTaskIds.has(d));
+      if (unknownTasks.length > 0) {
+        return c.json({ error: "Unknown task(s) in depends", unknownTasks }, 409);
+      }
+    }
+    if (body.milestone && !mission?.milestones.some((m) => m.id === body.milestone)) {
+      return c.json({ error: `Unknown milestone: ${body.milestone}` }, 409);
+    }
+
     const id = nextTaskId(session.dir);
     const now = new Date().toISOString();
     const task: Task = {
@@ -262,20 +287,20 @@ export function createApp(options: CreateAppOptions = {}): Hono {
       description: body.description ?? "",
       goal: body.goal ?? null,
       status: "todo",
-      assignee: null,
+      assignee: body.assignee ?? null,
       priority: body.priority ?? 2,
       created: now,
       updated: now,
       tags: body.tags ?? [],
       proof: null,
-      depends_on: [],
+      depends_on: body.depends ?? [],
       retryCount: 0,
       maxRetries: 5,
       lastError: null,
       nextRetryAt: null,
-      milestone: null,
-      specialty: null,
-      fulfills: [],
+      milestone: body.milestone ?? null,
+      specialty: body.specialty ?? null,
+      fulfills: body.fulfills ?? [],
       discoveredIssues: [],
       salientSummary: null,
     };
@@ -842,6 +867,17 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     const session = sessions.find((s) => s.name === name);
     if (!session) return c.json({ error: "Session not found" }, 404);
     return c.json(checkCoverage(session.dir));
+  });
+
+  // Canonical assertion-ID list parsed from the contract — the create-task modal's
+  // `fulfills` options come from here so the UI never re-implements the parser.
+  app.get("/api/project/:name/validation/assertions", (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const contract = loadValidationContract(session.dir);
+    return c.json({ assertions: contract ? parseAssertionIds(contract) : [] });
   });
 
   app.post(

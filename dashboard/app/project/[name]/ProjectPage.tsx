@@ -252,6 +252,7 @@ export default function ProjectPage() {
           sessionName={project.session}
           agents={project.agents}
           goals={project.goals}
+          milestones={milestones ?? []}
           onRefresh={refresh}
         />
       )}

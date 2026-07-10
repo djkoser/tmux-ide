@@ -208,6 +208,89 @@ describe("POST /api/project/:name/task (create)", () => {
     });
     expect(res.status).toBe(404);
   });
+
+  it("persists the create-only fields (specialty/milestone/fulfills/depends)", async () => {
+    saveMission(tmpDir, {
+      title: "M",
+      description: "",
+      status: "active",
+      goals: [],
+      milestones: [
+        {
+          id: "M1",
+          title: "First",
+          description: "",
+          status: "active",
+          order: 1,
+          created: "",
+          updated: "",
+        },
+      ],
+      created: "",
+      updated: "",
+    });
+    writeFileSync(join(tmpDir, ".tasks", "validation-contract.md"), "- **VAL-A** does a thing\n");
+    saveTask(tmpDir, makeTask({ id: "001", title: "Dep" }));
+
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/task", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "Full task",
+        specialty: "implementation",
+        milestone: "M1",
+        fulfills: ["VAL-A"],
+        depends: ["001"],
+        assignee: "cw2",
+      }),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { task: Task };
+    expect(body.task.specialty).toBe("implementation");
+    expect(body.task.milestone).toBe("M1");
+    expect(body.task.fulfills).toEqual(["VAL-A"]);
+    expect(body.task.depends_on).toEqual(["001"]);
+    expect(body.task.assignee).toBe("cw2");
+    // Round-trips through the store.
+    const stored = loadTask(tmpDir, body.task.id);
+    expect(stored?.fulfills).toEqual(["VAL-A"]);
+  });
+
+  it("rejects an unknown assertion in fulfills (409)", async () => {
+    writeFileSync(join(tmpDir, ".tasks", "validation-contract.md"), "- **VAL-A** real\n");
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/task", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "T", fulfills: ["VAL-A", "VAL-GHOST"] }),
+    });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { unknownAssertions: string[] };
+    expect(body.unknownAssertions).toEqual(["VAL-GHOST"]);
+  });
+
+  it("rejects a dangling task in depends (409)", async () => {
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/task", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "T", depends: ["999"] }),
+    });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { unknownTasks: string[] };
+    expect(body.unknownTasks).toEqual(["999"]);
+  });
+
+  it("rejects an unknown milestone (409)", async () => {
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/task", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "T", milestone: "M9" }),
+    });
+    expect(res.status).toBe(409);
+  });
 });
 
 describe("DELETE /api/project/:name/task/:id", () => {

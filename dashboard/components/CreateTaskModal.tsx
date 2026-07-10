@@ -1,21 +1,36 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { createTask } from "@/lib/api";
-import type { Goal } from "@/lib/types";
+import { createTask, fetchAssertionIds, type MilestoneData } from "@/lib/api";
+import type { Goal, Task } from "@/lib/types";
 
 interface CreateTaskModalProps {
   sessionName: string;
   goals: Goal[];
+  milestones: MilestoneData[];
+  tasks: Task[];
   onClose: () => void;
   onCreated: () => void;
 }
 
-export function CreateTaskModal({ sessionName, goals, onClose, onCreated }: CreateTaskModalProps) {
+export function CreateTaskModal({
+  sessionName,
+  goals,
+  milestones,
+  tasks,
+  onClose,
+  onCreated,
+}: CreateTaskModalProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState(2);
   const [goalId, setGoalId] = useState("");
+  const [specialty, setSpecialty] = useState("");
+  const [milestone, setMilestone] = useState("");
+  const [assignee, setAssignee] = useState("");
+  const [fulfills, setFulfills] = useState<string[]>([]);
+  const [depends, setDepends] = useState<string[]>([]);
+  const [assertionIds, setAssertionIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const titleRef = useRef<HTMLInputElement>(null);
@@ -25,12 +40,20 @@ export function CreateTaskModal({ sessionName, goals, onClose, onCreated }: Crea
   }, []);
 
   useEffect(() => {
+    void fetchAssertionIds(sessionName).then(setAssertionIds);
+  }, [sessionName]);
+
+  useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  function toggle(list: string[], value: string): string[] {
+    return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -40,34 +63,45 @@ export function CreateTaskModal({ sessionName, goals, onClose, onCreated }: Crea
     }
     setSaving(true);
     setError("");
-    const ok = await createTask(sessionName, {
+    const result = await createTask(sessionName, {
       title: title.trim(),
       description: description.trim() || undefined,
       priority,
       goal: goalId || undefined,
+      specialty: specialty.trim() || undefined,
+      milestone: milestone || undefined,
+      assignee: assignee.trim() || undefined,
+      fulfills: fulfills.length > 0 ? fulfills : undefined,
+      depends: depends.length > 0 ? depends : undefined,
     });
     setSaving(false);
-    if (ok) {
+    if (result.ok) {
       onCreated();
       onClose();
     } else {
-      setError("Failed to create task");
+      setError(result.error);
     }
   }
 
   const labelClass = "text-[var(--dim)] text-[10px] uppercase tracking-wider mb-1";
   const inputClass =
     "w-full bg-[var(--surface)] border border-[var(--border)] text-[var(--fg)] px-2 py-1 outline-none focus:border-[var(--accent)] placeholder:text-[var(--dim)]";
+  const chipClass = (on: boolean) =>
+    `px-2 py-0.5 text-[11px] border cursor-pointer transition-colors ${
+      on
+        ? "bg-[var(--accent)] text-[var(--bg)] border-[var(--accent)]"
+        : "bg-[var(--surface)] text-[var(--dim)] border-[var(--border)] hover:border-[var(--dim)]"
+    }`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-[var(--modal-overlay)]" onClick={onClose} />
       <form
         onSubmit={handleSubmit}
-        className="relative bg-[var(--bg)] border border-[var(--border)] w-full max-w-md"
+        className="relative bg-[var(--bg)] border border-[var(--border)] w-full max-w-md max-h-[90vh] overflow-y-auto"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 h-8 bg-[var(--surface)] border-b border-[var(--border)]">
+        <div className="sticky top-0 flex items-center justify-between px-4 h-8 bg-[var(--surface)] border-b border-[var(--border)]">
           <span className="text-[var(--fg)]">new task</span>
           <button
             type="button"
@@ -138,10 +172,95 @@ export function CreateTaskModal({ sessionName, goals, onClose, onCreated }: Crea
             </div>
           </div>
 
+          {/* Create-only-persisted fields — cannot be set later via `task edit`. */}
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <div className={labelClass}>specialty</div>
+              <input
+                type="text"
+                value={specialty}
+                onChange={(e) => setSpecialty(e.target.value)}
+                placeholder="implementation"
+                list="specialty-options"
+                className={inputClass}
+              />
+              <datalist id="specialty-options">
+                <option value="implementation" />
+              </datalist>
+            </div>
+            <div className="flex-1">
+              <div className={labelClass}>milestone</div>
+              <select
+                value={milestone}
+                onChange={(e) => setMilestone(e.target.value)}
+                className={inputClass}
+              >
+                <option value="">none</option>
+                {[...milestones]
+                  .sort((a, b) => a.order - b.order)
+                  .map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.id} — {m.title}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <div className={labelClass}>assignee</div>
+            <input
+              type="text"
+              value={assignee}
+              onChange={(e) => setAssignee(e.target.value)}
+              placeholder="cw1 / cw2 / … (optional)"
+              className={inputClass}
+            />
+          </div>
+
+          {/* Fulfills — assertion IDs from the contract (guarded server-side). */}
+          <div>
+            <div className={labelClass}>fulfills (assertions)</div>
+            {assertionIds.length === 0 ? (
+              <div className="text-[var(--dim)] text-[11px]">no assertions in contract</div>
+            ) : (
+              <div className="flex flex-wrap gap-1">
+                {assertionIds.map((a) => (
+                  <span
+                    key={a}
+                    onClick={() => setFulfills((f) => toggle(f, a))}
+                    className={chipClass(fulfills.includes(a))}
+                  >
+                    {a}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Depends — existing task IDs (guarded server-side). */}
+          {tasks.length > 0 && (
+            <div>
+              <div className={labelClass}>depends on</div>
+              <div className="flex flex-wrap gap-1">
+                {tasks.map((t) => (
+                  <span
+                    key={t.id}
+                    title={t.title}
+                    onClick={() => setDepends((d) => toggle(d, t.id))}
+                    className={chipClass(depends.includes(t.id))}
+                  >
+                    {t.id}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {error && <div className="text-[var(--red)] text-[11px]">{error}</div>}
 
           {/* Submit */}
-          <div className="flex justify-end gap-2 pt-1">
+          <div className="sticky bottom-0 flex justify-end gap-2 pt-1 bg-[var(--bg)]">
             <button
               type="button"
               onClick={onClose}

@@ -104,24 +104,55 @@ export async function updateTask(
   return data.task;
 }
 
+export interface CreateTaskFields {
+  title: string;
+  description?: string;
+  priority?: number;
+  goal?: string;
+  tags?: string[];
+  assignee?: string;
+  specialty?: string;
+  milestone?: string;
+  fulfills?: string[];
+  depends?: string[];
+}
+
+export type CreateTaskResult = { ok: true; task: Task } | { ok: false; error: string };
+
 export async function createTask(
   sessionName: string,
-  fields: {
-    title: string;
-    description?: string;
-    priority?: number;
-    goal?: string;
-    tags?: string[];
-  },
-): Promise<Task | null> {
+  fields: CreateTaskFields,
+): Promise<CreateTaskResult> {
   const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(sessionName)}/task`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(fields),
   });
-  if (!res.ok) return null;
-  const data = (await res.json()) as { ok: boolean; task: Task };
-  return data.task;
+  const data = (await res.json().catch(() => null)) as
+    | { ok: boolean; task: Task }
+    | { error: string; unknownAssertions?: string[]; unknownTasks?: string[] }
+    | null;
+  if (!res.ok || !data || !("task" in data)) {
+    // Surface the invariant-guard detail (409) so the modal can name the bad ref.
+    const detail = data && "error" in data ? data.error : `HTTP ${res.status}`;
+    const extra =
+      data && "unknownAssertions" in data && data.unknownAssertions
+        ? `: ${data.unknownAssertions.join(", ")}`
+        : data && "unknownTasks" in data && data.unknownTasks
+          ? `: ${data.unknownTasks.join(", ")}`
+          : "";
+    return { ok: false, error: `${detail}${extra}` };
+  }
+  return { ok: true, task: data.task };
+}
+
+export async function fetchAssertionIds(name: string): Promise<string[]> {
+  const res = await fetch(
+    `${API_BASE}/api/project/${encodeURIComponent(name)}/validation/assertions`,
+  );
+  if (!res.ok) return [];
+  const data = (await res.json()) as { assertions: string[] };
+  return data.assertions ?? [];
 }
 
 export type PlanStatus = "pending" | "in-progress" | "done" | "archived";

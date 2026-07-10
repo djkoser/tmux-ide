@@ -14,9 +14,20 @@ export const createTaskSchema = z.object({
   priority: z.number().optional(),
   goal: z.string().optional(),
   tags: z.array(z.string()).optional(),
+  // Create-only-persisted fields: the store honors these only at create time
+  // (`task edit` does not re-apply them), so the kanban modal must set them here.
+  assignee: z.string().optional(),
+  specialty: z.string().optional(),
+  milestone: z.string().optional(),
+  fulfills: z.array(z.string()).optional(),
+  depends: z.array(z.string()).optional(),
 });
 
 export const savePlanSchema = z.object({
+  content: z.string(),
+});
+
+export const saveContractSchema = z.object({
   content: z.string(),
 });
 
@@ -24,6 +35,8 @@ export const sendCommandSchema = z.object({
   target: z.string().min(1, "Target pane is required"),
   message: z.string().min(1, "Message is required"),
   noEnter: z.boolean().optional(),
+  // Skip the reliable-send receipt path: paste once, don't track an ack.
+  fireAndForget: z.boolean().optional(),
 });
 
 export const createMilestoneSchema = z.object({
