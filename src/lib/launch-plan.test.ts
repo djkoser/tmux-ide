@@ -43,7 +43,7 @@ describe("collectPaneStartupPlan", () => {
         title: "Lead",
         chdir: null,
         exports: [`export 'PORT'='3000'`],
-        command: `claude --name 'Lead'`,
+        command: `claude --name 'Lead' --append-system-prompt-file 'tmux-ide-scripts/boot/lead.md'`,
         widgetType: null,
         widgetTarget: null,
         paneRole: "lead",
@@ -54,7 +54,7 @@ describe("collectPaneStartupPlan", () => {
         title: "Worker",
         chdir: null,
         exports: [],
-        command: `claude --name 'Worker'`,
+        command: `claude --name 'Worker' --append-system-prompt-file 'tmux-ide-scripts/boot/worker.md'`,
         widgetType: null,
         widgetTarget: null,
         paneRole: "teammate",
@@ -72,6 +72,26 @@ describe("collectPaneStartupPlan", () => {
         paneType: "shell",
       },
     ]);
+  });
+
+  it("auto-attaches a boot doc to team agent panes, skips solo panes and pre-wired commands", () => {
+    const rows: Row[] = [
+      {
+        panes: [
+          { title: "cw3", command: "claude", role: "teammate" },
+          { title: "solo", command: "claude" }, // no role/task → untouched
+          { title: "pre", command: "claude --append-system-prompt-file custom.md", role: "lead" },
+        ],
+      },
+    ];
+
+    const result = collectPaneStartupPlan(rows, [["%1", "%2", "%3"]], new Set(["%1"]), "/w");
+    const cmd = Object.fromEntries(result.paneActions.map((a) => [a.title, a.command]));
+    expect(cmd["cw3"]).toContain("--append-system-prompt-file 'tmux-ide-scripts/boot/cw3.md'");
+    expect(cmd["solo"]).toBe("claude --name 'solo'"); // no boot doc for a role-less pane
+    // already wired → not double-injected
+    expect(cmd["pre"]!.match(/--append-system-prompt-file/g)!.length).toBe(1);
+    expect(cmd["pre"]).toContain("custom.md");
   });
 
   it("preserves validator and researcher roles in @ide_role (not collapsed to shell)", () => {

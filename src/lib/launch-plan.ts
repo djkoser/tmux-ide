@@ -1,6 +1,8 @@
 import { resolve } from "node:path";
 import type { Pane, Row, PaneAction } from "../types.ts";
 import { shellEscape } from "./shell.ts";
+import { slugify } from "./slugify.ts";
+import { BOOT_DOCS_DIR } from "../boot-docs.ts";
 
 export function buildPaneCommand(pane: Pane): string | null {
   if (!pane.command) return null;
@@ -83,6 +85,20 @@ export function collectPaneStartupPlan(
       // This is agent-agnostic: any CLI that respects --name will work.
       if (command && pane.title && /claude|codex/i.test(command) && !command.includes("--name")) {
         command = `${command} --name ${shellEscape(pane.title)}`;
+      }
+      // Auto-attach the generated boot doc for team agent panes (those with a
+      // role or task), unless the command already wires it. The doc is written
+      // by writeBootDocs at launch to the same dir + slug. Solo claude panes
+      // with no role/task are left untouched.
+      if (
+        command &&
+        pane.title &&
+        (pane.role != null || pane.task != null) &&
+        /claude/i.test(command) &&
+        !command.includes("--append-system-prompt-file")
+      ) {
+        const docPath = `${BOOT_DOCS_DIR}/${slugify(pane.title)}.md`;
+        command = `${command} --append-system-prompt-file ${shellEscape(docPath)}`;
       }
       if (command) {
         action.command = command;

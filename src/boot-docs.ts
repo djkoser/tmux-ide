@@ -60,17 +60,33 @@ ${p.task ?? "(no standing role defined for this pane)"}
   });
 }
 
+/** Default boot-doc output directory, relative to the project dir. */
+export const BOOT_DOCS_DIR = "tmux-ide-scripts/boot";
+
+/**
+ * Write boot docs to disk and return {outDir, docs}. Silent — used by the
+ * launch path to regenerate docs before panes spawn, and by the CLI command
+ * (which adds the human-facing log).
+ */
+export function writeBootDocs(
+  dir: string,
+  config: IdeConfig,
+  out?: string,
+): { outDir: string; docs: BootDoc[] } {
+  const outDir = resolve(dir, out ?? BOOT_DOCS_DIR);
+  mkdirSync(outDir, { recursive: true });
+  const docs = generateBootDocs(config);
+  for (const d of docs) writeFileSync(join(outDir, `${d.slug}.md`), d.content);
+  return { outDir, docs };
+}
+
 export async function bootDocs(
   targetDir: string | undefined,
   opts: { out?: string; json?: boolean } = {},
 ): Promise<void> {
   const dir = resolve(targetDir ?? ".");
   const { config } = readConfig(dir);
-  const outDir = resolve(dir, opts.out ?? "tmux-ide-scripts/boot");
-  mkdirSync(outDir, { recursive: true });
-
-  const docs = generateBootDocs(config);
-  for (const d of docs) writeFileSync(join(outDir, `${d.slug}.md`), d.content);
+  const { outDir, docs } = writeBootDocs(dir, config, opts.out);
 
   if (opts.json) {
     console.log(JSON.stringify({ ok: true, outDir, wrote: docs.map((d) => `${d.slug}.md`) }, null, 2));

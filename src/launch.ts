@@ -7,6 +7,7 @@ import { readConfig, getSessionName } from "./lib/yaml-io.ts";
 import { computeSizes, toSplitPercents } from "./lib/sizes.ts";
 import { outputError } from "./lib/output.ts";
 import { collectPaneStartupPlan } from "./lib/launch-plan.ts";
+import { writeBootDocs } from "./boot-docs.ts";
 import { buildSessionOptions } from "./lib/session-options.ts";
 import {
   attachSession,
@@ -221,6 +222,15 @@ export async function launch(
   const team = config.team ?? null;
 
   runBeforeHook(config.before, dir);
+
+  // Regenerate per-pane boot docs from the live config so every agent boots
+  // knowing the team, its role, and how to coordinate. Best-effort — a failure
+  // here must never block the session.
+  try {
+    writeBootDocs(dir, config);
+  } catch {
+    // ignore — boot docs are an enhancement, not a launch prerequisite
+  }
 
   // If session already exists, check for config drift and attach
   if (hasSession(session)) {
