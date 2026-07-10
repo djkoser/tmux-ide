@@ -74,6 +74,22 @@ describe("collectPaneStartupPlan", () => {
     ]);
   });
 
+  it("preserves validator and researcher roles in @ide_role (not collapsed to shell)", () => {
+    const rows: Row[] = [
+      {
+        panes: [
+          { title: "validator", command: "claude", role: "validator" },
+          { title: "researcher", command: "claude", role: "researcher" },
+        ],
+      },
+    ];
+
+    const result = collectPaneStartupPlan(rows, [["%1", "%2"]], new Set(["%1"]), "/workspace");
+    expect(result.paneActions.map((a) => a.paneRole)).toEqual(["validator", "researcher"]);
+    // still recognized as agent panes
+    expect(result.paneActions.every((a) => a.paneType === "agent")).toBe(true);
+  });
+
   it("widgets:false config produces fewer pane actions when widget panes are stripped", () => {
     const fullRows: Row[] = [
       {

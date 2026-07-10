@@ -23,12 +23,18 @@ export function collectPaneStartupPlan(
     for (let paneIdx = 0; paneIdx < panes.length; paneIdx++) {
       const pane = panes[paneIdx]!;
       const tmuxPane = paneMap[rowIdx]![paneIdx]!;
-      // Derive @ide_role from pane config
+      // Derive @ide_role from pane config. Every configured role is preserved
+      // so the orchestrator can find the validator/researcher by role (their
+      // dispatch functions look up p.role === "validator" / "researcher");
+      // previously these fell through to "shell", which is why post-launch had
+      // to re-assert the validator's role after the session came up.
       let paneRole: string;
       if (pane.role === "lead") {
         paneRole = "lead";
       } else if (pane.role === "teammate" || pane.role === "planner") {
         paneRole = "teammate";
+      } else if (pane.role === "validator" || pane.role === "researcher") {
+        paneRole = pane.role;
       } else if (pane.type) {
         paneRole = "widget";
       } else {
