@@ -56,6 +56,9 @@ const { positionals, values } = parseArgs({
     sequence: { type: "string" },
     evidence: { type: "string" },
     max: { type: "string" },
+    hard: { type: "boolean" },
+    "include-plans": { type: "boolean" },
+    "dry-run": { type: "boolean" },
     port: { type: "string" },
     // tunnel command flags
     provider: { type: "string" },
@@ -327,7 +330,12 @@ try {
         action: "mission",
         sub,
         args: positionals.slice(2),
-        values: { description: values.description },
+        values: {
+          description: values.description,
+          hard: values.hard,
+          includePlans: values["include-plans"],
+          dryRun: values["dry-run"],
+        },
       });
       break;
     }
@@ -484,6 +492,17 @@ try {
     }
 
     case "orchestrator": {
+      if (positionals[1] === "reset-claims") {
+        const { resetClaims } = await import("../src/lib/orchestrator.ts");
+        // positionals[1] is the subcommand, not a path — target the cwd.
+        resetClaims(resolve(positionals[2] ?? "."));
+        if (json) console.log(JSON.stringify({ ok: true, reset: "claims" }));
+        else
+          console.log(
+            "Orchestrator claim lock reset. Bounce the daemon so it reloads the cleared state.",
+          );
+        break;
+      }
       const { orchestratorStatus } = await import("../src/orchestrator-status.ts");
       await orchestratorStatus(positionals[1], { json });
       break;

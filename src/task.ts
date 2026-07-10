@@ -36,6 +36,7 @@ import { getSessionState } from "./lib/tmux.ts";
 import { listSessionPanes } from "./widgets/lib/pane-comms.ts";
 import { dispatchResearch, loadResearchState, type ResearchTrigger } from "./lib/research.ts";
 import { type OrchestratorState } from "./lib/orchestrator.ts";
+import { wipeMission } from "./lib/mission-wipe.ts";
 
 export function parseProof(raw: string, existing: ProofSchema | null): ProofSchema {
   // Try parsing as JSON first
@@ -93,6 +94,9 @@ interface TaskCommandValues {
   sequence?: string;
   evidence?: string;
   max?: string;
+  hard?: boolean;
+  includePlans?: boolean;
+  dryRun?: boolean;
 }
 
 export async function taskCommand(
@@ -398,20 +402,46 @@ function handleMission(
       }
       break;
     }
+    case "wipe": {
+      const dryRun = values.dryRun ?? false;
+      const summary = wipeMission(dir, {
+        hard: values.hard ?? false,
+        includePlans: values.includePlans ?? false,
+        dryRun,
+      });
+      if (json) {
+        console.log(JSON.stringify(summary, null, 2));
+      } else {
+        const verb = dryRun ? "Would erase" : "Erased";
+        console.log(`${verb} mission tracker${summary.mission ? ` "${summary.mission}"` : ""}:`);
+        console.log(`  goals: ${summary.goals} | tasks: ${summary.tasks}`);
+        console.log(
+          `  dispatch: ${summary.dispatchFiles} | messages: ${summary.messageFiles} | plans: ${summary.planFiles}`,
+        );
+        console.log(`  + validation contract/state, orchestrator claim lock`);
+        if (summary.hardLogsTruncated) console.log(`  + HARD: audit logs (events, metrics, accounting)`);
+        if (!dryRun) {
+          console.log(`Bounce the daemon so it reloads the cleared claim state, then plan the next mission.`);
+        }
+      }
+      break;
+    }
     case "help":
     case undefined:
-      console.log(`Usage: tmux-ide mission <set|create|show|status|plan-complete|clear>
+      console.log(`Usage: tmux-ide mission <set|create|show|status|plan-complete|clear|wipe>
 
   set "title"  [-d "description"]   Set mission (status: active)
   create "title" [-d "description"] Create mission (status: planning)
   show                              Show current mission
   status                            Show mission progress
   plan-complete                     Signal planning is done
-  clear                             Clear the mission`);
+  clear                             Clear the mission
+  wipe [--hard] [--include-plans] [--dry-run]
+                                    Erase the whole tracker to a clean slate`);
       break;
     default:
       outputError(
-        "Usage: tmux-ide mission <set|create|show|status|plan-complete|clear>\nRun: tmux-ide mission help",
+        "Usage: tmux-ide mission <set|create|show|status|plan-complete|clear|wipe>\nRun: tmux-ide mission help",
         "USAGE",
       );
   }

@@ -1575,6 +1575,22 @@ function stateFilePath(dir: string): string {
   return join(dir, ".tasks", "orchestrator-state.json");
 }
 
+/**
+ * Reset the orchestrator's persisted claim lock to empty, freeing every task
+ * id for reuse. The running daemon must be bounced (or restarted) to reload
+ * this; on its next start loadOrchestratorState reads the cleared file. This is
+ * the native replacement for deleting orchestrator-state.json by hand.
+ */
+export function resetClaims(dir: string): void {
+  const tasksDir = join(dir, ".tasks");
+  if (!existsSync(tasksDir)) mkdirSync(tasksDir, { recursive: true });
+  const empty: PersistedState = { claimedTasks: [], taskClaimTimes: {}, lastActivity: {} };
+  const filePath = stateFilePath(dir);
+  const tmpPath = filePath + ".tmp";
+  writeFileSync(tmpPath, JSON.stringify(empty, null, 2) + "\n");
+  renameSync(tmpPath, filePath);
+}
+
 export function saveOrchestratorState(dir: string, state: OrchestratorState): void {
   const tasksDir = join(dir, ".tasks");
   if (!existsSync(tasksDir)) mkdirSync(tasksDir, { recursive: true });
