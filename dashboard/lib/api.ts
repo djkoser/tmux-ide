@@ -146,6 +146,105 @@ export async function createTask(
   return { ok: true, task: data.task };
 }
 
+// --- Federated workspaces (VAL-019) ---
+
+export interface WorkspaceEntry {
+  name: string;
+  path: string;
+  session: string;
+  ports: { commandCenter: number; orchestrator?: number };
+  created?: string;
+}
+
+/** Base URL for a workspace's daemon API (client-side cross-port aggregation). */
+export function workspaceBaseUrl(ws: WorkspaceEntry): string {
+  return `http://127.0.0.1:${ws.ports.commandCenter}`;
+}
+
+/** Read the registry from the LOCAL daemon (it reads the fs; the browser can't). */
+export async function fetchWorkspaces(): Promise<WorkspaceEntry[]> {
+  const res = await fetch(`${API_BASE}/api/workspaces`, { cache: "no-store" });
+  if (!res.ok) return [];
+  const data = (await res.json()) as { workspaces?: WorkspaceEntry[] };
+  return data.workspaces ?? [];
+}
+
+/** Liveness probe against a workspace daemon's /health, bounded so a dead one can't block. */
+export async function probeWorkspaceHealth(baseUrl: string, timeoutMs = 1500): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${baseUrl}/health`, { cache: "no-store", signal: controller.signal });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Fields the federation summary reads from a workspace daemon's /api/project/:name.
+// The daemon sends milestones + validationSummary on the wire even though the shared
+// ProjectDetail type omits them, so this captures exactly what the swimlane consumes.
+export interface WorkspaceProjectDetail {
+  session: string;
+  mission: { title: string; status: string } | null;
+  tasks: { id: string; status: Task["status"] }[];
+  milestones?: { id: string; status: string; order: number }[];
+  validationSummary?: {
+    total: number;
+    passing: number;
+    failing: number;
+    pending: number;
+    blocked: number;
+  };
+}
+
+/** Fetch a workspace's project detail from its own daemon (one call = summary source). */
+export async function fetchProjectAt(
+  baseUrl: string,
+  session: string,
+  timeoutMs = 2500,
+): Promise<WorkspaceProjectDetail | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${baseUrl}/api/project/${encodeURIComponent(session)}`, {
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as WorkspaceProjectDetail;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export interface WorkspaceSummary {
+  ws: WorkspaceEntry;
+  online: boolean;
+  detail: WorkspaceProjectDetail | null;
+}
+
+/**
+ * Aggregate every registered workspace client-side: probe liveness, then pull
+ * the summary from each live daemon. Runs in parallel so one dead/slow workspace
+ * can't block the rest — a down workspace comes back `online: false, detail: null`.
+ */
+export async function aggregateWorkspaces(): Promise<WorkspaceSummary[]> {
+  const workspaces = await fetchWorkspaces();
+  return Promise.all(
+    workspaces.map(async (ws): Promise<WorkspaceSummary> => {
+      const base = workspaceBaseUrl(ws);
+      const online = await probeWorkspaceHealth(base);
+      const detail = online ? await fetchProjectAt(base, ws.session) : null;
+      return { ws, online, detail };
+    }),
+  );
+}
+
 export async function fetchAssertionIds(name: string): Promise<string[]> {
   const res = await fetch(
     `${API_BASE}/api/project/${encodeURIComponent(name)}/validation/assertions`,
@@ -261,8 +360,9 @@ export type SendResult =
 export async function sendToTargets(
   name: string,
   fields: { target: string; message: string; fireAndForget?: boolean },
+  baseUrl: string = API_BASE,
 ): Promise<SendResult> {
-  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/send`, {
+  const res = await fetch(`${baseUrl}/api/project/${encodeURIComponent(name)}/send`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(fields),
@@ -290,9 +390,13 @@ export async function sendToTargets(
   };
 }
 
-export async function fetchSendBatch(name: string, batchId: string): Promise<SendBatch | null> {
+export async function fetchSendBatch(
+  name: string,
+  batchId: string,
+  baseUrl: string = API_BASE,
+): Promise<SendBatch | null> {
   const res = await fetch(
-    `${API_BASE}/api/project/${encodeURIComponent(name)}/send/batch/${encodeURIComponent(batchId)}`,
+    `${baseUrl}/api/project/${encodeURIComponent(name)}/send/batch/${encodeURIComponent(batchId)}`,
   );
   if (!res.ok) return null;
   return (await res.json()) as SendBatch;

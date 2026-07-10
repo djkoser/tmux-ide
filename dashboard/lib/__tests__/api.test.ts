@@ -206,7 +206,10 @@ describe("createTask (create-only fields + guards)", () => {
       vi.fn().mockResolvedValue({
         ok: false,
         status: 409,
-        json: async () => ({ error: "Unknown assertion(s) in fulfills", unknownAssertions: ["VAL-X"] }),
+        json: async () => ({
+          error: "Unknown assertion(s) in fulfills",
+          unknownAssertions: ["VAL-X"],
+        }),
       }),
     );
     const { createTask } = await import("../api");
@@ -230,7 +233,14 @@ describe("sendToTargets + fetchSendBatch", () => {
           batchId: "abc123",
           fanOut: true,
           recipients: [
-            { paneId: "%1", name: "cw1", title: "cw1", role: "teammate", status: "retrying", attempts: 0 },
+            {
+              paneId: "%1",
+              name: "cw1",
+              title: "cw1",
+              role: "teammate",
+              status: "retrying",
+              attempts: 0,
+            },
           ],
         }),
       }),
@@ -250,7 +260,10 @@ describe("sendToTargets + fetchSendBatch", () => {
       vi.fn().mockResolvedValue({
         ok: false,
         status: 404,
-        json: async () => ({ error: "Pane not found", available: [{ title: "lead", name: "lead" }] }),
+        json: async () => ({
+          error: "Pane not found",
+          available: [{ title: "lead", name: "lead" }],
+        }),
       }),
     );
     const { sendToTargets } = await import("../api");
@@ -270,8 +283,22 @@ describe("sendToTargets + fetchSendBatch", () => {
           done: true,
           ok: false,
           recipients: [
-            { paneId: "%1", name: "cw1", title: "cw1", role: "teammate", status: "delivered", attempts: 1 },
-            { paneId: "%2", name: "cw2", title: "cw2", role: "teammate", status: "failed", attempts: 4 },
+            {
+              paneId: "%1",
+              name: "cw1",
+              title: "cw1",
+              role: "teammate",
+              status: "delivered",
+              attempts: 1,
+            },
+            {
+              paneId: "%2",
+              name: "cw2",
+              title: "cw2",
+              role: "teammate",
+              status: "failed",
+              attempts: 4,
+            },
           ],
         }),
       }),
@@ -288,7 +315,9 @@ describe("milestone + contract clients", () => {
   beforeEach(() => vi.unstubAllGlobals());
 
   it("insertMilestone posts to the insert route", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({ ok: true }) });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 201, json: async () => ({ ok: true }) });
     vi.stubGlobal("fetch", fetchMock);
     const { insertMilestone } = await import("../api");
     const r = await insertMilestone("s", { title: "X", position: 2 });
@@ -312,5 +341,71 @@ describe("milestone + contract clients", () => {
     const r = await saveContract("s", "- **VAL-A** a\n");
     expect(r.ok).toBe(false);
     expect(r.stillClaimed?.["VAL-B"]).toEqual(["001"]);
+  });
+});
+
+describe("federated workspaces", () => {
+  beforeEach(() => vi.unstubAllGlobals());
+
+  const alpha = {
+    name: "alpha",
+    path: "/w/alpha",
+    session: "w-alpha",
+    ports: { commandCenter: 6061 },
+  };
+  const beta = { name: "beta", path: "/w/beta", session: "w-beta", ports: { commandCenter: 6062 } };
+  const alphaDetail = {
+    session: "w-alpha",
+    mission: { title: "Alpha mission", status: "active" },
+    tasks: [
+      { id: "001", status: "done" },
+      { id: "002", status: "todo" },
+    ],
+    milestones: [{ id: "M1", status: "done", order: 1 }],
+    validationSummary: { total: 3, passing: 2, failing: 0, pending: 1, blocked: 0 },
+  };
+
+  it("fetchWorkspaces returns the registry list", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ version: 1, workspaces: [alpha] }),
+      }),
+    );
+    const { fetchWorkspaces } = await import("../api");
+    const list = await fetchWorkspaces();
+    expect(list.map((w) => w.name)).toEqual(["alpha"]);
+  });
+
+  it("aggregates two workspaces with one daemon down — offline never blocks the other", async () => {
+    const fetchMock = vi.fn((url: string, _opts?: unknown) => {
+      const u = String(url);
+      if (u.endsWith("/api/workspaces"))
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ version: 1, workspaces: [alpha, beta] }),
+        });
+      if (u === "http://127.0.0.1:6061/health") return Promise.resolve({ ok: true });
+      if (u === "http://127.0.0.1:6061/api/project/w-alpha")
+        return Promise.resolve({ ok: true, json: async () => alphaDetail });
+      // beta daemon down — connection refused
+      if (u.startsWith("http://127.0.0.1:6062")) return Promise.reject(new Error("ECONNREFUSED"));
+      return Promise.resolve({ ok: false, status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { aggregateWorkspaces } = await import("../api");
+    const sums = await aggregateWorkspaces();
+    expect(sums).toHaveLength(2);
+
+    const a = sums.find((s) => s.ws.name === "alpha")!;
+    expect(a.online).toBe(true);
+    expect(a.detail?.mission?.title).toBe("Alpha mission");
+    expect(a.detail?.tasks.filter((t) => t.status === "done")).toHaveLength(1);
+
+    const b = sums.find((s) => s.ws.name === "beta")!;
+    expect(b.online).toBe(false);
+    expect(b.detail).toBeNull();
   });
 });

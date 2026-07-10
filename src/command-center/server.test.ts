@@ -293,6 +293,35 @@ describe("POST /api/project/:name/task (create)", () => {
   });
 });
 
+describe("GET /api/workspaces", () => {
+  it("returns the registry from the injected path", async () => {
+    const regPath = join(tmpDir, "workspaces.json");
+    writeFileSync(
+      regPath,
+      JSON.stringify({
+        version: 1,
+        workspaces: [
+          { name: "alpha", path: "/w/alpha", session: "w-alpha", ports: { commandCenter: 6061 } },
+        ],
+      }),
+    );
+    const app = createApp({ registryPath: regPath });
+    const res = await app.request("/api/workspaces");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { version: number; workspaces: { name: string }[] };
+    expect(body.version).toBe(1);
+    expect(body.workspaces[0]!.name).toBe("alpha");
+  });
+
+  it("returns empty (never 500) when the registry file is absent", async () => {
+    const app = createApp({ registryPath: join(tmpDir, "does-not-exist.json") });
+    const res = await app.request("/api/workspaces");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { workspaces: unknown[] };
+    expect(body.workspaces).toEqual([]);
+  });
+});
+
 describe("POST /api/project/:name/milestones/insert (renumber + cascade)", () => {
   function seedTwoMilestones() {
     saveMission(tmpDir, {
