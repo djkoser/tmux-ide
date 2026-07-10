@@ -98,6 +98,8 @@ export interface OrchestratorState {
   previousTasks: Map<string, string>;
   claimedTasks: Set<string>;
   taskClaimTimes: Map<string, number>;
+  /** Task ids already handed to the validator while in `review` (in-memory; cleared when a task leaves review). */
+  reviewDispatched?: Set<string>;
 }
 
 export function runHook(command: string, cwd: string): { ok: true } | { ok: false; error: string } {
@@ -565,6 +567,74 @@ export function dispatchValidation(
 
   state.lastActivity.set(validatorPane.id, Date.now());
   return true;
+}
+
+/** The per-task review instruction handed to the validator when a task enters `review`. */
+export function buildReviewPrompt(task: Task, assignee: string): string {
+  return [
+    `VALIDATE task ${task.id} (assignee ${assignee}). You are the ONLY role that marks a task done.`,
+    `Steps: (1) tmux-ide task show ${task.id} --json.`,
+    `(2) Review that writer's diff (assignee cw1 = main checkout; cwN = its worktree) via /review-pr AND validate the change vs its fulfilled assertions in .tasks/validation-contract.md (and ticket AC via /jira if a real ticket).`,
+    `(3) PASS -> tmux-ide validate assert <VAL-id> --status passing --evidence '...' then tmux-ide task done ${task.id} --proof '...'.`,
+    `(4) FAIL -> tmux-ide validate assert <VAL-id> --status failing --evidence '...', send concrete fixes to ${assignee}, run 'tmux-ide task reopen ${task.id}' (reopens to todo preserving assignee; ESCALATE = left in review + flag Lead), and always flag the Lead.`,
+    `NEVER run whole-repo eslint / 'pnpm -r lint' (per-package 'timeout 60' only). NEVER create a GitHub PR review object.`,
+  ].join(" ");
+}
+
+/**
+ * Hand every task that has entered `review` to the validator exactly once.
+ *
+ * Replaces the detached review-dispatcher.sh poller: on each tick, any task in
+ * `review` not yet dispatched is sent to an idle validator pane; the id is
+ * tracked in-memory and dropped when the task leaves review, so a re-submit
+ * after a bounce is dispatched again. Waits for the validator to be idle rather
+ * than pasting into a busy pane.
+ */
+export function dispatchReviews(
+  config: OrchestratorConfig,
+  state: OrchestratorState,
+  tasks: Task[],
+  panes: PaneInfo[],
+): void {
+  const dispatched = (state.reviewDispatched ??= new Set());
+  const reviewTasks = tasks.filter((t) => t.status === "review");
+  const reviewIds = new Set(reviewTasks.map((t) => t.id));
+
+  // Forget tasks that left review so a later re-entry re-dispatches.
+  for (const id of [...dispatched]) {
+    if (!reviewIds.has(id)) dispatched.delete(id);
+  }
+  if (reviewTasks.length === 0) return;
+
+  const validatorPane = panes.find((p) => p.role === "validator");
+  if (!validatorPane || !isIdleForDispatch(validatorPane)) return;
+
+  const dispatchDir = join(config.dir, ".tasks", "dispatch");
+  if (!existsSync(dispatchDir)) mkdirSync(dispatchDir, { recursive: true });
+
+  for (const task of reviewTasks) {
+    if (dispatched.has(task.id)) continue;
+    const assignee = task.assignee ?? "UNASSIGNED";
+    const file = join(dispatchDir, `review-${task.id}.md`);
+    writeFileSync(file, buildReviewPrompt(task, assignee));
+    try {
+      sendCommand(
+        config.session,
+        validatorPane.id,
+        `Read and execute: .tasks/dispatch/review-${task.id}.md`,
+      );
+      dispatched.add(task.id);
+      state.lastActivity.set(validatorPane.id, Date.now());
+      appendEvent(config.dir, {
+        timestamp: new Date().toISOString(),
+        type: "review_dispatch",
+        taskId: task.id,
+        message: `Dispatched review of task ${task.id} (assignee ${assignee}) to ${validatorPane.title}`,
+      });
+    } catch {
+      // Leave undispatched; retry on the next tick.
+    }
+  }
 }
 
 /**
@@ -1628,6 +1698,7 @@ export function createOrchestrator(initialConfig: OrchestratorConfig): () => voi
     previousTasks: new Map(),
     claimedTasks: new Set(),
     taskClaimTimes: new Map(),
+    reviewDispatched: new Set(),
   };
   const researchState = loadResearchState(config.dir);
 
@@ -1700,6 +1771,7 @@ export function createOrchestrator(initialConfig: OrchestratorConfig): () => voi
 
     // 5. Milestone completion + validation flow + mission completion
     if (config.dispatchMode === "missions") {
+      dispatchReviews(config, state, tasks, panes);
       checkMilestoneCompletion(config, state, tasks, panes);
       checkValidationResults(config, tasks);
 

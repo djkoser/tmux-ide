@@ -99,6 +99,7 @@ export const EventTypeSchemaZ = z.enum([
   "milestone_validating",
   "milestone_complete",
   "validation_dispatch",
+  "review_dispatch",
   "remediation",
   "validation_failed",
   "planning",
