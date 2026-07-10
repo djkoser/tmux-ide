@@ -155,6 +155,70 @@ export async function fetchAssertionIds(name: string): Promise<string[]> {
   return data.assertions ?? [];
 }
 
+export type ReceiptStatus = "retrying" | "delivered" | "duplicate" | "superseded" | "failed";
+
+export interface SendRecipient {
+  paneId: string;
+  name: string | null;
+  title: string;
+  role: string | null;
+  status: ReceiptStatus;
+  attempts: number;
+}
+
+export interface SendBatch {
+  batchId: string;
+  done: boolean;
+  ok: boolean;
+  fanOut?: boolean;
+  recipients: SendRecipient[];
+}
+
+export type SendResult =
+  | { ok: true; batch: SendBatch }
+  | { ok: false; error: string; available?: { title: string; name: string | null }[] };
+
+/** Kick off a send; returns the batchId + seeded recipients immediately (poll for receipts). */
+export async function sendToTargets(
+  name: string,
+  fields: { target: string; message: string; fireAndForget?: boolean },
+): Promise<SendResult> {
+  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/send`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fields),
+  });
+  const data = (await res.json().catch(() => null)) as
+    | { ok: true; batchId: string; fanOut?: boolean; recipients: SendRecipient[] }
+    | { error: string; available?: { title: string; name: string | null }[] }
+    | null;
+  if (!res.ok || !data || !("batchId" in data)) {
+    return {
+      ok: false,
+      error: data && "error" in data ? data.error : `HTTP ${res.status}`,
+      available: data && "available" in data ? data.available : undefined,
+    };
+  }
+  return {
+    ok: true,
+    batch: {
+      batchId: data.batchId,
+      done: false,
+      ok: true,
+      fanOut: data.fanOut,
+      recipients: data.recipients,
+    },
+  };
+}
+
+export async function fetchSendBatch(name: string, batchId: string): Promise<SendBatch | null> {
+  const res = await fetch(
+    `${API_BASE}/api/project/${encodeURIComponent(name)}/send/batch/${encodeURIComponent(batchId)}`,
+  );
+  if (!res.ok) return null;
+  return (await res.json()) as SendBatch;
+}
+
 export type PlanStatus = "pending" | "in-progress" | "done" | "archived";
 
 export interface PlanSummary {

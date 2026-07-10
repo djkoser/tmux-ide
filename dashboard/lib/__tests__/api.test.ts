@@ -181,3 +181,105 @@ describe("updateTask", () => {
     expect(result).toBeNull();
   });
 });
+
+describe("createTask (create-only fields + guards)", () => {
+  beforeEach(() => vi.unstubAllGlobals());
+
+  it("returns the task on success", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 201,
+        json: async () => ({ ok: true, task: { id: "005", title: "T" } }),
+      }),
+    );
+    const { createTask } = await import("../api");
+    const result = await createTask("s", { title: "T", fulfills: ["VAL-A"], milestone: "M1" });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.task.id).toBe("005");
+  });
+
+  it("surfaces the 409 guard detail (unknown assertion)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 409,
+        json: async () => ({ error: "Unknown assertion(s) in fulfills", unknownAssertions: ["VAL-X"] }),
+      }),
+    );
+    const { createTask } = await import("../api");
+    const result = await createTask("s", { title: "T", fulfills: ["VAL-X"] });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("VAL-X");
+  });
+});
+
+describe("sendToTargets + fetchSendBatch", () => {
+  beforeEach(() => vi.unstubAllGlobals());
+
+  it("returns batchId + seeded recipients on 202", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 202,
+        json: async () => ({
+          ok: true,
+          batchId: "abc123",
+          fanOut: true,
+          recipients: [
+            { paneId: "%1", name: "cw1", title: "cw1", role: "teammate", status: "retrying", attempts: 0 },
+          ],
+        }),
+      }),
+    );
+    const { sendToTargets } = await import("../api");
+    const result = await sendToTargets("s", { target: "cw*", message: "hi" });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.batch.batchId).toBe("abc123");
+      expect(result.batch.recipients[0]!.status).toBe("retrying");
+    }
+  });
+
+  it("surfaces error + available panes on 404", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        json: async () => ({ error: "Pane not found", available: [{ title: "lead", name: "lead" }] }),
+      }),
+    );
+    const { sendToTargets } = await import("../api");
+    const result = await sendToTargets("s", { target: "ghost", message: "hi" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.available?.[0]!.name).toBe("lead");
+  });
+
+  it("parses per-recipient status from the batch poll", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          batchId: "abc123",
+          done: true,
+          ok: false,
+          recipients: [
+            { paneId: "%1", name: "cw1", title: "cw1", role: "teammate", status: "delivered", attempts: 1 },
+            { paneId: "%2", name: "cw2", title: "cw2", role: "teammate", status: "failed", attempts: 4 },
+          ],
+        }),
+      }),
+    );
+    const { fetchSendBatch } = await import("../api");
+    const batch = await fetchSendBatch("s", "abc123");
+    expect(batch?.done).toBe(true);
+    expect(batch?.ok).toBe(false);
+    expect(batch?.recipients.find((r) => r.paneId === "%2")?.status).toBe("failed");
+  });
+});

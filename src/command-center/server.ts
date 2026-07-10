@@ -20,8 +20,10 @@ import {
   sendCommand,
   sendText,
   getPaneBusyStatus,
+  type PaneInfo,
 } from "../widgets/lib/pane-comms.ts";
-import { resolveSendTargets } from "../send.ts";
+import { resolveSendTargets, deliverReliably, DEFAULT_TIMING } from "../send.ts";
+import { randomUUID } from "node:crypto";
 import { getSessionState, killSession, stopSessionMonitor } from "../lib/tmux.ts";
 import { readConfig } from "../lib/yaml-io.ts";
 import {
@@ -83,11 +85,25 @@ import { RegistrationPayloadSchema } from "../lib/hq/types.ts";
 import { dispatchResearch, loadResearchState } from "../lib/research.ts";
 import { serveDashboard } from "./static.ts";
 
+/** Outcome of one reliable delivery, mirroring send.ts DeliveryResult. */
+export type ComposerDeliveryStatus = "delivered" | "duplicate" | "superseded" | "failed";
+
+/** Deliver one message to one pane and resolve when its receipt settles. Injectable for tests. */
+export type ComposerDeliver = (
+  dir: string,
+  session: string,
+  pane: PaneInfo,
+  body: string,
+  batchId: string | undefined,
+) => Promise<{ outcome: ComposerDeliveryStatus; attempts: number }>;
+
 export interface CreateAppOptions {
   authService?: AuthService;
   authConfig?: AuthConfig;
   tunnelManager?: TunnelManager;
   remoteRegistry?: RemoteRegistry;
+  /** Override the reliable-send delivery (defaults to send.ts deliverReliably). */
+  deliver?: ComposerDeliver;
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -113,6 +129,34 @@ function isValidMilestoneTransition(
 export function createApp(options: CreateAppOptions = {}): Hono {
   const authConfig: AuthConfig = options.authConfig ?? { method: "none", token_expiry: 86400 };
   const authService = options.authService ?? new AuthService();
+
+  // Reliable delivery for the team-input composer — real send by default, injectable for tests.
+  const deliver: ComposerDeliver =
+    options.deliver ??
+    ((dir, session, pane, body, batchId) =>
+      deliverReliably(dir, session, pane, body, batchId, DEFAULT_TIMING));
+
+  // In-memory per-batch receipt tracker. `/send` seeds a batch and returns its id
+  // immediately; the UI polls `/send/batch/:id` for live per-recipient status.
+  interface ComposerRecipient {
+    paneId: string;
+    name: string | null;
+    title: string;
+    role: string | null;
+    status: "retrying" | ComposerDeliveryStatus;
+    attempts: number;
+  }
+  interface ComposerBatch {
+    createdAt: number;
+    recipients: ComposerRecipient[];
+  }
+  const sendBatches = new Map<string, ComposerBatch>();
+  const BATCH_TTL_MS = 10 * 60 * 1000;
+  const pruneBatches = (nowMs: number) => {
+    for (const [id, b] of sendBatches) {
+      if (nowMs - b.createdAt > BATCH_TTL_MS) sendBatches.delete(id);
+    }
+  };
 
   const app = new Hono();
 
@@ -1119,7 +1163,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
       return c.json({ error: "Session not found" }, 404);
     }
 
-    const { target, message, noEnter } = c.req.valid("json");
+    const { target, message, noEnter, fireAndForget } = c.req.valid("json");
 
     const panes = listSessionPanes(name);
     const targets = resolveSendTargets(panes, target);
@@ -1133,52 +1177,73 @@ export function createApp(options: CreateAppOptions = {}): Hono {
       return c.json({ error: "Pane not found", target, available }, 404);
     }
 
-    const deliveries = targets.map((pane) => {
-      const busyStatus = getPaneBusyStatus(name, pane.id);
+    pruneBatches(Date.now());
+    const batchId = randomUUID().slice(0, 8);
+    // Only agent panes can run `recv`; non-agent panes and --fire-and-forget fall
+    // back to a direct paste (delivered immediately, no receipt to await).
+    const useReliable = !noEnter && !fireAndForget;
 
-      // Collapse multiline for agent panes
-      const prepared = busyStatus === "agent" ? message.replace(/\n+/g, " ").trim() : message;
+    const recipients: ComposerRecipient[] = targets.map((pane) => ({
+      paneId: pane.id,
+      name: pane.name ?? null,
+      title: pane.title,
+      role: pane.role ?? null,
+      status: "retrying",
+      attempts: 0,
+    }));
+    sendBatches.set(batchId, { createdAt: Date.now(), recipients });
 
-      if (noEnter) {
-        sendText(name, pane.id, prepared);
+    for (const pane of targets) {
+      const rec = recipients.find((r) => r.paneId === pane.id)!;
+      const isAgent = getPaneBusyStatus(name, pane.id) === "agent";
+
+      if (useReliable && isAgent) {
+        // Reliable path: recv reads the full body from the outbox, so no multiline
+        // collapse. Fire in the background; update the tracker when the receipt settles.
+        void deliver(session.dir, name, pane, message, batchId)
+          .then((result) => {
+            rec.status = result.outcome;
+            rec.attempts = result.attempts;
+          })
+          .catch(() => {
+            rec.status = "failed";
+          });
+        appendEvent(session.dir, {
+          timestamp: new Date().toISOString(),
+          type: "send",
+          target: pane.name ?? pane.title,
+          paneId: pane.id,
+          message: `[reliable] ${message.slice(0, 90)}`,
+        });
       } else {
-        sendCommand(name, pane.id, prepared);
+        const prepared = isAgent ? message.replace(/\n+/g, " ").trim() : message;
+        if (noEnter) sendText(name, pane.id, prepared);
+        else sendCommand(name, pane.id, prepared);
+        rec.status = "delivered";
+        rec.attempts = 1;
+        appendEvent(session.dir, {
+          timestamp: new Date().toISOString(),
+          type: "send",
+          target: pane.name ?? pane.title,
+          paneId: pane.id,
+          message: prepared.length > 100 ? prepared.slice(0, 100) + "..." : prepared,
+        });
       }
+    }
 
-      appendEvent(session.dir, {
-        timestamp: new Date().toISOString(),
-        type: "send",
-        target: pane.name ?? pane.title,
-        paneId: pane.id,
-        message: prepared.length > 100 ? prepared.slice(0, 100) + "..." : prepared,
-      });
+    return c.json(
+      { ok: true, session: name, batchId, fanOut: targets.length > 1, recipients },
+      202,
+    );
+  });
 
-      return { pane, busyStatus };
-    });
-
-    const [first] = deliveries;
-    return c.json({
-      ok: true,
-      session: name,
-      target: {
-        paneId: first!.pane.id,
-        name: first!.pane.name,
-        title: first!.pane.title,
-        role: first!.pane.role,
-      },
-      ...(deliveries.length > 1
-        ? {
-            targets: deliveries.map((d) => ({
-              paneId: d.pane.id,
-              name: d.pane.name,
-              title: d.pane.title,
-              role: d.pane.role,
-              busyStatus: d.busyStatus,
-            })),
-          }
-        : {}),
-      busyStatus: first!.busyStatus,
-    });
+  // Poll per-recipient receipt status for a send batch (composer live indicators).
+  app.get("/api/project/:name/send/batch/:batchId", (c) => {
+    const batch = sendBatches.get(c.req.param("batchId"));
+    if (!batch) return c.json({ error: "Batch not found" }, 404);
+    const done = batch.recipients.every((r) => r.status !== "retrying");
+    const ok = batch.recipients.every((r) => r.status !== "failed");
+    return c.json({ batchId: c.req.param("batchId"), done, ok, recipients: batch.recipients });
   });
 
   // Launch a tmux-ide session (shells out to CLI since launch has complex side effects)

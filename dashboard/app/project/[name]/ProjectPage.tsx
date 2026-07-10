@@ -25,6 +25,7 @@ import { DiffPanel } from "@/components/DiffPanel";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { PlansPanel } from "@/components/PlansPanel";
 import { StatusBar } from "@/components/StatusBar";
+import { ComposerDock } from "@/components/ComposerDock";
 import type { ProjectDetail } from "@/lib/types";
 
 type Tab = "kanban" | "agents" | "diffs" | "plans" | "validation" | "metrics" | "activity";
@@ -282,6 +283,7 @@ export default function ProjectPage() {
         </div>
       )}
 
+      <ComposerDock sessionName={project.session} />
       <StatusBar project={project} lastUpdate={lastUpdate} stale={stale} />
     </div>
   );

@@ -293,6 +293,127 @@ describe("POST /api/project/:name/task (create)", () => {
   });
 });
 
+describe("POST /api/project/:name/send (composer)", () => {
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  it("returns a batchId immediately and delivers reliably to an agent pane", async () => {
+    mockPanes = [makePane({ id: "%1", title: "cw1", name: "cw1", currentCommand: "claude" })];
+    const calls: string[] = [];
+    const app = createApp({
+      deliver: async (_dir, _session, pane) => {
+        calls.push(pane.id);
+        return { outcome: "delivered", attempts: 1 };
+      },
+    });
+    const res = await app.request("/api/project/test-project/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target: "cw1", message: "hello" }),
+    });
+    expect(res.status).toBe(202);
+    const body = (await res.json()) as { batchId: string; recipients: { status: string }[] };
+    expect(body.batchId).toBeTruthy();
+    expect(body.recipients).toHaveLength(1);
+    expect(calls).toEqual(["%1"]);
+
+    await tick();
+    const poll = await app.request(`/api/project/test-project/send/batch/${body.batchId}`);
+    const state = (await poll.json()) as {
+      done: boolean;
+      ok: boolean;
+      recipients: { status: string }[];
+    };
+    expect(state.done).toBe(true);
+    expect(state.ok).toBe(true);
+    expect(state.recipients[0]!.status).toBe("delivered");
+  });
+
+  it("pastes directly (no reliable delivery) to a non-agent pane", async () => {
+    mockPanes = [makePane({ id: "%2", title: "team-input", name: "team-input", currentCommand: "zsh" })];
+    let delivered = false;
+    const app = createApp({
+      deliver: async () => {
+        delivered = true;
+        return { outcome: "delivered", attempts: 1 };
+      },
+    });
+    const res = await app.request("/api/project/test-project/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target: "team-input", message: "hi" }),
+    });
+    const body = (await res.json()) as { recipients: { status: string }[] };
+    expect(delivered).toBe(false);
+    expect(body.recipients[0]!.status).toBe("delivered");
+  });
+
+  it("fans out to a wildcard and reports per-recipient status (1 failed)", async () => {
+    mockPanes = [
+      makePane({ id: "%1", title: "cw1", name: "cw1", role: "teammate", currentCommand: "claude" }),
+      makePane({ id: "%2", title: "cw2", name: "cw2", role: "teammate", currentCommand: "claude" }),
+    ];
+    const app = createApp({
+      deliver: async (_dir, _session, pane) => ({
+        outcome: pane.id === "%2" ? "failed" : "delivered",
+        attempts: pane.id === "%2" ? 4 : 1,
+      }),
+    });
+    const res = await app.request("/api/project/test-project/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target: "cw*", message: "batch" }),
+    });
+    const body = (await res.json()) as { batchId: string; fanOut: boolean };
+    expect(body.fanOut).toBe(true);
+
+    await tick();
+    const poll = await app.request(`/api/project/test-project/send/batch/${body.batchId}`);
+    const state = (await poll.json()) as {
+      ok: boolean;
+      recipients: { paneId: string; status: string }[];
+    };
+    expect(state.ok).toBe(false);
+    expect(state.recipients.find((r) => r.paneId === "%1")!.status).toBe("delivered");
+    expect(state.recipients.find((r) => r.paneId === "%2")!.status).toBe("failed");
+  });
+
+  it("fireAndForget skips the reliable path even for an agent pane", async () => {
+    mockPanes = [makePane({ id: "%1", title: "cw1", name: "cw1", currentCommand: "claude" })];
+    let delivered = false;
+    const app = createApp({
+      deliver: async () => {
+        delivered = true;
+        return { outcome: "delivered", attempts: 1 };
+      },
+    });
+    const res = await app.request("/api/project/test-project/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target: "cw1", message: "quick", fireAndForget: true }),
+    });
+    const body = (await res.json()) as { recipients: { status: string }[] };
+    expect(delivered).toBe(false);
+    expect(body.recipients[0]!.status).toBe("delivered");
+  });
+
+  it("returns 404 polling an unknown batch", async () => {
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/send/batch/nope");
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 404 when the target matches no pane", async () => {
+    mockPanes = [makePane({ id: "%1", title: "cw1", name: "cw1", currentCommand: "claude" })];
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target: "ghost", message: "x" }),
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
 describe("DELETE /api/project/:name/task/:id", () => {
   it("deletes a task", async () => {
     saveTask(tmpDir, makeTask({ id: "001" }));
