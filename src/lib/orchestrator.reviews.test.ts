@@ -43,7 +43,7 @@ const idleValidator = makePane({
 });
 
 function triggerCount(): number {
-  return sendKeys.filter((s) => s.includes("Read and execute: .tasks/dispatch/review-")).length;
+  return sendKeys.filter((s) => s.includes("New message — read: .tasks/dispatch/review-")).length;
 }
 
 describe("buildReviewPrompt", () => {

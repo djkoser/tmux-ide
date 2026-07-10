@@ -384,7 +384,7 @@ export function dispatchResearch(
   const sent = sendCommand(
     config.session,
     pane.id,
-    `Read and execute: .tasks/dispatch/${filename}`,
+    `New message — read: .tasks/dispatch/${filename}`,
   );
   if (!sent) {
     task.status = "todo";

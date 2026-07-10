@@ -543,7 +543,7 @@ export function dispatchValidation(
     sendCommand(
       config.session,
       validatorPane.id,
-      `Read and execute: .tasks/dispatch/validate-${milestone.id}.md`,
+      `New message — read: .tasks/dispatch/validate-${milestone.id}.md`,
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
@@ -622,7 +622,7 @@ export function dispatchReviews(
       sendCommand(
         config.session,
         validatorPane.id,
-        `Read and execute: .tasks/dispatch/review-${task.id}.md`,
+        `New message — read: .tasks/dispatch/review-${task.id}.md`,
       );
       dispatched.add(task.id);
       state.lastActivity.set(validatorPane.id, Date.now());
@@ -852,7 +852,7 @@ export function dispatchPlanning(
   const dispatchFile = join(dispatchDir, "planning.md");
   writeFileSync(dispatchFile, prompt);
 
-  sendCommand(config.session, plannerPane.id, `Read and execute: .tasks/dispatch/planning.md`);
+  sendCommand(config.session, plannerPane.id, `New message — read: .tasks/dispatch/planning.md`);
 
   appendEvent(config.dir, {
     timestamp: new Date().toISOString(),
@@ -1271,7 +1271,7 @@ export function dispatchGoals(
     sendCommand(
       config.session,
       planner.id,
-      `Read and execute the goal in .tasks/dispatch/goal-${goal.id}.md`,
+      `New message — read the goal in .tasks/dispatch/goal-${goal.id}.md`,
     );
 
     // Log event

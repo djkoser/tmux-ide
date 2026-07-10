@@ -23,9 +23,13 @@ import {
 
 export const LONG_MESSAGE_THRESHOLD = 150;
 
-/** The single-line, shell-and-agent-runnable trigger a recipient executes to receive a message. */
+/**
+ * The single-line trigger a recipient runs to receive a message. Neutral by
+ * design: running `recv` only prints the body — the recipient decides whether
+ * it's a directive, a question, or an FYI. No "execute" language.
+ */
 export function buildRecvTrigger(msgId: string): string {
-  return `Run: tmux-ide recv ${msgId}`;
+  return `New message — run: tmux-ide recv ${msgId}`;
 }
 
 export interface ReliableSendTiming {
@@ -142,7 +146,7 @@ export function writeDispatchFile(
   const filename = `send-${paneSlug}-${Date.now()}-${randomUUID().slice(0, 8)}.md`;
   const filePath = join(dispatchDir, filename);
   writeFileSync(filePath, message);
-  return { filePath, triggerCmd: `Read and execute: .tasks/dispatch/${filename}` };
+  return { filePath, triggerCmd: `New message — read: .tasks/dispatch/${filename}` };
 }
 
 interface SendOptions {
