@@ -293,6 +293,106 @@ describe("POST /api/project/:name/task (create)", () => {
   });
 });
 
+describe("POST /api/project/:name/milestones/insert (renumber + cascade)", () => {
+  function seedTwoMilestones() {
+    saveMission(tmpDir, {
+      title: "Test",
+      description: "",
+      status: "active",
+      milestones: [
+        { id: "M1", title: "One", description: "", status: "active", order: 1, created: "", updated: "" },
+        { id: "M2", title: "Two", description: "", status: "locked", order: 2, created: "", updated: "" },
+      ],
+      created: "",
+      updated: "",
+    });
+  }
+
+  it("inserts at a position, renumbers contiguously, and cascades task milestone refs", async () => {
+    seedTwoMilestones();
+    saveTask(tmpDir, makeTask({ id: "001", milestone: "M2" }));
+
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/milestones/insert", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Inserted", position: 2 }),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as {
+      milestones: { id: string; title: string; order: number }[];
+      remapped: Record<string, string>;
+    };
+    expect(body.milestones.map((m) => m.id)).toEqual(["M1", "M2", "M3"]);
+    expect(body.milestones.find((m) => m.id === "M2")!.title).toBe("Inserted");
+    expect(body.milestones.find((m) => m.id === "M3")!.title).toBe("Two");
+    expect(body.remapped).toEqual({ M2: "M3" });
+
+    // The task that pointed at the old M2 now points at M3.
+    const mission = loadMission(tmpDir)!;
+    expect(mission.milestones.map((m) => m.order)).toEqual([1, 2, 3]);
+    const stored = loadTask(tmpDir, "001");
+    expect(stored?.milestone).toBe("M3");
+  });
+
+  it("appends at the end when position exceeds the count", async () => {
+    seedTwoMilestones();
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/milestones/insert", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Last", position: 99 }),
+    });
+    const body = (await res.json()) as { milestones: { id: string; title: string }[] };
+    expect(body.milestones.map((m) => m.id)).toEqual(["M1", "M2", "M3"]);
+    expect(body.milestones.find((m) => m.id === "M3")!.title).toBe("Last");
+  });
+});
+
+describe("POST /api/project/:name/validation/contract (text editor + I5)", () => {
+  it("saves contract text and round-trips via GET", async () => {
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/validation/contract", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "- **VAL-A** a\n- **VAL-B** b\n" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; assertions: string[] };
+    expect(body.assertions.sort()).toEqual(["VAL-A", "VAL-B"]);
+
+    const get = await app.request("/api/project/test-project/validation/contract");
+    const doc = (await get.json()) as { content: string };
+    expect(doc.content).toContain("VAL-A");
+  });
+
+  it("rejects dropping an assertion a task still claims (409)", async () => {
+    writeFileSync(join(tmpDir, ".tasks", "validation-contract.md"), "- **VAL-A** a\n- **VAL-B** b\n");
+    saveTask(tmpDir, makeTask({ id: "001", fulfills: ["VAL-B"] }));
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/validation/contract", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "- **VAL-A** a\n" }), // drops VAL-B
+    });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { stillClaimed: Record<string, string[]> };
+    expect(body.stillClaimed["VAL-B"]).toEqual(["001"]);
+  });
+
+  it("allows adding/reordering assertions", async () => {
+    writeFileSync(join(tmpDir, ".tasks", "validation-contract.md"), "- **VAL-A** a\n");
+    saveTask(tmpDir, makeTask({ id: "001", fulfills: ["VAL-A"] }));
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/validation/contract", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "- **VAL-B** b\n- **VAL-A** a\n" }),
+    });
+    expect(res.status).toBe(200);
+  });
+});
+
 describe("POST /api/project/:name/send (composer)", () => {
   const tick = () => new Promise((r) => setTimeout(r, 0));
 

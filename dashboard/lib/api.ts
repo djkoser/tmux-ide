@@ -155,6 +155,75 @@ export async function fetchAssertionIds(name: string): Promise<string[]> {
   return data.assertions ?? [];
 }
 
+export async function createMilestone(
+  name: string,
+  fields: { title: string; sequence: number; description?: string },
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/milestones`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fields),
+  });
+  if (res.ok) return { ok: true };
+  const data = (await res.json().catch(() => null)) as { error?: string } | null;
+  return { ok: false, error: data?.error ?? `HTTP ${res.status}` };
+}
+
+export async function updateMilestone(
+  name: string,
+  id: string,
+  fields: { status?: MilestoneData["status"]; title?: string; description?: string },
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(
+    `${API_BASE}/api/project/${encodeURIComponent(name)}/milestones/${encodeURIComponent(id)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fields),
+    },
+  );
+  if (res.ok) return { ok: true };
+  const data = (await res.json().catch(() => null)) as { error?: string } | null;
+  return { ok: false, error: data?.error ?? `HTTP ${res.status}` };
+}
+
+export async function insertMilestone(
+  name: string,
+  fields: { title: string; description?: string; position: number },
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/milestones/insert`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fields),
+  });
+  if (res.ok) return { ok: true };
+  const data = (await res.json().catch(() => null)) as { error?: string } | null;
+  return { ok: false, error: data?.error ?? `HTTP ${res.status}` };
+}
+
+export async function fetchContract(name: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/validation/contract`);
+  if (!res.ok) return "";
+  const data = (await res.json()) as { content: string };
+  return data.content ?? "";
+}
+
+export async function saveContract(
+  name: string,
+  content: string,
+): Promise<{ ok: boolean; error?: string; stillClaimed?: Record<string, string[]> }> {
+  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/validation/contract`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  });
+  if (res.ok) return { ok: true };
+  const data = (await res.json().catch(() => null)) as
+    | { error?: string; stillClaimed?: Record<string, string[]> }
+    | null;
+  return { ok: false, error: data?.error ?? `HTTP ${res.status}`, stillClaimed: data?.stillClaimed };
+}
+
 export type ReceiptStatus = "retrying" | "delivered" | "duplicate" | "superseded" | "failed";
 
 export interface SendRecipient {

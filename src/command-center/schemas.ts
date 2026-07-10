@@ -51,6 +51,14 @@ export const updateMilestoneSchema = z.object({
   description: z.string().optional(),
 });
 
+// Insert a milestone at a 1-based position, renumbering the rest so the set stays
+// contiguous 1..N (M{n} ids reassigned, task.milestone refs cascaded).
+export const insertMilestoneSchema = z.object({
+  title: z.string().trim().min(1, "Title is required"),
+  description: z.string().optional(),
+  position: z.number().int().positive(),
+});
+
 export const updateAssertionSchema = z.object({
   status: z.enum(["pending", "passing", "failing", "blocked"]),
   evidence: z.string().optional(),

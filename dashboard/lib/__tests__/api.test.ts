@@ -283,3 +283,34 @@ describe("sendToTargets + fetchSendBatch", () => {
     expect(batch?.recipients.find((r) => r.paneId === "%2")?.status).toBe("failed");
   });
 });
+
+describe("milestone + contract clients", () => {
+  beforeEach(() => vi.unstubAllGlobals());
+
+  it("insertMilestone posts to the insert route", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({ ok: true }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const { insertMilestone } = await import("../api");
+    const r = await insertMilestone("s", { title: "X", position: 2 });
+    expect(r.ok).toBe(true);
+    expect(fetchMock.mock.calls[0]![0]).toContain("/milestones/insert");
+  });
+
+  it("saveContract surfaces the 409 stillClaimed detail", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 409,
+        json: async () => ({
+          error: "Cannot drop assertion(s) still claimed by a task's fulfills",
+          stillClaimed: { "VAL-B": ["001"] },
+        }),
+      }),
+    );
+    const { saveContract } = await import("../api");
+    const r = await saveContract("s", "- **VAL-A** a\n");
+    expect(r.ok).toBe(false);
+    expect(r.stillClaimed?.["VAL-B"]).toEqual(["001"]);
+  });
+});

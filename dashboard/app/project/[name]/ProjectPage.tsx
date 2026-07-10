@@ -26,6 +26,8 @@ import { ActivityFeed } from "@/components/ActivityFeed";
 import { PlansPanel } from "@/components/PlansPanel";
 import { StatusBar } from "@/components/StatusBar";
 import { ComposerDock } from "@/components/ComposerDock";
+import { MilestonesEditor } from "@/components/MilestonesEditor";
+import { ContractEditor } from "@/components/ContractEditor";
 import type { ProjectDetail } from "@/lib/types";
 
 type Tab = "kanban" | "agents" | "diffs" | "plans" | "validation" | "metrics" | "activity";
@@ -262,7 +264,13 @@ export default function ProjectPage() {
 
       {activeTab === "plans" && <PlansPanel sessionName={project.session} />}
 
-      {activeTab === "validation" && <ValidationTab sessionName={project.session} />}
+      {activeTab === "validation" && (
+        <ValidationTab
+          sessionName={project.session}
+          milestones={milestones ?? []}
+          onRefresh={refresh}
+        />
+      )}
 
       {activeTab === "metrics" && <MetricsTab sessionName={project.session} />}
 
@@ -511,28 +519,27 @@ function MetricsTab({ sessionName }: { sessionName: string }) {
   );
 }
 
-function ValidationTab({ sessionName }: { sessionName: string }) {
+function ValidationTab({
+  sessionName,
+  milestones,
+  onRefresh,
+}: {
+  sessionName: string;
+  milestones: MilestoneData[];
+  onRefresh: () => void;
+}) {
   const valFetcher = useCallback(() => fetchValidation(sessionName), [sessionName]);
   const { data: validation } = usePolling(valFetcher, 3000);
   const covFetcher = useCallback(() => fetchCoverage(sessionName), [sessionName]);
   const { data: coverage } = usePolling(covFetcher, 5000);
 
-  if (!validation) {
-    return <div className="flex-1 p-4 text-[var(--dim)]">no validation contract found</div>;
-  }
-
-  const assertions = validation.state ? Object.entries(validation.state.assertions) : [];
+  const assertions = validation?.state ? Object.entries(validation.state.assertions) : [];
 
   return (
     <div className="flex-1 p-4 overflow-auto space-y-4">
-      {validation.contract && (
-        <div>
-          <h3 className="text-[var(--accent)] mb-1">contract</h3>
-          <pre className="text-[var(--fg)] text-[12px] whitespace-pre-wrap bg-[var(--surface)] p-2 border border-[var(--border)]">
-            {validation.contract}
-          </pre>
-        </div>
-      )}
+      <MilestonesEditor sessionName={sessionName} milestones={milestones} onChanged={onRefresh} />
+
+      <ContractEditor sessionName={sessionName} onSaved={onRefresh} />
 
       {assertions.length > 0 && (
         <div>

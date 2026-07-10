@@ -73,6 +73,8 @@ import {
   sendCommandSchema,
   createMilestoneSchema,
   updateMilestoneSchema,
+  insertMilestoneSchema,
+  saveContractSchema,
   updateAssertionSchema,
   triggerResearchSchema,
 } from "./schemas.ts";
@@ -861,6 +863,64 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     },
   );
 
+  // Registered before the `/milestones/:id` param route so the static "insert"
+  // segment isn't captured as an :id.
+  app.post(
+    "/api/project/:name/milestones/insert",
+    zValidator("json", insertMilestoneSchema),
+    (c) => {
+      const name = c.req.param("name");
+      const sessions = discoverSessions();
+      const session = sessions.find((s) => s.name === name);
+      if (!session) return c.json({ error: "Session not found" }, 404);
+      const mission = loadMission(session.dir);
+      if (!mission) return c.json({ error: "No mission" }, 404);
+      const body = c.req.valid("json");
+
+      const ordered = [...mission.milestones].sort((a, b) => a.order - b.order);
+      const pos = Math.min(Math.max(body.position, 1), ordered.length + 1);
+      const now = new Date().toISOString();
+      const inserted = {
+        id: "",
+        title: body.title,
+        description: body.description ?? "",
+        status: "locked" as const,
+        order: 0,
+        created: now,
+        updated: now,
+      };
+      ordered.splice(pos - 1, 0, inserted);
+
+      // Reassign contiguous ids/orders; record old→new id remap for the task cascade.
+      const remap = new Map<string, string>();
+      ordered.forEach((m, i) => {
+        const newId = `M${i + 1}`;
+        if (m !== inserted && m.id !== newId) remap.set(m.id, newId);
+        m.id = newId;
+        m.order = i + 1;
+        if (m !== inserted) m.updated = now;
+      });
+
+      mission.milestones = ordered;
+      mission.updated = now;
+      saveMission(session.dir, mission);
+
+      if (remap.size > 0) {
+        for (const task of loadTasks(session.dir)) {
+          if (task.milestone && remap.has(task.milestone)) {
+            task.milestone = remap.get(task.milestone)!;
+            saveTask(session.dir, task);
+          }
+        }
+      }
+
+      return c.json(
+        { ok: true, inserted, milestones: ordered, remapped: Object.fromEntries(remap) },
+        201,
+      );
+    },
+  );
+
   app.post(
     "/api/project/:name/milestones/:id",
     zValidator("json", updateMilestoneSchema),
@@ -923,6 +983,51 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     const contract = loadValidationContract(session.dir);
     return c.json({ assertions: contract ? parseAssertionIds(contract) : [] });
   });
+
+  // Raw contract markdown for the editor (mirrors the plans-editor read path).
+  app.get("/api/project/:name/validation/contract", (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    return c.json({ content: loadValidationContract(session.dir) ?? "" });
+  });
+
+  // Save the contract text. Guard I5: the new content may add/rename/reorder
+  // assertions, but must not DROP one a task's `fulfills` still claims — that would
+  // orphan the claim and break the coverage gate.
+  app.post(
+    "/api/project/:name/validation/contract",
+    zValidator("json", saveContractSchema),
+    (c) => {
+      const name = c.req.param("name");
+      const sessions = discoverSessions();
+      const session = sessions.find((s) => s.name === name);
+      if (!session) return c.json({ error: "Session not found" }, 404);
+      const { content } = c.req.valid("json");
+
+      const newIds = new Set(parseAssertionIds(content));
+      const stillClaimed: Record<string, string[]> = {};
+      for (const task of loadTasks(session.dir)) {
+        for (const assertId of task.fulfills ?? []) {
+          if (!newIds.has(assertId)) {
+            (stillClaimed[assertId] ??= []).push(task.id);
+          }
+        }
+      }
+      if (Object.keys(stillClaimed).length > 0) {
+        return c.json(
+          { error: "Cannot drop assertion(s) still claimed by a task's fulfills", stillClaimed },
+          409,
+        );
+      }
+
+      ensureTasksDir(session.dir);
+      // Same path convention as loadValidationContract (.tasks/validation-contract.md).
+      writeFileSync(join(session.dir, ".tasks", "validation-contract.md"), content);
+      return c.json({ ok: true, assertions: [...newIds] });
+    },
+  );
 
   app.post(
     "/api/project/:name/validation/assert/:assertId",
