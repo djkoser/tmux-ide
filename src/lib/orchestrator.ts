@@ -50,6 +50,7 @@ import {
   type Milestone,
 } from "./task-store.ts";
 import { slugify } from "./slugify.ts";
+import { normalizePaneTitle, SPINNERS } from "./pane-title.ts";
 import { recordTaskTime } from "./token-tracker.ts";
 import {
   listSessionPanes,
@@ -117,13 +118,12 @@ export function runHook(command: string, cwd: string): { ok: true } | { ok: fals
 // not "claude". Detect agents by checking both the command name and the pane title.
 const SHELL_COMMANDS = new Set(["zsh", "bash", "sh", "fish"]);
 const AGENT_PREFIXES = ["claude", "codex"];
-const SPINNERS = /^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏⠂⠒⠢⠆⠐⠠⠄◐◓◑◒✳|/\\-] /;
 const VERSION_PATTERN = /^\d+\.\d+/;
 
-// Strip spinner/status prefix from pane title to get stable name
-export function normalizePaneTitle(title: string): string {
-  return title.replace(SPINNERS, "").trim();
-}
+// Stable-name normalization lives in ./pane-title.ts so send (wildcard matching)
+// and relayout (pane resolution) share the exact same glyph strip. Re-exported
+// here for existing importers.
+export { normalizePaneTitle, SPINNERS };
 
 // French names for agents — fun, memorable, and stable across spinner changes
 const AGENT_NAMES = [

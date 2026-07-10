@@ -28,6 +28,8 @@ import {
 import { validateConfig } from "./validate.ts";
 import { resolveWidgetCommand } from "./widgets/resolve.ts";
 import { shellEscape } from "./lib/shell.ts";
+import { getWindowSize } from "./widgets/lib/pane-comms.ts";
+import { applyRelayout } from "./relayout.ts";
 import type { IdeConfig, Row, Pane } from "./types.ts";
 
 const DEFAULT_COMMAND_CENTER_PORT = 6060;
@@ -306,14 +308,18 @@ export async function launch(
 
   const { focusPane, paneActions } = collectPaneStartupPlan(rows, paneMap, firstPanesOfRows, dir);
 
-  for (const action of paneActions) {
+  for (const [paneIndex, action] of paneActions.entries()) {
     if (action.title) {
       setPaneTitle(action.targetPane, action.title);
     }
 
-    // Set pane identity options for discovery by orchestrator/widgets
+    // Set pane identity options for discovery by orchestrator/widgets.
+    // @ide_name is the durable identity relayout and send resolve panes by, so
+    // EVERY pane is stamped — including non-agent panes like team-input whose
+    // shell can rename the tmux title. A title-less pane falls back to a stable
+    // positional key so it still resolves (empty @ide_name resolved to nothing).
     setPaneOption(action.targetPane, "@ide_role", action.paneRole ?? "shell");
-    setPaneOption(action.targetPane, "@ide_name", action.title ?? "");
+    setPaneOption(action.targetPane, "@ide_name", action.title ?? `pane-${paneIndex}`);
     setPaneOption(action.targetPane, "@ide_type", action.paneType ?? "shell");
 
     // Lock agent pane titles so Claude Code can't overwrite them
@@ -345,6 +351,30 @@ export async function launch(
   for (const command of buildSessionOptions(session, { theme })) {
     runSessionCommand(command);
   }
+
+  // Pin exact ide.yml proportions now that every pane exists. tmux sizes each
+  // split once at creation with integer-percent rounding that compounds across
+  // sequential splits, so a fresh window drifts from the configured sizes.
+  // Recomputing against the final window geometry and resizing each pane makes
+  // launch match ide.yml with no post-launch fixup. The client-resized hook
+  // below re-pins the same proportions on later terminal resizes.
+  const launchGeom = getWindowSize(session);
+  if (launchGeom) {
+    applyRelayout(config, session, launchGeom.width, launchGeom.height);
+  }
+
+  // Arm the native client-resized hook: terminal resizes re-pin proportions via
+  // `tmux-ide relayout`, retiring post-launch.sh's hook and relayout.sh. `-b`
+  // keeps the resize off the hook's synchronous path.
+  const cliEntry = resolve(dirname(fileURLToPath(import.meta.url)), "..", "bin", "cli.ts");
+  const relayoutInvocation = `${shellEscape(process.execPath)} ${shellEscape(cliEntry)} relayout ${shellEscape(dir)}`;
+  runSessionCommand([
+    "set-hook",
+    "-t",
+    session,
+    "client-resized",
+    `run-shell -b ${shellEscape(relayoutInvocation)}`,
+  ]);
 
   // Store config hash for drift detection on re-launch
   setSessionVariable(session, "@config_hash", configHash(config));
