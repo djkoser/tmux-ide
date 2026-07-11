@@ -1,5 +1,5 @@
 import { describe, it, beforeEach, afterEach, expect } from "bun:test";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, mkdirSync, readdirSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -121,5 +121,48 @@ describe("receiveMessage — supersession (anti-replay)", () => {
     const second = send("cw3", "2");
     expect(receiveMessage(dir, first).status).toBe("delivered");
     expect(receiveMessage(dir, second).status).toBe("delivered");
+  });
+});
+
+describe("concurrency safety (F1 regression)", () => {
+  const stateDir = () => join(dir, ".tasks/messages/state");
+
+  it("leaves no lock directory behind after allocate + receive", () => {
+    const id = send("cw3", "hi");
+    receiveMessage(dir, id);
+    const leftovers = existsSync(stateDir())
+      ? readdirSync(stateDir()).filter((f) => f.endsWith(".lock"))
+      : [];
+    expect(leftovers).toEqual([]);
+  });
+
+  it("leaves no stray .tmp files (unique tmp names, no interleave loser)", () => {
+    for (let i = 0; i < 5; i++) receiveMessage(dir, send("cw3", `m${i}`));
+    const tmps = existsSync(stateDir())
+      ? readdirSync(stateDir()).filter((f) => f.includes(".tmp"))
+      : [];
+    expect(tmps).toEqual([]);
+  });
+
+  it("hands distinct seqs to two senders so neither real message is dropped as superseded", () => {
+    // Two independent sends to the same recipient (the collision scenario).
+    const a = send("cw3", "first");
+    const b = send("cw3", "second");
+    // Distinct seqs — the core guarantee that prevents false supersession.
+    expect(readEnvelope(dir, a)!.seq).not.toBe(readEnvelope(dir, b)!.seq);
+    // Both deliver; the second is NOT withheld as superseded.
+    expect(receiveMessage(dir, a).status).toBe("delivered");
+    expect(receiveMessage(dir, b).status).toBe("delivered");
+  });
+
+  it("recovers from a stale lock left by a crashed holder", () => {
+    // Simulate a crash mid-critical-section: an old lock dir with no holder.
+    const lock = join(stateDir(), "cw3.json.lock");
+    mkdirSync(lock, { recursive: true });
+    const old = new Date(Date.now() - 60_000);
+    utimesSync(lock, old, old); // age it past the staleness threshold
+    // allocateSeq detects the stale lock by age, breaks it, and proceeds.
+    expect(allocateSeq(dir, "cw3")).toBe(1);
+    expect(existsSync(lock)).toBe(false);
   });
 });

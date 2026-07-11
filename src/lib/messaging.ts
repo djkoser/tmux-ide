@@ -3,6 +3,8 @@ import { join } from "node:path";
 import {
   existsSync,
   mkdirSync,
+  rmdirSync,
+  statSync,
   writeFileSync,
   renameSync,
   readFileSync,
@@ -51,9 +53,82 @@ interface RecipientState {
 }
 
 function atomicWriteJSON(filePath: string, data: unknown): void {
-  const tmpPath = `${filePath}.tmp`;
+  // Unique tmp per writer: a fixed "file.tmp" lets two concurrent writers
+  // interleave write/rename so the loser's rename hits ENOENT.
+  const tmpPath = `${filePath}.${process.pid}.${randomUUID().slice(0, 8)}.tmp`;
   writeFileSync(tmpPath, JSON.stringify(data, null, 2) + "\n");
   renameSync(tmpPath, filePath);
+}
+
+function sleepMs(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/** A held lock older than this is treated as abandoned by a crashed holder. */
+const LOCK_STALE_MS = 5_000;
+const LOCK_SPIN_MS = 5;
+const LOCK_MAX_SPINS = 40; // ~200ms of live contention before force-breaking
+
+function lockIsStale(lockPath: string): boolean {
+  try {
+    return Date.now() - statSync(lockPath).mtimeMs > LOCK_STALE_MS;
+  } catch {
+    return true; // vanished between checks — treat as free
+  }
+}
+
+/**
+ * Serialize a per-recipient read-modify-write across processes with a mkdir
+ * mutex (mkdir is atomic on POSIX). The CLI (a validator/writer pane) and the
+ * daemon composer can send to the same recipient at once; without this both
+ * read the same nextSeq, mint the same seq, and the second real message is
+ * later rejected as "superseded" and silently dropped.
+ *
+ * Normal contention clears in a spin or two (the critical section is sub-ms).
+ * A lock abandoned by a crashed holder is detected by age and broken, so a send
+ * never blocks the caller (or the daemon's loop) for more than the short spin.
+ */
+function withRecipientLock<T>(dir: string, recipient: string, fn: () => T): T {
+  ensureMessagesDir(dir);
+  const lockPath = `${statePath(dir, recipient)}.lock`;
+  const runHeld = (): T => {
+    try {
+      return fn();
+    } finally {
+      try {
+        rmdirSync(lockPath);
+      } catch {
+        // best-effort release
+      }
+    }
+  };
+
+  for (let i = 0; i <= LOCK_MAX_SPINS; i++) {
+    try {
+      mkdirSync(lockPath); // throws EEXIST while held
+      return runHeld();
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+      if (lockIsStale(lockPath)) {
+        try {
+          rmdirSync(lockPath);
+        } catch {
+          // someone else broke it — retry immediately
+        }
+        continue;
+      }
+      if (i < LOCK_MAX_SPINS) sleepMs(LOCK_SPIN_MS);
+    }
+  }
+
+  // Live contention outlasted the spin budget — force-break as a last resort.
+  try {
+    rmdirSync(lockPath);
+  } catch {
+    // ignore
+  }
+  mkdirSync(lockPath);
+  return runHeld();
 }
 
 function outboxDir(dir: string): string {
@@ -112,10 +187,12 @@ function writeState(dir: string, recipient: string, state: RecipientState): void
  * Persisted so ordering survives across separate `send` invocations.
  */
 export function allocateSeq(dir: string, recipient: string): number {
-  const state = readState(dir, recipient);
-  const seq = state.nextSeq;
-  writeState(dir, recipient, { ...state, nextSeq: seq + 1 });
-  return seq;
+  return withRecipientLock(dir, recipient, () => {
+    const state = readState(dir, recipient);
+    const seq = state.nextSeq;
+    writeState(dir, recipient, { ...state, nextSeq: seq + 1 });
+    return seq;
+  });
 }
 
 /** Persist a message envelope to the outbox and return it. */
@@ -184,29 +261,34 @@ export function receiveMessage(dir: string, msgId: string): ReceiveResult {
     return { status: "superseded", note: `no message ${msgId} in outbox` };
   }
 
-  const existing = readReceipt(dir, msgId);
-  if (existing) {
-    return { status: "duplicate", note: `message ${msgId} already received` };
-  }
+  // The dedup check, the supersession compare, and the receipt/state writes are
+  // one critical section per recipient — concurrent recvs must not both read the
+  // same lastDeliveredSeq and race their receipts.
+  return withRecipientLock(dir, env.to, () => {
+    const existing = readReceipt(dir, msgId);
+    if (existing) {
+      return { status: "duplicate", note: `message ${msgId} already received` };
+    }
 
-  const now = new Date().toISOString();
-  const state = readState(dir, env.to);
+    const now = new Date().toISOString();
+    const state = readState(dir, env.to);
 
-  if (env.seq <= state.lastDeliveredSeq) {
-    writeReceipt(dir, {
-      msgId,
-      recipient: env.to,
-      seq: env.seq,
-      status: "superseded",
-      readAt: now,
-    });
-    return {
-      status: "superseded",
-      note: `message seq ${env.seq} superseded by ${state.lastDeliveredSeq}`,
-    };
-  }
+    if (env.seq <= state.lastDeliveredSeq) {
+      writeReceipt(dir, {
+        msgId,
+        recipient: env.to,
+        seq: env.seq,
+        status: "superseded",
+        readAt: now,
+      });
+      return {
+        status: "superseded",
+        note: `message seq ${env.seq} superseded by ${state.lastDeliveredSeq}`,
+      };
+    }
 
-  writeReceipt(dir, { msgId, recipient: env.to, seq: env.seq, status: "delivered", readAt: now });
-  writeState(dir, env.to, { ...state, lastDeliveredSeq: env.seq });
-  return { status: "delivered", body: env.body };
+    writeReceipt(dir, { msgId, recipient: env.to, seq: env.seq, status: "delivered", readAt: now });
+    writeState(dir, env.to, { ...state, lastDeliveredSeq: env.seq });
+    return { status: "delivered", body: env.body };
+  });
 }
