@@ -88,7 +88,7 @@ export default function ProjectPage() {
   // last-known UI and auto-reconnects on the next poll — no error screen.
   if (error && !project) {
     return (
-      <div className="h-screen flex items-center justify-center text-[var(--red)]">
+      <div className="h-[calc(100vh-1.5rem)] flex items-center justify-center text-[var(--red)]">
         failed to load project
       </div>
     );
@@ -96,7 +96,7 @@ export default function ProjectPage() {
 
   if (!project) {
     return (
-      <div className="h-screen flex items-center justify-center text-[var(--dim)]">loading...</div>
+      <div className="h-[calc(100vh-1.5rem)] flex items-center justify-center text-[var(--dim)]">loading...</div>
     );
   }
 
@@ -106,7 +106,7 @@ export default function ProjectPage() {
   const activeAgents = project.agents.filter((a) => a.isBusy).length;
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-[calc(100vh-1.5rem)] flex flex-col">
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 h-7 bg-[var(--surface)] border-b border-[var(--border)] shrink-0">
         <div className="flex items-center gap-3">

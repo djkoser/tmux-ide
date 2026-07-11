@@ -42,7 +42,7 @@ export function StatusBar({ project, lastUpdate, stale = false }: StatusBarProps
   });
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 h-6 bg-[var(--bg-weak)] border-t flex items-center px-3 text-[11px] z-20">
+    <div className="shrink-0 h-6 bg-[var(--bg-weak)] border-t flex items-center px-3 text-[11px]">
       {/* Left: session name */}
       <span className="text-[var(--accent)] font-medium">{project.session}</span>
 

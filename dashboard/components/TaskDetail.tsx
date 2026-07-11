@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { updateTask, deleteTaskApi } from "@/lib/api";
 import type { Task, AgentDetail } from "@/lib/types";
 
@@ -45,6 +45,14 @@ export function TaskDetail({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmDone, setConfirmDone] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   async function changeStatus(status: string) {
     // done is the review-flow gate (VAL-017): route it through the operator-override
