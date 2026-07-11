@@ -10,6 +10,7 @@ const config = {
     {
       panes: [
         { title: "lead", command: "claude --model x", role: "lead", task: "Lead the team." },
+        { title: "validator", command: "claude", role: "validator", task: "Validate." },
         {
           title: "cw3",
           command: "claude",
@@ -24,14 +25,14 @@ const config = {
 
 describe("claudePanes", () => {
   it("selects only claude-command panes, excluding the node input pane", () => {
-    expect(claudePanes(config).map((p) => p.title)).toEqual(["lead", "cw3"]);
+    expect(claudePanes(config).map((p) => p.title)).toEqual(["lead", "validator", "cw3"]);
   });
 });
 
 describe("generateBootDocs", () => {
   it("writes one doc per claude pane, slugged by title", () => {
     const docs = generateBootDocs(config);
-    expect(docs.map((d) => d.slug)).toEqual(["lead", "cw3"]);
+    expect(docs.map((d) => d.slug)).toEqual(["lead", "validator", "cw3"]);
   });
 
   it("embeds the team name, full roster, and the pane's standing role", () => {
@@ -53,5 +54,19 @@ describe("generateBootDocs", () => {
   it("falls back to config.name for the team label when no team block exists", () => {
     const noTeam = { ...config, team: undefined } as unknown as IdeConfig;
     expect(generateBootDocs(noTeam)[0]!.content).toContain('"proj"');
+  });
+
+  it("does not tell a teammate to run 'task done' (VAL-017: writers move to review)", () => {
+    const cw3 = generateBootDocs(config).find((d) => d.slug === "cw3")!;
+    expect(cw3.content).not.toContain("task done");
+    expect(cw3.content).toContain("--status review");
+    expect(cw3.content).toContain("only the reviewer can mark it done");
+  });
+
+  it("gives the reviewer/validator the task-done + reopen rights", () => {
+    const validator = generateBootDocs(config).find((d) => d.slug === "validator")!;
+    expect(validator.content).toContain("task done");
+    expect(validator.content).toContain("ONLY role that marks a task done");
+    expect(validator.content).toContain("tmux-ide task reopen");
   });
 });

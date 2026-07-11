@@ -2,7 +2,26 @@ import { resolve, join } from "node:path";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { readConfig } from "./lib/yaml-io.ts";
 import { slugify } from "./lib/slugify.ts";
+import { isReviewerRole } from "./lib/review-flow.ts";
 import type { IdeConfig, Pane } from "./types.ts";
+
+const MESSAGE_LINES =
+  '- Message a teammate: `tmux-ide send --to "<title>" "message"`\n- Notify the Lead: `tmux-ide notify "message"`';
+
+/**
+ * Role-aware coordination guidance. Critical: the review-flow (VAL-017) lets
+ * only a validator/reviewer mark a task done, so a teammate is told to finish
+ * by moving to review — never `task done`, which would be rejected.
+ */
+function coordinationBlock(role: string | null): string {
+  if (role === "lead") {
+    return '- Dispatch / message a teammate: `tmux-ide send --to "<title>" "message"`\n- Inspect tasks: `tmux-ide task list --json` · `tmux-ide task show <id> --json`';
+  }
+  if (isReviewerRole(role)) {
+    return `${MESSAGE_LINES}\n- The orchestrator hands you a task to review via \`tmux-ide dispatch <id>\`. You are the ONLY role that marks a task done: \`tmux-ide task done <id> --proof "..."\`. On a failed review, reopen it (preserving the assignee) with \`tmux-ide task reopen <id>\`.`;
+  }
+  return `${MESSAGE_LINES}\n- The orchestrator may hand you a task via \`tmux-ide dispatch <id>\`. Finish by moving it to review: \`tmux-ide task update <id> --status review --proof "..."\` — only the reviewer can mark it done.`;
+}
 
 /**
  * Per-pane team-awareness boot docs generated from ide.yml.
@@ -39,10 +58,7 @@ export function generateBootDocs(config: IdeConfig): BootDoc[] {
     .join("\n");
 
   return panes.map((p) => {
-    const isLead = p.role === "lead";
-    const coordination = isLead
-      ? `- Dispatch / message a teammate: \`tmux-ide send --to "<title>" "message"\`\n- Inspect tasks: \`tmux-ide task list --json\` · \`tmux-ide task show <id> --json\``
-      : `- Message a teammate: \`tmux-ide send --to "<title>" "message"\`\n- Notify the Lead: \`tmux-ide notify "message"\`\n- The orchestrator may hand you a task via \`tmux-ide dispatch <id>\`; finish with \`tmux-ide task done <id> --proof "..."\``;
+    const coordination = coordinationBlock(p.role ?? null);
 
     const content = `You are **${p.title}** in the "${teamName}" tmux-ide agent team — a coordinated multi-agent Claude Code session running in side-by-side tmux panes. You are NOT working alone; coordinate with your teammates, do not duplicate their work, and stay within your role.
 
