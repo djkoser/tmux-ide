@@ -36,9 +36,10 @@ export function loadWorkspaceRegistry(path = defaultRegistryPath()): WorkspaceRe
   const obj = raw as { version?: unknown; workspaces?: unknown };
   const version = typeof obj.version === "number" ? obj.version : 1;
   const list = Array.isArray(obj.workspaces) ? obj.workspaces : [];
+  // Keep valid entries, drop malformed ones. flatMap + the `.success` discriminant
+  // narrows without naming zod's SafeParse result type (renamed across zod versions).
   const workspaces = list
     .map((entry) => workspaceEntrySchema.safeParse(entry))
-    .filter((r): r is z.SafeParseSuccess<WorkspaceEntry> => r.success)
-    .map((r) => r.data);
+    .flatMap((r) => (r.success ? [r.data] : []));
   return { version, workspaces };
 }
