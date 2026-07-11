@@ -10,6 +10,7 @@ import {
   type ReceiptStatus,
   type WorkspaceEntry,
 } from "@/lib/api";
+import { nextPollDecision, markPendingUnknown } from "@/lib/composer-poll";
 
 interface ComposerDockProps {
   sessionName: string;
@@ -29,6 +30,7 @@ const STATUS_COLOR: Record<ReceiptStatus, string> = {
   duplicate: "var(--cyan)",
   superseded: "var(--dim)",
   failed: "var(--red)",
+  unknown: "var(--dim)",
 };
 
 /**
@@ -78,11 +80,17 @@ export function ComposerDock({ sessionName }: ComposerDockProps) {
         pollRef.current = null;
       }
     };
+    // Count consecutive unreachable polls so the interval can't run forever if the
+    // daemon bounces mid-batch (kill-switch) or the tracker loses the id (404).
+    let misses = 0;
     const poll = async () => {
       const batch = await fetchSendBatch(pod.session, batchId, pod.base);
-      if (cancelled || !batch) return;
-      setRecipients(batch.recipients);
-      if (batch.done) stop();
+      if (cancelled) return;
+      const decision = nextPollDecision(batch, misses);
+      misses = decision.misses;
+      if (decision.recipients) setRecipients(decision.recipients);
+      if (decision.gaveUp) setRecipients((prev) => markPendingUnknown(prev));
+      if (decision.stop) stop();
     };
     void poll();
     pollRef.current = setInterval(poll, 1000);

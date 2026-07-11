@@ -367,7 +367,15 @@ export async function saveContract(
   };
 }
 
-export type ReceiptStatus = "retrying" | "delivered" | "duplicate" | "superseded" | "failed";
+// "unknown" is client-synthesized (never sent by the server): the composer marks a
+// still-pending recipient unknown when the batch becomes unreachable (daemon bounce).
+export type ReceiptStatus =
+  | "retrying"
+  | "delivered"
+  | "duplicate"
+  | "superseded"
+  | "failed"
+  | "unknown";
 
 export interface SendRecipient {
   paneId: string;
