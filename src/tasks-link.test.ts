@@ -62,4 +62,11 @@ describe("linkTasks", () => {
   it("throws for a non-existent target", () => {
     expect(() => linkTasks(root, [join(root, "nope")])).toThrow();
   });
+
+  it("refuses to link the root store to itself (would delete the store)", () => {
+    // Target resolves to rootDir → link === store; must not rm the real store.
+    expect(() => linkTasks(root, [root])).toThrow();
+    expect(existsSync(join(root, ".tasks"))).toBe(true); // store intact
+    expect(lstatSync(join(root, ".tasks")).isDirectory()).toBe(true); // still a real dir, not a self-symlink
+  });
 });

@@ -29,6 +29,14 @@ export function linkTasks(rootDir: string, targets: string[]): LinkResult {
       });
     }
     const link = join(targetDir, ".tasks");
+    if (link === store) {
+      // The target IS the root store — linking it to itself would delete the
+      // store and leave a broken self-referential symlink.
+      throw new IdeError(
+        `tasks link: refusing to link the root task store to itself (${link}).`,
+        { code: "USAGE" },
+      );
+    }
     if (existsSync(link) || isSymlink(link)) {
       // Replace a stale real dir or an existing/broken symlink.
       rmSync(link, { recursive: true, force: true });

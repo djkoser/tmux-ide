@@ -76,6 +76,21 @@ describe("wipeMission", () => {
     expect(claims.claimedTasks).toEqual([]);
   });
 
+  it("sweeps a held/stale .lock directory in state/ without aborting the wipe", () => {
+    seed();
+    // withRecipientLock leaves a .lock DIRECTORY; a non-recursive rmSync throws
+    // EISDIR on it and would abort the wipe mid-way (F3 regression).
+    mkdirSync(join(dir, ".tasks/messages/state/cw3.json.lock"), { recursive: true });
+
+    const summary = wipeMission(dir); // must not throw
+    expect(summary.tasks).toBe(2);
+    expect(loadTasks(dir).length).toBe(0);
+    expect(loadMission(dir)).toBeNull();
+    expect(existsSync(join(dir, ".tasks/messages/state/cw3.json.lock"))).toBe(false);
+    // resetClaims still runs (proves the wipe reached the end, not aborted mid-way)
+    expect(existsSync(join(dir, ".tasks/orchestrator-state.json"))).toBe(true);
+  });
+
   it("leaves plans/ untouched unless --include-plans is given", () => {
     seed();
     mkdirSync(join(dir, "plans"), { recursive: true });

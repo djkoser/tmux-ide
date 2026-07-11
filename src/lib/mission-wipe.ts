@@ -98,14 +98,17 @@ export function wipeMission(dir: string, opts: WipeOptions = {}): WipeSummary {
   const contractPath = join(dir, TASKS_DIR, "validation-contract.md");
   writeFileSync(contractPath, "");
 
-  // Dispatch queue + reliable-messaging store
+  // Dispatch queue + reliable-messaging store. The state/ dir can hold
+  // per-recipient `.lock` DIRECTORIES (from withRecipientLock) alongside its
+  // JSON — recursive:true so sweeping a held/stale lock doesn't throw EISDIR
+  // and abort the wipe half-done.
   for (const f of dispatchFiles) rmSync(join(dispatchDir, f), { force: true });
   for (const [d, files] of [
     [messagesOutbox, countAll(messagesOutbox)],
     [messagesReceipts, countAll(messagesReceipts)],
     [messagesState, countAll(messagesState)],
   ] as const) {
-    for (const f of files) rmSync(join(d, f), { force: true });
+    for (const f of files) rmSync(join(d, f), { recursive: true, force: true });
   }
 
   if (includePlans) {
