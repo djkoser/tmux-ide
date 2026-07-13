@@ -1,103 +1,91 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
-import { Editor, defaultValueCtx, rootCtx } from "@milkdown/core";
+import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
+import { Editor, defaultValueCtx, rootCtx, editorViewCtx, serializerCtx } from "@milkdown/core";
 import { commonmark } from "@milkdown/preset-commonmark";
 import { nord } from "@milkdown/theme-nord";
 import { Milkdown, MilkdownProvider, useEditor, useInstance } from "@milkdown/react";
-import { getMarkdown } from "@milkdown/utils";
 import "@milkdown/theme-nord/style.css";
 
 interface MarkdownEditorProps {
   value: string;
-  onChange: (value: string) => void;
-  onSave: (value: string) => void;
+  /** Ctrl/Cmd+S from inside the editor. The owner reads live markdown via the ref and persists. */
+  onRequestSave: () => void;
 }
 
-function MilkdownEditor({ value, onChange, onSave }: MarkdownEditorProps) {
-  const onChangeRef = useRef(onChange);
-  const onSaveRef = useRef(onSave);
-  onChangeRef.current = onChange;
-  onSaveRef.current = onSave;
+export interface MarkdownEditorHandle {
+  /**
+   * Serialize the current editor document to markdown. Returns null when the
+   * editor instance is not yet mounted. Throws if the document cannot be
+   * serialized — callers must treat a throw as a hard save failure and must
+   * NOT persist a stale fallback in its place.
+   */
+  getLiveMarkdown: () => string | null;
+}
 
-  useEditor((root) => {
-    return Editor.make()
-      .config((ctx) => {
-        ctx.set(rootCtx, root);
-        ctx.set(defaultValueCtx, value);
-      })
-      .config(nord)
-      .use(commonmark);
-  }, []);
+const MilkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
+  function MilkdownEditor({ value, onRequestSave }, ref) {
+    const onRequestSaveRef = useRef(onRequestSave);
+    onRequestSaveRef.current = onRequestSave;
 
-  const [loading, getInstance] = useInstance();
+    useEditor((root) => {
+      return Editor.make()
+        .config((ctx) => {
+          ctx.set(rootCtx, root);
+          ctx.set(defaultValueCtx, value);
+        })
+        .config(nord)
+        .use(commonmark);
+    }, []);
 
-  // Extract markdown on changes via MutationObserver on ProseMirror
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const observerRef = useRef<MutationObserver | null>(null);
+    const [loading, getInstance] = useInstance();
 
-  const extractMarkdown = useCallback(() => {
-    if (loading) return;
-    const editor = getInstance();
-    if (!editor) return;
-    try {
-      const md = editor.action(getMarkdown() as any) as string;
-      onChangeRef.current(md);
-    } catch {
-      // Editor may not be ready
-    }
-  }, [loading, getInstance]);
+    // Serialize the live editor document straight from ProseMirror's committed
+    // state. editorViewCtx/serializerCtx are read from this same @milkdown/core
+    // instance — the one that created the editor and registered those ctx
+    // slices — so the lookup always resolves. (Routing through
+    // @milkdown/utils' getMarkdown pulled a second, version-skewed core whose
+    // slice identities did not match, making the lookup miss and throw.)
+    const serialize = useCallback((): string | null => {
+      if (loading) return null;
+      const editor = getInstance();
+      if (!editor) return null;
+      return editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx);
+        const serializer = ctx.get(serializerCtx);
+        return serializer(view.state.doc);
+      });
+    }, [loading, getInstance]);
 
-  useEffect(() => {
-    const el = containerRef.current?.querySelector(".ProseMirror");
-    if (!el) return;
+    useImperativeHandle(ref, () => ({ getLiveMarkdown: serialize }), [serialize]);
 
-    observerRef.current = new MutationObserver(() => {
-      extractMarkdown();
-    });
-
-    observerRef.current.observe(el, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-    });
-
-    return () => {
-      observerRef.current?.disconnect();
-    };
-  }, [loading, extractMarkdown]);
-
-  // Ctrl+S / Cmd+S
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
-        e.preventDefault();
-        if (loading) return;
-        const editor = getInstance();
-        if (!editor) return;
-        try {
-          const md = editor.action(getMarkdown() as any) as string;
-          onSaveRef.current(md);
-        } catch {
-          // ignore
+    // Ctrl+S / Cmd+S — delegate to the owner, which reads live markdown via the
+    // ref and applies the block-on-failure save policy.
+    useEffect(() => {
+      function onKey(e: KeyboardEvent) {
+        if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+          e.preventDefault();
+          onRequestSaveRef.current();
         }
       }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [loading, getInstance]);
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, []);
 
-  return (
-    <div ref={containerRef} className="milkdown-wrap flex-1 min-h-0 overflow-auto">
-      <Milkdown />
-    </div>
-  );
-}
+    return (
+      <div className="milkdown-wrap flex-1 min-h-0 overflow-auto">
+        <Milkdown />
+      </div>
+    );
+  },
+);
 
-export function MarkdownEditor(props: MarkdownEditorProps) {
-  return (
-    <MilkdownProvider>
-      <MilkdownEditor {...props} />
-    </MilkdownProvider>
-  );
-}
+export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
+  function MarkdownEditor(props, ref) {
+    return (
+      <MilkdownProvider>
+        <MilkdownEditor {...props} ref={ref} />
+      </MilkdownProvider>
+    );
+  },
+);

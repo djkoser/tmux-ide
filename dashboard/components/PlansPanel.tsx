@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import Markdown from "react-markdown";
 import {
   fetchPlans,
@@ -10,9 +10,10 @@ import {
   type PlanData,
   type AuthorshipData,
 } from "@/lib/api";
+import { decideSaveContent } from "@/lib/plan-save";
 import { usePolling } from "@/lib/usePolling";
 import { AuthorshipBar } from "./AuthorshipBar";
-import { MarkdownEditor } from "./MarkdownEditor";
+import { MarkdownEditor, type MarkdownEditorHandle } from "./MarkdownEditor";
 
 interface PlansPanelProps {
   sessionName: string;
@@ -92,6 +93,8 @@ export function PlansPanel({ sessionName }: PlansPanelProps) {
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const editorRef = useRef<MarkdownEditorHandle>(null);
 
   // Plans have no status lifecycle — narrow the list by a name search instead.
   const filteredPlans = useMemo(() => {
@@ -129,15 +132,40 @@ export function PlansPanel({ sessionName }: PlansPanelProps) {
     [planData],
   );
 
-  async function handleSave(content: string) {
+  // Read the live editor document and persist it. A serialization failure or an
+  // unmounted editor blocks the save and surfaces an error rather than writing a
+  // stale snapshot, so the user never silently loses edits.
+  async function requestSave() {
     if (!selectedFile) return;
+    let live: string | null = null;
+    let serializeFailed = false;
+    try {
+      live = editorRef.current?.getLiveMarkdown() ?? null;
+    } catch {
+      serializeFailed = true;
+    }
+    const decision = decideSaveContent(live, serializeFailed);
+    if (!decision.save) {
+      setSaveError(
+        decision.reason === "serialize-error"
+          ? "Could not read your edits from the editor — save aborted so nothing is lost. Try again."
+          : "Editor is still loading — try again in a moment.",
+      );
+      return;
+    }
+
+    setSaveError(null);
     setSaving(true);
-    const ok = await savePlan(sessionName, selectedFile, content);
+    const ok = await savePlan(sessionName, selectedFile, decision.content);
     if (ok) {
       const d = await fetchPlan(sessionName, selectedFile);
       setPlanData(d);
       setEditContent(d.content);
       setEditing(false);
+    } else {
+      setSaveError(
+        "Save failed — the server rejected the write. Your edits are still in the editor.",
+      );
     }
     setSaving(false);
   }
@@ -214,8 +242,16 @@ export function PlansPanel({ sessionName }: PlansPanelProps) {
               <div className="flex items-center gap-2 shrink-0">
                 {editing && (
                   <>
+                    {saveError && (
+                      <span
+                        className="text-[10px] text-[var(--danger,#e5484d)] max-w-[360px] truncate"
+                        title={saveError}
+                      >
+                        {saveError}
+                      </span>
+                    )}
                     <button
-                      onClick={() => handleSave(editContent)}
+                      onClick={requestSave}
                       disabled={saving}
                       className="text-[11px] px-2 py-0.5 text-[var(--bg)] bg-[var(--accent)] hover:opacity-90 disabled:opacity-50 transition-opacity"
                     >
@@ -227,9 +263,10 @@ export function PlansPanel({ sessionName }: PlansPanelProps) {
                 <button
                   onClick={() =>
                     editing
-                      ? setEditing(false)
+                      ? (setEditing(false), setSaveError(null))
                       : (() => {
                           setEditContent(planData.content);
+                          setSaveError(null);
                           setEditing(true);
                         })()
                   }
@@ -247,10 +284,10 @@ export function PlansPanel({ sessionName }: PlansPanelProps) {
             {/* Content */}
             {editing ? (
               <MarkdownEditor
+                ref={editorRef}
                 key={selectedFile}
                 value={editContent}
-                onChange={setEditContent}
-                onSave={handleSave}
+                onRequestSave={requestSave}
               />
             ) : (
               <div className="flex-1 overflow-y-auto p-4 max-w-3xl">
