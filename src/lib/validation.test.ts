@@ -6,6 +6,8 @@ import {
   loadValidationContract,
   loadValidationState,
   saveValidationState,
+  assertValidationStatus,
+  ValidationAssertError,
   isAllPassing,
   getFailedAssertions,
   parseAssertionIds,
@@ -34,6 +36,55 @@ describe("loadValidationContract", () => {
   it("reads the contract file", () => {
     writeFileSync(join(tmpDir, ".tasks", "validation-contract.md"), "# Contract\n- [A1] test");
     expect(loadValidationContract(tmpDir)).toBe("# Contract\n- [A1] test");
+  });
+});
+
+describe("assertValidationStatus", () => {
+  it("persists status + evidence and stamps verifiedAt/lastVerified", () => {
+    const entry = assertValidationStatus(tmpDir, "VAL-1", {
+      status: "passing",
+      evidence: "ran the suite",
+      verifiedBy: "cw4",
+    });
+    expect(entry.status).toBe("passing");
+    expect(entry.evidence).toBe("ran the suite");
+    expect(entry.verifiedBy).toBe("cw4");
+    expect(entry.verifiedAt).not.toBeNull();
+
+    const state = loadValidationState(tmpDir)!;
+    expect(state.assertions["VAL-1"]!.status).toBe("passing");
+    expect(state.lastVerified).not.toBeNull();
+  });
+
+  it("requires evidence when marking passing", () => {
+    expect(() => assertValidationStatus(tmpDir, "VAL-1", { status: "passing" })).toThrow(
+      ValidationAssertError,
+    );
+    // Nothing written on rejection.
+    expect(loadValidationState(tmpDir)).toBeNull();
+  });
+
+  it("requires evidence when marking failing (whitespace does not count)", () => {
+    expect(() =>
+      assertValidationStatus(tmpDir, "VAL-1", { status: "failing", evidence: "   " }),
+    ).toThrow(ValidationAssertError);
+  });
+
+  it("routes evidence into blockedBy when marking blocked", () => {
+    const entry = assertValidationStatus(tmpDir, "VAL-1", {
+      status: "blocked",
+      evidence: "waiting on VPN",
+    });
+    expect(entry.blockedBy).toBe("waiting on VPN");
+    expect(entry.status).toBe("blocked");
+  });
+
+  it("allows pending with no evidence (un-verify)", () => {
+    assertValidationStatus(tmpDir, "VAL-1", { status: "passing", evidence: "ok" });
+    const entry = assertValidationStatus(tmpDir, "VAL-1", { status: "pending" });
+    expect(entry.status).toBe("pending");
+    expect(entry.evidence).toBeNull();
+    expect(loadValidationState(tmpDir)!.assertions["VAL-1"]!.status).toBe("pending");
   });
 });
 

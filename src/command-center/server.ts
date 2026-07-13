@@ -46,7 +46,8 @@ import { extractMarks, calculateStats, tagContent } from "../lib/authorship.ts";
 import {
   loadValidationState,
   loadValidationContract,
-  saveValidationState,
+  assertValidationStatus,
+  ValidationAssertError,
   checkCoverage,
   parseAssertionIds,
 } from "../lib/validation.ts";
@@ -1091,28 +1092,33 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     },
   );
 
+  // Set an assertion's status from the console validation tab. Delegates to the
+  // shared assertValidationStatus write path so the UI, the CLI, and the
+  // orchestrator's remediation flow stay in lockstep (evidence-required on
+  // passing/failing is enforced there and surfaces as a 400).
   app.post(
     "/api/project/:name/validation/assert/:assertId",
     zValidator("json", updateAssertionSchema),
-    async (c) => {
+    (c) => {
       const name = c.req.param("name");
       const assertId = c.req.param("assertId");
       const sessions = discoverSessions();
       const session = sessions.find((s) => s.name === name);
       if (!session) return c.json({ error: "Session not found" }, 404);
       const body = c.req.valid("json");
-      ensureTasksDir(session.dir);
-      const state = loadValidationState(session.dir) ?? { assertions: {}, lastVerified: null };
-      state.assertions[assertId] = {
-        status: body.status,
-        verifiedBy: body.verifiedBy ?? null,
-        verifiedAt: new Date().toISOString(),
-        evidence: body.evidence ?? null,
-        blockedBy: body.status === "blocked" ? (body.evidence ?? null) : null,
-      };
-      state.lastVerified = new Date().toISOString();
-      saveValidationState(session.dir, state);
-      return c.json({ ok: true, assertionId: assertId, ...state.assertions[assertId] });
+      try {
+        const entry = assertValidationStatus(session.dir, assertId, {
+          status: body.status,
+          evidence: body.evidence,
+          verifiedBy: body.verifiedBy,
+        });
+        return c.json({ ok: true, assertionId: assertId, ...entry });
+      } catch (err) {
+        if (err instanceof ValidationAssertError) {
+          return c.json({ error: err.message }, 400);
+        }
+        throw err;
+      }
     },
   );
 

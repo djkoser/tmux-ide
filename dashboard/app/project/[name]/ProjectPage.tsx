@@ -28,6 +28,7 @@ import { StatusBar } from "@/components/StatusBar";
 import { ComposerDock } from "@/components/ComposerDock";
 import { MilestonesEditor } from "@/components/MilestonesEditor";
 import { ContractEditor } from "@/components/ContractEditor";
+import { AssertionControl } from "@/components/AssertionControl";
 import { FederationView } from "@/components/FederationView";
 import { MissionWipeDialog } from "@/components/MissionWipeDialog";
 import type { ProjectDetail } from "@/lib/types";
@@ -96,7 +97,9 @@ export default function ProjectPage() {
 
   if (!project) {
     return (
-      <div className="h-[calc(100vh-1.5rem)] flex items-center justify-center text-[var(--dim)]">loading...</div>
+      <div className="h-[calc(100vh-1.5rem)] flex items-center justify-center text-[var(--dim)]">
+        loading...
+      </div>
     );
   }
 
@@ -334,13 +337,6 @@ export default function ProjectPage() {
     </div>
   );
 }
-
-const STATUS_COLORS: Record<string, string> = {
-  passing: "var(--green)",
-  failing: "var(--red)",
-  pending: "var(--dim)",
-  blocked: "var(--yellow)",
-};
 
 function fmtDuration(ms: number): string {
   if (ms < 60000) return `${Math.round(ms / 1000)}s`;
@@ -584,21 +580,15 @@ function ValidationTab({
           <h3 className="text-[var(--accent)] mb-1">assertions</h3>
           <div className="space-y-px">
             {assertions.map(([id, entry]) => (
-              <div key={id} className="flex items-center gap-2 px-2 py-0.5 bg-[var(--surface)]">
-                <span className="text-[var(--fg)] w-32 shrink-0">{id}</span>
-                <span
-                  style={{ color: STATUS_COLORS[entry.status] ?? "var(--dim)" }}
-                  className="w-16 shrink-0"
-                >
-                  {entry.status}
-                </span>
-                {entry.verifiedBy && (
-                  <span className="text-[var(--cyan)] text-[11px]">@{entry.verifiedBy}</span>
-                )}
-                {entry.evidence && (
-                  <span className="text-[var(--dim)] text-[11px] truncate">{entry.evidence}</span>
-                )}
-              </div>
+              <AssertionControl
+                key={id}
+                sessionName={sessionName}
+                assertionId={id}
+                status={entry.status}
+                verifiedBy={entry.verifiedBy}
+                evidence={entry.evidence}
+                onChanged={onRefresh}
+              />
             ))}
           </div>
         </div>

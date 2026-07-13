@@ -353,6 +353,36 @@ describe("milestone + contract clients", () => {
     expect(r.ok).toBe(false);
     expect(r.stillClaimed?.["VAL-B"]).toEqual(["001"]);
   });
+
+  it("assertValidation posts status + evidence to the assert route", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200, json: async () => ({ ok: true }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const { assertValidation } = await import("../api");
+    const r = await assertValidation("s", "VAL-1", { status: "passing", evidence: "ran it" });
+    expect(r.ok).toBe(true);
+    expect(fetchMock.mock.calls[0]![0]).toContain("/validation/assert/VAL-1");
+    expect(JSON.parse(fetchMock.mock.calls[0]![1]!.body)).toEqual({
+      status: "passing",
+      evidence: "ran it",
+    });
+  });
+
+  it("assertValidation surfaces the server 400 (evidence required)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: async () => ({ error: "Evidence is required when marking an assertion passing" }),
+      }),
+    );
+    const { assertValidation } = await import("../api");
+    const r = await assertValidation("s", "VAL-1", { status: "passing" });
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain("Evidence is required");
+  });
 });
 
 describe("federated workspaces", () => {

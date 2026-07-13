@@ -27,7 +27,8 @@ import { isGhAvailable, createTaskPr } from "./lib/github-pr.ts";
 import {
   loadValidationContract,
   loadValidationState,
-  saveValidationState,
+  assertValidationStatus,
+  ValidationAssertError,
   checkCoverage,
   parseAssertionIds,
 } from "./lib/validation.ts";
@@ -440,9 +441,12 @@ function handleMission(
           `  dispatch: ${summary.dispatchFiles} | messages: ${summary.messageFiles} | plans: ${summary.planFiles}`,
         );
         console.log(`  + validation contract/state, orchestrator claim lock`);
-        if (summary.hardLogsTruncated) console.log(`  + HARD: audit logs (events, metrics, accounting)`);
+        if (summary.hardLogsTruncated)
+          console.log(`  + HARD: audit logs (events, metrics, accounting)`);
         if (!dryRun) {
-          console.log(`Bounce the daemon so it reloads the cleared claim state, then plan the next mission.`);
+          console.log(
+            `Bounce the daemon so it reloads the cleared claim state, then plan the next mission.`,
+          );
         }
       }
       break;
@@ -646,23 +650,24 @@ function handleValidation(
       if (status !== "passing" && status !== "failing" && status !== "blocked") {
         outputError("Status must be 'passing', 'failing', or 'blocked'", "USAGE");
       }
-      ensureTasksDir(dir);
-      const state = loadValidationState(dir) ?? { assertions: {}, lastVerified: null };
-      state.assertions[assertionId] = {
-        status,
-        verifiedBy: values.assign ?? null,
-        verifiedAt: new Date().toISOString(),
-        evidence: values.evidence ?? null,
-        blockedBy: status === "blocked" ? (values.evidence ?? null) : null,
-      };
-      state.lastVerified = new Date().toISOString();
-      saveValidationState(dir, state);
-      if (json) {
-        console.log(JSON.stringify({ assertionId, ...state.assertions[assertionId] }, null, 2));
-      } else {
-        console.log(
-          `Assertion ${assertionId}: ${status}${values.evidence ? ` — ${values.evidence}` : ""}`,
-        );
+      try {
+        const entry = assertValidationStatus(dir, assertionId, {
+          status,
+          evidence: values.evidence,
+          verifiedBy: values.assign,
+        });
+        if (json) {
+          console.log(JSON.stringify({ assertionId, ...entry }, null, 2));
+        } else {
+          console.log(
+            `Assertion ${assertionId}: ${status}${values.evidence ? ` — ${values.evidence}` : ""}`,
+          );
+        }
+      } catch (err) {
+        if (err instanceof ValidationAssertError) {
+          outputError(err.message, "USAGE");
+        }
+        throw err;
       }
       break;
     }

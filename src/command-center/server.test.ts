@@ -11,7 +11,7 @@ import {
   loadMission,
   type Task,
 } from "../lib/task-store.ts";
-import { saveValidationState } from "../lib/validation.ts";
+import { saveValidationState, loadValidationState } from "../lib/validation.ts";
 import { appendEvent, readEvents } from "../lib/event-log.ts";
 import { loadResearchState, saveResearchState } from "../lib/research.ts";
 import { _setExecutor, type PaneInfo } from "../widgets/lib/pane-comms.ts";
@@ -532,6 +532,48 @@ describe("POST /api/project/:name/validation/contract (text editor + I5)", () =>
     expect(res.status).toBe(409);
     const body = (await res.json()) as { stillClaimed: Record<string, string[]> };
     expect(body.stillClaimed["VAL-B"]).toEqual(["002"]);
+  });
+});
+
+describe("POST /api/project/:name/validation/assert/:assertId", () => {
+  it("sets an assertion passing with evidence and persists to state", async () => {
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/validation/assert/VAL-1", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "passing", evidence: "ran the suite", verifiedBy: "cw4" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; status: string; evidence: string };
+    expect(body.ok).toBe(true);
+    expect(body.status).toBe("passing");
+
+    const state = loadValidationState(tmpDir)!;
+    expect(state.assertions["VAL-1"]!.status).toBe("passing");
+    expect(state.assertions["VAL-1"]!.evidence).toBe("ran the suite");
+    expect(state.assertions["VAL-1"]!.verifiedBy).toBe("cw4");
+  });
+
+  it("rejects passing without evidence (400) and writes nothing", async () => {
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/validation/assert/VAL-1", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "passing" }),
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toContain("Evidence is required");
+    expect(loadValidationState(tmpDir)).toBeNull();
+  });
+
+  it("returns 404 for unknown session", async () => {
+    const app = createApp();
+    const res = await app.request("/api/project/nonexistent/validation/assert/VAL-1", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "pending" }),
+    });
+    expect(res.status).toBe(404);
   });
 });
 

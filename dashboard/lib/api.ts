@@ -367,6 +367,33 @@ export async function saveContract(
   };
 }
 
+export type AssertionStatus = "pending" | "passing" | "failing" | "blocked";
+
+/**
+ * Set an assertion's verification status via the daemon's shared assert path
+ * (the same write the `validate assert` CLI uses). Evidence is required
+ * server-side when marking passing/failing; that rejection surfaces as ok=false.
+ */
+export async function assertValidation(
+  name: string,
+  assertionId: string,
+  input: { status: AssertionStatus; evidence?: string; verifiedBy?: string },
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(
+    `${API_BASE}/api/project/${encodeURIComponent(name)}/validation/assert/${encodeURIComponent(
+      assertionId,
+    )}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+  if (res.ok) return { ok: true };
+  const data = (await res.json().catch(() => null)) as { error?: string } | null;
+  return { ok: false, error: data?.error ?? `HTTP ${res.status}` };
+}
+
 // "unknown" is client-synthesized (never sent by the server): the composer marks a
 // still-pending recipient unknown when the batch becomes unreachable (daemon bounce).
 export type ReceiptStatus =
@@ -644,7 +671,7 @@ export interface ValidationData {
   state: {
     assertions: Record<
       string,
-      { status: string; verifiedBy: string | null; evidence: string | null }
+      { status: AssertionStatus; verifiedBy: string | null; evidence: string | null }
     >;
     lastVerified: string | null;
   } | null;

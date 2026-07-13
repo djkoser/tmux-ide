@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { existsSync, readFileSync, writeFileSync, renameSync } from "node:fs";
-import { loadTasks } from "./task-store.ts";
+import { loadTasks, ensureTasksDir } from "./task-store.ts";
 
 export interface AssertionEntry {
   status: "pending" | "passing" | "failing" | "blocked";
@@ -49,6 +49,57 @@ export function saveValidationState(dir: string, state: ValidationState): void {
   const tmpPath = path + ".tmp";
   writeFileSync(tmpPath, JSON.stringify(state, null, 2) + "\n");
   renameSync(tmpPath, path);
+}
+
+/** Thrown by {@link assertValidationStatus} when a status transition is rejected. */
+export class ValidationAssertError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ValidationAssertError";
+  }
+}
+
+/**
+ * Set an assertion's verification status and persist it. This is the single
+ * write path shared by the `tmux-ide validate assert` CLI and the command
+ * center's assert endpoint — callers validate their own input shape, but the
+ * state-file semantics (evidence-required on passing/failing, blockedBy on
+ * blocked, verifiedAt/lastVerified stamps) live here so the two entry points
+ * never drift. Failing/blocked results are picked up by the orchestrator's
+ * existing checkValidationResults remediation flow regardless of which entry
+ * point wrote them.
+ *
+ * @throws {ValidationAssertError} when passing/failing is set without evidence.
+ */
+export function assertValidationStatus(
+  dir: string,
+  assertionId: string,
+  opts: {
+    status: AssertionEntry["status"];
+    evidence?: string | null;
+    verifiedBy?: string | null;
+  },
+): AssertionEntry {
+  const { status } = opts;
+  const hasEvidence = typeof opts.evidence === "string" && opts.evidence.trim().length > 0;
+  if ((status === "passing" || status === "failing") && !hasEvidence) {
+    throw new ValidationAssertError(`Evidence is required when marking an assertion ${status}`);
+  }
+
+  ensureTasksDir(dir);
+  const state = loadValidationState(dir) ?? { assertions: {}, lastVerified: null };
+  const now = new Date().toISOString();
+  const entry: AssertionEntry = {
+    status,
+    verifiedBy: opts.verifiedBy ?? null,
+    verifiedAt: now,
+    evidence: opts.evidence ?? null,
+    blockedBy: status === "blocked" ? (opts.evidence ?? null) : null,
+  };
+  state.assertions[assertionId] = entry;
+  state.lastVerified = now;
+  saveValidationState(dir, state);
+  return entry;
 }
 
 /**

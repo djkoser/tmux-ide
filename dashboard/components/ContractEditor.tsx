@@ -9,9 +9,9 @@ interface ContractEditorProps {
 }
 
 /**
- * Edit the validation-contract markdown text. Assertion *status* is not editable
- * here — that stays a reviewer-CLI gate (VAL-017). Saving that drops an assertion
- * a task still claims is rejected server-side (I5); the claimants are shown.
+ * Edit the validation-contract markdown text. Assertion *status* is set from the
+ * per-assertion AssertionControl, not here. Saving that drops an assertion a task
+ * still claims is rejected server-side (I5); the claimants are shown.
  */
 export function ContractEditor({ sessionName, onSaved }: ContractEditorProps) {
   const [content, setContent] = useState("");
