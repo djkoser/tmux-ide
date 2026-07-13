@@ -1597,6 +1597,52 @@ describe("milestone gating", () => {
     expect(m1.status).toBe("active");
     expect(m2.status).toBe("locked");
   });
+
+  it("checkMilestoneCompletion ignores prior-generation done tasks carrying a reused milestone id (born-complete guard)", () => {
+    // mission.created is 2026-01-01 (setupMission). A prior mission left done
+    // tasks tagged milestone M1 but created before this mission started.
+    setupMission([
+      {
+        id: "M1",
+        title: "Phase 1",
+        description: "",
+        status: "active",
+        order: 1,
+        created: "2026-01-01T00:00:00Z",
+        updated: "2026-01-01T00:00:00Z",
+      },
+      {
+        id: "M2",
+        title: "Phase 2",
+        description: "",
+        status: "locked",
+        order: 2,
+        created: "2026-01-01T00:00:00Z",
+        updated: "2026-01-01T00:00:00Z",
+      },
+    ]);
+
+    const stale = makeTask({
+      id: "001",
+      milestone: "M1",
+      status: "done",
+      assignee: "Agent 1",
+      created: "2025-12-01T00:00:00Z",
+    });
+    saveTask(tmpDir, stale);
+
+    const config = makeOrchestratorConfig(tmpDir, { dispatchMode: "missions" });
+    const state = makeOrchestratorState();
+    mockPanes = [];
+    checkMilestoneCompletion(config, state, [stale], []);
+
+    // M1 must stay active — it has no current-generation tasks, so it is not
+    // born all-tasks-done.
+    const mission = loadMission(tmpDir)!;
+    expect(mission.milestones.find((m) => m.id === "M1")!.status).toBe("active");
+    expect(mission.milestones.find((m) => m.id === "M2")!.status).toBe("locked");
+    expect(readEvents(tmpDir).find((e) => e.type === "milestone_complete")).toBeFalsy();
+  });
 });
 
 describe("validation flow", () => {

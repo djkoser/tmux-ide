@@ -390,7 +390,15 @@ export function checkMilestoneCompletion(
   for (const milestone of sorted) {
     if (milestone.status !== "active") continue;
 
-    const milestoneTasks = tasks.filter((t) => t.milestone === milestone.id);
+    // Scope to the current mission generation: milestone ids (M1, M2, …) are
+    // reused across missions, so a new mission's milestone must not match
+    // prior-generation tasks still carrying that id. Those stale tasks are all
+    // done, so without this the milestone is born all-tasks-done and self-passes
+    // validation against stale state. Tasks created after the mission started
+    // belong to this generation.
+    const milestoneTasks = tasks.filter(
+      (t) => t.milestone === milestone.id && t.created >= mission.created,
+    );
     if (milestoneTasks.length === 0) continue;
     const allDone = milestoneTasks.every((t) => t.status === "done");
     if (!allDone) continue;
@@ -656,8 +664,13 @@ export function checkValidationResults(config: OrchestratorConfig, tasks: Task[]
   for (const milestone of sorted) {
     if (milestone.status !== "validating") continue;
 
-    // Collect assertion IDs relevant to this milestone's tasks
-    const milestoneTasks = tasks.filter((t) => t.milestone === milestone.id);
+    // Collect assertion IDs relevant to this milestone's tasks, scoped to the
+    // current mission generation (see checkMilestoneCompletion) so a reused
+    // milestone id doesn't pull in prior-generation tasks and their stale
+    // assertions.
+    const milestoneTasks = tasks.filter(
+      (t) => t.milestone === milestone.id && t.created >= mission.created,
+    );
     const milestoneAssertionIds = new Set(milestoneTasks.flatMap((t) => t.fulfills));
 
     if (milestoneAssertionIds.size === 0) {
