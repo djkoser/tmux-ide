@@ -432,6 +432,38 @@ export async function sendToTargets(
   };
 }
 
+export interface SendPreviewMatch {
+  id: string;
+  name: string | null;
+  title: string;
+  role: string | null;
+}
+
+/**
+ * Preview which panes a send target resolves to (the server reuses
+ * resolveSendTargets, so this can never disagree with an actual send).
+ * Returns null when the resolution could not run (session missing / network
+ * error) — distinct from an empty array, which means "resolved, zero matches".
+ */
+export async function fetchSendPreview(
+  name: string,
+  target: string,
+  baseUrl: string = API_BASE,
+): Promise<SendPreviewMatch[] | null> {
+  try {
+    const res = await fetch(
+      `${baseUrl}/api/project/${encodeURIComponent(name)}/send/preview?target=${encodeURIComponent(target)}`,
+    );
+    if (!res.ok) return null;
+    const data = (await res.json().catch(() => null)) as { matches?: SendPreviewMatch[] } | null;
+    return data?.matches ?? null;
+  } catch {
+    // fetch rejects (not just !ok) when the pod is offline — a supported state
+    // for a federated composer. Fail open: null leaves send un-gated.
+    return null;
+  }
+}
+
 export async function fetchSendBatch(
   name: string,
   batchId: string,

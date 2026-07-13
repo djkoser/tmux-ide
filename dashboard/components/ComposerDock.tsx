@@ -4,9 +4,11 @@ import { useState, useEffect, useRef } from "react";
 import {
   sendToTargets,
   fetchSendBatch,
+  fetchSendPreview,
   fetchWorkspaces,
   workspaceBaseUrl,
   type SendRecipient,
+  type SendPreviewMatch,
   type ReceiptStatus,
   type WorkspaceEntry,
 } from "@/lib/api";
@@ -47,6 +49,10 @@ export function ComposerDock({ sessionName }: ComposerDockProps) {
   const [error, setError] = useState("");
   const [batchId, setBatchId] = useState<string | null>(null);
   const [recipients, setRecipients] = useState<SendRecipient[]>([]);
+  // Live preview of which panes the current target resolves to. null = not yet
+  // resolved (don't gate send); [] = resolved to zero matches (gate send).
+  const [preview, setPreview] = useState<SendPreviewMatch[] | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [workspaces, setWorkspaces] = useState<WorkspaceEntry[]>([]);
   const [podKey, setPodKey] = useState("local");
   // The pod a batch was sent to — polled for receipts on that same daemon.
@@ -67,6 +73,30 @@ export function ComposerDock({ sessionName }: ComposerDockProps) {
   useEffect(() => {
     void fetchWorkspaces().then(setWorkspaces);
   }, []);
+
+  // Debounced preview of the target's resolved panes, refreshed as the target
+  // (or selected pod) changes. Queries the same pod a send would hit.
+  useEffect(() => {
+    const t = target.trim();
+    if (!t) {
+      setPreview(null);
+      setPreviewLoading(false);
+      return;
+    }
+    setPreviewLoading(true);
+    let cancelled = false;
+    const handle = setTimeout(() => {
+      void fetchSendPreview(selectedPod.session, t, selectedPod.base).then((matches) => {
+        if (cancelled) return;
+        setPreview(matches);
+        setPreviewLoading(false);
+      });
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [target, selectedPod.session, selectedPod.base]);
 
   // Poll the batch's receipts until all recipients settle (no longer "retrying").
   useEffect(() => {
@@ -100,9 +130,12 @@ export function ComposerDock({ sessionName }: ComposerDockProps) {
     };
   }, [batchId]);
 
+  // Send is blocked when the target resolves to zero panes (preview === []).
+  const noMatches = preview !== null && preview.length === 0;
+
   async function handleSend() {
     const trimmed = message.trim();
-    if (!trimmed || !target.trim()) return;
+    if (!trimmed || !target.trim() || noMatches) return;
     setSending(true);
     setError("");
     setRecipients([]);
@@ -189,7 +222,7 @@ export function ComposerDock({ sessionName }: ComposerDockProps) {
               <button
                 type="button"
                 onClick={handleSend}
-                disabled={sending || !message.trim() || !target.trim()}
+                disabled={sending || !message.trim() || !target.trim() || noMatches}
                 className="px-3 py-1 text-[var(--bg)] bg-[var(--accent)] hover:opacity-90 transition-opacity disabled:opacity-50"
               >
                 {sending ? "sending…" : "send"}
@@ -204,6 +237,20 @@ export function ComposerDock({ sessionName }: ComposerDockProps) {
               </label>
             </div>
           </div>
+
+          {target.trim() && (
+            <div className="text-[11px]">
+              {previewLoading ? (
+                <span className="text-[var(--dim)]">resolving…</span>
+              ) : preview === null ? null : preview.length === 0 ? (
+                <span className="text-[var(--red)]">no matching panes</span>
+              ) : (
+                <span className="text-[var(--dim)]">
+                  → {preview.map((m) => m.name ?? m.title).join(", ")}
+                </span>
+              )}
+            </div>
+          )}
 
           {error && <div className="text-[var(--red)] text-[11px]">{error}</div>}
 

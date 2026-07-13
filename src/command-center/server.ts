@@ -1368,6 +1368,35 @@ export function createApp(options: CreateAppOptions = {}): Hono {
 
   // --- Remote command execution endpoints ---
 
+  // Preview which panes a send target (including globs like "cw*"/"*") resolves
+  // to, before sending. Reuses resolveSendTargets so the preview and the actual
+  // send can never disagree.
+  app.get("/api/project/:name/send/preview", (c) => {
+    const name = c.req.param("name");
+    const target = c.req.query("target") ?? "";
+    let panes: ReturnType<typeof listSessionPanes>;
+    try {
+      panes = listSessionPanes(name);
+    } catch {
+      return c.json({ error: "Session not found" }, 404);
+    }
+    if (panes.length === 0) {
+      const sessions = discoverSessions();
+      if (!sessions.find((s) => s.name === name)) {
+        return c.json({ error: "Session not found" }, 404);
+      }
+    }
+    const matches = target.trim()
+      ? resolveSendTargets(panes, target.trim()).map((p) => ({
+          id: p.id,
+          name: p.name,
+          title: p.title,
+          role: p.role ?? null,
+        }))
+      : [];
+    return c.json({ target, matches });
+  });
+
   // Send message to a pane by name/title/role/ID
   app.post("/api/project/:name/send", zValidator("json", sendCommandSchema), async (c) => {
     const name = c.req.param("name");

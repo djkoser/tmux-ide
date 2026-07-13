@@ -734,6 +734,54 @@ describe("POST /api/project/:name/send (composer)", () => {
   });
 });
 
+describe("GET /api/project/:name/send/preview", () => {
+  it("resolves a glob to the matching agent pane names", async () => {
+    mockPanes = [
+      makePane({ id: "%1", title: "cw1", name: "cw1", role: "teammate", currentCommand: "claude" }),
+      makePane({ id: "%2", title: "cw2", name: "cw2", role: "teammate", currentCommand: "claude" }),
+      makePane({ id: "%3", title: "cw3", name: "cw3", role: "teammate", currentCommand: "claude" }),
+    ];
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/send/preview?target=cw*");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { target: string; matches: { name: string | null }[] };
+    expect(body.target).toBe("cw*");
+    expect(body.matches.map((m) => m.name)).toEqual(["cw1", "cw2", "cw3"]);
+  });
+
+  it("returns 200 with an empty match list for an unmatched target (not an error)", async () => {
+    mockPanes = [
+      makePane({ id: "%1", title: "cw1", name: "cw1", role: "teammate", currentCommand: "claude" }),
+    ];
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/send/preview?target=xyz*");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { matches: unknown[] };
+    expect(body.matches).toEqual([]);
+  });
+
+  it("returns an empty match list for an empty or missing target", async () => {
+    mockPanes = [
+      makePane({ id: "%1", title: "cw1", name: "cw1", role: "teammate", currentCommand: "claude" }),
+    ];
+    const app = createApp();
+
+    const empty = await app.request("/api/project/test-project/send/preview?target=");
+    expect(empty.status).toBe(200);
+    expect(((await empty.json()) as { matches: unknown[] }).matches).toEqual([]);
+
+    const missing = await app.request("/api/project/test-project/send/preview");
+    expect(missing.status).toBe(200);
+    expect(((await missing.json()) as { matches: unknown[] }).matches).toEqual([]);
+  });
+
+  it("returns 404 for an unknown session", async () => {
+    const app = createApp();
+    const res = await app.request("/api/project/nonexistent/send/preview?target=cw*");
+    expect(res.status).toBe(404);
+  });
+});
+
 describe("DELETE /api/project/:name/task/:id", () => {
   it("deletes a task", async () => {
     saveTask(tmpDir, makeTask({ id: "001" }));
