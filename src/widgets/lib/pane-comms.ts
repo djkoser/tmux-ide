@@ -140,6 +140,27 @@ const BUSY_COMMANDS = new Set([
 
 const SHELL_COMMANDS = new Set(["zsh", "bash", "sh", "fish"]);
 
+/** Roles tmux-ide assigns to a Claude/Codex agent pane (excludes widget/shell/untyped panes like the input REPL). */
+export const AGENT_ROLES = new Set([
+  "lead",
+  "teammate",
+  "planner",
+  "validator",
+  "reviewer",
+  "researcher",
+]);
+
+/**
+ * An agent pane runs a Claude/Codex TUI. Identify it by the tmux-ide metadata
+ * (`@ide_type`/`@ide_role`) rather than `pane_current_command`: Claude Code
+ * renames its process to its version (e.g. "2.1.207"), so a command-name check
+ * misses live agent panes and mis-routes their sends to the fire-and-forget
+ * path instead of the reliable receipt/retry delivery.
+ */
+export function isAgentPane(pane: PaneInfo): boolean {
+  return pane.type === "agent" || (pane.role !== null && AGENT_ROLES.has(pane.role));
+}
+
 export type PaneBusyStatus = "idle" | "busy" | "agent";
 
 export function isPaneBusy(session: string, paneId: string): boolean {
@@ -156,6 +177,7 @@ export function getPaneBusyStatus(session: string, paneId: string): PaneBusyStat
   const panes = listSessionPanes(session);
   const pane = panes.find((p) => p.id === paneId);
   if (!pane) return "busy";
+  if (isAgentPane(pane)) return "agent";
   const cmd = pane.currentCommand.toLowerCase();
   if (cmd.startsWith("claude") || cmd.startsWith("codex")) return "agent";
   if (SHELL_COMMANDS.has(cmd)) return "idle";

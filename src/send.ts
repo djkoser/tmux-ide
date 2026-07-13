@@ -9,6 +9,7 @@ import {
   sendText,
   getPaneBusyStatus,
   getPaneReadiness,
+  isAgentPane,
   type PaneInfo,
   type PaneBusyStatus,
 } from "./widgets/lib/pane-comms.ts";
@@ -160,16 +161,9 @@ interface SendOptions {
   timing?: Partial<ReliableSendTiming>;
 }
 
-/** Roles that mark a pane as an addressable agent (excludes widget/shell/untyped panes like the input REPL). */
-const AGENT_ROLES = new Set(["lead", "teammate", "planner", "validator", "reviewer", "researcher"]);
-
 /** A target containing glob metacharacters fans out to every matching agent pane. */
 export function isWildcardTarget(target: string): boolean {
   return target.includes("*") || target.includes("?");
-}
-
-function isAgentPane(pane: PaneInfo): boolean {
-  return pane.type === "agent" || (pane.role !== null && AGENT_ROLES.has(pane.role));
 }
 
 /**

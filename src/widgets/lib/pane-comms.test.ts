@@ -143,6 +143,18 @@ describe("getPaneBusyStatus", () => {
     setMockPanes(TWO_PANES);
     expect(getPaneBusyStatus("s", "%99")).toBe("busy");
   });
+
+  it("returns agent for an @ide_type=agent pane even when the command is a version string", () => {
+    // Claude Code renames its process to its version, so pane_current_command is
+    // e.g. "2.1.207" — not "claude". The @ide_type metadata is authoritative.
+    setMockPanes("%0\t0\tcw1\t2.1.207\t80\t24\t1\tteammate\tcw1\tagent");
+    expect(getPaneBusyStatus("s", "%0")).toBe("agent");
+  });
+
+  it("returns agent by @ide_role when type is absent", () => {
+    setMockPanes("%0\t0\tlead\t2.1.207\t80\t24\t1\tlead\tlead\t");
+    expect(getPaneBusyStatus("s", "%0")).toBe("agent");
+  });
 });
 
 describe("resolveTarget", () => {
