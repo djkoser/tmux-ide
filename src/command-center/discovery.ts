@@ -11,8 +11,13 @@ import {
   type Goal,
   type Task,
 } from "../lib/task-store.ts";
-import { listSessionPanes, type PaneInfo } from "../widgets/lib/pane-comms.ts";
-import { isAgentPane, isAgentBusy, agentIdentifier } from "../lib/orchestrator.ts";
+import {
+  listSessionPanes,
+  isAgentPane,
+  isAgentBusy,
+  agentIdentifier,
+  type PaneInfo,
+} from "../widgets/lib/pane-comms.ts";
 import { loadValidationState } from "../lib/validation.ts";
 import { loadSkills } from "../lib/skill-registry.ts";
 

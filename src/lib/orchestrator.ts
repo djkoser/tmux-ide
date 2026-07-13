@@ -56,6 +56,9 @@ import {
   listSessionPanes,
   sendCommand,
   captureLastLine,
+  isAgentPane,
+  isAgentBusy,
+  agentIdentifier,
   type PaneInfo,
 } from "../widgets/lib/pane-comms.ts";
 import { appendEvent, readEvents, type OrchestratorEvent } from "./event-log.ts";
@@ -114,63 +117,12 @@ export function runHook(command: string, cwd: string): { ok: true } | { ok: fals
   }
 }
 
-// Agent detection: Claude Code reports its version (e.g. "2.1.80") as currentCommand,
-// not "claude". Detect agents by checking both the command name and the pane title.
 const SHELL_COMMANDS = new Set(["zsh", "bash", "sh", "fish"]);
-const AGENT_PREFIXES = ["claude", "codex"];
-const VERSION_PATTERN = /^\d+\.\d+/;
 
 // Stable-name normalization lives in ./pane-title.ts so send (wildcard matching)
 // and relayout (pane resolution) share the exact same glyph strip. Re-exported
 // here for existing importers.
 export { normalizePaneTitle, SPINNERS };
-
-// French names for agents — fun, memorable, and stable across spinner changes
-const AGENT_NAMES = [
-  "François",
-  "Amélie",
-  "Louis",
-  "Camille",
-  "Marcel",
-  "Colette",
-  "Henri",
-  "Margaux",
-  "René",
-  "Léonie",
-  "Étienne",
-  "Fleur",
-  "Gaston",
-  "Isabelle",
-  "Jacques",
-  "Lucienne",
-  "Nicolas",
-  "Odette",
-  "Pierre",
-  "Rosalie",
-];
-
-// Get a stable, memorable identifier for an agent pane
-export function agentIdentifier(pane: PaneInfo): string {
-  if (pane.name) return pane.name;
-  return AGENT_NAMES[pane.index % AGENT_NAMES.length] ?? `Agent ${pane.index}`;
-}
-
-export function isAgentPane(pane: PaneInfo): boolean {
-  const cmd = pane.currentCommand.toLowerCase();
-  if (AGENT_PREFIXES.some((p) => cmd.startsWith(p))) return true;
-  // Claude Code shows its version string as the command (e.g. "2.1.80")
-  if (VERSION_PATTERN.test(cmd)) return true;
-  // Title-based detection — check for Claude Code or French agent names
-  if (/claude\s*code/i.test(pane.title)) return true;
-  const name = normalizePaneTitle(pane.title);
-  if (AGENT_NAMES.includes(name)) return true;
-  return false;
-}
-
-export function isAgentBusy(pane: PaneInfo): boolean {
-  // Spinner chars in pane title indicate the agent is actively working
-  return SPINNERS.test(pane.title);
-}
 
 /**
  * Check if a pane is at the agent prompt (❯) by capturing the last line.

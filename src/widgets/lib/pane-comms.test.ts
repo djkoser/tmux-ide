@@ -8,7 +8,11 @@ import {
   isPaneBusy,
   getPaneBusyStatus,
   resolveTarget,
+  isAgentPane,
+  isAgentBusy,
+  agentIdentifier,
 } from "./pane-comms.ts";
+import { makePane } from "../../__tests__/support.ts";
 
 let restoreExec: () => void;
 let mockOutput: string;
@@ -186,5 +190,81 @@ describe("resolveTarget", () => {
   it("returns null when nothing matches", () => {
     setMockPanes(THREE_PANES);
     expect(resolveTarget("s", {})).toBe(null);
+  });
+});
+
+describe("isAgentPane (canonical classifier)", () => {
+  // tmux-ide metadata is authoritative and independent of the process command.
+  it("detects an @ide_type=agent pane even when the command is a version string", () => {
+    expect(isAgentPane(makePane({ type: "agent", currentCommand: "2.1.207" }))).toBe(true);
+  });
+
+  it("detects an @ide_type=agent pane whose command is a plain shell", () => {
+    expect(isAgentPane(makePane({ type: "agent", currentCommand: "zsh", title: "Shell" }))).toBe(
+      true,
+    );
+  });
+
+  it("detects each agent @ide_role when type is absent", () => {
+    for (const role of [
+      "lead",
+      "teammate",
+      "planner",
+      "validator",
+      "reviewer",
+      "researcher",
+    ] as const) {
+      expect(isAgentPane(makePane({ role, currentCommand: "zsh" }))).toBe(true);
+    }
+  });
+
+  // Command/title heuristics catch panes tmux-ide didn't stamp.
+  it("detects claude and codex commands", () => {
+    expect(isAgentPane(makePane({ currentCommand: "claude" }))).toBe(true);
+    expect(isAgentPane(makePane({ currentCommand: "codex" }))).toBe(true);
+  });
+
+  it("detects a version-string command regardless of title", () => {
+    expect(isAgentPane(makePane({ currentCommand: "2.1.80", title: "Dev Server" }))).toBe(true);
+  });
+
+  it("detects the Claude Code title banner", () => {
+    expect(isAgentPane(makePane({ currentCommand: "node", title: "Claude Code" }))).toBe(true);
+  });
+
+  it("detects a French agent display name, including under a leading spinner", () => {
+    expect(isAgentPane(makePane({ currentCommand: "node", title: "François" }))).toBe(true);
+    expect(isAgentPane(makePane({ currentCommand: "node", title: "⠙ François" }))).toBe(true);
+  });
+
+  it("does not match a plain shell pane with no agent metadata", () => {
+    expect(isAgentPane(makePane({ currentCommand: "zsh", title: "Shell" }))).toBe(false);
+  });
+
+  it("does not match a widget or untyped input pane", () => {
+    expect(isAgentPane(makePane({ role: "widget", currentCommand: "node", title: "Console" }))).toBe(
+      false,
+    );
+  });
+});
+
+describe("isAgentBusy", () => {
+  it("returns true when a spinner glyph leads the title", () => {
+    expect(isAgentBusy(makePane({ title: "⠙ Working..." }))).toBe(true);
+  });
+
+  it("returns false for a normal title", () => {
+    expect(isAgentBusy(makePane({ title: "Claude Code" }))).toBe(false);
+  });
+});
+
+describe("agentIdentifier", () => {
+  it("prefers the configured pane name", () => {
+    expect(agentIdentifier(makePane({ name: "cw2", index: 3 }))).toBe("cw2");
+  });
+
+  it("falls back to a stable French name by pane index", () => {
+    expect(agentIdentifier(makePane({ name: null, index: 0 }))).toBe("François");
+    expect(agentIdentifier(makePane({ name: null, index: 1 }))).toBe("Amélie");
   });
 });

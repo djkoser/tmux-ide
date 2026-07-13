@@ -10,8 +10,6 @@ import {
   buildGoalPrompt,
   runHook,
   createOrchestrator,
-  isAgentPane,
-  isAgentBusy,
   isIdleForDispatch,
   saveOrchestratorState,
   loadOrchestratorState,
@@ -19,7 +17,6 @@ import {
   gracefulShutdown,
   reloadConfig,
   reconcile,
-  agentIdentifier,
   normalizePaneTitle,
   getPaneSpecialties,
   dispatchGoals,
@@ -48,7 +45,7 @@ import {
   type Mission,
 } from "./task-store.ts";
 import { loadValidationState, saveValidationState } from "./validation.ts";
-import { _setExecutor, type PaneInfo } from "../widgets/lib/pane-comms.ts";
+import { _setExecutor, agentIdentifier, type PaneInfo } from "../widgets/lib/pane-comms.ts";
 import {
   makeTask,
   makePane,
@@ -442,42 +439,6 @@ describe("detectCompletions with after_run", () => {
       (c) => c.args.includes("send-keys") && c.args.includes("%0"),
     );
     expect(sendCalls.length > 0).toBeTruthy();
-  });
-});
-
-describe("isAgentPane", () => {
-  it("detects claude command", () => {
-    expect(isAgentPane(makePane({ currentCommand: "claude" }))).toBeTruthy();
-  });
-
-  it("detects codex command", () => {
-    expect(isAgentPane(makePane({ currentCommand: "codex" }))).toBeTruthy();
-  });
-
-  it("detects Claude Code via version string + title", () => {
-    expect(isAgentPane(makePane({ currentCommand: "2.1.80", title: "Claude Code" }))).toBeTruthy();
-  });
-
-  it("detects Claude Code via title pattern", () => {
-    expect(isAgentPane(makePane({ currentCommand: "node", title: "Claude Code" }))).toBeTruthy();
-  });
-
-  it("does not match a plain shell", () => {
-    expect(!isAgentPane(makePane({ currentCommand: "zsh", title: "Shell" }))).toBeTruthy();
-  });
-
-  it("matches version string regardless of title (Claude Code reports version as command)", () => {
-    expect(isAgentPane(makePane({ currentCommand: "2.1.80", title: "Dev Server" }))).toBeTruthy();
-  });
-});
-
-describe("isAgentBusy", () => {
-  it("returns true when spinner in title", () => {
-    expect(isAgentBusy(makePane({ title: "⠙ Working..." }))).toBeTruthy();
-  });
-
-  it("returns false for normal title", () => {
-    expect(!isAgentBusy(makePane({ title: "Claude Code" }))).toBeTruthy();
   });
 });
 

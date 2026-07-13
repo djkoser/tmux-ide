@@ -5,8 +5,12 @@ import { getSessionName, readConfig } from "./lib/yaml-io.ts";
 import { getSessionState } from "./lib/tmux.ts";
 import { loadTasks, loadMission } from "./lib/task-store.ts";
 import { readEvents } from "./lib/event-log.ts";
-import { listSessionPanes } from "./widgets/lib/pane-comms.ts";
-import { isAgentPane, isAgentBusy, agentIdentifier } from "./lib/orchestrator.ts";
+import {
+  listSessionPanes,
+  isAgentPane,
+  isAgentBusy,
+  agentIdentifier,
+} from "./widgets/lib/pane-comms.ts";
 
 function formatElapsed(ms: number): string {
   if (ms < 60000) return `${Math.round(ms / 1000)}s`;

@@ -2,7 +2,7 @@ import { describe, it, beforeEach, afterEach, expect } from "bun:test";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { agentIdentifier } from "../lib/orchestrator.ts";
+import { agentIdentifier } from "../widgets/lib/pane-comms.ts";
 import {
   ensureTasksDir,
   saveMission,

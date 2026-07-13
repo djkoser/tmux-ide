@@ -2,7 +2,7 @@ import { describe, it, beforeEach, afterEach, expect } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { agentIdentifier } from "../lib/orchestrator.ts";
+import { agentIdentifier } from "../widgets/lib/pane-comms.ts";
 import { ensureTasksDir, saveMission, saveTask, loadTask, type Goal } from "../lib/task-store.ts";
 import { _setExecutor, type PaneInfo } from "../widgets/lib/pane-comms.ts";
 import {
@@ -126,6 +126,20 @@ describe("computeStats", () => {
     const stats = computeStats(info);
     expect(stats.agents).toBe(1);
     expect(stats.activeAgents).toBe(1);
+  });
+
+  it("counts a pane classified by tmux-ide metadata when its command is a version string", () => {
+    // Claude Code renames its process to its version, so before the canonical
+    // classifier discovery missed live agents identified only by @ide_type/@ide_role.
+    const info = makeSessionInfo({
+      panes: [
+        makePane({ id: "%1", title: "cw1", name: "cw1", role: "teammate", currentCommand: "2.1.207", type: "agent" }),
+        makePane({ id: "%2", title: "Shell", currentCommand: "zsh" }),
+      ],
+    });
+
+    const stats = computeStats(info);
+    expect(stats.agents).toBe(1);
   });
 });
 

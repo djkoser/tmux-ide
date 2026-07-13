@@ -5,7 +5,7 @@ import { render, useKeyboard, useTerminalDimensions } from "@opentui/solid";
 import { RGBA, TextAttributes, type InputRenderable } from "@opentui/core";
 import { createSignal, createMemo, createEffect, onCleanup, Show, For } from "solid-js";
 import { createTheme, type RGBA as RGBAType, type WidgetTheme } from "../lib/theme.ts";
-import { listSessionPanes, sendCommand, type PaneInfo } from "../lib/pane-comms.ts";
+import { listSessionPanes, sendCommand, isAgentPane, type PaneInfo } from "../lib/pane-comms.ts";
 import {
   loadMission,
   loadGoals,
@@ -32,18 +32,6 @@ function toRGBA(c: RGBAType): RGBA {
 // --- Helpers ---
 
 const SPINNERS = /^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏⠂⠒⠢⠆⠐⠠⠄◐◓◑◒✳|/\\-] /;
-
-function isAgentPane(pane: PaneInfo): boolean {
-  const cmd = pane.currentCommand?.toLowerCase() ?? "";
-  return (
-    cmd.startsWith("claude") ||
-    cmd.startsWith("codex") ||
-    pane.role === "lead" ||
-    pane.role === "teammate" ||
-    pane.title.includes("Claude Code") ||
-    /^\d+\.\d+/.test(cmd)
-  );
-}
 
 function fmtElapsed(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();

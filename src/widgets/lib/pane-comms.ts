@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { normalizePaneTitle, SPINNERS } from "../../lib/pane-title.ts";
 
 export interface PaneInfo {
   id: string;
@@ -150,15 +151,74 @@ export const AGENT_ROLES = new Set([
   "researcher",
 ]);
 
+/** Process command a Claude/Codex agent reports at launch, before renaming itself. */
+const AGENT_COMMAND_PREFIXES = ["claude", "codex"];
+
+/** Claude Code renames its process to its version string (e.g. "2.1.207"). */
+const VERSION_COMMAND_PATTERN = /^\d+\.\d+/;
+
+/** French display names tmux-ide assigns to unnamed agent panes. Stable across spinner changes. */
+const AGENT_NAMES = [
+  "François",
+  "Amélie",
+  "Louis",
+  "Camille",
+  "Marcel",
+  "Colette",
+  "Henri",
+  "Margaux",
+  "René",
+  "Léonie",
+  "Étienne",
+  "Fleur",
+  "Gaston",
+  "Isabelle",
+  "Jacques",
+  "Lucienne",
+  "Nicolas",
+  "Odette",
+  "Pierre",
+  "Rosalie",
+];
+
 /**
- * An agent pane runs a Claude/Codex TUI. Identify it by the tmux-ide metadata
- * (`@ide_type`/`@ide_role`) rather than `pane_current_command`: Claude Code
- * renames its process to its version (e.g. "2.1.207"), so a command-name check
- * misses live agent panes and mis-routes their sends to the fire-and-forget
- * path instead of the reliable receipt/retry delivery.
+ * The single canonical agent-pane classifier. An agent pane runs a Claude/Codex
+ * TUI. Signals are checked in priority order:
+ *
+ * 1. tmux-ide metadata (`@ide_type`/`@ide_role`) is authoritative — it's stamped
+ *    when the pane is created and survives the agent renaming its own process, so
+ *    it wins over any command/title heuristic. Metadata-only detection is what the
+ *    send path relies on to route agent panes to reliable receipt/retry delivery
+ *    (Claude Code reports its version as the command, so a command check alone
+ *    misses live agents).
+ * 2. Command heuristics — the process command is "claude"/"codex" at launch, then
+ *    the version string once the TUI renames itself. These catch agent panes
+ *    tmux-ide didn't stamp (e.g. one started by hand).
+ * 3. Title heuristics — the "Claude Code" banner or a configured French agent name.
+ *
+ * The union of these signals means orchestrator/discovery now also honor the
+ * metadata that only the send path previously used, and the send path gains the
+ * command/title fallbacks — every consumer classifies a pane identically.
  */
 export function isAgentPane(pane: PaneInfo): boolean {
-  return pane.type === "agent" || (pane.role !== null && AGENT_ROLES.has(pane.role));
+  if (pane.type === "agent") return true;
+  if (pane.role !== null && AGENT_ROLES.has(pane.role)) return true;
+  const cmd = pane.currentCommand.toLowerCase();
+  if (AGENT_COMMAND_PREFIXES.some((p) => cmd.startsWith(p))) return true;
+  if (VERSION_COMMAND_PATTERN.test(cmd)) return true;
+  if (/claude\s*code/i.test(pane.title)) return true;
+  return AGENT_NAMES.includes(normalizePaneTitle(pane.title));
+}
+
+/** A stable, memorable identifier for an agent pane: its configured name, else a French display name. */
+export function agentIdentifier(pane: PaneInfo): string {
+  if (pane.name) return pane.name;
+  return AGENT_NAMES[pane.index % AGENT_NAMES.length] ?? `Agent ${pane.index}`;
+}
+
+/** An agent pane is busy when its title carries a leading spinner/status glyph. */
+export function isAgentBusy(pane: PaneInfo): boolean {
+  return SPINNERS.test(pane.title);
 }
 
 export type PaneBusyStatus = "idle" | "busy" | "agent";
@@ -179,7 +239,6 @@ export function getPaneBusyStatus(session: string, paneId: string): PaneBusyStat
   if (!pane) return "busy";
   if (isAgentPane(pane)) return "agent";
   const cmd = pane.currentCommand.toLowerCase();
-  if (cmd.startsWith("claude") || cmd.startsWith("codex")) return "agent";
   if (SHELL_COMMANDS.has(cmd)) return "idle";
   return "busy";
 }
