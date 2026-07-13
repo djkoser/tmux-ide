@@ -38,3 +38,6 @@ plans/
 
 # TypeScript build output
 dist/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
