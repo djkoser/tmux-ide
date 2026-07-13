@@ -1060,8 +1060,17 @@ export function createApp(options: CreateAppOptions = {}): Hono {
       const { content } = c.req.valid("json");
 
       const newIds = new Set(parseAssertionIds(content));
+      // Scope the claimed-check to the current mission generation: assertion ids
+      // (VAL-001, …) are reused across missions, so retained prior-generation
+      // tasks still carrying a `fulfills` for an id absent from the new contract
+      // would reject every save — even pure additions. Tasks created after the
+      // mission started belong to this generation (same approach as
+      // checkMilestoneCompletion). Without a mission there is no generation
+      // boundary, so fall back to checking all tasks.
+      const mission = loadMission(session.dir);
       const stillClaimed: Record<string, string[]> = {};
       for (const task of loadTasks(session.dir)) {
+        if (mission && task.created < mission.created) continue;
         for (const assertId of task.fulfills ?? []) {
           if (!newIds.has(assertId)) {
             (stillClaimed[assertId] ??= []).push(task.id);

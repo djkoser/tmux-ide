@@ -480,6 +480,59 @@ describe("POST /api/project/:name/validation/contract (text editor + I5)", () =>
     });
     expect(res.status).toBe(200);
   });
+
+  it("ignores prior-generation tasks claiming an assertion absent from the contract (generation-scoped guard)", async () => {
+    // Retained prior-mission task (created before this mission) claims VAL-OLD,
+    // an id the current contract never had. Without generation scoping this
+    // rejects every save — even a pure addition.
+    saveMission(tmpDir, {
+      title: "M",
+      description: "",
+      status: "active",
+      goals: [],
+      milestones: [],
+      created: "2026-06-01T00:00:00Z",
+      updated: "2026-06-01T00:00:00Z",
+    });
+    writeFileSync(join(tmpDir, ".tasks", "validation-contract.md"), "- **VAL-A** a\n");
+    saveTask(
+      tmpDir,
+      makeTask({ id: "001", fulfills: ["VAL-OLD"], created: "2026-05-01T00:00:00Z" }),
+    );
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/validation/contract", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "- **VAL-A** a\n- **VAL-B** b\n" }), // pure addition
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it("still rejects a current-generation task's dropped assertion (409)", async () => {
+    saveMission(tmpDir, {
+      title: "M",
+      description: "",
+      status: "active",
+      goals: [],
+      milestones: [],
+      created: "2026-06-01T00:00:00Z",
+      updated: "2026-06-01T00:00:00Z",
+    });
+    writeFileSync(
+      join(tmpDir, ".tasks", "validation-contract.md"),
+      "- **VAL-A** a\n- **VAL-B** b\n",
+    );
+    saveTask(tmpDir, makeTask({ id: "002", fulfills: ["VAL-B"], created: "2026-06-15T00:00:00Z" }));
+    const app = createApp();
+    const res = await app.request("/api/project/test-project/validation/contract", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "- **VAL-A** a\n" }), // drops VAL-B
+    });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { stillClaimed: Record<string, string[]> };
+    expect(body.stillClaimed["VAL-B"]).toEqual(["002"]);
+  });
 });
 
 describe("POST /api/project/:name/mission/wipe (kill-switch)", () => {
