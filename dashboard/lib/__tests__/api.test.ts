@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { marksToSections } from "../api";
 import { makeMark } from "./support";
+import type { Mark } from "../types";
 
 describe("marksToSections", () => {
   it("returns empty object for empty marks", () => {

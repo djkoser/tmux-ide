@@ -22,7 +22,6 @@ export function makeTask(overrides: Partial<Task> = {}): Task {
     priority: 1,
     created: "2026-03-21T10:00:00Z",
     updated: "2026-03-21T10:00:00Z",
-    branch: null,
     tags: [],
     proof: null,
     depends_on: [],
@@ -30,6 +29,11 @@ export function makeTask(overrides: Partial<Task> = {}): Task {
     maxRetries: 3,
     lastError: null,
     nextRetryAt: null,
+    milestone: null,
+    specialty: null,
+    fulfills: [],
+    discoveredIssues: [],
+    salientSummary: null,
     ...overrides,
   };
 }
