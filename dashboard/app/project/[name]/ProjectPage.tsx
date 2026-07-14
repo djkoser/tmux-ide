@@ -27,19 +27,10 @@ import { ComposerDock } from "@/components/ComposerDock";
 import { MilestonesEditor } from "@/components/MilestonesEditor";
 import { ContractEditor } from "@/components/ContractEditor";
 import { AssertionControl } from "@/components/AssertionControl";
-import { FederationView } from "@/components/FederationView";
 import { MissionWipeDialog } from "@/components/MissionWipeDialog";
 import type { ProjectDetail } from "@/lib/types";
 
-type Tab =
-  | "kanban"
-  | "agents"
-  | "diffs"
-  | "plans"
-  | "validation"
-  | "workspaces"
-  | "metrics"
-  | "activity";
+type Tab = "kanban" | "agents" | "diffs" | "plans" | "validation" | "metrics" | "activity";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "kanban", label: "kanban" },
@@ -47,7 +38,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "diffs", label: "diffs" },
   { id: "plans", label: "plans" },
   { id: "validation", label: "validation" },
-  { id: "workspaces", label: "workspaces" },
   { id: "metrics", label: "metrics" },
   { id: "activity", label: "activity" },
 ];
@@ -291,8 +281,6 @@ export default function ProjectPage() {
           onRefresh={refresh}
         />
       )}
-
-      {activeTab === "workspaces" && <FederationView />}
 
       {activeTab === "metrics" && <MetricsTab sessionName={project.session} />}
 

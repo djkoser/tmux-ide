@@ -5,25 +5,14 @@ import {
   sendToTargets,
   fetchSendBatch,
   fetchSendPreview,
-  fetchWorkspaces,
-  workspaceBaseUrl,
   type SendRecipient,
   type SendPreviewMatch,
   type ReceiptStatus,
-  type WorkspaceEntry,
 } from "@/lib/api";
 import { nextPollDecision, markPendingUnknown } from "@/lib/composer-poll";
 
 interface ComposerDockProps {
   sessionName: string;
-}
-
-// A send target pod: the local workspace or a registered remote one. base "" = same-origin.
-interface Pod {
-  key: string;
-  label: string;
-  base: string;
-  session: string;
 }
 
 const STATUS_COLOR: Record<ReceiptStatus, string> = {
@@ -53,29 +42,10 @@ export function ComposerDock({ sessionName }: ComposerDockProps) {
   // resolved (don't gate send); [] = resolved to zero matches (gate send).
   const [preview, setPreview] = useState<SendPreviewMatch[] | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [workspaces, setWorkspaces] = useState<WorkspaceEntry[]>([]);
-  const [podKey, setPodKey] = useState("local");
-  // The pod a batch was sent to — polled for receipts on that same daemon.
-  const activePod = useRef<Pod | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const pods: Pod[] = [
-    { key: "local", label: "this workspace", base: "", session: sessionName },
-    ...workspaces.map((ws) => ({
-      key: ws.name,
-      label: ws.name,
-      base: workspaceBaseUrl(ws),
-      session: ws.session,
-    })),
-  ];
-  const selectedPod = pods.find((p) => p.key === podKey) ?? pods[0]!;
-
-  useEffect(() => {
-    void fetchWorkspaces().then(setWorkspaces);
-  }, []);
-
   // Debounced preview of the target's resolved panes, refreshed as the target
-  // (or selected pod) changes. Queries the same pod a send would hit.
+  // changes. Queries the same session a send would hit.
   useEffect(() => {
     const t = target.trim();
     if (!t) {
@@ -86,7 +56,7 @@ export function ComposerDock({ sessionName }: ComposerDockProps) {
     setPreviewLoading(true);
     let cancelled = false;
     const handle = setTimeout(() => {
-      void fetchSendPreview(selectedPod.session, t, selectedPod.base).then((matches) => {
+      void fetchSendPreview(sessionName, t).then((matches) => {
         if (cancelled) return;
         setPreview(matches);
         setPreviewLoading(false);
@@ -96,13 +66,11 @@ export function ComposerDock({ sessionName }: ComposerDockProps) {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [target, selectedPod.session, selectedPod.base]);
+  }, [target, sessionName]);
 
   // Poll the batch's receipts until all recipients settle (no longer "retrying").
   useEffect(() => {
     if (!batchId) return;
-    const pod = activePod.current;
-    if (!pod) return;
     let cancelled = false;
     const stop = () => {
       if (pollRef.current) {
@@ -114,7 +82,7 @@ export function ComposerDock({ sessionName }: ComposerDockProps) {
     // daemon bounces mid-batch (kill-switch) or the tracker loses the id (404).
     let misses = 0;
     const poll = async () => {
-      const batch = await fetchSendBatch(pod.session, batchId, pod.base);
+      const batch = await fetchSendBatch(sessionName, batchId);
       if (cancelled) return;
       const decision = nextPollDecision(batch, misses);
       misses = decision.misses;
@@ -128,7 +96,7 @@ export function ComposerDock({ sessionName }: ComposerDockProps) {
       cancelled = true;
       stop();
     };
-  }, [batchId]);
+  }, [batchId, sessionName]);
 
   // Send is blocked when the target resolves to zero panes (preview === []).
   const noMatches = preview !== null && preview.length === 0;
@@ -140,15 +108,13 @@ export function ComposerDock({ sessionName }: ComposerDockProps) {
     setError("");
     setRecipients([]);
     setBatchId(null);
-    const pod = selectedPod;
-    const result = await sendToTargets(
-      pod.session,
-      { target: target.trim(), message: trimmed, fireAndForget: fireAndForget || undefined },
-      pod.base,
-    );
+    const result = await sendToTargets(sessionName, {
+      target: target.trim(),
+      message: trimmed,
+      fireAndForget: fireAndForget || undefined,
+    });
     setSending(false);
     if (result.ok) {
-      activePod.current = pod;
       setRecipients(result.batch.recipients);
       setBatchId(result.batch.batchId);
       setMessage("");
@@ -187,20 +153,6 @@ export function ComposerDock({ sessionName }: ComposerDockProps) {
       {!collapsed && (
         <div className="p-2 space-y-2">
           <div className="flex items-start gap-2">
-            {pods.length > 1 && (
-              <select
-                value={podKey}
-                onChange={(e) => setPodKey(e.target.value)}
-                className={`${inputClass} w-32 shrink-0`}
-                aria-label="workspace"
-              >
-                {pods.map((p) => (
-                  <option key={p.key} value={p.key}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-            )}
             <input
               type="text"
               value={target}

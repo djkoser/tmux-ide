@@ -24,7 +24,6 @@ import {
 } from "../widgets/lib/pane-comms.ts";
 import { resolveSendTargets, deliverReliably, DEFAULT_TIMING } from "../send.ts";
 import { randomUUID } from "node:crypto";
-import { loadWorkspaceRegistry, defaultRegistryPath } from "./workspaces.ts";
 import { getSessionState, killSession, stopSessionMonitor } from "../lib/tmux.ts";
 import { readConfig } from "../lib/yaml-io.ts";
 import {
@@ -114,8 +113,6 @@ export interface CreateAppOptions {
   remoteRegistry?: RemoteRegistry;
   /** Override the reliable-send delivery (defaults to send.ts deliverReliably). */
   deliver?: ComposerDeliver;
-  /** Override the workspace-registry path (defaults to ~/.tmux-ide/workspaces.json). */
-  registryPath?: string;
   /** Bounce the daemon after a mission wipe (defaults to a deferred process exit;
    *  the watchdog respawns it, so the console reconnects). Injectable for tests. */
   bounceDaemon?: () => void;
@@ -150,8 +147,6 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     options.deliver ??
     ((dir, session, pane, body, batchId) =>
       deliverReliably(dir, session, pane, body, batchId, DEFAULT_TIMING));
-
-  const registryPath = options.registryPath ?? defaultRegistryPath();
 
   // After a mission wipe, bounce the daemon so it drops its in-memory claim lock;
   // the watchdog respawns it (non-zero exit) and the console reconnects. Deferred
@@ -236,14 +231,6 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     const sessions = discoverSessions();
     const overviews = buildOverviews(sessions);
     return c.json({ sessions: overviews });
-  });
-
-  // Federated-workspace registry. The browser can't read the filesystem, so the
-  // local daemon exposes the parsed registry; the dashboard then aggregates each
-  // workspace's daemon API client-side (probing liveness per entry). Reading is
-  // resilient — a missing/corrupt file yields zero workspaces, never a 500.
-  app.get("/api/workspaces", (c) => {
-    return c.json(loadWorkspaceRegistry(registryPath));
   });
 
   app.get("/api/project/:name", (c) => {

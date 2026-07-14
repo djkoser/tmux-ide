@@ -91,26 +91,6 @@ export const triggerResearchSchema = z.object({
   type: z.string().trim().min(1, "Research type is required"),
 });
 
-// Federated-workspace registry (~/.tmux-ide/workspaces.json). Written by
-// new-workspace.sh (VAL-018), read by the command center (VAL-019). Only
-// commandCenter is required — the daemon serves API + command center on one port;
-// orchestrator is optional until a real split exists.
-export const workspaceEntrySchema = z.object({
-  name: z.string().min(1),
-  path: z.string(),
-  session: z.string().min(1),
-  ports: z.object({
-    commandCenter: z.number().int().positive(),
-    orchestrator: z.number().int().positive().optional(),
-  }),
-  created: z.string().optional(),
-});
-
-export const workspaceRegistrySchema = z.object({
-  version: z.number().int(),
-  workspaces: z.array(workspaceEntrySchema),
-});
-
 export const launchSchema = z
   .object({
     attach: z.boolean().optional(),
