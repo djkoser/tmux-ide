@@ -14,7 +14,7 @@ export function ProgressBar({ percent, width = 10 }: ProgressBarProps) {
         <span style={{ color }}>{"█".repeat(filled)}</span>
         <span className="text-[var(--dim)]">{"░".repeat(empty)}</span>
       </span>
-      <span className="text-[var(--dim)] text-right" style={{ width: "3ch" }}>
+      <span className="text-[var(--dim)] text-right tabular-nums shrink-0" style={{ width: "4ch" }}>
         {percent}%
       </span>
     </span>

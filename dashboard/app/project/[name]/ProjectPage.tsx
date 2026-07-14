@@ -7,7 +7,6 @@ import {
   fetchEvents,
   fetchMilestones,
   fetchMission,
-  fetchSkills,
   fetchValidation,
   fetchCoverage,
   fetchMetrics,
@@ -15,7 +14,6 @@ import {
   type MetricsData,
   type MilestoneData,
   type MissionDetail,
-  type SkillData,
 } from "@/lib/api";
 import { usePolling } from "@/lib/usePolling";
 import { ProgressBar } from "@/components/ProgressBar";
@@ -81,9 +79,6 @@ export default function ProjectPage() {
   const missionFetcher = useCallback(() => fetchMission(name), [name]);
   const { data: missionDetail } = usePolling<MissionDetail | null>(missionFetcher, 5000);
 
-  const skillsFetcher = useCallback(() => fetchSkills(name), [name]);
-  const { data: skills } = usePolling<SkillData[]>(skillsFetcher, 10000);
-
   // Only hard-fail when we've never connected. A transient error while we still
   // hold prior data (e.g. the daemon bouncing after a mission wipe) keeps the
   // last-known UI and auto-reconnects on the next poll — no error screen.
@@ -111,36 +106,38 @@ export default function ProjectPage() {
   return (
     <div className="h-[calc(100vh-1.5rem)] flex flex-col">
       {/* Top bar */}
-      <div className="flex items-center justify-between px-4 h-7 bg-[var(--surface)] border-b border-[var(--border)] shrink-0">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-4 px-4 h-7 bg-[var(--surface)] border-b border-[var(--border)] shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => router.push("/")}
-            className="text-[var(--dim)] hover:text-[var(--fg)] transition-colors"
+            className="text-[var(--dim)] hover:text-[var(--fg)] transition-colors shrink-0"
           >
             {"< esc"}
           </button>
-          <span className="text-[var(--border)]">│</span>
-          <span className="text-[var(--accent)]">{project.session}</span>
+          <span className="text-[var(--border)] shrink-0">│</span>
+          <span className="text-[var(--accent)] shrink-0">{project.session}</span>
           {project.mission && (
             <>
-              <span className="text-[var(--border)]">│</span>
-              <span className="text-[var(--dim)] truncate">{project.mission.title}</span>
+              <span className="text-[var(--border)] shrink-0">│</span>
+              <span className="text-[var(--dim)] truncate" title={project.mission.title}>
+                {project.mission.title}
+              </span>
             </>
           )}
         </div>
-        <div className="flex items-center gap-4 text-[var(--dim)]">
-          <span>
+        <div className="flex items-center gap-4 text-[var(--dim)] shrink-0">
+          <span className="whitespace-nowrap">
             <span className="text-[var(--green)]">{activeAgents}</span>/{project.agents.length}{" "}
             agents
           </span>
-          <span>
+          <span className="whitespace-nowrap">
             <span className="text-[var(--green)]">{doneTasks}</span>/{totalTasks} tasks
           </span>
           <ProgressBar percent={pct} width={10} />
           {project.mission && (
             <button
               onClick={() => setShowWipe(true)}
-              className="text-[var(--red)] border border-[var(--border)] hover:border-[var(--red)] px-2 py-0.5 transition-colors"
+              className="text-[var(--red)] border border-[var(--border)] hover:border-[var(--red)] px-2 py-0.5 transition-colors whitespace-nowrap shrink-0"
               title="Stop & wipe mission"
             >
               stop &amp; wipe
@@ -251,22 +248,6 @@ export default function ProjectPage() {
               </span>
             );
           })}
-        </div>
-      )}
-
-      {/* Skills bar */}
-      {skills && skills.length > 0 && (
-        <div className="flex items-center gap-2 px-4 h-6 bg-[var(--surface)] border-b border-[var(--border)] shrink-0 overflow-x-auto">
-          <span className="text-[var(--dim)] shrink-0">skills:</span>
-          {skills.map((s) => (
-            <span
-              key={s.name}
-              className="px-1.5 py-0 text-[10px] border border-[var(--border)] text-[var(--cyan)] shrink-0"
-              title={s.specialties.join(", ")}
-            >
-              {s.name}
-            </span>
-          ))}
         </div>
       )}
 

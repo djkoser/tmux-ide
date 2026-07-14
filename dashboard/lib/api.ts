@@ -699,25 +699,6 @@ export async function fetchCoverage(name: string): Promise<CoverageData | null> 
   return (await res.json()) as CoverageData;
 }
 
-// --- Skills ---
-
-export interface SkillData {
-  name: string;
-  specialties: string[];
-  role: string;
-  description: string;
-  body: string;
-}
-
-export async function fetchSkills(name: string): Promise<SkillData[]> {
-  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/skills`, {
-    cache: "no-store",
-  });
-  if (!res.ok) return [];
-  const data = (await res.json()) as { skills: SkillData[] };
-  return data.skills;
-}
-
 // --- Mission ---
 
 export interface MissionDetail {

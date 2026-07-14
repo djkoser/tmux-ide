@@ -65,9 +65,9 @@ export default function OverviewPage() {
             {/* Column headers */}
             <div className="flex items-center px-4 h-6 text-[var(--dim)] bg-[var(--surface)] border-b border-[var(--border)]">
               <span className="w-3" />
-              <span className="w-[20ch] shrink-0">session</span>
+              <span className="min-w-[20ch] shrink-0">session</span>
               <span className="flex-1">mission</span>
-              <span className="w-[14ch] text-right">progress</span>
+              <span className="w-[16ch] text-right">progress</span>
               <span className="w-[8ch] text-right">agents</span>
               <span className="w-[10ch] text-right">tasks</span>
             </div>

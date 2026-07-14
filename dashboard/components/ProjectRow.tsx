@@ -24,9 +24,14 @@ export function ProjectRow({ session: s }: ProjectRowProps) {
             }`}
           />
         </span>
-        <span className="w-[20ch] shrink-0 text-[var(--fg)] truncate">{s.name}</span>
+        <span
+          className="min-w-[20ch] max-w-[40ch] shrink-0 text-[var(--fg)] truncate"
+          title={s.name}
+        >
+          {s.name}
+        </span>
         <span className="flex-1 text-[var(--dim)] truncate pr-4">{missionText}</span>
-        <span className="w-[14ch] text-right shrink-0">
+        <span className="w-[16ch] flex justify-end shrink-0">
           <ProgressBar percent={pct} width={8} />
         </span>
         <span className="w-[8ch] text-right shrink-0 text-[var(--dim)]">
