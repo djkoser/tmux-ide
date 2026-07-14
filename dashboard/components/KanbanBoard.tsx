@@ -184,6 +184,15 @@ export function KanbanBoard({
           </button>
         </div>
       )}
+      <div className="flex items-center justify-end px-3 h-7 bg-[var(--surface)] border-b border-[var(--border)] shrink-0">
+        <button
+          type="button"
+          onClick={() => setShowCreate(true)}
+          className="px-2 py-0.5 text-[var(--bg)] bg-[var(--accent)] hover:opacity-90 transition-opacity leading-none"
+        >
+          + new task
+        </button>
+      </div>
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
