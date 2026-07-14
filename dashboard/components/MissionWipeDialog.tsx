@@ -85,7 +85,7 @@ export function MissionWipeDialog({
               type="text"
               value={typed}
               onChange={(e) => setTyped(e.target.value)}
-              placeholder="mission name"
+              placeholder={missionTitle}
               className="w-full bg-[var(--surface)] border border-[var(--border)] text-[var(--fg)] px-2 py-1 outline-none focus:border-[var(--red)] placeholder:text-[var(--dim)]"
             />
           </div>
