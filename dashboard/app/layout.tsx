@@ -10,8 +10,11 @@ const ibmPlexMono = IBM_Plex_Mono({
   variable: "--font-mono",
 });
 
+// Title is set client-side per route (see app/page.tsx and
+// app/project/[name]/ProjectPage.tsx). A static metadata title would win the
+// one-time hydration race and overwrite the workspace-aware title, so it is
+// intentionally omitted here.
 export const metadata: Metadata = {
-  title: "tmux-ide",
   description: "Command center for tmux-ide",
 };
 

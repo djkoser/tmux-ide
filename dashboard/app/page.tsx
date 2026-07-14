@@ -10,6 +10,10 @@ export default function OverviewPage() {
   const [error, setError] = useState(false);
 
   useEffect(() => {
+    document.title = "tmux-ide";
+  }, []);
+
+  useEffect(() => {
     let active = true;
 
     async function poll() {

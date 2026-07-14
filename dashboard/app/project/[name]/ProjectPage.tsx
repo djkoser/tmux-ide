@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   fetchProject,
@@ -50,6 +50,14 @@ export default function ProjectPage() {
   const name = decodeURIComponent(pathname.replace(/^\/project\//, "").replace(/\/$/, ""));
   const [activeTab, setActiveTab] = useState<Tab>("kanban");
   const [showWipe, setShowWipe] = useState(false);
+
+  // Reflect the workspace name in the browser tab title; restore on nav away.
+  useEffect(() => {
+    document.title = `${name} — tmux-ide`;
+    return () => {
+      document.title = "tmux-ide";
+    };
+  }, [name]);
 
   const fetcher = useCallback(() => fetchProject(name) as Promise<ProjectDetail | null>, [name]);
   const {
