@@ -6,6 +6,7 @@ import {
   fetchPlans,
   fetchPlan,
   savePlan,
+  createPlan,
   type PlanSummary,
   type PlanData,
   type AuthorshipData,
@@ -95,6 +96,15 @@ export function PlansPanel({ sessionName }: PlansPanelProps) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const editorRef = useRef<MarkdownEditorHandle>(null);
+  // New-plan control state.
+  const [creating, setCreating] = useState(false);
+  const [newPlanName, setNewPlanName] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
+  // Set to a freshly-created file path so the load effect opens it in edit mode.
+  const openForEditRef = useRef<string | null>(null);
+
+  // Mirror of the server's kebab-case rule for immediate client-side feedback.
+  const KEBAB_CASE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
   // Plans have no status lifecycle — narrow the list by a name search instead.
   const filteredPlans = useMemo(() => {
@@ -116,6 +126,11 @@ export function PlansPanel({ sessionName }: PlansPanelProps) {
       .then((d) => {
         setPlanData(d);
         setEditContent(d.content);
+        // Open a just-created plan straight into the editor.
+        if (openForEditRef.current === selectedFile) {
+          setEditing(true);
+          openForEditRef.current = null;
+        }
       })
       .catch(() => setPlanData({ content: "", authorship: null }))
       .finally(() => setLoadingContent(false));
@@ -131,6 +146,32 @@ export function PlansPanel({ sessionName }: PlansPanelProps) {
     () => splitIntoSections(planData.content, planData.authorship),
     [planData],
   );
+
+  // Create a new plan, then open it in the editor. Empty/invalid names are
+  // rejected client-side (mirrors the server) before any request; the server is
+  // still authoritative for collisions and traversal.
+  async function handleCreate() {
+    const nm = newPlanName.trim();
+    if (!nm) {
+      setCreateError("Enter a name.");
+      return;
+    }
+    if (!KEBAB_CASE.test(nm)) {
+      setCreateError("Use kebab-case: lowercase letters, numbers, hyphens.");
+      return;
+    }
+    const res = await createPlan(sessionName, nm);
+    if (!res.ok) {
+      setCreateError(res.error);
+      return;
+    }
+    setCreating(false);
+    setNewPlanName("");
+    setCreateError(null);
+    setQuery("");
+    openForEditRef.current = res.path;
+    setSelectedFile(res.path);
+  }
 
   // Read the live editor document and persist it. A serialization failure or an
   // unmounted editor blocks the save and surfaces an error rather than writing a
@@ -178,29 +219,65 @@ export function PlansPanel({ sessionName }: PlansPanelProps) {
     );
   }
 
-  if (!plans || plans.length === 0) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-[var(--dim)]">
-        No plan files found in plans/
-      </div>
-    );
-  }
-
   return (
     <div className="flex-1 flex min-h-0">
       {/* Sidebar */}
       <div className="w-[260px] shrink-0 border-r border-[var(--border)] flex flex-col min-h-0">
-        {/* Search */}
-        <div className="h-7 bg-[var(--surface)] border-b border-[var(--border)] shrink-0 flex items-center px-1">
+        {/* Search + new-plan control */}
+        <div className="h-7 bg-[var(--surface)] border-b border-[var(--border)] shrink-0 flex items-center px-1 gap-1">
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="search plans…"
-            className="w-full bg-transparent text-[12px] text-[var(--fg)] px-1 outline-none placeholder:text-[var(--dim)]"
+            className="flex-1 min-w-0 bg-transparent text-[12px] text-[var(--fg)] px-1 outline-none placeholder:text-[var(--dim)]"
             aria-label="search plans"
           />
+          <button
+            onClick={() => {
+              setCreating((v) => !v);
+              setCreateError(null);
+              setNewPlanName("");
+            }}
+            className="shrink-0 text-[11px] px-1.5 py-0.5 text-[var(--dim)] hover:text-[var(--accent)] transition-colors"
+            title="New plan"
+            aria-label="new plan"
+          >
+            {creating ? "×" : "+ new"}
+          </button>
         </div>
+
+        {creating && (
+          <div className="border-b border-[var(--border)] shrink-0 p-1.5 space-y-1">
+            <input
+              type="text"
+              value={newPlanName}
+              onChange={(e) => {
+                setNewPlanName(e.target.value);
+                setCreateError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void handleCreate();
+                if (e.key === "Escape") setCreating(false);
+              }}
+              placeholder="kebab-case-name"
+              autoFocus
+              className="w-full bg-[var(--bg)] border border-[var(--border)] text-[12px] text-[var(--fg)] px-1.5 py-0.5 outline-none focus:border-[var(--accent)] placeholder:text-[var(--dim)]"
+              aria-label="new plan name"
+            />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => void handleCreate()}
+                disabled={!newPlanName.trim()}
+                className="text-[11px] px-2 py-0.5 text-[var(--bg)] bg-[var(--accent)] hover:opacity-90 disabled:opacity-50 transition-opacity"
+              >
+                create
+              </button>
+              <span className="text-[9px] text-[var(--dimmer)]">.md appended</span>
+            </div>
+            {createError && <div className="text-[var(--red)] text-[10px]">{createError}</div>}
+          </div>
+        )}
 
         {/* Plan list */}
         <div className="flex-1 overflow-y-auto">

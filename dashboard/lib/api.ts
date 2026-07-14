@@ -809,6 +809,29 @@ export async function savePlan(name: string, filename: string, content: string):
   return res.ok;
 }
 
+export type CreatePlanResult = { ok: true; path: string } | { ok: false; error: string };
+
+/**
+ * Create a new (stub) plan file. Server enforces kebab-case (400) and rejects a
+ * name collision (409); the returned error surfaces those to the user.
+ */
+export async function createPlan(name: string, planName: string): Promise<CreatePlanResult> {
+  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/plans`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: planName }),
+  });
+  const data = (await res.json().catch(() => null)) as {
+    ok?: boolean;
+    path?: string;
+    error?: string;
+  } | null;
+  if (!res.ok || !data?.ok || !data.path) {
+    return { ok: false, error: data?.error ?? `HTTP ${res.status}` };
+  }
+  return { ok: true, path: data.path };
+}
+
 export async function deletePlan(name: string, filename: string): Promise<boolean> {
   const res = await fetch(
     `${API_BASE}/api/project/${encodeURIComponent(name)}/plans/${encodeURIComponent(filename)}`,

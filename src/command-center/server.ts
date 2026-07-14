@@ -76,6 +76,7 @@ import {
   updateTaskSchema,
   createTaskSchema,
   savePlanSchema,
+  createPlanSchema,
   sendCommandSchema,
   createMilestoneSchema,
   updateMilestoneSchema,
@@ -443,6 +444,29 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     }));
 
     return c.json({ plans });
+  });
+
+  // Create a new (stub) plan file. Collection POST = create; distinct from the
+  // by-filename save route, which overwrites. Kebab-case only (zod → 400),
+  // collision → 409. The editor opens on it and saves via the by-filename route.
+  app.post("/api/project/:name/plans", zValidator("json", createPlanSchema), (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    const { name: planName } = c.req.valid("json");
+    const plansDir = join(session.dir, "plans");
+    if (!existsSync(plansDir)) mkdirSync(plansDir, { recursive: true });
+    const filePath = join(plansDir, `${planName}.md`);
+    if (existsSync(filePath)) {
+      return c.json({ error: "A plan with that name already exists", name: planName }, 409);
+    }
+
+    writeFileSync(filePath, `# ${planName}\n`);
+    return c.json({ ok: true, name: planName, path: `${planName}.md` }, 201);
   });
 
   // Read a single plan file

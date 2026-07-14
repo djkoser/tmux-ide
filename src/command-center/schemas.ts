@@ -31,6 +31,17 @@ export const savePlanSchema = z.object({
   content: z.string(),
 });
 
+// Create-a-plan: kebab-case name only. The regex rejects empty, whitespace,
+// uppercase, dots and slashes — so path traversal (".." / "/") can never form a
+// valid name. `.md` is appended server-side.
+export const createPlanSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "name must be kebab-case (a-z, 0-9, hyphens)"),
+});
+
 export const saveContractSchema = z.object({
   content: z.string(),
 });

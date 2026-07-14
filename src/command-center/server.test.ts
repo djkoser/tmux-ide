@@ -874,6 +874,63 @@ describe("GET /api/project/:name/plans", () => {
   });
 });
 
+describe("POST /api/project/:name/plans (create)", () => {
+  const create = (app: ReturnType<typeof createApp>, body: unknown) =>
+    app.request("/api/project/test-project/plans", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  it("creates a stub plan file and makes it readable", async () => {
+    const app = createApp();
+    const res = await create(app, { name: "my-new-plan" });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { ok: boolean; path: string };
+    expect(body.ok).toBe(true);
+    expect(body.path).toBe("my-new-plan.md");
+
+    const read = await app.request("/api/project/test-project/plans/my-new-plan.md");
+    expect(read.status).toBe(200);
+    expect(((await read.json()) as { content: string }).content).toContain("# my-new-plan");
+  });
+
+  it("rejects a name collision with 409", async () => {
+    const app = createApp();
+    expect((await create(app, { name: "dupe" })).status).toBe(201);
+    const res = await create(app, { name: "dupe" });
+    expect(res.status).toBe(409);
+  });
+
+  it("rejects a non-kebab-case name with 400", async () => {
+    const app = createApp();
+    expect((await create(app, { name: "Bad Name" })).status).toBe(400);
+    expect((await create(app, { name: "UPPER" })).status).toBe(400);
+  });
+
+  it("rejects an empty name with 400", async () => {
+    const app = createApp();
+    expect((await create(app, { name: "" })).status).toBe(400);
+    expect((await create(app, { name: "   " })).status).toBe(400);
+  });
+
+  it("rejects a path-traversal name with 400", async () => {
+    const app = createApp();
+    expect((await create(app, { name: "../evil" })).status).toBe(400);
+    expect((await create(app, { name: "foo/bar" })).status).toBe(400);
+  });
+
+  it("returns 404 for an unknown session", async () => {
+    const app = createApp();
+    const res = await app.request("/api/project/nonexistent/plans", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "x" }),
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
 describe("research endpoints", () => {
   it("returns research state, active task, and recent findings", async () => {
     saveTask(
