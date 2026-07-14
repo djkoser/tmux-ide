@@ -10,6 +10,7 @@ import {
   resolveSendTargets,
   buildRecvTrigger,
   deliverReliably,
+  WIPE_STANDDOWN_TIMING,
   type ReliableSendTiming,
   type DeliveryDeps,
 } from "./send.ts";
@@ -320,5 +321,36 @@ describe("deliverReliably", () => {
     const byName = Object.fromEntries(results.map((r) => [r.pane.name, r.outcome]));
     expect(byName.cw3).toBe("delivered");
     expect(byName.cw4).toBe("failed");
+  });
+
+  it("bounds the stand-down wait for a non-acking pane under WIPE_STANDDOWN_TIMING", async () => {
+    // The mission-wipe kill-switch awaits every pane before clearing the store,
+    // so a mid-work pane that never acks must still settle within the tight
+    // per-pane budget. Summed sleep is the loop's wall clock (see deliverReliably).
+    let slept = 0;
+    const pastes: string[] = [];
+    const deps: DeliveryDeps = {
+      paste: (_s, _p, trigger) => pastes.push(trigger), // never acks
+      receiptStatus: () => null,
+      sleep: async (ms) => {
+        slept += ms;
+      },
+    };
+
+    const res = await deliverReliably(
+      tmpDir,
+      "sess",
+      agentPane("%2", "cw3"),
+      "STAND DOWN",
+      undefined,
+      WIPE_STANDDOWN_TIMING,
+      deps,
+    );
+
+    expect(res.outcome).toBe("failed");
+    // Bounded: initial paste + at most maxRetries re-pastes, wait ≤ timeoutMs.
+    expect(pastes.length).toBe(WIPE_STANDDOWN_TIMING.maxRetries + 1);
+    expect(res.attempts).toBe(WIPE_STANDDOWN_TIMING.maxRetries + 1);
+    expect(slept).toBeLessThanOrEqual(WIPE_STANDDOWN_TIMING.timeoutMs);
   });
 });

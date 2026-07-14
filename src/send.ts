@@ -51,6 +51,20 @@ export const DEFAULT_TIMING: ReliableSendTiming = {
   maxRetries: 4,
 };
 
+/**
+ * Tight timing for the mission-wipe stand-down broadcast. The kill-switch awaits
+ * every pane's delivery before clearing the messaging store, so the per-pane
+ * budget is the user-visible confirm→response latency. A ~1.5s cap keeps that
+ * response ≤2s even when several agent panes are mid-work and slow to ack, while
+ * still re-pasting once and preserving the deliver-before-wipe ordering.
+ */
+export const WIPE_STANDDOWN_TIMING: ReliableSendTiming = {
+  timeoutMs: 1_500,
+  retryIntervalMs: 600,
+  pollIntervalMs: 150,
+  maxRetries: 1,
+};
+
 export type DeliveryOutcome = ReceiptStatus | "failed";
 
 export interface DeliveryResult {

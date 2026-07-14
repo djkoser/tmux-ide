@@ -17,6 +17,7 @@ import { loadResearchState, saveResearchState } from "../lib/research.ts";
 import { _setExecutor, type PaneInfo } from "../widgets/lib/pane-comms.ts";
 import { _setTmuxRunner } from "./discovery.ts";
 import { createApp } from "./server.ts";
+import { WIPE_STANDDOWN_TIMING } from "../send.ts";
 import { makeTask, makePane } from "../__tests__/support.ts";
 
 let tmpDir: string;
@@ -597,10 +598,12 @@ describe("POST /api/project/:name/mission/wipe (kill-switch)", () => {
     ];
     let bounced = false;
     const delivered: string[] = [];
+    const timings: (typeof WIPE_STANDDOWN_TIMING | undefined)[] = [];
     const app = createApp({
       bounceDaemon: () => (bounced = true),
-      deliver: async (_dir, _session, pane) => {
+      deliver: async (_dir, _session, pane, _body, _batchId, timing) => {
         delivered.push(pane.id);
+        timings.push(timing);
         return { outcome: "delivered", attempts: 1 };
       },
     });
@@ -613,6 +616,8 @@ describe("POST /api/project/:name/mission/wipe (kill-switch)", () => {
     expect(((await res.json()) as { wiped: boolean }).wiped).toBe(true);
     // Stand-down broadcast reached the agent pane before the wipe.
     expect(delivered).toEqual(["%1"]);
+    // Broadcast used the tight per-pane budget so the confirm→response stays bounded.
+    expect(timings).toEqual([WIPE_STANDDOWN_TIMING]);
     // Tracker erased + daemon bounced.
     expect(loadMission(tmpDir)).toBeNull();
     expect(loadTask(tmpDir, "001")).toBeNull();

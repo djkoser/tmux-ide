@@ -22,7 +22,13 @@ import {
   getPaneBusyStatus,
   type PaneInfo,
 } from "../widgets/lib/pane-comms.ts";
-import { resolveSendTargets, deliverReliably, DEFAULT_TIMING } from "../send.ts";
+import {
+  resolveSendTargets,
+  deliverReliably,
+  DEFAULT_TIMING,
+  WIPE_STANDDOWN_TIMING,
+  type ReliableSendTiming,
+} from "../send.ts";
 import { randomUUID } from "node:crypto";
 import { getSessionState, killSession, stopSessionMonitor } from "../lib/tmux.ts";
 import { readConfig } from "../lib/yaml-io.ts";
@@ -104,6 +110,7 @@ export type ComposerDeliver = (
   pane: PaneInfo,
   body: string,
   batchId: string | undefined,
+  timing?: ReliableSendTiming,
 ) => Promise<{ outcome: ComposerDeliveryStatus; attempts: number }>;
 
 export interface CreateAppOptions {
@@ -145,8 +152,8 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   // Reliable delivery for the team-input composer — real send by default, injectable for tests.
   const deliver: ComposerDeliver =
     options.deliver ??
-    ((dir, session, pane, body, batchId) =>
-      deliverReliably(dir, session, pane, body, batchId, DEFAULT_TIMING));
+    ((dir, session, pane, body, batchId, timing) =>
+      deliverReliably(dir, session, pane, body, batchId, timing ?? DEFAULT_TIMING));
 
   // After a mission wipe, bounce the daemon so it drops its in-memory claim lock;
   // the watchdog respawns it (non-zero exit) and the console reconnects. Deferred
@@ -1291,7 +1298,12 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     }
 
     // 1. Stand-down broadcast to every agent pane via the reliable-send '*' path,
-    //    before the wipe clears the messaging store. Best-effort + bounded.
+    //    before the wipe clears the messaging store. Best-effort + bounded: the
+    //    per-pane budget uses WIPE_STANDDOWN_TIMING (~1.5s) rather than the
+    //    composer's 45s default, since deliveries fan out concurrently and this
+    //    await is the user-visible confirm→response latency. The deliver-before-
+    //    wipe ordering is preserved — the wipe below still runs only after this
+    //    broadcast settles.
     const panes = listSessionPanes(name);
     const targets = resolveSendTargets(panes, "*").filter(
       (p) => getPaneBusyStatus(name, p.id) === "agent",
@@ -1300,7 +1312,9 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     const batchId = randomUUID().slice(0, 8);
     await Promise.all(
       targets.map((pane) =>
-        deliver(session.dir, name, pane, standDown, batchId).catch(() => undefined),
+        deliver(session.dir, name, pane, standDown, batchId, WIPE_STANDDOWN_TIMING).catch(
+          () => undefined,
+        ),
       ),
     );
 
