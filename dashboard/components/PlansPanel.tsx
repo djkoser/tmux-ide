@@ -7,11 +7,13 @@ import {
   fetchPlan,
   savePlan,
   createPlan,
+  deletePlan,
   type PlanSummary,
   type PlanData,
   type AuthorshipData,
 } from "@/lib/api";
 import { decideSaveContent } from "@/lib/plan-save";
+import { deleteClick, applyDeleteResult, type DeleteConfirmState } from "@/lib/plan-delete";
 import { usePolling } from "@/lib/usePolling";
 import { AuthorshipBar } from "./AuthorshipBar";
 import { MarkdownEditor, type MarkdownEditorHandle } from "./MarkdownEditor";
@@ -85,7 +87,7 @@ function formatAuthorTime(at: string | null): string {
 
 export function PlansPanel({ sessionName }: PlansPanelProps) {
   const fetcher = useCallback(() => fetchPlans(sessionName), [sessionName]);
-  const { data: plans, loading } = usePolling<PlanSummary[]>(fetcher, 10000);
+  const { data: plans, loading, refresh } = usePolling<PlanSummary[]>(fetcher, 10000);
 
   const [query, setQuery] = useState("");
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -102,6 +104,9 @@ export function PlansPanel({ sessionName }: PlansPanelProps) {
   const [createError, setCreateError] = useState<string | null>(null);
   // Set to a freshly-created file path so the load effect opens it in edit mode.
   const openForEditRef = useRef<string | null>(null);
+  // Two-step delete: holds the path whose delete button is armed for confirm.
+  const [confirmingDelete, setConfirmingDelete] = useState<DeleteConfirmState>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Mirror of the server's kebab-case rule for immediate client-side feedback.
   const KEBAB_CASE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -171,6 +176,21 @@ export function PlansPanel({ sessionName }: PlansPanelProps) {
     setQuery("");
     openForEditRef.current = res.path;
     setSelectedFile(res.path);
+  }
+
+  // Two-step delete: first click arms the confirm, second click fires. Applies
+  // the pure effect decision (surface failure / clear a deleted selection /
+  // refresh the list) from plan-delete.ts.
+  async function handleDeleteClick(path: string) {
+    setDeleteError(null);
+    const decision = deleteClick(confirmingDelete, path);
+    setConfirmingDelete(decision.next);
+    if (!decision.fire) return;
+    const ok = await deletePlan(sessionName, path);
+    const effects = applyDeleteResult(ok, path, selectedFile);
+    setDeleteError(effects.error);
+    if (effects.clearSelection) setSelectedFile(null);
+    if (effects.refresh) refresh();
   }
 
   // Read the live editor document and persist it. A serialization failure or an
@@ -283,22 +303,42 @@ export function PlansPanel({ sessionName }: PlansPanelProps) {
         <div className="flex-1 overflow-y-auto">
           {filteredPlans.map((p) => {
             const isSelected = selectedFile === p.path;
+            const isConfirming = confirmingDelete === p.path;
             return (
-              <button
+              <div
                 key={p.path}
-                onClick={() => setSelectedFile(p.path)}
-                className={`w-full text-left px-2 py-1 transition-colors ${
+                className={`group flex items-center transition-colors ${
                   isSelected
                     ? "bg-[rgba(255,255,255,0.04)] text-[var(--accent)]"
                     : "text-[var(--fg)] hover:bg-[rgba(255,255,255,0.02)]"
                 }`}
               >
-                <span className="block truncate text-[12px]">{p.name}</span>
-              </button>
+                <button
+                  onClick={() => setSelectedFile(p.path)}
+                  className="flex-1 min-w-0 text-left px-2 py-1"
+                >
+                  <span className="block truncate text-[12px]">{p.name}</span>
+                </button>
+                <button
+                  onClick={() => void handleDeleteClick(p.path)}
+                  className={`shrink-0 px-1.5 py-1 text-[10px] transition-colors ${
+                    isConfirming
+                      ? "text-[var(--red)]"
+                      : "text-transparent group-hover:text-[var(--dim)] hover:!text-[var(--red)]"
+                  }`}
+                  title={isConfirming ? "Click again to delete" : "Delete plan"}
+                  aria-label={isConfirming ? `confirm delete ${p.name}` : `delete ${p.name}`}
+                >
+                  {isConfirming ? "confirm?" : "×"}
+                </button>
+              </div>
             );
           })}
           {filteredPlans.length === 0 && (
             <div className="px-2 py-1 text-[11px] text-[var(--dim)]">no plans match</div>
+          )}
+          {deleteError && (
+            <div className="px-2 py-1 text-[10px] text-[var(--red)]">{deleteError}</div>
           )}
         </div>
       </div>
