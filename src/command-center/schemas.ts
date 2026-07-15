@@ -51,6 +51,8 @@ export const saveContractSchema = z.object({
 // can't wipe the tracker.
 export const missionWipeSchema = z.object({
   confirm: z.string(),
+  // Also clear the scratch plans/ directory (passed through to wipeMission).
+  includePlans: z.boolean().optional(),
 });
 
 export const sendCommandSchema = z.object({

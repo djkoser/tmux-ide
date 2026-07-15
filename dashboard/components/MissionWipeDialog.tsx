@@ -23,6 +23,7 @@ export function MissionWipeDialog({
   onWiped,
 }: MissionWipeDialogProps) {
   const [typed, setTyped] = useState("");
+  const [includePlans, setIncludePlans] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -45,7 +46,7 @@ export function MissionWipeDialog({
     if (!matches) return;
     setBusy(true);
     setError("");
-    const r = await stopAndWipeMission(sessionName, typed);
+    const r = await stopAndWipeMission(sessionName, typed, includePlans);
     setBusy(false);
     if (r.ok) onWiped();
     else setError(r.error ?? "wipe failed");
@@ -89,6 +90,16 @@ export function MissionWipeDialog({
               className="w-full bg-[var(--surface)] border border-[var(--border)] text-[var(--fg)] px-2 py-1 outline-none focus:border-[var(--red)] placeholder:text-[var(--dim)]"
             />
           </div>
+
+          <label className="flex items-center gap-2 text-[var(--fg)] cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={includePlans}
+              onChange={(e) => setIncludePlans(e.target.checked)}
+              className="accent-[var(--red)]"
+            />
+            also delete all plans
+          </label>
 
           {error && <div className="text-[var(--red)] text-[11px]">{error}</div>}
 

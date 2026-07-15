@@ -1338,7 +1338,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     const mission = loadMission(session.dir);
     if (!mission) return c.json({ error: "No mission" }, 404);
 
-    const { confirm } = c.req.valid("json");
+    const { confirm, includePlans } = c.req.valid("json");
     if (confirm !== mission.title) {
       // Type-the-name gate: a mismatch is a no-op (nothing wiped, no bounce).
       return c.json({ error: "Confirmation does not match the mission title", wiped: false }, 409);
@@ -1375,7 +1375,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
 
     // 3. Native wipe (same code path as `tmux-ide mission wipe`, incl. claim-lock
     //    reset), then bounce the daemon so it reloads the cleared state.
-    const summary = wipeMission(session.dir);
+    const summary = wipeMission(session.dir, { includePlans: includePlans ?? false });
     resetClaims(session.dir);
     bounceDaemon();
 

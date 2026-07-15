@@ -1,5 +1,5 @@
 import { describe, it, beforeEach, afterEach, expect } from "bun:test";
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { agentIdentifier } from "../widgets/lib/pane-comms.ts";
@@ -627,6 +627,38 @@ describe("POST /api/directory/:name/mission/wipe (kill-switch)", () => {
     const overrides = readEvents(tmpDir).filter((e) => e.type === "override");
     expect(overrides.length).toBe(1);
     expect(overrides[0]!.message).toContain("kill-switch");
+  });
+
+  it("clears the plans/ directory when includePlans is true", async () => {
+    seedMission("Real Mission");
+    mkdirSync(join(tmpDir, "plans"), { recursive: true });
+    writeFileSync(join(tmpDir, "plans", "scratch.md"), "# scratch");
+    const app = createApp({ bounceDaemon: () => undefined });
+    const res = await app.request("/api/directory/test-project/mission/wipe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: "Real Mission", includePlans: true }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { summary: { planFiles: number } };
+    expect(body.summary.planFiles).toBe(1);
+    expect(existsSync(join(tmpDir, "plans", "scratch.md"))).toBe(false);
+  });
+
+  it("preserves plans when includePlans is omitted", async () => {
+    seedMission("Real Mission");
+    mkdirSync(join(tmpDir, "plans"), { recursive: true });
+    writeFileSync(join(tmpDir, "plans", "scratch.md"), "# scratch");
+    const app = createApp({ bounceDaemon: () => undefined });
+    const res = await app.request("/api/directory/test-project/mission/wipe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: "Real Mission" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { summary: { planFiles: number } };
+    expect(body.summary.planFiles).toBe(0);
+    expect(existsSync(join(tmpDir, "plans", "scratch.md"))).toBe(true);
   });
 });
 

@@ -209,12 +209,13 @@ export async function createTask(
 export async function stopAndWipeMission(
   name: string,
   confirm: string,
+  includePlans: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     const res = await fetch(`${API_BASE}/api/directory/${encodeURIComponent(name)}/mission/wipe`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ confirm }),
+      body: JSON.stringify({ confirm, includePlans }),
     });
     if (res.ok) return { ok: true };
     const data = (await res.json().catch(() => null)) as { error?: string } | null;

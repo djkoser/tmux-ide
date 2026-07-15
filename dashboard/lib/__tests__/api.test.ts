@@ -388,14 +388,16 @@ describe("milestone + contract clients", () => {
 describe("stopAndWipeMission", () => {
   beforeEach(() => vi.unstubAllGlobals());
 
-  it("returns ok on a successful wipe", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, wiped: true }) }),
-    );
+  it("returns ok on a successful wipe and passes includePlans through", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => ({ ok: true, wiped: true }) });
+    vi.stubGlobal("fetch", fetchMock);
     const { stopAndWipeMission } = await import("../api");
-    const r = await stopAndWipeMission("s", "Real Mission");
+    const r = await stopAndWipeMission("s", "Real Mission", true);
     expect(r.ok).toBe(true);
+    const body = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string);
+    expect(body).toEqual({ confirm: "Real Mission", includePlans: true });
   });
 
   it("surfaces the 409 reason on a name mismatch", async () => {
@@ -411,7 +413,7 @@ describe("stopAndWipeMission", () => {
       }),
     );
     const { stopAndWipeMission } = await import("../api");
-    const r = await stopAndWipeMission("s", "wrong");
+    const r = await stopAndWipeMission("s", "wrong", true);
     expect(r.ok).toBe(false);
     expect(r.error).toContain("does not match");
   });
@@ -419,7 +421,7 @@ describe("stopAndWipeMission", () => {
   it("treats a dropped connection (daemon bounce) as success in flight", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNRESET")));
     const { stopAndWipeMission } = await import("../api");
-    const r = await stopAndWipeMission("s", "Real Mission");
+    const r = await stopAndWipeMission("s", "Real Mission", false);
     expect(r.ok).toBe(true);
   });
 });
