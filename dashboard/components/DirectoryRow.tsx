@@ -4,18 +4,18 @@ import Link from "next/link";
 import type { SessionOverview } from "@/lib/types";
 import { ProgressBar } from "./ProgressBar";
 
-interface ProjectRowProps {
+interface DirectoryRowProps {
   session: SessionOverview;
 }
 
-export function ProjectRow({ session: s }: ProjectRowProps) {
+export function DirectoryRow({ session: s }: DirectoryRowProps) {
   const pct =
     s.stats.totalTasks > 0 ? Math.round((s.stats.doneTasks / s.stats.totalTasks) * 100) : 0;
 
   const missionText = s.mission?.title ?? "—";
 
   return (
-    <Link href={`/project/${encodeURIComponent(s.name)}`}>
+    <Link href={`/directory/${encodeURIComponent(s.name)}`}>
       <div className="flex items-center px-4 h-7 hover:bg-[var(--surface)] cursor-pointer border-b border-[var(--border)] transition-colors">
         <span className="w-3 shrink-0">
           <span

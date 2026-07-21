@@ -1,15 +1,15 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import type { ProjectDetail } from "@/lib/types";
+import type { DirectoryDetail } from "@/lib/types";
 
 interface StatusBarProps {
-  project: ProjectDetail;
+  directory: DirectoryDetail;
   lastUpdate?: number;
   stale?: boolean;
 }
 
-export function StatusBar({ project, lastUpdate, stale = false }: StatusBarProps) {
+export function StatusBar({ directory, lastUpdate, stale = false }: StatusBarProps) {
   const [now, setNow] = useState(Date.now());
   const [flash, setFlash] = useState(false);
   const prevUpdateRef = useRef(lastUpdate);
@@ -29,8 +29,8 @@ export function StatusBar({ project, lastUpdate, stale = false }: StatusBarProps
     }
   }, [lastUpdate]);
 
-  const doneTasks = project.tasks.filter((t) => t.status === "done").length;
-  const activeAgents = project.agents.filter((a) => a.isBusy).length;
+  const doneTasks = directory.tasks.filter((t) => t.status === "done").length;
+  const activeAgents = directory.agents.filter((a) => a.isBusy).length;
 
   const ago = lastUpdate ? Math.max(0, Math.floor((now - lastUpdate) / 1000)) : 0;
 
@@ -44,7 +44,7 @@ export function StatusBar({ project, lastUpdate, stale = false }: StatusBarProps
   return (
     <div className="shrink-0 h-6 bg-[var(--bg-weak)] border-t flex items-center px-3 text-[11px]">
       {/* Left: session name */}
-      <span className="text-[var(--accent)] font-medium">{project.session}</span>
+      <span className="text-[var(--accent)] font-medium">{directory.session}</span>
 
       {/* Center: stats */}
       <span className="mx-2 text-[var(--dim)] opacity-30">│</span>
@@ -52,12 +52,12 @@ export function StatusBar({ project, lastUpdate, stale = false }: StatusBarProps
         <span style={{ color: activeAgents > 0 ? "var(--yellow)" : undefined }}>
           {activeAgents}
         </span>
-        /{project.agents.length} agents
+        /{directory.agents.length} agents
       </span>
       <span className="mx-2 text-[var(--dim)] opacity-30">│</span>
       <span className="text-[var(--dim)]">
         <span style={{ color: doneTasks > 0 ? "var(--green)" : undefined }}>{doneTasks}</span>/
-        {project.tasks.length} tasks
+        {directory.tasks.length} tasks
       </span>
       <span className="mx-2 text-[var(--dim)] opacity-30">│</span>
       <span className="text-[var(--dim)]">updated {ago}s ago</span>

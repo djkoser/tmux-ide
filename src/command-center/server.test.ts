@@ -83,15 +83,15 @@ describe("GET /api/sessions", () => {
   });
 });
 
-describe("GET /api/project/:name", () => {
-  it("returns project detail", async () => {
+describe("GET /api/directory/:name", () => {
+  it("returns directory detail", async () => {
     const pane = makePane({ id: "%1", index: 0, title: "Agent 1", currentCommand: "claude" });
     const name = agentIdentifier(pane);
     saveTask(tmpDir, makeTask({ id: "001", status: "in-progress", assignee: name }));
     mockPanes = [pane];
 
     const app = createApp();
-    const res = await app.request("/api/project/test-project");
+    const res = await app.request("/api/directory/test-project");
     expect(res.status).toBe(200);
 
     const body = (await res.json()) as {
@@ -107,17 +107,17 @@ describe("GET /api/project/:name", () => {
 
   it("returns 404 for unknown session", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/nonexistent");
+    const res = await app.request("/api/directory/nonexistent");
     expect(res.status).toBe(404);
   });
 });
 
-describe("POST /api/project/:name/task/:id", () => {
+describe("POST /api/directory/:name/task/:id", () => {
   it("updates task status", async () => {
     saveTask(tmpDir, makeTask({ id: "001", status: "todo" }));
 
     const app = createApp();
-    const res = await app.request("/api/project/test-project/task/001", {
+    const res = await app.request("/api/directory/test-project/task/001", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "in-progress" }),
@@ -134,7 +134,7 @@ describe("POST /api/project/:name/task/:id", () => {
 
   it("returns 404 for unknown session", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/nonexistent/task/001", {
+    const res = await app.request("/api/directory/nonexistent/task/001", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "done" }),
@@ -144,7 +144,7 @@ describe("POST /api/project/:name/task/:id", () => {
 
   it("returns 404 for unknown task", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/test-project/task/999", {
+    const res = await app.request("/api/directory/test-project/task/999", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "done" }),
@@ -155,7 +155,7 @@ describe("POST /api/project/:name/task/:id", () => {
   it("rejects invalid status via zod validation", async () => {
     saveTask(tmpDir, makeTask({ id: "001" }));
     const app = createApp();
-    const res = await app.request("/api/project/test-project/task/001", {
+    const res = await app.request("/api/directory/test-project/task/001", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "invalid-status" }),
@@ -166,7 +166,7 @@ describe("POST /api/project/:name/task/:id", () => {
   it("operator override marks a review task done and logs an override event", async () => {
     saveTask(tmpDir, makeTask({ id: "001", status: "review" }));
     const app = createApp();
-    const res = await app.request("/api/project/test-project/task/001", {
+    const res = await app.request("/api/directory/test-project/task/001", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "done", override: true }),
@@ -181,7 +181,7 @@ describe("POST /api/project/:name/task/:id", () => {
   it("refuses a non-override done from review with the reviewer reason (409)", async () => {
     saveTask(tmpDir, makeTask({ id: "001", status: "review" }));
     const app = createApp();
-    const res = await app.request("/api/project/test-project/task/001", {
+    const res = await app.request("/api/directory/test-project/task/001", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "done" }),
@@ -195,7 +195,7 @@ describe("POST /api/project/:name/task/:id", () => {
   it("refuses a non-override done that skips review with the review reason (409)", async () => {
     saveTask(tmpDir, makeTask({ id: "001", status: "todo" }));
     const app = createApp();
-    const res = await app.request("/api/project/test-project/task/001", {
+    const res = await app.request("/api/directory/test-project/task/001", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "done" }),
@@ -205,10 +205,10 @@ describe("POST /api/project/:name/task/:id", () => {
   });
 });
 
-describe("POST /api/project/:name/task (create)", () => {
+describe("POST /api/directory/:name/task (create)", () => {
   it("creates a task", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/test-project/task", {
+    const res = await app.request("/api/directory/test-project/task", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title: "New task", priority: 1 }),
@@ -223,7 +223,7 @@ describe("POST /api/project/:name/task (create)", () => {
 
   it("returns 400 when title is missing", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/test-project/task", {
+    const res = await app.request("/api/directory/test-project/task", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ description: "no title" }),
@@ -233,7 +233,7 @@ describe("POST /api/project/:name/task (create)", () => {
 
   it("returns 400 when title is only whitespace", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/test-project/task", {
+    const res = await app.request("/api/directory/test-project/task", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title: "  " }),
@@ -243,7 +243,7 @@ describe("POST /api/project/:name/task (create)", () => {
 
   it("returns 404 for unknown session", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/nonexistent/task", {
+    const res = await app.request("/api/directory/nonexistent/task", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title: "Test" }),
@@ -275,7 +275,7 @@ describe("POST /api/project/:name/task (create)", () => {
     saveTask(tmpDir, makeTask({ id: "001", title: "Dep" }));
 
     const app = createApp();
-    const res = await app.request("/api/project/test-project/task", {
+    const res = await app.request("/api/directory/test-project/task", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -302,7 +302,7 @@ describe("POST /api/project/:name/task (create)", () => {
   it("rejects an unknown assertion in fulfills (409)", async () => {
     writeFileSync(join(tmpDir, ".tasks", "validation-contract.md"), "- **VAL-A** real\n");
     const app = createApp();
-    const res = await app.request("/api/project/test-project/task", {
+    const res = await app.request("/api/directory/test-project/task", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title: "T", fulfills: ["VAL-A", "VAL-GHOST"] }),
@@ -314,7 +314,7 @@ describe("POST /api/project/:name/task (create)", () => {
 
   it("rejects a dangling task in depends (409)", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/test-project/task", {
+    const res = await app.request("/api/directory/test-project/task", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title: "T", depends: ["999"] }),
@@ -326,7 +326,7 @@ describe("POST /api/project/:name/task (create)", () => {
 
   it("rejects an unknown milestone (409)", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/test-project/task", {
+    const res = await app.request("/api/directory/test-project/task", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title: "T", milestone: "M9" }),
@@ -335,7 +335,7 @@ describe("POST /api/project/:name/task (create)", () => {
   });
 });
 
-describe("POST /api/project/:name/milestones/insert (renumber + cascade)", () => {
+describe("POST /api/directory/:name/milestones/insert (renumber + cascade)", () => {
   function seedTwoMilestones() {
     saveMission(tmpDir, {
       title: "Test",
@@ -371,7 +371,7 @@ describe("POST /api/project/:name/milestones/insert (renumber + cascade)", () =>
     saveTask(tmpDir, makeTask({ id: "001", milestone: "M2" }));
 
     const app = createApp();
-    const res = await app.request("/api/project/test-project/milestones/insert", {
+    const res = await app.request("/api/directory/test-project/milestones/insert", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title: "Inserted", position: 2 }),
@@ -396,7 +396,7 @@ describe("POST /api/project/:name/milestones/insert (renumber + cascade)", () =>
   it("appends at the end when position exceeds the count", async () => {
     seedTwoMilestones();
     const app = createApp();
-    const res = await app.request("/api/project/test-project/milestones/insert", {
+    const res = await app.request("/api/directory/test-project/milestones/insert", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title: "Last", position: 99 }),
@@ -407,10 +407,10 @@ describe("POST /api/project/:name/milestones/insert (renumber + cascade)", () =>
   });
 });
 
-describe("POST /api/project/:name/validation/contract (text editor + I5)", () => {
+describe("POST /api/directory/:name/validation/contract (text editor + I5)", () => {
   it("saves contract text and round-trips via GET", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/test-project/validation/contract", {
+    const res = await app.request("/api/directory/test-project/validation/contract", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: "- **VAL-A** a\n- **VAL-B** b\n" }),
@@ -419,7 +419,7 @@ describe("POST /api/project/:name/validation/contract (text editor + I5)", () =>
     const body = (await res.json()) as { ok: boolean; assertions: string[] };
     expect(body.assertions.sort()).toEqual(["VAL-A", "VAL-B"]);
 
-    const get = await app.request("/api/project/test-project/validation/contract");
+    const get = await app.request("/api/directory/test-project/validation/contract");
     const doc = (await get.json()) as { content: string };
     expect(doc.content).toContain("VAL-A");
   });
@@ -431,7 +431,7 @@ describe("POST /api/project/:name/validation/contract (text editor + I5)", () =>
     );
     saveTask(tmpDir, makeTask({ id: "001", fulfills: ["VAL-B"] }));
     const app = createApp();
-    const res = await app.request("/api/project/test-project/validation/contract", {
+    const res = await app.request("/api/directory/test-project/validation/contract", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: "- **VAL-A** a\n" }), // drops VAL-B
@@ -445,7 +445,7 @@ describe("POST /api/project/:name/validation/contract (text editor + I5)", () =>
     writeFileSync(join(tmpDir, ".tasks", "validation-contract.md"), "- **VAL-A** a\n");
     saveTask(tmpDir, makeTask({ id: "001", fulfills: ["VAL-A"] }));
     const app = createApp();
-    const res = await app.request("/api/project/test-project/validation/contract", {
+    const res = await app.request("/api/directory/test-project/validation/contract", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: "- **VAL-B** b\n- **VAL-A** a\n" }),
@@ -472,7 +472,7 @@ describe("POST /api/project/:name/validation/contract (text editor + I5)", () =>
       makeTask({ id: "001", fulfills: ["VAL-OLD"], created: "2026-05-01T00:00:00Z" }),
     );
     const app = createApp();
-    const res = await app.request("/api/project/test-project/validation/contract", {
+    const res = await app.request("/api/directory/test-project/validation/contract", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: "- **VAL-A** a\n- **VAL-B** b\n" }), // pure addition
@@ -496,7 +496,7 @@ describe("POST /api/project/:name/validation/contract (text editor + I5)", () =>
     );
     saveTask(tmpDir, makeTask({ id: "002", fulfills: ["VAL-B"], created: "2026-06-15T00:00:00Z" }));
     const app = createApp();
-    const res = await app.request("/api/project/test-project/validation/contract", {
+    const res = await app.request("/api/directory/test-project/validation/contract", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: "- **VAL-A** a\n" }), // drops VAL-B
@@ -507,10 +507,10 @@ describe("POST /api/project/:name/validation/contract (text editor + I5)", () =>
   });
 });
 
-describe("POST /api/project/:name/validation/assert/:assertId", () => {
+describe("POST /api/directory/:name/validation/assert/:assertId", () => {
   it("sets an assertion passing with evidence and persists to state", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/test-project/validation/assert/VAL-1", {
+    const res = await app.request("/api/directory/test-project/validation/assert/VAL-1", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "passing", evidence: "ran the suite", verifiedBy: "cw4" }),
@@ -528,7 +528,7 @@ describe("POST /api/project/:name/validation/assert/:assertId", () => {
 
   it("rejects passing without evidence (400) and writes nothing", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/test-project/validation/assert/VAL-1", {
+    const res = await app.request("/api/directory/test-project/validation/assert/VAL-1", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "passing" }),
@@ -540,7 +540,7 @@ describe("POST /api/project/:name/validation/assert/:assertId", () => {
 
   it("returns 404 for unknown session", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/nonexistent/validation/assert/VAL-1", {
+    const res = await app.request("/api/directory/nonexistent/validation/assert/VAL-1", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "pending" }),
@@ -549,7 +549,7 @@ describe("POST /api/project/:name/validation/assert/:assertId", () => {
   });
 });
 
-describe("POST /api/project/:name/mission/wipe (kill-switch)", () => {
+describe("POST /api/directory/:name/mission/wipe (kill-switch)", () => {
   function seedMission(title: string) {
     saveMission(tmpDir, {
       title,
@@ -576,7 +576,7 @@ describe("POST /api/project/:name/mission/wipe (kill-switch)", () => {
     saveTask(tmpDir, makeTask({ id: "001" }));
     let bounced = false;
     const app = createApp({ bounceDaemon: () => (bounced = true) });
-    const res = await app.request("/api/project/test-project/mission/wipe", {
+    const res = await app.request("/api/directory/test-project/mission/wipe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ confirm: "wrong name" }),
@@ -607,7 +607,7 @@ describe("POST /api/project/:name/mission/wipe (kill-switch)", () => {
         return { outcome: "delivered", attempts: 1 };
       },
     });
-    const res = await app.request("/api/project/test-project/mission/wipe", {
+    const res = await app.request("/api/directory/test-project/mission/wipe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ confirm: "Real Mission" }),
@@ -629,7 +629,7 @@ describe("POST /api/project/:name/mission/wipe (kill-switch)", () => {
   });
 });
 
-describe("POST /api/project/:name/send (composer)", () => {
+describe("POST /api/directory/:name/send (composer)", () => {
   const tick = () => new Promise((r) => setTimeout(r, 0));
 
   it("returns a batchId immediately and delivers reliably to an agent pane", async () => {
@@ -641,7 +641,7 @@ describe("POST /api/project/:name/send (composer)", () => {
         return { outcome: "delivered", attempts: 1 };
       },
     });
-    const res = await app.request("/api/project/test-project/send", {
+    const res = await app.request("/api/directory/test-project/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ target: "cw1", message: "hello" }),
@@ -653,7 +653,7 @@ describe("POST /api/project/:name/send (composer)", () => {
     expect(calls).toEqual(["%1"]);
 
     await tick();
-    const poll = await app.request(`/api/project/test-project/send/batch/${body.batchId}`);
+    const poll = await app.request(`/api/directory/test-project/send/batch/${body.batchId}`);
     const state = (await poll.json()) as {
       done: boolean;
       ok: boolean;
@@ -675,7 +675,7 @@ describe("POST /api/project/:name/send (composer)", () => {
         return { outcome: "delivered", attempts: 1 };
       },
     });
-    const res = await app.request("/api/project/test-project/send", {
+    const res = await app.request("/api/directory/test-project/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ target: "team-input", message: "hi" }),
@@ -696,7 +696,7 @@ describe("POST /api/project/:name/send (composer)", () => {
         attempts: pane.id === "%2" ? 4 : 1,
       }),
     });
-    const res = await app.request("/api/project/test-project/send", {
+    const res = await app.request("/api/directory/test-project/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ target: "cw*", message: "batch" }),
@@ -705,7 +705,7 @@ describe("POST /api/project/:name/send (composer)", () => {
     expect(body.fanOut).toBe(true);
 
     await tick();
-    const poll = await app.request(`/api/project/test-project/send/batch/${body.batchId}`);
+    const poll = await app.request(`/api/directory/test-project/send/batch/${body.batchId}`);
     const state = (await poll.json()) as {
       ok: boolean;
       recipients: { paneId: string; status: string }[];
@@ -724,7 +724,7 @@ describe("POST /api/project/:name/send (composer)", () => {
         return { outcome: "delivered", attempts: 1 };
       },
     });
-    const res = await app.request("/api/project/test-project/send", {
+    const res = await app.request("/api/directory/test-project/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ target: "cw1", message: "quick", fireAndForget: true }),
@@ -736,14 +736,14 @@ describe("POST /api/project/:name/send (composer)", () => {
 
   it("returns 404 polling an unknown batch", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/test-project/send/batch/nope");
+    const res = await app.request("/api/directory/test-project/send/batch/nope");
     expect(res.status).toBe(404);
   });
 
   it("returns 404 when the target matches no pane", async () => {
     mockPanes = [makePane({ id: "%1", title: "cw1", name: "cw1", currentCommand: "claude" })];
     const app = createApp();
-    const res = await app.request("/api/project/test-project/send", {
+    const res = await app.request("/api/directory/test-project/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ target: "ghost", message: "x" }),
@@ -752,7 +752,7 @@ describe("POST /api/project/:name/send (composer)", () => {
   });
 });
 
-describe("GET /api/project/:name/send/preview", () => {
+describe("GET /api/directory/:name/send/preview", () => {
   it("resolves a glob to the matching agent pane names", async () => {
     mockPanes = [
       makePane({ id: "%1", title: "cw1", name: "cw1", role: "teammate", currentCommand: "claude" }),
@@ -760,7 +760,7 @@ describe("GET /api/project/:name/send/preview", () => {
       makePane({ id: "%3", title: "cw3", name: "cw3", role: "teammate", currentCommand: "claude" }),
     ];
     const app = createApp();
-    const res = await app.request("/api/project/test-project/send/preview?target=cw*");
+    const res = await app.request("/api/directory/test-project/send/preview?target=cw*");
     expect(res.status).toBe(200);
     const body = (await res.json()) as { target: string; matches: { name: string | null }[] };
     expect(body.target).toBe("cw*");
@@ -772,7 +772,7 @@ describe("GET /api/project/:name/send/preview", () => {
       makePane({ id: "%1", title: "cw1", name: "cw1", role: "teammate", currentCommand: "claude" }),
     ];
     const app = createApp();
-    const res = await app.request("/api/project/test-project/send/preview?target=xyz*");
+    const res = await app.request("/api/directory/test-project/send/preview?target=xyz*");
     expect(res.status).toBe(200);
     const body = (await res.json()) as { matches: unknown[] };
     expect(body.matches).toEqual([]);
@@ -784,27 +784,27 @@ describe("GET /api/project/:name/send/preview", () => {
     ];
     const app = createApp();
 
-    const empty = await app.request("/api/project/test-project/send/preview?target=");
+    const empty = await app.request("/api/directory/test-project/send/preview?target=");
     expect(empty.status).toBe(200);
     expect(((await empty.json()) as { matches: unknown[] }).matches).toEqual([]);
 
-    const missing = await app.request("/api/project/test-project/send/preview");
+    const missing = await app.request("/api/directory/test-project/send/preview");
     expect(missing.status).toBe(200);
     expect(((await missing.json()) as { matches: unknown[] }).matches).toEqual([]);
   });
 
   it("returns 404 for an unknown session", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/nonexistent/send/preview?target=cw*");
+    const res = await app.request("/api/directory/nonexistent/send/preview?target=cw*");
     expect(res.status).toBe(404);
   });
 });
 
-describe("DELETE /api/project/:name/task/:id", () => {
+describe("DELETE /api/directory/:name/task/:id", () => {
   it("deletes a task", async () => {
     saveTask(tmpDir, makeTask({ id: "001" }));
     const app = createApp();
-    const res = await app.request("/api/project/test-project/task/001", {
+    const res = await app.request("/api/directory/test-project/task/001", {
       method: "DELETE",
     });
     expect(res.status).toBe(200);
@@ -815,7 +815,7 @@ describe("DELETE /api/project/:name/task/:id", () => {
 
   it("returns 404 for unknown task", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/test-project/task/999", {
+    const res = await app.request("/api/directory/test-project/task/999", {
       method: "DELETE",
     });
     expect(res.status).toBe(404);
@@ -823,14 +823,14 @@ describe("DELETE /api/project/:name/task/:id", () => {
 
   it("returns 404 for unknown session", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/nonexistent/task/001", {
+    const res = await app.request("/api/directory/nonexistent/task/001", {
       method: "DELETE",
     });
     expect(res.status).toBe(404);
   });
 });
 
-describe("GET /api/project/:name/plans", () => {
+describe("GET /api/directory/:name/plans", () => {
   it("returns plan list with metadata", async () => {
     const plansDir = join(tmpDir, "plans");
     mkdirSync(plansDir, { recursive: true });
@@ -840,7 +840,7 @@ describe("GET /api/project/:name/plans", () => {
     );
 
     const app = createApp();
-    const res = await app.request("/api/project/test-project/plans");
+    const res = await app.request("/api/directory/test-project/plans");
     expect(res.status).toBe(200);
     const body = (await res.json()) as { plans: Array<{ name: string; status: string }> };
     expect(body.plans.length >= 1).toBeTruthy();
@@ -850,9 +850,9 @@ describe("GET /api/project/:name/plans", () => {
   });
 });
 
-describe("POST /api/project/:name/plans (create)", () => {
+describe("POST /api/directory/:name/plans (create)", () => {
   const create = (app: ReturnType<typeof createApp>, body: unknown) =>
-    app.request("/api/project/test-project/plans", {
+    app.request("/api/directory/test-project/plans", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -866,7 +866,7 @@ describe("POST /api/project/:name/plans (create)", () => {
     expect(body.ok).toBe(true);
     expect(body.path).toBe("my-new-plan.md");
 
-    const read = await app.request("/api/project/test-project/plans/my-new-plan.md");
+    const read = await app.request("/api/directory/test-project/plans/my-new-plan.md");
     expect(read.status).toBe(200);
     expect(((await read.json()) as { content: string }).content).toContain("# my-new-plan");
   });
@@ -898,7 +898,7 @@ describe("POST /api/project/:name/plans (create)", () => {
 
   it("returns 404 for an unknown session", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/nonexistent/plans", {
+    const res = await app.request("/api/directory/nonexistent/plans", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: "x" }),
@@ -939,7 +939,7 @@ describe("research endpoints", () => {
     });
 
     const app = createApp();
-    const res = await app.request("/api/project/test-project/research");
+    const res = await app.request("/api/directory/test-project/research");
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
@@ -965,7 +965,7 @@ describe("research endpoints", () => {
     ];
 
     const app = createApp();
-    const res = await app.request("/api/project/test-project/research/trigger", {
+    const res = await app.request("/api/directory/test-project/research/trigger", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "periodic" }),
@@ -983,14 +983,14 @@ describe("research endpoints", () => {
   });
 });
 
-describe("GET /api/project/:name/plans/:filename", () => {
+describe("GET /api/directory/:name/plans/:filename", () => {
   it("returns plan content", async () => {
     const plansDir = join(tmpDir, "plans");
     mkdirSync(plansDir, { recursive: true });
     writeFileSync(join(plansDir, "test-plan.md"), "# Test Plan\n\nSome content.");
 
     const app = createApp();
-    const res = await app.request("/api/project/test-project/plans/test-plan");
+    const res = await app.request("/api/directory/test-project/plans/test-plan");
     expect(res.status).toBe(200);
     const body = (await res.json()) as { name: string; content: string; marks: unknown };
     expect(body.content.includes("Test Plan")).toBeTruthy();
@@ -998,53 +998,53 @@ describe("GET /api/project/:name/plans/:filename", () => {
 
   it("returns 404 for missing plan", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/test-project/plans/nonexistent");
+    const res = await app.request("/api/directory/test-project/plans/nonexistent");
     expect(res.status).toBe(404);
   });
 });
 
-describe("POST /api/project/:name/plans/:filename", () => {
+describe("POST /api/directory/:name/plans/:filename", () => {
   it("saves plan content", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/test-project/plans/new-plan", {
+    const res = await app.request("/api/directory/test-project/plans/new-plan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: "# New Plan\n\nContent here." }),
     });
     expect(res.status).toBe(200);
 
-    const getRes = await app.request("/api/project/test-project/plans/new-plan");
+    const getRes = await app.request("/api/directory/test-project/plans/new-plan");
     expect(getRes.status).toBe(200);
     const body = (await getRes.json()) as { content: string };
     expect(body.content.includes("New Plan")).toBeTruthy();
   });
 });
 
-describe("DELETE /api/project/:name/plans/:filename", () => {
+describe("DELETE /api/directory/:name/plans/:filename", () => {
   it("deletes a plan file", async () => {
     const plansDir = join(tmpDir, "plans");
     mkdirSync(plansDir, { recursive: true });
     writeFileSync(join(plansDir, "to-delete.md"), "# Delete me");
 
     const app = createApp();
-    const res = await app.request("/api/project/test-project/plans/to-delete", {
+    const res = await app.request("/api/directory/test-project/plans/to-delete", {
       method: "DELETE",
     });
     expect(res.status).toBe(200);
 
-    const getRes = await app.request("/api/project/test-project/plans/to-delete");
+    const getRes = await app.request("/api/directory/test-project/plans/to-delete");
     expect(getRes.status).toBe(404);
   });
 });
 
-describe("POST /api/project/:name/plans/:filename/done", () => {
+describe("POST /api/directory/:name/plans/:filename/done", () => {
   it("marks a plan as done", async () => {
     const plansDir = join(tmpDir, "plans");
     mkdirSync(plansDir, { recursive: true });
     writeFileSync(join(plansDir, "70-test.md"), "# Plan 70\n\n**Status:** `in-progress`\n");
 
     const app = createApp();
-    const res = await app.request("/api/project/test-project/plans/70-test/done", {
+    const res = await app.request("/api/directory/test-project/plans/70-test/done", {
       method: "POST",
     });
     expect(res.status).toBe(200);
@@ -1054,10 +1054,10 @@ describe("POST /api/project/:name/plans/:filename/done", () => {
   });
 });
 
-describe("GET /api/project/:name/diff", () => {
+describe("GET /api/directory/:name/diff", () => {
   it("returns diff shape", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/test-project/diff");
+    const res = await app.request("/api/directory/test-project/diff");
     expect(res.status).toBe(200);
     const body = (await res.json()) as { diff: string; files: unknown[] };
     expect(typeof body.diff).toBe("string");
@@ -1066,12 +1066,12 @@ describe("GET /api/project/:name/diff", () => {
 
   it("returns 404 for unknown session", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/nonexistent/diff");
+    const res = await app.request("/api/directory/nonexistent/diff");
     expect(res.status).toBe(404);
   });
 });
 
-describe("GET /api/project/:name/events", () => {
+describe("GET /api/directory/:name/events", () => {
   it("returns recent events", async () => {
     appendEvent(tmpDir, {
       timestamp: new Date().toISOString(),
@@ -1081,7 +1081,7 @@ describe("GET /api/project/:name/events", () => {
     });
 
     const app = createApp();
-    const res = await app.request("/api/project/test-project/events");
+    const res = await app.request("/api/directory/test-project/events");
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       events: Array<{ type: string; message: string; relative: string }>;
@@ -1093,7 +1093,7 @@ describe("GET /api/project/:name/events", () => {
 
   it("returns empty events when no log exists", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/test-project/events");
+    const res = await app.request("/api/directory/test-project/events");
     expect(res.status).toBe(200);
     const body = (await res.json()) as { events: unknown[] };
     expect(body.events).toEqual([]);
@@ -1101,15 +1101,15 @@ describe("GET /api/project/:name/events", () => {
 
   it("returns 404 for unknown session", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/nonexistent/events");
+    const res = await app.request("/api/directory/nonexistent/events");
     expect(res.status).toBe(404);
   });
 });
 
-describe("GET /api/project/:name/diff/:file", () => {
+describe("GET /api/directory/:name/diff/:file", () => {
   it("returns per-file diff shape", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/test-project/diff/src/index.ts");
+    const res = await app.request("/api/directory/test-project/diff/src/index.ts");
     expect(res.status).toBe(200);
 
     const body = (await res.json()) as { file: string; diff: string };
@@ -1119,7 +1119,7 @@ describe("GET /api/project/:name/diff/:file", () => {
 
   it("returns 404 for unknown session", async () => {
     const app = createApp();
-    const res = await app.request("/api/project/nonexistent/diff/file.ts");
+    const res = await app.request("/api/directory/nonexistent/diff/file.ts");
     expect(res.status).toBe(404);
   });
 });
@@ -1145,7 +1145,7 @@ describe("GET /", () => {
   });
 });
 
-describe("GET /api/project/:name/milestones", () => {
+describe("GET /api/directory/:name/milestones", () => {
   it("returns milestones with task counts", async () => {
     saveMission(tmpDir, {
       title: "Test",
@@ -1180,7 +1180,7 @@ describe("GET /api/project/:name/milestones", () => {
     saveTask(tmpDir, makeTask({ id: "003", milestone: "M2" }));
 
     const app = createApp();
-    const res = await app.request("/api/project/test-project/milestones");
+    const res = await app.request("/api/directory/test-project/milestones");
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       milestones: Array<{ id: string; taskCount: number; tasksDone: number }>;
@@ -1194,7 +1194,7 @@ describe("GET /api/project/:name/milestones", () => {
   });
 });
 
-describe("POST /api/project/:name/milestones", () => {
+describe("POST /api/directory/:name/milestones", () => {
   it("creates a milestone", async () => {
     saveMission(tmpDir, {
       title: "Test",
@@ -1207,7 +1207,7 @@ describe("POST /api/project/:name/milestones", () => {
     });
 
     const app = createApp();
-    const res = await app.request("/api/project/test-project/milestones", {
+    const res = await app.request("/api/directory/test-project/milestones", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title: "Foundation", sequence: 1 }),
@@ -1245,7 +1245,7 @@ describe("POST /api/project/:name/milestones", () => {
     });
 
     const app = createApp();
-    const res = await app.request("/api/project/test-project/milestones/M1", {
+    const res = await app.request("/api/directory/test-project/milestones/M1", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "validating" }),
@@ -1277,7 +1277,7 @@ describe("POST /api/project/:name/milestones", () => {
     });
 
     const app = createApp();
-    const res = await app.request("/api/project/test-project/milestones/M1", {
+    const res = await app.request("/api/directory/test-project/milestones/M1", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "done" }),
@@ -1310,7 +1310,7 @@ describe("POST /api/project/:name/milestones", () => {
     });
 
     const app = createApp();
-    const res = await app.request("/api/project/test-project/milestones/M1", {
+    const res = await app.request("/api/directory/test-project/milestones/M1", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "bogus" }),
@@ -1320,7 +1320,7 @@ describe("POST /api/project/:name/milestones", () => {
   });
 });
 
-describe("GET /api/project/:name/validation", () => {
+describe("GET /api/directory/:name/validation", () => {
   it("returns validation state and contract", async () => {
     mkdirSync(join(tmpDir, ".tasks"), { recursive: true });
     writeFileSync(join(tmpDir, ".tasks", "validation-contract.md"), "**ASSERT01**: Auth works");
@@ -1338,7 +1338,7 @@ describe("GET /api/project/:name/validation", () => {
     });
 
     const app = createApp();
-    const res = await app.request("/api/project/test-project/validation");
+    const res = await app.request("/api/directory/test-project/validation");
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       contract: string;
@@ -1349,7 +1349,7 @@ describe("GET /api/project/:name/validation", () => {
   });
 });
 
-describe("GET /api/project/:name/skills", () => {
+describe("GET /api/directory/:name/skills", () => {
   it("returns loaded skills", async () => {
     const skillsDir = join(tmpDir, ".tmux-ide", "skills");
     mkdirSync(skillsDir, { recursive: true });
@@ -1359,7 +1359,7 @@ describe("GET /api/project/:name/skills", () => {
     );
 
     const app = createApp();
-    const res = await app.request("/api/project/test-project/skills");
+    const res = await app.request("/api/directory/test-project/skills");
     expect(res.status).toBe(200);
     const body = (await res.json()) as { skills: Array<{ name: string; specialties: string[] }> };
     expect(body.skills.length).toBe(1);
@@ -1368,7 +1368,7 @@ describe("GET /api/project/:name/skills", () => {
   });
 });
 
-describe("GET /api/project/:name/mission", () => {
+describe("GET /api/directory/:name/mission", () => {
   it("returns mission with validation summary", async () => {
     saveMission(tmpDir, {
       title: "Ship v2",
@@ -1410,7 +1410,7 @@ describe("GET /api/project/:name/mission", () => {
     });
 
     const app = createApp();
-    const res = await app.request("/api/project/test-project/mission");
+    const res = await app.request("/api/directory/test-project/mission");
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       mission: { title: string };
@@ -1423,7 +1423,7 @@ describe("GET /api/project/:name/mission", () => {
   });
 });
 
-describe("POST /api/project/:name/mission/plan-complete", () => {
+describe("POST /api/directory/:name/mission/plan-complete", () => {
   it("transitions mission from planning to active", async () => {
     saveMission(tmpDir, {
       title: "Test",
@@ -1446,7 +1446,7 @@ describe("POST /api/project/:name/mission/plan-complete", () => {
     });
 
     const app = createApp();
-    const res = await app.request("/api/project/test-project/mission/plan-complete", {
+    const res = await app.request("/api/directory/test-project/mission/plan-complete", {
       method: "POST",
     });
     expect(res.status).toBe(200);

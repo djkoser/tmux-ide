@@ -365,7 +365,7 @@ export const PaneInfoSchemaZ = z.object({
 });
 
 // ---------------------------------------------------------------------------
-// AgentDetail / SessionStats / SessionOverview / ProjectDetail
+// AgentDetail / SessionStats / SessionOverview / DirectoryDetail
 // (from src/command-center/discovery.ts)
 // ---------------------------------------------------------------------------
 
@@ -399,7 +399,7 @@ export const SessionOverviewSchemaZ = z.object({
   ),
 });
 
-export const ProjectDetailSchemaZ = z.object({
+export const DirectoryDetailSchemaZ = z.object({
   session: z.string(),
   dir: z.string(),
   mission: MissionSchemaZ.nullable(),
@@ -421,4 +421,4 @@ export type MarkRange = z.infer<typeof MarkRangeSchemaZ>;
 export type AuthorshipStats = z.infer<typeof AuthorshipStatsSchemaZ>;
 export type AgentDetail = z.infer<typeof AgentDetailSchemaZ>;
 export type SessionOverview = z.infer<typeof SessionOverviewSchemaZ>;
-export type ProjectDetail = z.infer<typeof ProjectDetailSchemaZ>;
+export type DirectoryDetail = z.infer<typeof DirectoryDetailSchemaZ>;

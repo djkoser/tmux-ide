@@ -11,7 +11,7 @@ const ibmPlexMono = IBM_Plex_Mono({
 });
 
 // Title is set client-side per route (see app/page.tsx and
-// app/project/[name]/ProjectPage.tsx). A static metadata title would win the
+// app/directory/[name]/DirectoryPage.tsx). A static metadata title would win the
 // one-time hydration race and overwrite the workspace-aware title, so it is
 // intentionally omitted here.
 export const metadata: Metadata = {

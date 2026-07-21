@@ -9,11 +9,11 @@ import { cors } from "hono/cors";
 import {
   discoverSessions,
   buildOverviews,
-  buildProjectDetail,
+  buildDirectoryDetail,
   buildOrchestratorSnapshot,
   updateTask,
   type SessionOverview,
-  type ProjectDetail,
+  type DirectoryDetail,
 } from "./discovery.ts";
 import {
   listSessionPanes,
@@ -240,14 +240,14 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     return c.json({ sessions: overviews });
   });
 
-  app.get("/api/project/:name", (c) => {
+  app.get("/api/directory/:name", (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
     if (!session) {
       return c.json({ error: "Session not found" }, 404);
     }
-    const detail = buildProjectDetail(session);
+    const detail = buildDirectoryDetail(session);
     const orchestratorSnapshot = buildOrchestratorSnapshot(session);
     let orchestratorConfig: { enabled: boolean; dispatchMode: string } | null = null;
     try {
@@ -265,7 +265,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     return c.json({ ...detail, orchestratorSnapshot, orchestratorConfig });
   });
 
-  app.get("/api/project/:name/panes", (c) => {
+  app.get("/api/directory/:name/panes", (c) => {
     const name = c.req.param("name");
     let panes: ReturnType<typeof listSessionPanes>;
     try {
@@ -296,7 +296,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     });
   });
 
-  app.post("/api/project/:name/task/:id", zValidator("json", updateTaskSchema), async (c) => {
+  app.post("/api/directory/:name/task/:id", zValidator("json", updateTaskSchema), async (c) => {
     const name = c.req.param("name");
     const taskId = c.req.param("id");
 
@@ -339,7 +339,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   });
 
   // Create task
-  app.post("/api/project/:name/task", zValidator("json", createTaskSchema), async (c) => {
+  app.post("/api/directory/:name/task", zValidator("json", createTaskSchema), async (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -404,7 +404,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   });
 
   // Delete task
-  app.delete("/api/project/:name/task/:id", (c) => {
+  app.delete("/api/directory/:name/task/:id", (c) => {
     const name = c.req.param("name");
     const taskId = c.req.param("id");
     const sessions = discoverSessions();
@@ -420,7 +420,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   });
 
   // List plan files with status metadata
-  app.get("/api/project/:name/plans", (c) => {
+  app.get("/api/directory/:name/plans", (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -443,7 +443,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   // Create a new (stub) plan file. Collection POST = create; distinct from the
   // by-filename save route, which overwrites. Kebab-case only (zod → 400),
   // collision → 409. The editor opens on it and saves via the by-filename route.
-  app.post("/api/project/:name/plans", zValidator("json", createPlanSchema), (c) => {
+  app.post("/api/directory/:name/plans", zValidator("json", createPlanSchema), (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -464,7 +464,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   });
 
   // Read a single plan file
-  app.get("/api/project/:name/plans/:filename", (c) => {
+  app.get("/api/directory/:name/plans/:filename", (c) => {
     const name = c.req.param("name");
     const filename = c.req.param("filename");
     const sessions = discoverSessions();
@@ -497,7 +497,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   });
 
   // Save a plan file (with authorship tagging)
-  app.post("/api/project/:name/plans/:filename", zValidator("json", savePlanSchema), async (c) => {
+  app.post("/api/directory/:name/plans/:filename", zValidator("json", savePlanSchema), async (c) => {
     const name = c.req.param("name");
     const filename = c.req.param("filename");
     const sessions = discoverSessions();
@@ -525,7 +525,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   });
 
   // Delete a plan file
-  app.delete("/api/project/:name/plans/:filename", (c) => {
+  app.delete("/api/directory/:name/plans/:filename", (c) => {
     const name = c.req.param("name");
     const filename = c.req.param("filename");
     const sessions = discoverSessions();
@@ -550,7 +550,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   });
 
   // Mark a plan as done
-  app.post("/api/project/:name/plans/:filename/done", (c) => {
+  app.post("/api/directory/:name/plans/:filename/done", (c) => {
     const name = c.req.param("name");
     const filename = c.req.param("filename");
     const sessions = discoverSessions();
@@ -570,7 +570,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
 
   // --- Checkpoints ---
 
-  app.get("/api/project/:name/checkpoints", (c) => {
+  app.get("/api/directory/:name/checkpoints", (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -582,7 +582,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     return c.json({ checkpoints: list });
   });
 
-  app.get("/api/project/:name/checkpoints/:id", (c) => {
+  app.get("/api/directory/:name/checkpoints/:id", (c) => {
     const name = c.req.param("name");
     const id = c.req.param("id");
     const sessions = discoverSessions();
@@ -593,7 +593,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     return c.json({ checkpoint: cp });
   });
 
-  app.post("/api/project/:name/checkpoints", async (c) => {
+  app.post("/api/directory/:name/checkpoints", async (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -619,7 +619,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     return c.json({ ok: true, checkpoint }, 201);
   });
 
-  app.post("/api/project/:name/checkpoints/:id", async (c) => {
+  app.post("/api/directory/:name/checkpoints/:id", async (c) => {
     const name = c.req.param("name");
     const id = c.req.param("id");
     const sessions = discoverSessions();
@@ -639,7 +639,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     return c.json({ ok: true, checkpoint: updated });
   });
 
-  app.delete("/api/project/:name/checkpoints/:id", (c) => {
+  app.delete("/api/directory/:name/checkpoints/:id", (c) => {
     const name = c.req.param("name");
     const id = c.req.param("id");
     const sessions = discoverSessions();
@@ -651,7 +651,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
 
   // --- Reviews ---
 
-  app.get("/api/project/:name/reviews", (c) => {
+  app.get("/api/directory/:name/reviews", (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -661,7 +661,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     return c.json({ reviews: list });
   });
 
-  app.get("/api/project/:name/reviews/:id", (c) => {
+  app.get("/api/directory/:name/reviews/:id", (c) => {
     const name = c.req.param("name");
     const id = c.req.param("id");
     const sessions = discoverSessions();
@@ -672,7 +672,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     return c.json({ review });
   });
 
-  app.post("/api/project/:name/reviews", async (c) => {
+  app.post("/api/directory/:name/reviews", async (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -697,7 +697,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     return c.json({ ok: true, review }, 201);
   });
 
-  app.post("/api/project/:name/reviews/:id", async (c) => {
+  app.post("/api/directory/:name/reviews/:id", async (c) => {
     const name = c.req.param("name");
     const id = c.req.param("id");
     const sessions = discoverSessions();
@@ -717,7 +717,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     return c.json({ ok: true, review: updated });
   });
 
-  app.post("/api/project/:name/reviews/:id/comment", async (c) => {
+  app.post("/api/directory/:name/reviews/:id/comment", async (c) => {
     const name = c.req.param("name");
     const id = c.req.param("id");
     const sessions = discoverSessions();
@@ -737,7 +737,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     return c.json({ ok: true, review: existing });
   });
 
-  app.delete("/api/project/:name/reviews/:id", (c) => {
+  app.delete("/api/directory/:name/reviews/:id", (c) => {
     const name = c.req.param("name");
     const id = c.req.param("id");
     const sessions = discoverSessions();
@@ -747,7 +747,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     return c.json({ ok: true, deleted: id });
   });
 
-  app.get("/api/project/:name/diff", (c) => {
+  app.get("/api/directory/:name/diff", (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -830,7 +830,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   });
 
   // Per-file diff endpoint
-  app.get("/api/project/:name/diff/:file{.+}", (c) => {
+  app.get("/api/directory/:name/diff/:file{.+}", (c) => {
     const name = c.req.param("name");
     const file = c.req.param("file");
     const sessions = discoverSessions();
@@ -864,7 +864,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
 
   // --- Milestone endpoints ---
 
-  app.get("/api/project/:name/milestones", (c) => {
+  app.get("/api/directory/:name/milestones", (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -885,7 +885,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     return c.json({ milestones });
   });
 
-  app.get("/api/project/:name/milestones/:id", (c) => {
+  app.get("/api/directory/:name/milestones/:id", (c) => {
     const name = c.req.param("name");
     const milestoneId = c.req.param("id");
     const sessions = discoverSessions();
@@ -900,7 +900,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   });
 
   app.post(
-    "/api/project/:name/milestones",
+    "/api/directory/:name/milestones",
     zValidator("json", createMilestoneSchema),
     async (c) => {
       const name = c.req.param("name");
@@ -938,7 +938,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   // Registered before the `/milestones/:id` param route so the static "insert"
   // segment isn't captured as an :id.
   app.post(
-    "/api/project/:name/milestones/insert",
+    "/api/directory/:name/milestones/insert",
     zValidator("json", insertMilestoneSchema),
     (c) => {
       const name = c.req.param("name");
@@ -994,7 +994,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   );
 
   app.post(
-    "/api/project/:name/milestones/:id",
+    "/api/directory/:name/milestones/:id",
     zValidator("json", updateMilestoneSchema),
     async (c) => {
       const name = c.req.param("name");
@@ -1027,7 +1027,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
 
   // --- Validation endpoints ---
 
-  app.get("/api/project/:name/validation", (c) => {
+  app.get("/api/directory/:name/validation", (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -1037,7 +1037,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     return c.json({ contract: contract ?? null, state: state ?? null });
   });
 
-  app.get("/api/project/:name/validation/coverage", (c) => {
+  app.get("/api/directory/:name/validation/coverage", (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -1047,7 +1047,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
 
   // Canonical assertion-ID list parsed from the contract — the create-task modal's
   // `fulfills` options come from here so the UI never re-implements the parser.
-  app.get("/api/project/:name/validation/assertions", (c) => {
+  app.get("/api/directory/:name/validation/assertions", (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -1057,7 +1057,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   });
 
   // Raw contract markdown for the editor (mirrors the plans-editor read path).
-  app.get("/api/project/:name/validation/contract", (c) => {
+  app.get("/api/directory/:name/validation/contract", (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -1069,7 +1069,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   // assertions, but must not DROP one a task's `fulfills` still claims — that would
   // orphan the claim and break the coverage gate.
   app.post(
-    "/api/project/:name/validation/contract",
+    "/api/directory/:name/validation/contract",
     zValidator("json", saveContractSchema),
     (c) => {
       const name = c.req.param("name");
@@ -1115,7 +1115,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   // orchestrator's remediation flow stay in lockstep (evidence-required on
   // passing/failing is enforced there and surfaces as a 400).
   app.post(
-    "/api/project/:name/validation/assert/:assertId",
+    "/api/directory/:name/validation/assert/:assertId",
     zValidator("json", updateAssertionSchema),
     (c) => {
       const name = c.req.param("name");
@@ -1140,7 +1140,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     },
   );
 
-  app.get("/api/project/:name/research", (c) => {
+  app.get("/api/directory/:name/research", (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -1161,7 +1161,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   });
 
   app.post(
-    "/api/project/:name/research/trigger",
+    "/api/directory/:name/research/trigger",
     zValidator("json", triggerResearchSchema),
     async (c) => {
       const name = c.req.param("name");
@@ -1218,7 +1218,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
 
   // --- Skill endpoints ---
 
-  app.get("/api/project/:name/skills", (c) => {
+  app.get("/api/directory/:name/skills", (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -1227,7 +1227,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     return c.json({ skills });
   });
 
-  app.get("/api/project/:name/skills/:skillName", (c) => {
+  app.get("/api/directory/:name/skills/:skillName", (c) => {
     const name = c.req.param("name");
     const skillName = c.req.param("skillName");
     const sessions = discoverSessions();
@@ -1240,7 +1240,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
 
   // --- Mission endpoints ---
 
-  app.get("/api/project/:name/mission", (c) => {
+  app.get("/api/directory/:name/mission", (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -1259,7 +1259,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     return c.json({ mission, validationSummary });
   });
 
-  app.post("/api/project/:name/mission/plan-complete", async (c) => {
+  app.post("/api/directory/:name/mission/plan-complete", async (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -1283,7 +1283,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
 
   // Mission kill-switch: stand the team down, then wipe the tracker to a clean
   // slate and bounce the daemon. `confirm` must equal the mission title.
-  app.post("/api/project/:name/mission/wipe", zValidator("json", missionWipeSchema), async (c) => {
+  app.post("/api/directory/:name/mission/wipe", zValidator("json", missionWipeSchema), async (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -1337,7 +1337,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
 
   // --- Metrics endpoints ---
 
-  app.get("/api/project/:name/metrics", (c) => {
+  app.get("/api/directory/:name/metrics", (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -1345,7 +1345,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     return c.json(computeMetrics(session.dir));
   });
 
-  app.get("/api/project/:name/metrics/agents", (c) => {
+  app.get("/api/directory/:name/metrics/agents", (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -1353,7 +1353,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     return c.json({ agents: computeMetrics(session.dir).agents });
   });
 
-  app.get("/api/project/:name/metrics/timeline", (c) => {
+  app.get("/api/directory/:name/metrics/timeline", (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -1361,7 +1361,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     return c.json({ timeline: computeMetrics(session.dir).timeline });
   });
 
-  app.get("/api/project/:name/metrics/history", (c) => {
+  app.get("/api/directory/:name/metrics/history", (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -1370,7 +1370,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   });
 
   // Events endpoint — returns recent orchestrator events
-  app.get("/api/project/:name/events", (c) => {
+  app.get("/api/directory/:name/events", (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -1402,7 +1402,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   // Preview which panes a send target (including globs like "cw*"/"*") resolves
   // to, before sending. Reuses resolveSendTargets so the preview and the actual
   // send can never disagree.
-  app.get("/api/project/:name/send/preview", (c) => {
+  app.get("/api/directory/:name/send/preview", (c) => {
     const name = c.req.param("name");
     const target = c.req.query("target") ?? "";
     let panes: ReturnType<typeof listSessionPanes>;
@@ -1429,7 +1429,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   });
 
   // Send message to a pane by name/title/role/ID
-  app.post("/api/project/:name/send", zValidator("json", sendCommandSchema), async (c) => {
+  app.post("/api/directory/:name/send", zValidator("json", sendCommandSchema), async (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -1512,7 +1512,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   });
 
   // Poll per-recipient receipt status for a send batch (composer live indicators).
-  app.get("/api/project/:name/send/batch/:batchId", (c) => {
+  app.get("/api/directory/:name/send/batch/:batchId", (c) => {
     const batch = sendBatches.get(c.req.param("batchId"));
     if (!batch) return c.json({ error: "Batch not found" }, 404);
     const done = batch.recipients.every((r) => r.status !== "retrying");
@@ -1523,7 +1523,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   // Launch a tmux-ide session (shells out to CLI since launch has complex side effects)
   const execFileAsync = promisify(execFile);
 
-  app.post("/api/project/:name/launch", async (c) => {
+  app.post("/api/directory/:name/launch", async (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -1551,7 +1551,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   });
 
   // Stop a tmux-ide session
-  app.post("/api/project/:name/stop", async (c) => {
+  app.post("/api/directory/:name/stop", async (c) => {
     const name = c.req.param("name");
     const sessions = discoverSessions();
     const session = sessions.find((s) => s.name === name);
@@ -1576,7 +1576,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   app.get("/api/events", (c) => {
     return streamSSE(c, async (stream) => {
       let prevOverviews: SessionOverview[] = [];
-      let prevDetails = new Map<string, ProjectDetail>();
+      let prevDetails = new Map<string, DirectoryDetail>();
       const eventCursors = new Map<string, number>(); // session → last-seen event count
       let prevOrchHashes = new Map<string, string>(); // session → orchestrator snapshot hash
 
@@ -1653,7 +1653,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
           }
 
           // Task-level and agent-level diffs (existing logic)
-          const detail = buildProjectDetail(session);
+          const detail = buildDirectoryDetail(session);
           const prevDetail = prevDetails.get(session.name);
 
           if (prevDetail) {

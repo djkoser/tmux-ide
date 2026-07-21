@@ -17,7 +17,7 @@ import {
 } from "./task-store.ts";
 import { appendEvent, readEvents } from "./event-log.ts";
 import {
-  buildProjectDetail,
+  buildDirectoryDetail,
   computeStats,
   computeGoalProgress,
   type SessionInfo,
@@ -144,7 +144,7 @@ describe("task lifecycle round-trip", () => {
 });
 
 describe("discovery round-trip", () => {
-  it("builds project detail from on-disk data with mock panes", () => {
+  it("builds directory detail from on-disk data with mock panes", () => {
     ensureTasksDir(tmpDir);
 
     const mission: Mission = {
@@ -220,7 +220,7 @@ describe("discovery round-trip", () => {
       panes: [mockPane],
     };
 
-    const detail = buildProjectDetail(info);
+    const detail = buildDirectoryDetail(info);
     expect(detail.session).toBe("test-session");
     expect(detail.dir).toBe(tmpDir);
     expect(detail.mission).toBeTruthy();

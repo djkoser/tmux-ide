@@ -5,7 +5,7 @@ export type {
   ProofSchema,
   AgentDetail,
   SessionOverview,
-  ProjectDetail,
+  DirectoryDetail,
   Mark,
   MarkRange,
   AuthorshipStats,

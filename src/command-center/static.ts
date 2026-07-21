@@ -104,9 +104,9 @@ export function serveDashboard(): MiddlewareHandler {
     const indexFile = readCached(indexPath);
     if (indexFile) return serve(indexFile);
 
-    // 3. SPA fallback for /project/* dynamic routes
-    if (normalized.startsWith("/project/")) {
-      const fallbackPath = join(outDir, "project", "__fallback", "index.html");
+    // 3. SPA fallback for /directory/* dynamic routes
+    if (normalized.startsWith("/directory/")) {
+      const fallbackPath = join(outDir, "directory", "__fallback", "index.html");
       const fallbackFile = readCached(fallbackPath);
       if (fallbackFile) return serve(fallbackFile);
     }

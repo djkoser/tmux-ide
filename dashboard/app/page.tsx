@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchSessions } from "@/lib/api";
-import { ProjectRow } from "@/components/ProjectRow";
+import { DirectoryRow } from "@/components/DirectoryRow";
 import type { SessionOverview } from "@/lib/types";
 
 export default function OverviewPage() {
@@ -77,7 +77,7 @@ export default function OverviewPage() {
             </div>
 
             {sessions.map((s) => (
-              <ProjectRow key={s.name} session={s} />
+              <DirectoryRow key={s.name} session={s} />
             ))}
           </div>
         )}

@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  fetchProject,
+  fetchDirectory,
   fetchEvents,
   fetchMilestones,
   fetchMission,
@@ -28,7 +28,7 @@ import { MilestonesEditor } from "@/components/MilestonesEditor";
 import { ContractEditor } from "@/components/ContractEditor";
 import { AssertionControl } from "@/components/AssertionControl";
 import { MissionWipeDialog } from "@/components/MissionWipeDialog";
-import type { ProjectDetail } from "@/lib/types";
+import type { DirectoryDetail } from "@/lib/types";
 
 type Tab = "kanban" | "agents" | "diffs" | "plans" | "validation" | "metrics" | "activity";
 
@@ -42,12 +42,12 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "activity", label: "activity" },
 ];
 
-export default function ProjectPage() {
+export default function DirectoryPage() {
   const pathname = usePathname();
   const router = useRouter();
-  // Extract project name from URL pathname (not useParams, which returns
+  // Extract directory name from URL pathname (not useParams, which returns
   // the build-time placeholder "__fallback" in static exports)
-  const name = decodeURIComponent(pathname.replace(/^\/project\//, "").replace(/\/$/, ""));
+  const name = decodeURIComponent(pathname.replace(/^\/directory\//, "").replace(/\/$/, ""));
   const [activeTab, setActiveTab] = useState<Tab>("kanban");
   const [showWipe, setShowWipe] = useState(false);
 
@@ -59,14 +59,14 @@ export default function ProjectPage() {
     };
   }, [name]);
 
-  const fetcher = useCallback(() => fetchProject(name) as Promise<ProjectDetail | null>, [name]);
+  const fetcher = useCallback(() => fetchDirectory(name) as Promise<DirectoryDetail | null>, [name]);
   const {
-    data: project,
+    data: directory,
     error,
     stale,
     lastUpdate,
     refresh,
-  } = usePolling<ProjectDetail | null>(fetcher, 2000);
+  } = usePolling<DirectoryDetail | null>(fetcher, 2000);
 
   const eventsFetcher = useCallback(() => fetchEvents(name), [name]);
   const { data: events } = usePolling<EventData[]>(eventsFetcher, 3000);
@@ -80,15 +80,15 @@ export default function ProjectPage() {
   // Only hard-fail when we've never connected. A transient error while we still
   // hold prior data (e.g. the daemon bouncing after a mission wipe) keeps the
   // last-known UI and auto-reconnects on the next poll — no error screen.
-  if (error && !project) {
+  if (error && !directory) {
     return (
       <div className="h-[calc(100vh-1.5rem)] flex items-center justify-center text-[var(--red)]">
-        failed to load project
+        failed to load directory
       </div>
     );
   }
 
-  if (!project) {
+  if (!directory) {
     return (
       <div className="h-[calc(100vh-1.5rem)] flex items-center justify-center text-[var(--dim)]">
         loading...
@@ -96,10 +96,10 @@ export default function ProjectPage() {
     );
   }
 
-  const doneTasks = project.tasks.filter((t) => t.status === "done").length;
-  const totalTasks = project.tasks.length;
+  const doneTasks = directory.tasks.filter((t) => t.status === "done").length;
+  const totalTasks = directory.tasks.length;
   const pct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
-  const activeAgents = project.agents.filter((a) => a.isBusy).length;
+  const activeAgents = directory.agents.filter((a) => a.isBusy).length;
 
   return (
     <div className="h-[calc(100vh-1.5rem)] flex flex-col">
@@ -113,26 +113,26 @@ export default function ProjectPage() {
             {"< esc"}
           </button>
           <span className="text-[var(--border)] shrink-0">│</span>
-          <span className="text-[var(--accent)] shrink-0">{project.session}</span>
-          {project.mission && (
+          <span className="text-[var(--accent)] shrink-0">{directory.session}</span>
+          {directory.mission && (
             <>
               <span className="text-[var(--border)] shrink-0">│</span>
-              <span className="text-[var(--dim)] truncate" title={project.mission.title}>
-                {project.mission.title}
+              <span className="text-[var(--dim)] truncate" title={directory.mission.title}>
+                {directory.mission.title}
               </span>
             </>
           )}
         </div>
         <div className="flex items-center gap-4 text-[var(--dim)] shrink-0">
           <span className="whitespace-nowrap">
-            <span className="text-[var(--green)]">{activeAgents}</span>/{project.agents.length}{" "}
+            <span className="text-[var(--green)]">{activeAgents}</span>/{directory.agents.length}{" "}
             agents
           </span>
           <span className="whitespace-nowrap">
             <span className="text-[var(--green)]">{doneTasks}</span>/{totalTasks} tasks
           </span>
           <ProgressBar percent={pct} width={10} />
-          {project.mission && (
+          {directory.mission && (
             <button
               onClick={() => setShowWipe(true)}
               className="text-[var(--red)] border border-[var(--border)] hover:border-[var(--red)] px-2 py-0.5 transition-colors whitespace-nowrap shrink-0"
@@ -144,10 +144,10 @@ export default function ProjectPage() {
         </div>
       </div>
 
-      {showWipe && project.mission && (
+      {showWipe && directory.mission && (
         <MissionWipeDialog
-          sessionName={project.session}
-          missionTitle={project.mission.title}
+          sessionName={directory.session}
+          missionTitle={directory.mission.title}
           onClose={() => setShowWipe(false)}
           onWiped={() => {
             setShowWipe(false);
@@ -157,19 +157,19 @@ export default function ProjectPage() {
       )}
 
       {/* Agents bar */}
-      {project.agents.length > 0 && (
+      {directory.agents.length > 0 && (
         <div className="flex items-center px-2 bg-[var(--surface)] border-b border-[var(--border)] shrink-0 overflow-x-auto">
-          {project.agents.map((a, i) => (
+          {directory.agents.map((a, i) => (
             <AgentCard key={`${a.paneTitle}-${i}`} agent={a} />
           ))}
         </div>
       )}
 
       {/* Goals bar */}
-      {project.goals.length > 0 && (
+      {directory.goals.length > 0 && (
         <div className="flex items-center gap-4 px-4 h-6 bg-[var(--surface)] border-b border-[var(--border)] shrink-0 overflow-x-auto">
-          {project.goals.map((g) => {
-            const goalTasks = project.tasks.filter((t) => t.goal === g.id);
+          {directory.goals.map((g) => {
+            const goalTasks = directory.tasks.filter((t) => t.goal === g.id);
             const goalDone = goalTasks.filter((t) => t.status === "done").length;
             const goalPct =
               goalTasks.length > 0 ? Math.round((goalDone / goalTasks.length) * 100) : 0;
@@ -269,39 +269,39 @@ export default function ProjectPage() {
       {/* Tab content */}
       {activeTab === "kanban" && (
         <KanbanBoard
-          tasks={project.tasks}
-          sessionName={project.session}
-          agents={project.agents}
-          goals={project.goals}
+          tasks={directory.tasks}
+          sessionName={directory.session}
+          agents={directory.agents}
+          goals={directory.goals}
           milestones={milestones ?? []}
           onRefresh={refresh}
         />
       )}
 
-      {activeTab === "diffs" && <DiffPanel sessionName={project.session} />}
+      {activeTab === "diffs" && <DiffPanel sessionName={directory.session} />}
 
-      {activeTab === "plans" && <PlansPanel sessionName={project.session} />}
+      {activeTab === "plans" && <PlansPanel sessionName={directory.session} />}
 
       {activeTab === "validation" && (
         <ValidationTab
-          sessionName={project.session}
+          sessionName={directory.session}
           milestones={milestones ?? []}
           onRefresh={refresh}
         />
       )}
 
-      {activeTab === "metrics" && <MetricsTab sessionName={project.session} />}
+      {activeTab === "metrics" && <MetricsTab sessionName={directory.session} />}
 
       {activeTab === "activity" && <ActivityFeed events={events ?? []} />}
 
       {activeTab === "agents" && (
         <div className="flex-1 p-4 overflow-auto">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {project.agents.map((a, i) => (
+            {directory.agents.map((a, i) => (
               <AgentCard key={`${a.paneTitle}-${i}`} agent={a} />
             ))}
           </div>
-          {project.agents.length === 0 && (
+          {directory.agents.length === 0 && (
             <div className="flex items-center justify-center h-32 text-[var(--dim)]">
               no agents in this session
             </div>
@@ -309,8 +309,8 @@ export default function ProjectPage() {
         </div>
       )}
 
-      <ComposerDock sessionName={project.session} />
-      <StatusBar project={project} lastUpdate={lastUpdate} stale={stale} />
+      <ComposerDock sessionName={directory.session} />
+      <StatusBar directory={directory} lastUpdate={lastUpdate} stale={stale} />
     </div>
   );
 }

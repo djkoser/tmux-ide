@@ -1,4 +1,4 @@
-import type { SessionOverview, ProjectDetail, Task, Mark, AuthorshipStats } from "./types";
+import type { SessionOverview, DirectoryDetail, Task, Mark, AuthorshipStats } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -23,7 +23,7 @@ export interface PaneData {
 }
 
 export async function fetchPanes(name: string): Promise<PaneData[]> {
-  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/panes`, {
+  const res = await fetch(`${API_BASE}/api/directory/${encodeURIComponent(name)}/panes`, {
     cache: "no-store",
   });
   if (!res.ok) return [];
@@ -31,12 +31,12 @@ export async function fetchPanes(name: string): Promise<PaneData[]> {
   return data.panes;
 }
 
-export async function fetchProject(name: string): Promise<ProjectDetail | null> {
-  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}`, {
+export async function fetchDirectory(name: string): Promise<DirectoryDetail | null> {
+  const res = await fetch(`${API_BASE}/api/directory/${encodeURIComponent(name)}`, {
     cache: "no-store",
   });
   if (!res.ok) return null;
-  return (await res.json()) as ProjectDetail;
+  return (await res.json()) as DirectoryDetail;
 }
 
 export interface DiffData {
@@ -45,7 +45,7 @@ export interface DiffData {
 }
 
 export async function fetchDiff(name: string): Promise<DiffData | null> {
-  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/diff`, {
+  const res = await fetch(`${API_BASE}/api/directory/${encodeURIComponent(name)}/diff`, {
     cache: "no-store",
   });
   if (!res.ok) return null;
@@ -54,7 +54,7 @@ export async function fetchDiff(name: string): Promise<DiffData | null> {
 
 export async function fetchFileDiff(name: string, filePath: string): Promise<string> {
   const res = await fetch(
-    `${API_BASE}/api/project/${encodeURIComponent(name)}/diff/${encodeURIComponent(filePath)}`,
+    `${API_BASE}/api/directory/${encodeURIComponent(name)}/diff/${encodeURIComponent(filePath)}`,
     { cache: "no-store" },
   );
   if (!res.ok) return "";
@@ -72,7 +72,7 @@ export interface EventData {
 }
 
 export async function fetchEvents(name: string): Promise<EventData[]> {
-  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/events`, {
+  const res = await fetch(`${API_BASE}/api/directory/${encodeURIComponent(name)}/events`, {
     cache: "no-store",
   });
   if (!res.ok) return [];
@@ -95,7 +95,7 @@ export async function updateTask(
   },
 ): Promise<UpdateTaskResult> {
   const res = await fetch(
-    `${API_BASE}/api/project/${encodeURIComponent(sessionName)}/task/${encodeURIComponent(taskId)}`,
+    `${API_BASE}/api/directory/${encodeURIComponent(sessionName)}/task/${encodeURIComponent(taskId)}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -132,7 +132,7 @@ export async function createTask(
   sessionName: string,
   fields: CreateTaskFields,
 ): Promise<CreateTaskResult> {
-  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(sessionName)}/task`, {
+  const res = await fetch(`${API_BASE}/api/directory/${encodeURIComponent(sessionName)}/task`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(fields),
@@ -165,7 +165,7 @@ export async function stopAndWipeMission(
   confirm: string,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/mission/wipe`, {
+    const res = await fetch(`${API_BASE}/api/directory/${encodeURIComponent(name)}/mission/wipe`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ confirm }),
@@ -182,7 +182,7 @@ export async function stopAndWipeMission(
 
 export async function fetchAssertionIds(name: string): Promise<string[]> {
   const res = await fetch(
-    `${API_BASE}/api/project/${encodeURIComponent(name)}/validation/assertions`,
+    `${API_BASE}/api/directory/${encodeURIComponent(name)}/validation/assertions`,
   );
   if (!res.ok) return [];
   const data = (await res.json()) as { assertions: string[] };
@@ -193,7 +193,7 @@ export async function createMilestone(
   name: string,
   fields: { title: string; sequence: number; description?: string },
 ): Promise<{ ok: boolean; error?: string }> {
-  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/milestones`, {
+  const res = await fetch(`${API_BASE}/api/directory/${encodeURIComponent(name)}/milestones`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(fields),
@@ -209,7 +209,7 @@ export async function updateMilestone(
   fields: { status?: MilestoneData["status"]; title?: string; description?: string },
 ): Promise<{ ok: boolean; error?: string }> {
   const res = await fetch(
-    `${API_BASE}/api/project/${encodeURIComponent(name)}/milestones/${encodeURIComponent(id)}`,
+    `${API_BASE}/api/directory/${encodeURIComponent(name)}/milestones/${encodeURIComponent(id)}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -225,7 +225,7 @@ export async function insertMilestone(
   name: string,
   fields: { title: string; description?: string; position: number },
 ): Promise<{ ok: boolean; error?: string }> {
-  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/milestones/insert`, {
+  const res = await fetch(`${API_BASE}/api/directory/${encodeURIComponent(name)}/milestones/insert`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(fields),
@@ -237,7 +237,7 @@ export async function insertMilestone(
 
 export async function fetchContract(name: string): Promise<string> {
   const res = await fetch(
-    `${API_BASE}/api/project/${encodeURIComponent(name)}/validation/contract`,
+    `${API_BASE}/api/directory/${encodeURIComponent(name)}/validation/contract`,
   );
   if (!res.ok) return "";
   const data = (await res.json()) as { content: string };
@@ -249,7 +249,7 @@ export async function saveContract(
   content: string,
 ): Promise<{ ok: boolean; error?: string; stillClaimed?: Record<string, string[]> }> {
   const res = await fetch(
-    `${API_BASE}/api/project/${encodeURIComponent(name)}/validation/contract`,
+    `${API_BASE}/api/directory/${encodeURIComponent(name)}/validation/contract`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -281,7 +281,7 @@ export async function assertValidation(
   input: { status: AssertionStatus; evidence?: string; verifiedBy?: string },
 ): Promise<{ ok: boolean; error?: string }> {
   const res = await fetch(
-    `${API_BASE}/api/project/${encodeURIComponent(name)}/validation/assert/${encodeURIComponent(
+    `${API_BASE}/api/directory/${encodeURIComponent(name)}/validation/assert/${encodeURIComponent(
       assertionId,
     )}`,
     {
@@ -332,7 +332,7 @@ export async function sendToTargets(
   fields: { target: string; message: string; fireAndForget?: boolean },
   baseUrl: string = API_BASE,
 ): Promise<SendResult> {
-  const res = await fetch(`${baseUrl}/api/project/${encodeURIComponent(name)}/send`, {
+  const res = await fetch(`${baseUrl}/api/directory/${encodeURIComponent(name)}/send`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(fields),
@@ -380,7 +380,7 @@ export async function fetchSendPreview(
 ): Promise<SendPreviewMatch[] | null> {
   try {
     const res = await fetch(
-      `${baseUrl}/api/project/${encodeURIComponent(name)}/send/preview?target=${encodeURIComponent(target)}`,
+      `${baseUrl}/api/directory/${encodeURIComponent(name)}/send/preview?target=${encodeURIComponent(target)}`,
     );
     if (!res.ok) return null;
     const data = (await res.json().catch(() => null)) as { matches?: SendPreviewMatch[] } | null;
@@ -398,7 +398,7 @@ export async function fetchSendBatch(
   baseUrl: string = API_BASE,
 ): Promise<SendBatch | null> {
   const res = await fetch(
-    `${baseUrl}/api/project/${encodeURIComponent(name)}/send/batch/${encodeURIComponent(batchId)}`,
+    `${baseUrl}/api/directory/${encodeURIComponent(name)}/send/batch/${encodeURIComponent(batchId)}`,
   );
   if (!res.ok) return null;
   return (await res.json()) as SendBatch;
@@ -416,7 +416,7 @@ export interface PlanSummary {
 }
 
 export async function fetchPlans(name: string): Promise<PlanSummary[]> {
-  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/plans`, {
+  const res = await fetch(`${API_BASE}/api/directory/${encodeURIComponent(name)}/plans`, {
     cache: "no-store",
   });
   if (!res.ok) return [];
@@ -426,7 +426,7 @@ export async function fetchPlans(name: string): Promise<PlanSummary[]> {
 
 export async function markPlanDone(name: string, filename: string): Promise<boolean> {
   const res = await fetch(
-    `${API_BASE}/api/project/${encodeURIComponent(name)}/plans/${encodeURIComponent(filename)}/done`,
+    `${API_BASE}/api/directory/${encodeURIComponent(name)}/plans/${encodeURIComponent(filename)}/done`,
     { method: "POST" },
   );
   return res.ok;
@@ -522,7 +522,7 @@ export function marksToSections(
 
 export async function fetchPlan(name: string, filename: string): Promise<PlanData> {
   const res = await fetch(
-    `${API_BASE}/api/project/${encodeURIComponent(name)}/plans/${encodeURIComponent(filename)}`,
+    `${API_BASE}/api/directory/${encodeURIComponent(name)}/plans/${encodeURIComponent(filename)}`,
     { cache: "no-store" },
   );
   if (!res.ok) return { content: "", authorship: null };
@@ -557,7 +557,7 @@ export interface MilestoneData {
 }
 
 export async function fetchMilestones(name: string): Promise<MilestoneData[]> {
-  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/milestones`, {
+  const res = await fetch(`${API_BASE}/api/directory/${encodeURIComponent(name)}/milestones`, {
     cache: "no-store",
   });
   if (!res.ok) return [];
@@ -584,7 +584,7 @@ export interface CoverageData {
 }
 
 export async function fetchValidation(name: string): Promise<ValidationData | null> {
-  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/validation`, {
+  const res = await fetch(`${API_BASE}/api/directory/${encodeURIComponent(name)}/validation`, {
     cache: "no-store",
   });
   if (!res.ok) return null;
@@ -593,7 +593,7 @@ export async function fetchValidation(name: string): Promise<ValidationData | nu
 
 export async function fetchCoverage(name: string): Promise<CoverageData | null> {
   const res = await fetch(
-    `${API_BASE}/api/project/${encodeURIComponent(name)}/validation/coverage`,
+    `${API_BASE}/api/directory/${encodeURIComponent(name)}/validation/coverage`,
     { cache: "no-store" },
   );
   if (!res.ok) return null;
@@ -620,7 +620,7 @@ export interface MissionDetail {
 }
 
 export async function fetchMission(name: string): Promise<MissionDetail | null> {
-  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/mission`, {
+  const res = await fetch(`${API_BASE}/api/directory/${encodeURIComponent(name)}/mission`, {
     cache: "no-store",
   });
   if (!res.ok) return null;
@@ -683,7 +683,7 @@ export interface MetricsData {
 }
 
 export async function fetchMetrics(name: string): Promise<MetricsData | null> {
-  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/metrics`, {
+  const res = await fetch(`${API_BASE}/api/directory/${encodeURIComponent(name)}/metrics`, {
     cache: "no-store",
   });
   if (!res.ok) return null;
@@ -692,7 +692,7 @@ export async function fetchMetrics(name: string): Promise<MetricsData | null> {
 
 export async function deleteTaskApi(sessionName: string, taskId: string): Promise<boolean> {
   const res = await fetch(
-    `${API_BASE}/api/project/${encodeURIComponent(sessionName)}/task/${encodeURIComponent(taskId)}`,
+    `${API_BASE}/api/directory/${encodeURIComponent(sessionName)}/task/${encodeURIComponent(taskId)}`,
     { method: "DELETE" },
   );
   return res.ok;
@@ -700,7 +700,7 @@ export async function deleteTaskApi(sessionName: string, taskId: string): Promis
 
 export async function savePlan(name: string, filename: string, content: string): Promise<boolean> {
   const res = await fetch(
-    `${API_BASE}/api/project/${encodeURIComponent(name)}/plans/${encodeURIComponent(filename)}`,
+    `${API_BASE}/api/directory/${encodeURIComponent(name)}/plans/${encodeURIComponent(filename)}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -717,7 +717,7 @@ export type CreatePlanResult = { ok: true; path: string } | { ok: false; error: 
  * name collision (409); the returned error surfaces those to the user.
  */
 export async function createPlan(name: string, planName: string): Promise<CreatePlanResult> {
-  const res = await fetch(`${API_BASE}/api/project/${encodeURIComponent(name)}/plans`, {
+  const res = await fetch(`${API_BASE}/api/directory/${encodeURIComponent(name)}/plans`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name: planName }),
@@ -735,7 +735,7 @@ export async function createPlan(name: string, planName: string): Promise<Create
 
 export async function deletePlan(name: string, filename: string): Promise<boolean> {
   const res = await fetch(
-    `${API_BASE}/api/project/${encodeURIComponent(name)}/plans/${encodeURIComponent(filename)}`,
+    `${API_BASE}/api/directory/${encodeURIComponent(name)}/plans/${encodeURIComponent(filename)}`,
     { method: "DELETE" },
   );
   return res.ok;

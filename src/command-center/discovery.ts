@@ -67,7 +67,7 @@ export interface SkillSummary {
   specialties: string[];
 }
 
-export interface ProjectDetail {
+export interface DirectoryDetail {
   session: string;
   dir: string;
   mission: Mission | null;
@@ -183,7 +183,7 @@ export function buildOverviews(sessions: SessionInfo[]): SessionOverview[] {
   }));
 }
 
-export function buildProjectDetail(info: SessionInfo): ProjectDetail {
+export function buildDirectoryDetail(info: SessionInfo): DirectoryDetail {
   const agents: AgentDetail[] = info.panes
     .filter((p) => isAgentPane(p))
     .map((pane) => {

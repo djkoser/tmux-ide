@@ -11,7 +11,7 @@ import {
   computeStats,
   computeGoalProgress,
   buildOverviews,
-  buildProjectDetail,
+  buildDirectoryDetail,
   updateTask,
   type SessionInfo,
 } from "./discovery.ts";
@@ -217,7 +217,7 @@ describe("buildOverviews", () => {
   });
 });
 
-describe("buildProjectDetail", () => {
+describe("buildDirectoryDetail", () => {
   it("builds detail with agents matched to tasks", () => {
     const pane = makePane({ id: "%1", index: 0, title: "Agent 1", currentCommand: "claude" });
     const name = agentIdentifier(pane);
@@ -233,7 +233,7 @@ describe("buildProjectDetail", () => {
       panes: [pane],
     });
 
-    const detail = buildProjectDetail(info);
+    const detail = buildDirectoryDetail(info);
     expect(detail.agents.length).toBe(1);
     expect(detail.agents[0]!.paneTitle).toBe(name);
     expect(detail.agents[0]!.taskTitle).toBe("Test task");
@@ -246,7 +246,7 @@ describe("buildProjectDetail", () => {
       panes: [makePane({ id: "%1", title: "Agent 1", currentCommand: "claude" })],
     });
 
-    const detail = buildProjectDetail(info);
+    const detail = buildDirectoryDetail(info);
     expect(detail.agents[0]!.taskTitle).toBe(null);
     expect(detail.agents[0]!.isBusy).toBe(false);
   });

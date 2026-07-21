@@ -32,7 +32,7 @@ export {
   PlanMetaSchemaZ,
   AgentDetailSchemaZ,
   SessionOverviewSchemaZ,
-  ProjectDetailSchemaZ,
+  DirectoryDetailSchemaZ,
   SessionStatsSchemaZ,
   PaneInfoSchemaZ,
   StructuredEventSchemaZ,
@@ -49,5 +49,5 @@ export type {
   AuthorshipStats,
   AgentDetail,
   SessionOverview,
-  ProjectDetail,
+  DirectoryDetail,
 } from "./domain.ts";

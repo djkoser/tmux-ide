@@ -45,13 +45,13 @@ describe("serveDashboard", () => {
     expect(body).toEqual({ ok: true });
   });
 
-  it("serves fallback HTML for /project/any-name/", async () => {
+  it("serves fallback HTML for /directory/any-name/", async () => {
     if (!hasDashboardBuild) return; // skip in CI where dashboard isn't built
 
     const app = new Hono();
     app.use("*", serveDashboard());
 
-    const res = await app.request("/project/my-project/");
+    const res = await app.request("/directory/my-project/");
     expect(res.status).toBe(200);
     const contentType = res.headers.get("content-type");
     expect(contentType).toContain("text/html");
