@@ -79,10 +79,40 @@ theme: # optional color overrides
 | `tmux-ide config add-row [--size <percent>]`       | Add a new row                           |
 | `tmux-ide config enable-team --name <name>`        | Enable agent teams                      |
 | `tmux-ide config disable-team`                     | Disable agent teams                     |
+| `tmux-ide send <target> <message>`                 | Send a message to an agent pane         |
+| `tmux-ide recv <msgId>`                            | Receive a message (recipient side)      |
+| `tmux-ide inbox list <recipient>`                  | List pending inbox messages             |
+| `tmux-ide inbox watch <recipient>`                 | Block until a message is pending        |
 
 All commands support `--json` for structured output.
 
 `tmux-ide detect` now includes reasoning about the package manager, language, framework, and dev-command signals it used. `tmux-ide inspect` combines config validation, resolved layout details, and live tmux state in one command.
+
+## Agent Messaging & Inbox Delivery
+
+`tmux-ide send` delivers to agent panes through a durable message store
+(envelopes in `.tasks/messages/outbox/`, receipts written by
+`tmux-ide recv <msgId>`); the sender polls the receipt and reports
+`delivered`, `duplicate`, `superseded`, or `failed`.
+
+A pane flagged `inbox: true` in `ide.yml` gets envelope-only delivery: `send`
+never pastes into the pane, so a human typing in that pane's composer
+(typically the lead) is never interrupted. `--inbox` / `--no-inbox` on `send`
+force the mode for a single message.
+
+The inbox recipient's lifecycle is event-driven:
+
+1. At session start, the pane's agent launches
+   `tmux-ide inbox watch <name>` as a Claude Code background Bash task.
+2. The watcher exits as soon as messages are pending — immediately at start
+   if any queued up while no watcher was running (catch-up) — which
+   re-invokes the agent via the task notification.
+3. The agent runs `tmux-ide recv <id>` per message, handles it, and
+   relaunches the watcher.
+
+For inbox recipients a `failed` send outcome means not yet acked: the
+envelope stays pending and is picked up on the recipient's next watch/recv
+cycle.
 
 ## Templates
 

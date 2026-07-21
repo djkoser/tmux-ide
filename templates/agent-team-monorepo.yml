@@ -10,6 +10,15 @@ rows:
         command: claude
         role: lead
         focus: true
+        inbox: true
+        task: >-
+          You are the team lead. Your pane is inbox-mode: messages to you are
+          queued as envelopes, never pasted into your composer. At session
+          start, launch 'tmux-ide inbox watch "Lead — Architect"' as a
+          background Bash task. When it exits with message ids, run
+          'tmux-ide recv <id>' for each, handle the message, then relaunch the
+          watcher — catch-up at watch start covers anything that arrived in
+          between.
       - title: Frontend Agent
         command: claude
         role: teammate

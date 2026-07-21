@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Added
+
+- **Inbox delivery mode** — `inbox: true` on an `ide.yml` pane makes `send` envelope-only for that recipient: the message is queued in the durable store and nothing is ever pasted into the pane, so a human typing in that composer is never interrupted. Receipt polling, outcomes, and exit codes are unchanged; for inbox recipients `failed` means not yet acked and the envelope stays pending. `--inbox` / `--no-inbox` on `send` override per message.
+- **`tmux-ide inbox` command** — `inbox list <recipient>` prints the pending envelopes (`--json` for machine-parseable output); `inbox watch <recipient>` blocks until something is pending, then exits 0 — run it as a Claude Code background Bash task and relaunch it after `tmux-ide recv <id>`-ing each reported message. Pending messages at watch start exit immediately, closing the watcher-restart gap.
+- **Lead inbox contract in team templates** — agent-team and missions templates flag the lead pane `inbox: true` and document the watch → recv → relaunch lifecycle in its `task` text.
+
 ## 2.1.3
 
 ### Added

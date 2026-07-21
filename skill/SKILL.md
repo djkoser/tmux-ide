@@ -164,6 +164,45 @@ tmux-ide config disable-team
 
 Removes the `team` config and all `role`/`task` fields from panes.
 
+## Inter-pane messaging & the inbox
+
+`tmux-ide send <target> <message>` delivers to agent panes through a durable
+message store: the body is written as an envelope under
+`.tasks/messages/outbox/`, a recv trigger is pasted into the pane, and the
+sender polls for the receipt the recipient writes when it runs
+`tmux-ide recv <msgId>`. Outcomes are `delivered`, `duplicate`, `superseded`
+(stale replay), or `failed`.
+
+### Inbox delivery mode
+
+A pane flagged `inbox: true` in `ide.yml` is never pasted into: `send` writes
+the envelope and polls for the receipt, nothing touches the pane's composer.
+Use it for panes where a human types (typically the lead) so pasted triggers
+can't splice into a draft. Per-send overrides: `tmux-ide send <target> --inbox <msg>`
+forces envelope-only delivery, `--no-inbox` forces the paste flow.
+
+```bash
+tmux-ide inbox list <recipient> [--json]    # pending envelopes for a recipient
+tmux-ide inbox watch <recipient> [--json]   # block until something is pending, then exit 0
+```
+
+`inbox watch` exits immediately when messages are already pending (catch-up),
+so messages queued while no watcher was running are never missed.
+
+### Inbox recipient lifecycle (run this as the inbox pane's agent)
+
+1. At session start, launch the watcher as a Claude Code background Bash task
+   (`run_in_background`): `tmux-ide inbox watch <your-pane-name>`
+2. The watcher exits when messages are pending, which re-invokes you via the
+   task notification. Run `tmux-ide recv <msgId>` for each reported message
+   and handle it.
+3. Relaunch the watcher (step 1). Catch-up at watch start covers anything
+   that arrived in between.
+
+For inbox recipients a `failed` send outcome means **not yet acked**: the
+envelope stays pending in the outbox and the recipient still picks it up on
+its next watch/recv cycle.
+
 ## Session features (v1.2.0)
 
 tmux-ide sessions include these built-in features:
@@ -268,6 +307,7 @@ rows:
         command: claude
         role: lead # optional layout metadata: "lead" or "teammate"
         focus: true
+        inbox: true # envelope-only delivery: send never pastes into this pane
       - title: Teammate 1
         command: claude
         role: teammate
