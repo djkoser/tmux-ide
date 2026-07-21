@@ -12,6 +12,7 @@ import {
   type Task,
 } from "../lib/task-store.ts";
 import { saveValidationState, loadValidationState } from "../lib/validation.ts";
+import { addTodo, loadTodos, setTodoDone } from "../lib/todo-store.ts";
 import { appendEvent, readEvents } from "../lib/event-log.ts";
 import { loadResearchState, saveResearchState } from "../lib/research.ts";
 import { _setExecutor, type PaneInfo } from "../widgets/lib/pane-comms.ts";
@@ -1457,5 +1458,91 @@ describe("POST /api/directory/:name/mission/plan-complete", () => {
     expect(body.ok).toBe(true);
     expect(body.mission.status).toBe("active");
     expect(body.mission.milestones[0]!.status).toBe("active");
+  });
+});
+
+describe("GET /api/todos (owner action items aggregate)", () => {
+  it("returns items across discovered workspaces labeled with the directory name", async () => {
+    const a = addTodo(tmpDir, "approve the deploy", "lead");
+    const b = addTodo(tmpDir, "rotate the token", "cw1");
+    setTodoDone(tmpDir, b.id, true);
+
+    const app = createApp();
+    const res = await app.request("/api/todos");
+    expect(res.status).toBe(200);
+
+    const body = (await res.json()) as {
+      todos: Array<{ id: string; text: string; done: boolean; directory: string; source: string }>;
+    };
+    expect(body.todos).toHaveLength(2);
+    expect(body.todos.map((t) => t.id)).toEqual([a.id, b.id]);
+    expect(body.todos.every((t) => t.directory === "test-project")).toBe(true);
+    expect(body.todos[1]!.done).toBe(true);
+    expect(body.todos[0]!.source).toBe("lead");
+  });
+
+  it("returns an empty list when no workspace has todos", async () => {
+    const app = createApp();
+    const res = await app.request("/api/todos");
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { todos: unknown[] }).todos).toEqual([]);
+  });
+});
+
+describe("POST /api/directory/:name/todo/:id (toggle)", () => {
+  it("toggles done in the owning workspace store and back", async () => {
+    const item = addTodo(tmpDir, "toggle me", "lead");
+    const app = createApp();
+
+    const res = await app.request(`/api/directory/test-project/todo/${item.id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ done: true }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; todo: { done: boolean; doneAt: string } };
+    expect(body.ok).toBe(true);
+    expect(body.todo.done).toBe(true);
+    expect(body.todo.doneAt).not.toBeNull();
+    expect(loadTodos(tmpDir)[0]!.done).toBe(true);
+
+    const undo = await app.request(`/api/directory/test-project/todo/${item.id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ done: false }),
+    });
+    expect(undo.status).toBe(200);
+    expect(loadTodos(tmpDir)[0]!.done).toBe(false);
+  });
+
+  it("returns 404 for an unknown session", async () => {
+    const app = createApp();
+    const res = await app.request("/api/directory/nonexistent/todo/abc", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ done: true }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 404 for an unknown todo id", async () => {
+    const app = createApp();
+    const res = await app.request("/api/directory/test-project/todo/nope", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ done: true }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("rejects a body without a boolean done", async () => {
+    const item = addTodo(tmpDir, "strict", "lead");
+    const app = createApp();
+    const res = await app.request(`/api/directory/test-project/todo/${item.id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ done: "yes" }),
+    });
+    expect(res.status).toBe(400);
   });
 });

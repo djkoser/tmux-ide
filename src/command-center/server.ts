@@ -59,6 +59,7 @@ import {
 import { loadSkills, loadSkill } from "../lib/skill-registry.ts";
 import { computeMetrics, loadMissionHistory } from "../lib/metrics.ts";
 import { loadPlans, markPlanDone } from "../lib/plan-store.ts";
+import { loadTodos, setTodoDone } from "../lib/todo-store.ts";
 import {
   loadCheckpoints,
   loadCheckpoint,
@@ -90,6 +91,7 @@ import {
   missionWipeSchema,
   updateAssertionSchema,
   triggerResearchSchema,
+  toggleTodoSchema,
 } from "./schemas.ts";
 import { AuthService } from "../lib/auth/auth-service.ts";
 import { authMiddleware } from "../lib/auth/middleware.ts";
@@ -238,6 +240,33 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     const sessions = discoverSessions();
     const overviews = buildOverviews(sessions);
     return c.json({ sessions: overviews });
+  });
+
+  // Owner action items, aggregated across every discovered workspace. Each
+  // item carries the directory (session) name so the console can badge it and
+  // route its toggle back to the owning store.
+  app.get("/api/todos", (c) => {
+    const sessions = discoverSessions();
+    const todos = sessions.flatMap((s) =>
+      loadTodos(s.dir).map((t) => ({ ...t, directory: s.name })),
+    );
+    return c.json({ todos });
+  });
+
+  app.post("/api/directory/:name/todo/:id", zValidator("json", toggleTodoSchema), async (c) => {
+    const name = c.req.param("name");
+    const id = c.req.param("id");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+    const { done } = c.req.valid("json");
+    const item = setTodoDone(session.dir, id, done);
+    if (!item) {
+      return c.json({ error: "Todo not found" }, 404);
+    }
+    return c.json({ ok: true, todo: item });
   });
 
   app.get("/api/directory/:name", (c) => {

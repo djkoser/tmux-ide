@@ -87,6 +87,12 @@ export const updateAssertionSchema = z.object({
   verifiedBy: z.string().optional(),
 });
 
+// Owner action-item toggle: the console checkbox sets the item's done state
+// in the owning workspace's store.
+export const toggleTodoSchema = z.object({
+  done: z.boolean(),
+});
+
 export const triggerResearchSchema = z.object({
   type: z.string().trim().min(1, "Research type is required"),
 });
