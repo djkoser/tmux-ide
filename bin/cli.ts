@@ -76,6 +76,8 @@ const { positionals, values } = parseArgs({
     to: { type: "string" },
     "no-enter": { type: "boolean" },
     "fire-and-forget": { type: "boolean" },
+    inbox: { type: "boolean" },
+    "no-inbox": { type: "boolean" },
   },
 });
 
@@ -103,6 +105,7 @@ const knownCommands = new Set([
   "setup",
   "send",
   "recv",
+  "inbox",
   "dispatch",
   "boot-docs",
   "tasks",
@@ -185,6 +188,9 @@ ${bold("Pane Messaging:")}
   ${cyan("tmux-ide send")} <target> <message>     ${dim("Send message to a pane")}
   ${cyan("tmux-ide send")} --to <name> <message>   ${dim("Target by name, title, role, or ID")}
   ${cyan("tmux-ide send")} <target> --no-enter msg  ${dim("Send text without pressing Enter")}
+  ${cyan("tmux-ide send")} <target> --inbox <msg>   ${dim("Queue only — never paste (--no-inbox forces paste)")}
+  ${cyan("tmux-ide inbox list")} <recipient>        ${dim("Pending inbox messages")}
+  ${cyan("tmux-ide inbox watch")} <recipient>       ${dim("Block until a message is pending, then exit")}
 
 ${bold("Dispatch:")}
   ${cyan("tmux-ide dispatch")} <id> [--json]        ${dim("Print task context to stdout")}
@@ -473,7 +479,14 @@ try {
         message,
         noEnter: values["no-enter"],
         fireAndForget: values["fire-and-forget"],
+        inbox: values.inbox === true ? true : values["no-inbox"] === true ? false : undefined,
       });
+      break;
+    }
+
+    case "inbox": {
+      const { inboxCommand } = await import("../src/inbox.ts");
+      await inboxCommand(undefined, { json, sub: positionals[1], recipient: positionals[2] });
       break;
     }
 
