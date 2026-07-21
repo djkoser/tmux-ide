@@ -45,6 +45,20 @@ describe("focusSessionWindow", () => {
     expect(calls[3]!.args[1]).toContain('name of w contains "my-team"');
   });
 
+  it("captures the window title before raising (AXRaise reorders windows)", () => {
+    const { run, calls } = scriptedRunner({});
+    focusSessionWindow("my-team", run);
+
+    const script = calls[3]!.args[1]!;
+    const captureIdx = script.indexOf("set matchedName to name of w");
+    const raiseIdx = script.indexOf('perform action "AXRaise" of w');
+    const returnIdx = script.indexOf("return matchedName");
+    expect(captureIdx).toBeGreaterThan(-1);
+    expect(raiseIdx).toBeGreaterThan(captureIdx);
+    expect(returnIdx).toBeGreaterThan(raiseIdx);
+    expect(script).not.toContain("return name of w");
+  });
+
   it("falls back to app activation when window raising fails", () => {
     const { run } = scriptedRunner({ raise: new Error("no accessibility permission") });
     const result = focusSessionWindow("my-team", run);

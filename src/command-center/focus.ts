@@ -82,8 +82,11 @@ export function focusSessionWindow(session: string, run: FocusRunner = realRunne
     `tell application "System Events" to tell process "${scriptSafe(terminal.process)}"`,
     "  repeat with w in windows",
     `    if name of w contains "${scriptSafe(session)}" then`,
+    // Capture the title before raising: AXRaise reorders windows and `w` is a
+    // by-index reference, so a post-raise read resolves to a different window.
+    "      set matchedName to name of w",
     '      perform action "AXRaise" of w',
-    "      return name of w",
+    "      return matchedName",
     "    end if",
     "  end repeat",
     "end tell",
