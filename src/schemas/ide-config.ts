@@ -26,6 +26,8 @@ export const PaneSchema = z.object({
   focus: z.boolean().optional(),
   env: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
   role: z.enum(["lead", "teammate", "planner", "validator", "reviewer", "researcher"]).optional(),
+  /** Envelope-only message delivery: `send` never pastes into this pane. */
+  inbox: z.boolean().optional(),
   task: z.string().optional(),
   specialty: z.string().optional(),
   skill: z.string().optional(),

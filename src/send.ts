@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { resolve, join } from "node:path";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { getSessionName } from "./lib/yaml-io.ts";
+import { getSessionName, readConfig } from "./lib/yaml-io.ts";
+import type { IdeConfig } from "./types.ts";
 import { getSessionState } from "./lib/tmux.ts";
 import {
   listSessionPanes,
@@ -19,6 +20,7 @@ import {
   allocateSeq,
   writeEnvelope,
   readReceipt,
+  recipientKey,
   type ReceiptStatus,
 } from "./lib/messaging.ts";
 
@@ -146,6 +148,69 @@ export async function deliverReliably(
 }
 
 /**
+ * Deliver one message to an inbox-mode recipient: envelope only, never a paste.
+ *
+ * Allocates the seq and writes the envelope exactly like deliverReliably, then
+ * polls the receipt for the full timeout — the recipient's own `inbox watch`
+ * loop is what surfaces the message, so there is nothing to retry. attempts is
+ * 0 (no pastes). A "failed" outcome means "not yet acked": the envelope stays
+ * pending in the outbox and is still picked up by the recipient later.
+ */
+export async function deliverToInbox(
+  dir: string,
+  pane: PaneInfo,
+  body: string,
+  batchId: string | undefined,
+  timing: ReliableSendTiming,
+  deps: DeliveryDeps = realDeps,
+): Promise<DeliveryResult> {
+  const recipient = pane.name ?? pane.title;
+  const seq = allocateSeq(dir, recipient);
+  const env = writeEnvelope(dir, { to: recipient, paneId: pane.id, body, seq, batchId });
+
+  const settled = (outcome: DeliveryOutcome): DeliveryResult => ({
+    pane,
+    msgId: env.msgId,
+    seq,
+    outcome,
+    attempts: 0,
+  });
+
+  let waited = 0;
+  while (waited < timing.timeoutMs) {
+    const status = deps.receiptStatus(dir, env.msgId);
+    if (status) return settled(status);
+    await deps.sleep(timing.pollIntervalMs);
+    waited += timing.pollIntervalMs;
+  }
+
+  const finalStatus = deps.receiptStatus(dir, env.msgId);
+  return settled(finalStatus ?? "failed");
+}
+
+/**
+ * Recipient keys (recipientKey) of panes flagged `inbox: true` in the target
+ * dir's ide.yml. A missing or unreadable config means no inbox recipients.
+ * Pane title is the key: launch stamps @ide_name from it, and send resolves
+ * recipients by that name.
+ */
+export function readInboxRecipientKeys(dir: string): Set<string> {
+  let cfg: IdeConfig;
+  try {
+    ({ config: cfg } = readConfig(dir));
+  } catch {
+    return new Set();
+  }
+  const keys = new Set<string>();
+  for (const row of cfg?.rows ?? []) {
+    for (const pane of row?.panes ?? []) {
+      if (pane?.inbox && pane.title) keys.add(recipientKey(pane.title));
+    }
+  }
+  return keys;
+}
+
+/**
  * Write a long message to a dispatch file and return the short trigger command.
  * Returns null if message is short enough to send directly.
  */
@@ -171,6 +236,11 @@ interface SendOptions {
   noEnter?: boolean;
   /** Skip the receipt/retry protocol: paste once, don't wait for an ack (legacy behavior). */
   fireAndForget?: boolean;
+  /**
+   * Force inbox mode on (true) or off (false) for this send; undefined defers
+   * to the recipient pane's `inbox: true` in ide.yml.
+   */
+  inbox?: boolean;
   /** Override the reliable-send timing (tests / tuning). */
   timing?: Partial<ReliableSendTiming>;
 }
@@ -311,12 +381,24 @@ export async function send(targetDir: string | undefined, opts: SendOptions): Pr
     outcome: DeliveryOutcome | "sent";
     attempts?: number;
     readiness?: string;
+    inbox?: boolean;
   }
 
+  // Inbox mode never touches the pane, so busy status is irrelevant to it.
+  // --no-enter / --fire-and-forget explicitly request a paste and win over it.
+  const inboxKeys = opts.inbox === undefined ? readInboxRecipientKeys(dir) : new Set<string>();
+  const isInbox = (p: PaneInfo): boolean =>
+    opts.inbox ?? inboxKeys.has(recipientKey(p.name ?? p.title));
+
+  const inboxTargets = useReliable ? targets.filter((p) => isInbox(p)) : [];
   const reliableTargets = useReliable
-    ? targets.filter((p) => getPaneBusyStatus(session, p.id) === "agent")
+    ? targets.filter(
+        (p) => !inboxTargets.includes(p) && getPaneBusyStatus(session, p.id) === "agent",
+      )
     : [];
-  const directTargets = targets.filter((p) => !reliableTargets.includes(p));
+  const directTargets = targets.filter(
+    (p) => !inboxTargets.includes(p) && !reliableTargets.includes(p),
+  );
 
   const directReports: Report[] = directTargets.map((pane) => {
     const busyStatus = getPaneBusyStatus(session, pane.id);
@@ -338,24 +420,40 @@ export async function send(targetDir: string | undefined, opts: SendOptions): Pr
     return { pane, outcome: "sent" };
   });
 
-  const reliableResults = await Promise.all(
-    reliableTargets.map(async (pane) => {
-      const readiness = getPaneReadiness(session, pane.id);
-      const res = await deliverReliably(dir, session, pane, rawMessage, batchId, timing);
-      appendEvent(dir, {
-        timestamp: new Date().toISOString(),
-        type: "send",
-        target: pane.name ?? pane.title,
-        paneId: pane.id,
-        message: `[${res.outcome}] ${rawMessage.slice(0, 90)}`,
-      });
-      return { pane, outcome: res.outcome, attempts: res.attempts, readiness } as Report;
-    }),
-  );
+  const [inboxResults, reliableResults] = await Promise.all([
+    Promise.all(
+      inboxTargets.map(async (pane) => {
+        const res = await deliverToInbox(dir, pane, rawMessage, batchId, timing);
+        appendEvent(dir, {
+          timestamp: new Date().toISOString(),
+          type: "send",
+          target: pane.name ?? pane.title,
+          paneId: pane.id,
+          message: `[inbox:${res.outcome}] ${rawMessage.slice(0, 90)}`,
+        });
+        return { pane, outcome: res.outcome, attempts: res.attempts, inbox: true } as Report;
+      }),
+    ),
+    Promise.all(
+      reliableTargets.map(async (pane) => {
+        const readiness = getPaneReadiness(session, pane.id);
+        const res = await deliverReliably(dir, session, pane, rawMessage, batchId, timing);
+        appendEvent(dir, {
+          timestamp: new Date().toISOString(),
+          type: "send",
+          target: pane.name ?? pane.title,
+          paneId: pane.id,
+          message: `[${res.outcome}] ${rawMessage.slice(0, 90)}`,
+        });
+        return { pane, outcome: res.outcome, attempts: res.attempts, readiness } as Report;
+      }),
+    ),
+  ]);
 
   // Re-order reports to match the original target order.
   const byPaneId = new Map<string, Report>();
-  for (const r of [...directReports, ...reliableResults]) byPaneId.set(r.pane.id, r);
+  for (const r of [...directReports, ...reliableResults, ...inboxResults])
+    byPaneId.set(r.pane.id, r);
   const reports = targets.map((p) => byPaneId.get(p.id)!);
   const anyFailed = reports.some((r) => r.outcome === "failed");
 
@@ -374,6 +472,7 @@ export async function send(targetDir: string | undefined, opts: SendOptions): Pr
             role: r.pane.role,
             outcome: r.outcome,
             attempts: r.attempts ?? null,
+            inbox: r.inbox ?? false,
           })),
         },
         null,
@@ -389,12 +488,18 @@ export async function send(targetDir: string | undefined, opts: SendOptions): Pr
     if (r.outcome === "sent") {
       console.log(`Sent to "${label}" (${r.pane.id})`);
     } else if (r.outcome === "delivered") {
-      console.log(`Delivered to "${label}" (${r.pane.id}) — acked in ${r.attempts} attempt(s)`);
+      console.log(
+        r.inbox
+          ? `Delivered to "${label}" (${r.pane.id}) — inbox, acked`
+          : `Delivered to "${label}" (${r.pane.id}) — acked in ${r.attempts} attempt(s)`,
+      );
     } else if (r.outcome === "duplicate" || r.outcome === "superseded") {
       console.log(`Delivered to "${label}" (${r.pane.id}) — ${r.outcome} (already handled)`);
     } else {
       console.log(
-        `FAILED to reach "${label}" (${r.pane.id}) — no receipt after ${r.attempts} attempt(s)`,
+        r.inbox
+          ? `FAILED to reach "${label}" (${r.pane.id}) — no ack yet; message queued in inbox`
+          : `FAILED to reach "${label}" (${r.pane.id}) — no receipt after ${r.attempts} attempt(s)`,
       );
     }
   }

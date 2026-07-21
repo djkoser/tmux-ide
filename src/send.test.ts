@@ -1,5 +1,5 @@
 import { describe, it, beforeEach, afterEach, expect } from "bun:test";
-import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -10,11 +10,19 @@ import {
   resolveSendTargets,
   buildRecvTrigger,
   deliverReliably,
+  deliverToInbox,
+  readInboxRecipientKeys,
   WIPE_STANDDOWN_TIMING,
   type ReliableSendTiming,
   type DeliveryDeps,
 } from "./send.ts";
-import { receiveMessage, readReceipt } from "./lib/messaging.ts";
+import {
+  receiveMessage,
+  readReceipt,
+  readEnvelope,
+  listPendingEnvelopes,
+  recipientKey,
+} from "./lib/messaging.ts";
 import type { PaneInfo } from "./widgets/lib/pane-comms.ts";
 
 let tmpDir: string;
@@ -323,6 +331,17 @@ describe("deliverReliably", () => {
     expect(byName.cw4).toBe("failed");
   });
 
+  it("keeps pasting for non-inbox recipients (existing flow untouched)", async () => {
+    const pastes: string[] = [];
+    const deps: DeliveryDeps = {
+      paste: (_s, _p, trigger) => pastes.push(trigger),
+      receiptStatus: () => "delivered",
+      sleep: async () => {},
+    };
+    await deliverReliably(tmpDir, "sess", agentPane("%2", "cw3"), "hi", undefined, FAST_TIMING, deps);
+    expect(pastes.length).toBe(1);
+  });
+
   it("bounds the stand-down wait for a non-acking pane under WIPE_STANDDOWN_TIMING", async () => {
     // The mission-wipe kill-switch awaits every pane before clearing the store,
     // so a mid-work pane that never acks must still settle within the tight
@@ -352,5 +371,97 @@ describe("deliverReliably", () => {
     expect(pastes.length).toBe(WIPE_STANDDOWN_TIMING.maxRetries + 1);
     expect(res.attempts).toBe(WIPE_STANDDOWN_TIMING.maxRetries + 1);
     expect(slept).toBeLessThanOrEqual(WIPE_STANDDOWN_TIMING.timeoutMs);
+  });
+});
+
+describe("deliverToInbox", () => {
+  it("writes the envelope, never pastes, and resolves delivered once the recipient acks", async () => {
+    const pastes: string[] = [];
+    const deps: DeliveryDeps = {
+      paste: (_s, _p, trigger) => pastes.push(trigger),
+      receiptStatus: (dir, msgId) => readReceipt(dir, msgId)?.status ?? null,
+      sleep: async () => {
+        // The recipient's own inbox-watch loop picks the message up out-of-band.
+        for (const env of listPendingEnvelopes(tmpDir, "lead")) receiveMessage(tmpDir, env.msgId);
+      },
+    };
+
+    const res = await deliverToInbox(
+      tmpDir,
+      agentPane("%1", "lead"),
+      "queued for the lead",
+      undefined,
+      FAST_TIMING,
+      deps,
+    );
+    expect(res.outcome).toBe("delivered");
+    expect(res.attempts).toBe(0);
+    expect(pastes).toEqual([]);
+    expect(readEnvelope(tmpDir, res.msgId)!.body).toBe("queued for the lead");
+    expect(readEnvelope(tmpDir, res.msgId)!.seq).toBe(res.seq);
+  });
+
+  it("reports failed after the timeout with zero pastes; the envelope stays pending", async () => {
+    const pastes: string[] = [];
+    const deps: DeliveryDeps = {
+      paste: (_s, _p, trigger) => pastes.push(trigger),
+      receiptStatus: () => null,
+      sleep: async () => {},
+    };
+
+    const res = await deliverToInbox(
+      tmpDir,
+      agentPane("%1", "lead"),
+      "nobody home yet",
+      undefined,
+      FAST_TIMING,
+      deps,
+    );
+    expect(res.outcome).toBe("failed");
+    expect(res.attempts).toBe(0);
+    expect(pastes).toEqual([]);
+    expect(listPendingEnvelopes(tmpDir, "lead").map((e) => e.msgId)).toContain(res.msgId);
+  });
+
+  it("surfaces duplicate/superseded receipt statuses unchanged", async () => {
+    const deps: DeliveryDeps = {
+      paste: () => {},
+      receiptStatus: () => "superseded",
+      sleep: async () => {},
+    };
+    const res = await deliverToInbox(
+      tmpDir,
+      agentPane("%1", "lead"),
+      "stale",
+      undefined,
+      FAST_TIMING,
+      deps,
+    );
+    expect(res.outcome).toBe("superseded");
+  });
+});
+
+describe("readInboxRecipientKeys", () => {
+  it("returns the recipient keys of panes flagged inbox: true", () => {
+    writeFileSync(
+      join(tmpDir, "ide.yml"),
+      [
+        "name: t",
+        "rows:",
+        "  - panes:",
+        "      - title: lead",
+        "        command: claude",
+        "        inbox: true",
+        "      - title: cw1",
+        "        command: claude",
+      ].join("\n"),
+    );
+    const keys = readInboxRecipientKeys(tmpDir);
+    expect(keys.has(recipientKey("lead"))).toBe(true);
+    expect(keys.has(recipientKey("cw1"))).toBe(false);
+  });
+
+  it("returns an empty set when ide.yml is missing", () => {
+    expect(readInboxRecipientKeys(tmpDir).size).toBe(0);
   });
 });
