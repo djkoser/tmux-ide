@@ -1,8 +1,20 @@
 import { describe, it, beforeEach, afterEach, expect } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readdirSync, existsSync } from "node:fs";
+import {
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+  mkdirSync,
+  readdirSync,
+  existsSync,
+  utimesSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { addTodo, loadTodos, setTodoDone, removeTodo } from "./todo-store.ts";
+
+const execFileAsync = promisify(execFile);
 
 let dir: string;
 
@@ -85,5 +97,59 @@ describe("removeTodo", () => {
   it("returns false for an unknown id", () => {
     expect(removeTodo(dir, "nope")).toBe(false);
     expect(existsSync(join(dir, ".tasks", "todos.json"))).toBe(false);
+  });
+});
+
+describe("cross-process concurrency (whole-list read-modify-write)", () => {
+  it("toggles and adds racing another process's adds lose no change", async () => {
+    const seeded = addTodo(dir, "toggle me", "lead");
+    const COUNT = 200;
+
+    // A second real process hammers adds against the same store while this
+    // process adds and toggles in a tight loop — without the lock, either
+    // side's whole-list write silently drops the other's changes.
+    const storePath = new URL("./todo-store.ts", import.meta.url).pathname;
+    const script = [
+      `const { addTodo } = await import(${JSON.stringify(storePath)});`,
+      `const dir = ${JSON.stringify(dir)};`,
+      `for (let i = 0; i < ${COUNT}; i++) addTodo(dir, "child-" + i, "cli");`,
+    ].join("\n");
+    const child = execFileAsync("bun", ["-e", script]);
+
+    // Wait for the child's first write so the tight loops genuinely overlap.
+    while (!loadTodos(dir).some((t) => t.text === "child-0")) {
+      await new Promise((r) => setTimeout(r, 2));
+    }
+
+    let lastDone = false;
+    for (let i = 0; i < COUNT; i++) {
+      addTodo(dir, `main-${i}`, "lead");
+      lastDone = i % 2 === 0;
+      setTodoDone(dir, seeded.id, lastDone);
+    }
+    await child;
+
+    const todos = loadTodos(dir);
+    expect(todos.filter((t) => t.text.startsWith("child-"))).toHaveLength(COUNT);
+    expect(todos.filter((t) => t.text.startsWith("main-"))).toHaveLength(COUNT);
+    expect(todos.find((t) => t.id === seeded.id)!.done).toBe(lastDone);
+  }, 30_000);
+
+  it("breaks a stale lock left by a crashed holder", () => {
+    const lock = join(dir, ".tasks", "todos.json.lock");
+    mkdirSync(lock, { recursive: true });
+    const old = new Date(Date.now() - 60_000);
+    utimesSync(lock, old, old);
+
+    const item = addTodo(dir, "proceeds past the stale lock", "lead");
+    expect(loadTodos(dir).map((t) => t.id)).toContain(item.id);
+    expect(existsSync(lock)).toBe(false);
+  });
+
+  it("leaves no lock directory behind after normal operations", () => {
+    const item = addTodo(dir, "hygiene", "lead");
+    setTodoDone(dir, item.id, true);
+    removeTodo(dir, item.id);
+    expect(existsSync(join(dir, ".tasks", "todos.json.lock"))).toBe(false);
   });
 });

@@ -3,14 +3,13 @@ import { join } from "node:path";
 import {
   existsSync,
   mkdirSync,
-  rmdirSync,
-  statSync,
   writeFileSync,
   renameSync,
   readFileSync,
   readdirSync,
 } from "node:fs";
 import { slugify } from "./slugify.ts";
+import { withDirLock } from "./fs-lock.ts";
 
 /**
  * Reliable inter-pane messaging: durable envelopes + recipient-written receipts.
@@ -61,75 +60,16 @@ function atomicWriteJSON(filePath: string, data: unknown): void {
   renameSync(tmpPath, filePath);
 }
 
-function sleepMs(ms: number): void {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
-
-/** A held lock older than this is treated as abandoned by a crashed holder. */
-const LOCK_STALE_MS = 5_000;
-const LOCK_SPIN_MS = 5;
-const LOCK_MAX_SPINS = 40; // ~200ms of live contention before force-breaking
-
-function lockIsStale(lockPath: string): boolean {
-  try {
-    return Date.now() - statSync(lockPath).mtimeMs > LOCK_STALE_MS;
-  } catch {
-    return true; // vanished between checks — treat as free
-  }
-}
-
 /**
- * Serialize a per-recipient read-modify-write across processes with a mkdir
- * mutex (mkdir is atomic on POSIX). The CLI (a validator/writer pane) and the
- * daemon composer can send to the same recipient at once; without this both
- * read the same nextSeq, mint the same seq, and the second real message is
- * later rejected as "superseded" and silently dropped.
- *
- * Normal contention clears in a spin or two (the critical section is sub-ms).
- * A lock abandoned by a crashed holder is detected by age and broken, so a send
- * never blocks the caller (or the daemon's loop) for more than the short spin.
+ * Serialize a per-recipient read-modify-write across processes (mkdir mutex,
+ * see fs-lock.ts). The CLI (a validator/writer pane) and the daemon composer
+ * can send to the same recipient at once; without this both read the same
+ * nextSeq, mint the same seq, and the second real message is later rejected
+ * as "superseded" and silently dropped.
  */
 function withRecipientLock<T>(dir: string, recipient: string, fn: () => T): T {
   ensureMessagesDir(dir);
-  const lockPath = `${statePath(dir, recipient)}.lock`;
-  const runHeld = (): T => {
-    try {
-      return fn();
-    } finally {
-      try {
-        rmdirSync(lockPath);
-      } catch {
-        // best-effort release
-      }
-    }
-  };
-
-  for (let i = 0; i <= LOCK_MAX_SPINS; i++) {
-    try {
-      mkdirSync(lockPath); // throws EEXIST while held
-      return runHeld();
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-      if (lockIsStale(lockPath)) {
-        try {
-          rmdirSync(lockPath);
-        } catch {
-          // someone else broke it — retry immediately
-        }
-        continue;
-      }
-      if (i < LOCK_MAX_SPINS) sleepMs(LOCK_SPIN_MS);
-    }
-  }
-
-  // Live contention outlasted the spin budget — force-break as a last resort.
-  try {
-    rmdirSync(lockPath);
-  } catch {
-    // ignore
-  }
-  mkdirSync(lockPath);
-  return runHeld();
+  return withDirLock(`${statePath(dir, recipient)}.lock`, fn);
 }
 
 export function outboxDir(dir: string): string {

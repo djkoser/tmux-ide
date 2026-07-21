@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
+import { withDirLock } from "./fs-lock.ts";
 
 /**
  * Owner action items for one workspace: a durable list in .tasks/todos.json.
@@ -43,9 +44,18 @@ export function loadTodos(dir: string): TodoItem[] {
 }
 
 function saveTodos(dir: string, todos: TodoItem[]): void {
+  atomicWriteJSON(todosPath(dir), todos);
+}
+
+/**
+ * Serialize the whole-list read-modify-write across processes: the CLI
+ * (`todo add`) and the daemon (console toggle) can mutate the same list at
+ * once, and the last whole-file write would silently drop the other's change.
+ */
+function withTodosLock<T>(dir: string, fn: () => T): T {
   const tasksDir = join(dir, ".tasks");
   if (!existsSync(tasksDir)) mkdirSync(tasksDir, { recursive: true });
-  atomicWriteJSON(todosPath(dir), todos);
+  return withDirLock(join(tasksDir, "todos.json.lock"), fn);
 }
 
 export function addTodo(dir: string, text: string, source: string): TodoItem {
@@ -57,26 +67,32 @@ export function addTodo(dir: string, text: string, source: string): TodoItem {
     doneAt: null,
     source,
   };
-  saveTodos(dir, [...loadTodos(dir), item]);
+  withTodosLock(dir, () => {
+    saveTodos(dir, [...loadTodos(dir), item]);
+  });
   return item;
 }
 
 /** Set an item's done state (stamping/clearing doneAt). Null if the id is unknown. */
 export function setTodoDone(dir: string, id: string, done: boolean): TodoItem | null {
-  const todos = loadTodos(dir);
-  const item = todos.find((t) => t.id === id);
-  if (!item) return null;
-  item.done = done;
-  item.doneAt = done ? new Date().toISOString() : null;
-  saveTodos(dir, todos);
-  return item;
+  return withTodosLock(dir, () => {
+    const todos = loadTodos(dir);
+    const item = todos.find((t) => t.id === id);
+    if (!item) return null;
+    item.done = done;
+    item.doneAt = done ? new Date().toISOString() : null;
+    saveTodos(dir, todos);
+    return item;
+  });
 }
 
 /** Remove an item. False if the id is unknown. */
 export function removeTodo(dir: string, id: string): boolean {
-  const todos = loadTodos(dir);
-  const remaining = todos.filter((t) => t.id !== id);
-  if (remaining.length === todos.length) return false;
-  saveTodos(dir, remaining);
-  return true;
+  return withTodosLock(dir, () => {
+    const todos = loadTodos(dir);
+    const remaining = todos.filter((t) => t.id !== id);
+    if (remaining.length === todos.length) return false;
+    saveTodos(dir, remaining);
+    return true;
+  });
 }
