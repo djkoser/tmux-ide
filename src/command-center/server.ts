@@ -60,6 +60,7 @@ import { loadSkills, loadSkill } from "../lib/skill-registry.ts";
 import { computeMetrics, loadMissionHistory } from "../lib/metrics.ts";
 import { loadPlans, markPlanDone } from "../lib/plan-store.ts";
 import { loadTodos, setTodoDone } from "../lib/todo-store.ts";
+import { focusSessionWindow, type FocusRunner } from "./focus.ts";
 import {
   loadCheckpoints,
   loadCheckpoint,
@@ -125,6 +126,9 @@ export interface CreateAppOptions {
   /** Bounce the daemon after a mission wipe (defaults to a deferred process exit;
    *  the watchdog respawns it, so the console reconnects). Injectable for tests. */
   bounceDaemon?: () => void;
+  /** Command runner for the focus-window endpoint (tmux + osascript).
+   *  Injectable so tests never execute real osascript. */
+  focusRunner?: FocusRunner;
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -267,6 +271,20 @@ export function createApp(options: CreateAppOptions = {}): Hono {
       return c.json({ error: "Todo not found" }, 404);
     }
     return c.json({ ok: true, todo: item });
+  });
+
+  // Raise the macOS terminal window attached to this directory's tmux session.
+  app.post("/api/directory/:name/focus", (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    if (!sessions.find((s) => s.name === name)) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+    const result = focusSessionWindow(name, options.focusRunner);
+    if (!result.ok) {
+      return c.json({ ok: false, error: result.error }, 409);
+    }
+    return c.json({ ok: true, app: result.app, window: result.window ?? null });
   });
 
   app.get("/api/directory/:name", (c) => {

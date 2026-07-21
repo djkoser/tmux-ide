@@ -479,3 +479,44 @@ describe("fetchTodos + toggleTodo (owner action items)", () => {
     expect(await toggleTodo("team-a", "nope", true)).toBe(false);
   });
 });
+
+describe("focusDirectory", () => {
+  beforeEach(() => vi.unstubAllGlobals());
+
+  it("posts to the focus route and reports success", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, app: "iTerm", window: "team-a — tmux" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { focusDirectory } = await import("../api");
+    const result = await focusDirectory("team-a");
+    expect(result.ok).toBe(true);
+    expect(fetchMock.mock.calls[0]![0]).toContain("/api/directory/team-a/focus");
+    expect(fetchMock.mock.calls[0]![1]!.method).toBe("POST");
+  });
+
+  it("surfaces the server's failure reason", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 409,
+        json: async () => ({ ok: false, error: "unrecognized terminal (TERM_PROGRAM=unset)" }),
+      }),
+    );
+    const { focusDirectory } = await import("../api");
+    const result = await focusDirectory("team-a");
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("unrecognized terminal");
+  });
+
+  it("reports a network failure as an error result", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
+    const { focusDirectory } = await import("../api");
+    const result = await focusDirectory("team-a");
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("ECONNREFUSED");
+  });
+});

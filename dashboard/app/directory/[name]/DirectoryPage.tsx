@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   fetchDirectory,
+  focusDirectory,
   fetchEvents,
   fetchMilestones,
   fetchMission,
@@ -50,6 +51,14 @@ export default function DirectoryPage() {
   const name = decodeURIComponent(pathname.replace(/^\/directory\//, "").replace(/\/$/, ""));
   const [activeTab, setActiveTab] = useState<Tab>("kanban");
   const [showWipe, setShowWipe] = useState(false);
+  const [focusState, setFocusState] = useState<"idle" | "busy" | "ok" | "error">("idle");
+
+  async function onFocusWindow() {
+    setFocusState("busy");
+    const result = await focusDirectory(name);
+    setFocusState(result.ok ? "ok" : "error");
+    setTimeout(() => setFocusState("idle"), 2000);
+  }
 
   // Reflect the workspace name in the browser tab title; restore on nav away.
   useEffect(() => {
@@ -132,6 +141,24 @@ export default function DirectoryPage() {
             <span className="text-[var(--green)]">{doneTasks}</span>/{totalTasks} tasks
           </span>
           <ProgressBar percent={pct} width={10} />
+          <button
+            onClick={onFocusWindow}
+            disabled={focusState === "busy"}
+            className={`border border-[var(--border)] px-2 py-0.5 transition-colors whitespace-nowrap shrink-0 ${
+              focusState === "error"
+                ? "text-[var(--red)]"
+                : focusState === "ok"
+                  ? "text-[var(--green)]"
+                  : "text-[var(--dim)] hover:text-[var(--fg)] hover:border-[var(--fg)]"
+            }`}
+            title="Raise this session's terminal window"
+          >
+            {focusState === "ok"
+              ? "focused ✓"
+              : focusState === "error"
+                ? "focus failed"
+                : "focus window"}
+          </button>
           {directory.mission && (
             <button
               onClick={() => setShowWipe(true)}

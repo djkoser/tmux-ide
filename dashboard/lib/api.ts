@@ -41,6 +41,20 @@ export async function toggleTodo(directory: string, id: string, done: boolean): 
   return res.ok;
 }
 
+/** Raise the macOS terminal window attached to this directory's tmux session. */
+export async function focusDirectory(name: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/api/directory/${encodeURIComponent(name)}/focus`, {
+      method: "POST",
+    });
+    const data = (await res.json()) as { ok?: boolean; error?: string };
+    if (!res.ok || !data.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
 export interface PaneData {
   id: string;
   index: number;

@@ -1546,3 +1546,74 @@ describe("POST /api/directory/:name/todo/:id (toggle)", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("POST /api/directory/:name/focus", () => {
+  function runnerReturning(map: Record<string, string | Error>): {
+    runner: (cmd: string, args: string[]) => string;
+    calls: string[];
+  } {
+    const calls: string[] = [];
+    return {
+      calls,
+      runner: (cmd, args) => {
+        calls.push(cmd);
+        const key =
+          cmd === "tmux" ? args[0]! : args[1]!.includes("to activate") ? "activate" : "raise";
+        const result = map[key] ?? "";
+        if (result instanceof Error) throw result;
+        return result;
+      },
+    };
+  }
+
+  it("raises the attached terminal window via the injected runner", async () => {
+    const { runner, calls } = runnerReturning({
+      "list-clients": "/dev/ttys002\n",
+      "show-environment": "TERM_PROGRAM=iTerm.app\n",
+      raise: "test-project — tmux\n",
+    });
+    const app = createApp({ focusRunner: runner });
+    const res = await app.request("/api/directory/test-project/focus", { method: "POST" });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; app: string; window: string | null };
+    expect(body.ok).toBe(true);
+    expect(body.app).toBe("iTerm");
+    expect(body.window).toBe("test-project — tmux");
+    expect(calls).toEqual(["tmux", "tmux", "osascript", "osascript"]);
+  });
+
+  it("succeeds with a null window when only app activation is possible", async () => {
+    const { runner } = runnerReturning({
+      "show-environment": "TERM_PROGRAM=Apple_Terminal\n",
+      raise: new Error("not permitted"),
+    });
+    const app = createApp({ focusRunner: runner });
+    const res = await app.request("/api/directory/test-project/focus", { method: "POST" });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; app: string; window: string | null };
+    expect(body.app).toBe("Terminal");
+    expect(body.window).toBeNull();
+  });
+
+  it("returns 409 with the reason when no terminal is identifiable", async () => {
+    const { runner } = runnerReturning({
+      "list-clients": "/dev/ttys002\n",
+      "show-environment": new Error("unset"),
+    });
+    const app = createApp({ focusRunner: runner });
+    const res = await app.request("/api/directory/test-project/focus", { method: "POST" });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { ok: boolean; error: string };
+    expect(body.ok).toBe(false);
+    expect(body.error).toContain("unrecognized terminal");
+  });
+
+  it("returns 404 for an unknown session without running anything", async () => {
+    const { runner, calls } = runnerReturning({});
+    const app = createApp({ focusRunner: runner });
+    const res = await app.request("/api/directory/nonexistent/focus", { method: "POST" });
+    expect(res.status).toBe(404);
+    expect(calls).toEqual([]);
+  });
+});
