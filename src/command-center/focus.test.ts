@@ -10,6 +10,8 @@ interface Call {
 function scriptedRunner(handlers: {
   clients?: string | Error;
   termProgram?: string | Error;
+  /** Global-scope (-g) show-environment answer; defaults to termProgram's. */
+  globalTermProgram?: string | Error;
   activate?: string | Error;
   raise?: string | Error;
 }): { run: FocusRunner; calls: Call[] } {
@@ -19,11 +21,13 @@ function scriptedRunner(handlers: {
     const result =
       cmd === "tmux" && args[0] === "list-clients"
         ? (handlers.clients ?? "/dev/ttys001\n")
-        : cmd === "tmux" && args[0] === "show-environment"
-          ? (handlers.termProgram ?? "TERM_PROGRAM=iTerm.app\n")
-          : cmd === "osascript" && args[1]!.includes("to activate")
-            ? (handlers.activate ?? "")
-            : (handlers.raise ?? "");
+        : cmd === "tmux" && args[0] === "show-environment" && args[1] === "-g"
+          ? (handlers.globalTermProgram ?? handlers.termProgram ?? "TERM_PROGRAM=iTerm.app\n")
+          : cmd === "tmux" && args[0] === "show-environment"
+            ? (handlers.termProgram ?? "TERM_PROGRAM=iTerm.app\n")
+            : cmd === "osascript" && args[1]!.includes("to activate")
+              ? (handlers.activate ?? "")
+              : (handlers.raise ?? "");
     if (result instanceof Error) throw result;
     return result;
   };
@@ -58,6 +62,39 @@ describe("focusSessionWindow", () => {
     const result = focusSessionWindow("my-team", run);
     expect(result.app).toBe("Terminal");
     expect(calls[2]!.args[1]).toContain('"Terminal"');
+  });
+
+  it("falls back to the global environment when the session scope lacks TERM_PROGRAM", () => {
+    // Default tmux configs never propagate TERM_PROGRAM into the session
+    // scope (not in update-environment), so this is the common real-world path.
+    const { run, calls } = scriptedRunner({
+      termProgram: new Error("unknown variable: TERM_PROGRAM"),
+      globalTermProgram: "TERM_PROGRAM=Apple_Terminal\n",
+    });
+    const result = focusSessionWindow("my-team", run);
+
+    expect(result.ok).toBe(true);
+    expect(result.app).toBe("Terminal");
+    const envCalls = calls.filter((c) => c.args[0] === "show-environment");
+    expect(envCalls.map((c) => c.args[1])).toEqual(["-t", "-g"]);
+  });
+
+  it("skips the global lookup when the session scope has TERM_PROGRAM", () => {
+    const { run, calls } = scriptedRunner({ termProgram: "TERM_PROGRAM=iTerm.app\n" });
+    focusSessionWindow("my-team", run);
+    const envCalls = calls.filter((c) => c.args[0] === "show-environment");
+    expect(envCalls.map((c) => c.args[1])).toEqual(["-t"]);
+  });
+
+  it("fails when both session and global scopes lack TERM_PROGRAM", () => {
+    const { run, calls } = scriptedRunner({
+      termProgram: new Error("unset"),
+      globalTermProgram: new Error("unset"),
+    });
+    const result = focusSessionWindow("my-team", run);
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("TERM_PROGRAM=unset");
+    expect(calls.some((c) => c.cmd === "osascript")).toBe(false);
   });
 
   it("fails without osascript for an unrecognized TERM_PROGRAM", () => {

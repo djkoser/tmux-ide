@@ -35,6 +35,16 @@ function scriptSafe(value: string): string {
   return value.replace(/[\\"]/g, "");
 }
 
+/** TERM_PROGRAM from one tmux environment scope ("" when unset/errored). */
+function readTermProgram(run: FocusRunner, scope: string[]): string {
+  try {
+    const out = run("tmux", ["show-environment", ...scope, "TERM_PROGRAM"]).trim();
+    return out.startsWith("TERM_PROGRAM=") ? out.slice("TERM_PROGRAM=".length) : "";
+  } catch {
+    return "";
+  }
+}
+
 export function focusSessionWindow(session: string, run: FocusRunner = realRunner): FocusResult {
   let hasClient: boolean;
   try {
@@ -43,13 +53,11 @@ export function focusSessionWindow(session: string, run: FocusRunner = realRunne
     return { ok: false, error: `tmux session "${session}" not reachable` };
   }
 
-  let termProgram = "";
-  try {
-    const out = run("tmux", ["show-environment", "-t", session, "TERM_PROGRAM"]).trim();
-    if (out.startsWith("TERM_PROGRAM=")) termProgram = out.slice("TERM_PROGRAM=".length);
-  } catch {
-    // TERM_PROGRAM unset for this session
-  }
+  // TERM_PROGRAM is not in tmux's default update-environment list, so the
+  // session scope usually lacks it; the server's global environment (seeded
+  // from the terminal that started tmux) is the reliable fallback.
+  let termProgram = readTermProgram(run, ["-t", session]);
+  if (!termProgram) termProgram = readTermProgram(run, ["-g"]);
 
   const terminal = TERM_PROGRAM_APPS[termProgram];
   if (!terminal) {
