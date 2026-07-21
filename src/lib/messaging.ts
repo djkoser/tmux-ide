@@ -8,6 +8,7 @@ import {
   writeFileSync,
   renameSync,
   readFileSync,
+  readdirSync,
 } from "node:fs";
 import { slugify } from "./slugify.ts";
 
@@ -131,7 +132,7 @@ function withRecipientLock<T>(dir: string, recipient: string, fn: () => T): T {
   return runHeld();
 }
 
-function outboxDir(dir: string): string {
+export function outboxDir(dir: string): string {
   return join(dir, MESSAGES_DIR, "outbox");
 }
 function receiptsDir(dir: string): string {
@@ -153,10 +154,10 @@ export function recipientKey(recipient: string): string {
   return slugify(recipient) || "unknown";
 }
 
-export function envelopePath(dir: string, msgId: string): string {
+function envelopePath(dir: string, msgId: string): string {
   return join(outboxDir(dir), `${msgId}.json`);
 }
-export function receiptPath(dir: string, msgId: string): string {
+function receiptPath(dir: string, msgId: string): string {
   return join(receiptsDir(dir), `${msgId}.json`);
 }
 function statePath(dir: string, recipient: string): string {
@@ -222,6 +223,30 @@ export function readEnvelope(dir: string, msgId: string): MessageEnvelope | null
   } catch {
     return null;
   }
+}
+
+/**
+ * Envelopes awaiting pickup by a recipient: `to` matches (via recipientKey),
+ * no receipt written yet, and seq newer than the last delivered one. Sorted by
+ * seq so callers process in send order. Shared by `inbox list` and
+ * `inbox watch` so "pending" has exactly one definition.
+ */
+export function listPendingEnvelopes(dir: string, recipient: string): MessageEnvelope[] {
+  const out = outboxDir(dir);
+  if (!existsSync(out)) return [];
+  const key = recipientKey(recipient);
+  const { lastDeliveredSeq } = readState(dir, recipient);
+  const pending: MessageEnvelope[] = [];
+  for (const file of readdirSync(out)) {
+    if (!file.endsWith(".json")) continue;
+    const env = readEnvelope(dir, file.slice(0, -".json".length));
+    if (!env) continue;
+    if (recipientKey(env.to) !== key) continue;
+    if (env.seq <= lastDeliveredSeq) continue;
+    if (readReceipt(dir, env.msgId)) continue;
+    pending.push(env);
+  }
+  return pending.sort((a, b) => a.seq - b.seq);
 }
 
 export function readReceipt(dir: string, msgId: string): Receipt | null {

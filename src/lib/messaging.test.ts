@@ -10,6 +10,7 @@ import {
   receiveMessage,
   ensureMessagesDir,
   recipientKey,
+  listPendingEnvelopes,
 } from "./messaging.ts";
 
 let dir: string;
@@ -121,6 +122,47 @@ describe("receiveMessage — supersession (anti-replay)", () => {
     const second = send("cw3", "2");
     expect(receiveMessage(dir, first).status).toBe("delivered");
     expect(receiveMessage(dir, second).status).toBe("delivered");
+  });
+});
+
+describe("listPendingEnvelopes", () => {
+  it("returns unreceipted envelopes for the recipient, sorted by seq", () => {
+    const first = send("lead", "first");
+    const second = send("lead", "second");
+    // Directory order is by random msgId; listing must order by seq.
+    const pending = listPendingEnvelopes(dir, "lead");
+    expect(pending.map((e) => e.msgId)).toEqual([first, second]);
+    expect(pending.map((e) => e.seq)).toEqual([1, 2]);
+  });
+
+  it("excludes envelopes that already have a receipt", () => {
+    const received = send("lead", "handled");
+    const waiting = send("lead", "still waiting");
+    receiveMessage(dir, received);
+    expect(listPendingEnvelopes(dir, "lead").map((e) => e.msgId)).toEqual([waiting]);
+  });
+
+  it("excludes envelopes whose seq is not newer than the last delivered one", () => {
+    const stale = send("lead", "old directive");
+    const newer = send("lead", "new directive");
+    receiveMessage(dir, newer); // lastDeliveredSeq jumps past the stale envelope
+    expect(listPendingEnvelopes(dir, "lead")).toEqual([]);
+    expect(readReceipt(dir, stale)).toBeNull(); // stale is unreceipted yet still not pending
+  });
+
+  it("excludes envelopes addressed to other recipients", () => {
+    send("cw1", "not yours");
+    const mine = send("lead", "yours");
+    expect(listPendingEnvelopes(dir, "lead").map((e) => e.msgId)).toEqual([mine]);
+  });
+
+  it("normalizes decorated recipient labels via recipientKey", () => {
+    const id = send("⠐ lead", "decorated sender label");
+    expect(listPendingEnvelopes(dir, "lead").map((e) => e.msgId)).toEqual([id]);
+  });
+
+  it("returns empty when the outbox does not exist yet", () => {
+    expect(listPendingEnvelopes(dir, "lead")).toEqual([]);
   });
 });
 
