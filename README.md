@@ -83,6 +83,9 @@ theme: # optional color overrides
 | `tmux-ide recv <msgId>`                            | Receive a message (recipient side)      |
 | `tmux-ide inbox list <recipient>`                  | List pending inbox messages             |
 | `tmux-ide inbox watch <recipient>`                 | Block until a message is pending        |
+| `tmux-ide todo add "text"`                         | Post an owner action item               |
+| `tmux-ide todo list`                               | List this workspace's action items      |
+| `tmux-ide todo done\|undone\|rm <id>`              | Toggle or delete an action item         |
 
 All commands support `--json` for structured output.
 
@@ -113,6 +116,21 @@ The inbox recipient's lifecycle is event-driven:
 For inbox recipients a `failed` send outcome means not yet acked: the
 envelope stays pending and is picked up on the recipient's next watch/recv
 cycle.
+
+## Owner Action Items
+
+`tmux-ide todo add "text"` posts an action item for the owner from any
+workspace — a lead uses it to flag something only a human can unblock
+(approve a deploy, rotate a credential). Items live per workspace in
+`.tasks/todos.json` with the posting pane's name as their source;
+`todo list [--json]`, `todo done|undone <id>`, and `todo rm <id>` manage
+them from the CLI.
+
+The command-center dashboard root (http://localhost:6060/) renders the
+consolidated view: one "action items" checkbox list across every running
+workspace, each item badged with its directory. Checking an item persists
+through `POST /api/directory/:name/todo/:id`; the aggregate feed is
+`GET /api/todos`.
 
 ## Templates
 

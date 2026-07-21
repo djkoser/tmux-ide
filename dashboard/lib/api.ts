@@ -9,6 +9,38 @@ export async function fetchSessions(): Promise<SessionOverview[]> {
   return data.sessions;
 }
 
+export interface TodoData {
+  id: string;
+  text: string;
+  createdAt: string;
+  done: boolean;
+  doneAt: string | null;
+  source: string;
+  /** Owning workspace's directory (session) name — set by the aggregate API. */
+  directory: string;
+}
+
+/** Owner action items aggregated across every active workspace. */
+export async function fetchTodos(): Promise<TodoData[]> {
+  const res = await fetch(`${API_BASE}/api/todos`, { cache: "no-store" });
+  if (!res.ok) return [];
+  const data = (await res.json()) as { todos: TodoData[] };
+  return data.todos;
+}
+
+/** Toggle an action item's done state in its owning workspace's store. */
+export async function toggleTodo(directory: string, id: string, done: boolean): Promise<boolean> {
+  const res = await fetch(
+    `${API_BASE}/api/directory/${encodeURIComponent(directory)}/todo/${encodeURIComponent(id)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ done }),
+    },
+  );
+  return res.ok;
+}
+
 export interface PaneData {
   id: string;
   index: number;

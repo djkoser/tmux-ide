@@ -203,6 +203,21 @@ For inbox recipients a `failed` send outcome means **not yet acked**: the
 envelope stays pending in the outbox and the recipient still picks it up on
 its next watch/recv cycle.
 
+## Owner action items
+
+When something needs a human (approve a deploy, rotate a credential), a lead
+posts it as an action item instead of blocking:
+
+```bash
+tmux-ide todo add "approve the staging deploy"   # posts with your pane as source
+tmux-ide todo list [--json]                      # this workspace's items
+tmux-ide todo done|undone|rm <id>
+```
+
+Items persist in the workspace's `.tasks/todos.json`; the command-center root
+page shows one consolidated checkbox list across all running workspaces, so
+the owner sees every team's asks in one place.
+
 ## Session features (v1.2.0)
 
 tmux-ide sessions include these built-in features:

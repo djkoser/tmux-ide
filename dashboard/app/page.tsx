@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { fetchSessions } from "@/lib/api";
 import { DirectoryRow } from "@/components/DirectoryRow";
+import { ActionItems } from "@/components/ActionItems";
 import type { SessionOverview } from "@/lib/types";
 
 export default function OverviewPage() {
@@ -59,6 +60,8 @@ export default function OverviewPage() {
             <span className="text-[var(--accent)]">tmux-ide command-center</span> running?
           </div>
         )}
+
+        <ActionItems />
 
         {sessions.length === 0 && !error && (
           <div className="px-4 py-8 text-[var(--dim)]">no tmux-ide sessions running</div>

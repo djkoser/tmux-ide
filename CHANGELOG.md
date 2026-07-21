@@ -9,6 +9,8 @@ All notable changes to this project will be documented in this file.
 - **Inbox delivery mode** — `inbox: true` on an `ide.yml` pane makes `send` envelope-only for that recipient: the message is queued in the durable store and nothing is ever pasted into the pane, so a human typing in that composer is never interrupted. Receipt polling, outcomes, and exit codes are unchanged; for inbox recipients `failed` means not yet acked and the envelope stays pending. `--inbox` / `--no-inbox` on `send` override per message.
 - **`tmux-ide inbox` command** — `inbox list <recipient>` prints the pending envelopes (`--json` for machine-parseable output); `inbox watch <recipient>` blocks until something is pending, then exits 0 — run it as a Claude Code background Bash task and relaunch it after `tmux-ide recv <id>`-ing each reported message. Pending messages at watch start exit immediately, closing the watcher-restart gap.
 - **Lead inbox contract in team templates** — agent-team and missions templates flag the lead pane `inbox: true` and document the watch → recv → relaunch lifecycle in its `task` text.
+- **Owner action items** — `tmux-ide todo add|list|done|undone|rm` manages a per-workspace `.tasks/todos.json` so a lead can post an unblock item for the owner in one command (source derived from the posting pane). The command-center root page shows one consolidated checkbox list across all running workspaces (directory badge per item) backed by `GET /api/todos` and a per-directory toggle route.
+- **Console directory terminology** — API routes are `/api/directory/:name/*` and the dashboard's per-session page is `/directory/[name]`; identifiers and display strings say directory.
 
 ## 2.1.3
 

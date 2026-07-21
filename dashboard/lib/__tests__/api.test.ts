@@ -423,3 +423,59 @@ describe("stopAndWipeMission", () => {
     expect(r.ok).toBe(true);
   });
 });
+
+describe("fetchTodos + toggleTodo (owner action items)", () => {
+  beforeEach(() => vi.unstubAllGlobals());
+
+  it("returns directory-labeled items from the aggregate route", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        todos: [
+          {
+            id: "abc12345",
+            text: "approve the deploy",
+            createdAt: "2026-07-21T10:00:00Z",
+            done: false,
+            doneAt: null,
+            source: "lead",
+            directory: "team-a",
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { fetchTodos } = await import("../api");
+    const todos = await fetchTodos();
+    expect(fetchMock.mock.calls[0]![0]).toContain("/api/todos");
+    expect(todos).toHaveLength(1);
+    expect(todos[0]!.directory).toBe("team-a");
+    expect(todos[0]!.done).toBe(false);
+  });
+
+  it("returns empty when the API is unreachable", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+    const { fetchTodos } = await import("../api");
+    expect(await fetchTodos()).toEqual([]);
+  });
+
+  it("toggleTodo posts done to the owning directory's route", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => ({ ok: true }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { toggleTodo } = await import("../api");
+    const ok = await toggleTodo("team-a", "abc12345", true);
+    expect(ok).toBe(true);
+    expect(fetchMock.mock.calls[0]![0]).toContain("/api/directory/team-a/todo/abc12345");
+    expect(JSON.parse(fetchMock.mock.calls[0]![1]!.body)).toEqual({ done: true });
+  });
+
+  it("toggleTodo reports failure on a non-ok response", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+    const { toggleTodo } = await import("../api");
+    expect(await toggleTodo("team-a", "nope", true)).toBe(false);
+  });
+});
