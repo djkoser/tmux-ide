@@ -22,6 +22,11 @@ beforeEach(() => {
   git("init", "-b", "main");
   git("config", "user.email", "test@test.com");
   git("config", "user.name", "Test");
+  // Hermetic fixtures: the machine's global gitconfig may require signed
+  // commits through an external agent — fixture commits must never depend on
+  // that agent's state.
+  git("config", "commit.gpgsign", "false");
+  git("config", "tag.gpgsign", "false");
   writeFileSync(join(tmpDir, "initial.txt"), "hello\n");
   git("add", ".");
   git("commit", "-m", "initial");
