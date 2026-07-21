@@ -78,6 +78,8 @@ const { positionals, values } = parseArgs({
     "fire-and-forget": { type: "boolean" },
     inbox: { type: "boolean" },
     "no-inbox": { type: "boolean" },
+    // todo command flags
+    source: { type: "string" },
   },
 });
 
@@ -106,6 +108,7 @@ const knownCommands = new Set([
   "send",
   "recv",
   "inbox",
+  "todo",
   "dispatch",
   "boot-docs",
   "tasks",
@@ -191,6 +194,11 @@ ${bold("Pane Messaging:")}
   ${cyan("tmux-ide send")} <target> --inbox <msg>   ${dim("Queue only — never paste (--no-inbox forces paste)")}
   ${cyan("tmux-ide inbox list")} <recipient>        ${dim("Pending inbox messages")}
   ${cyan("tmux-ide inbox watch")} <recipient>       ${dim("Block until a message is pending, then exit")}
+
+${bold("Owner Todos:")}
+  ${cyan("tmux-ide todo add")} "text" [--source X]  ${dim("Post an action item for the owner")}
+  ${cyan("tmux-ide todo list")} [--json]            ${dim("List this workspace's action items")}
+  ${cyan("tmux-ide todo done|undone|rm")} <id>      ${dim("Toggle or delete an item")}
 
 ${bold("Dispatch:")}
   ${cyan("tmux-ide dispatch")} <id> [--json]        ${dim("Print task context to stdout")}
@@ -487,6 +495,17 @@ try {
     case "inbox": {
       const { inboxCommand } = await import("../src/inbox.ts");
       await inboxCommand(undefined, { json, sub: positionals[1], recipient: positionals[2] });
+      break;
+    }
+
+    case "todo": {
+      const { todoCommand } = await import("../src/todo.ts");
+      await todoCommand(undefined, {
+        json,
+        sub: positionals[1],
+        args: positionals.slice(2),
+        source: typeof values.source === "string" ? values.source : undefined,
+      });
       break;
     }
 
