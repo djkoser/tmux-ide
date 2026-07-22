@@ -74,7 +74,7 @@ export default function OverviewPage() {
               <span className="w-3" />
               <span className="min-w-[20ch] shrink-0">session</span>
               <span className="flex-1">mission</span>
-              <span className="w-[14ch]" />
+              <span className="w-[12ch] shrink-0 mr-2" />
               <span className="w-[16ch] text-right">progress</span>
               <span className="w-[8ch] text-right">agents</span>
               <span className="w-[10ch] text-right">tasks</span>

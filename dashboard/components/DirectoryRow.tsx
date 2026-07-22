@@ -44,11 +44,11 @@ export function DirectoryRow({ session: s }: DirectoryRowProps) {
           {s.name}
         </span>
         <span className="flex-1 text-[var(--dim)] truncate pr-4">{missionText}</span>
-        <span className="w-[14ch] flex justify-end shrink-0">
+        <span className="w-[12ch] flex justify-end shrink-0 overflow-hidden mr-2">
           <button
             onClick={onFocus}
             disabled={focusState === "busy"}
-            className={`border border-[var(--border)] px-2 leading-4 transition-colors whitespace-nowrap ${
+            className={`border border-[var(--border)] px-1.5 leading-4 transition-colors whitespace-nowrap max-w-full truncate ${
               focusState === "error"
                 ? "text-[var(--red)]"
                 : focusState === "ok"
@@ -57,7 +57,7 @@ export function DirectoryRow({ session: s }: DirectoryRowProps) {
             }`}
             title="Raise this session's terminal window"
           >
-            {focusState === "ok" ? "focused ✓" : focusState === "error" ? "failed" : "focus"}
+            {focusState === "ok" ? "✓ ok" : focusState === "error" ? "✗ fail" : "focus"}
           </button>
         </span>
         <span className="w-[16ch] flex justify-end shrink-0">
