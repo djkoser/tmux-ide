@@ -4,10 +4,13 @@ import { execFileSync } from "node:child_process";
  * Raise the macOS terminal window attached to a tmux session.
  *
  * The terminal app is identified from the session's TERM_PROGRAM environment
- * (stamped by the attaching terminal); the window is matched by session name
- * via System Events, falling back to plain app activation when no window
- * matches or accessibility scripting is unavailable. All command execution
- * goes through an injectable runner so tests never run tmux or osascript.
+ * (stamped by the attaching terminal). Window titles are listed via System
+ * Events and matched in-process: a boundary-aware match first (so a session
+ * named "team" never grabs "team_3"'s window), then a plain substring
+ * fallback. The chosen window is raised by index, falling back to plain app
+ * activation when no window matches or accessibility scripting is
+ * unavailable. All command execution goes through an injectable runner so
+ * tests never run tmux or osascript.
  */
 
 export type FocusRunner = (cmd: string, args: string[]) => string;
@@ -35,6 +38,10 @@ function scriptSafe(value: string): string {
   return value.replace(/[\\"]/g, "");
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /** TERM_PROGRAM from one tmux environment scope ("" when unset/errored). */
 function readTermProgram(run: FocusRunner, scope: string[]): string {
   try {
@@ -43,6 +50,21 @@ function readTermProgram(run: FocusRunner, scope: string[]): string {
   } catch {
     return "";
   }
+}
+
+/**
+ * Pick the window whose title carries the session name. Session names can be
+ * prefixes of each other (team, team_2), so titles where the name is followed
+ * or preceded by an identifier character are rejected first; a plain
+ * substring match is the fallback when no boundary match exists.
+ */
+export function matchWindowIndex(names: string[], session: string): number {
+  const boundary = new RegExp(
+    `(^|[^A-Za-z0-9_-])${escapeRegExp(session)}($|[^A-Za-z0-9_-])`,
+  );
+  const boundaryIdx = names.findIndex((n) => boundary.test(n));
+  if (boundaryIdx !== -1) return boundaryIdx;
+  return names.findIndex((n) => n.includes(session));
 }
 
 export function focusSessionWindow(session: string, run: FocusRunner = realRunner): FocusResult {
@@ -75,27 +97,40 @@ export function focusSessionWindow(session: string, run: FocusRunner = realRunne
     return { ok: false, app: terminal.app, error: `could not activate ${terminal.app}` };
   }
 
-  // Best effort: raise the window whose title carries the session name. Any
-  // failure here (no accessibility permission, no matching window) leaves the
-  // app activation as the result.
+  // Best effort: list window titles, match the session in-process, and raise
+  // the matched window by index. Any failure here (no accessibility
+  // permission, no matching window) leaves the app activation as the result.
+  const listScript = [
+    `tell application "System Events" to tell process "${scriptSafe(terminal.process)}"`,
+    "  set nameList to name of every window",
+    "end tell",
+    "set {tid, text item delimiters} to {text item delimiters, linefeed}",
+    "set joined to nameList as text",
+    "set text item delimiters to tid",
+    "return joined",
+  ].join("\n");
+
+  let names: string[];
+  try {
+    names = run("osascript", ["-e", listScript]).replace(/\n$/, "").split("\n");
+  } catch {
+    return { ok: true, app: terminal.app, window: null };
+  }
+
+  const idx = matchWindowIndex(names, session);
+  if (idx === -1) {
+    return { ok: true, app: terminal.app, window: null };
+  }
+
   const raiseScript = [
     `tell application "System Events" to tell process "${scriptSafe(terminal.process)}"`,
-    "  repeat with w in windows",
-    `    if name of w contains "${scriptSafe(session)}" then`,
-    // Capture the title before raising: AXRaise reorders windows and `w` is a
-    // by-index reference, so a post-raise read resolves to a different window.
-    "      set matchedName to name of w",
-    '      perform action "AXRaise" of w',
-    "      return matchedName",
-    "    end if",
-    "  end repeat",
+    `  perform action "AXRaise" of window ${idx + 1}`,
     "end tell",
-    'return ""',
   ].join("\n");
 
   try {
-    const windowName = run("osascript", ["-e", raiseScript]).trim();
-    return { ok: true, app: terminal.app, window: windowName || null };
+    run("osascript", ["-e", raiseScript]);
+    return { ok: true, app: terminal.app, window: names[idx] ?? null };
   } catch {
     return { ok: true, app: terminal.app, window: null };
   }

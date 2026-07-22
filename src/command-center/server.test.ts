@@ -1590,7 +1590,13 @@ describe("POST /api/directory/:name/focus", () => {
       runner: (cmd, args) => {
         calls.push(cmd);
         const key =
-          cmd === "tmux" ? args[0]! : args[1]!.includes("to activate") ? "activate" : "raise";
+          cmd === "tmux"
+            ? args[0]!
+            : args[1]!.includes("to activate")
+              ? "activate"
+              : args[1]!.includes("name of every window")
+                ? "list"
+                : "raise";
         const result = map[key] ?? "";
         if (result instanceof Error) throw result;
         return result;
@@ -1602,7 +1608,7 @@ describe("POST /api/directory/:name/focus", () => {
     const { runner, calls } = runnerReturning({
       "list-clients": "/dev/ttys002\n",
       "show-environment": "TERM_PROGRAM=iTerm.app\n",
-      raise: "test-project — tmux\n",
+      list: "test-project — tmux\n",
     });
     const app = createApp({ focusRunner: runner });
     const res = await app.request("/api/directory/test-project/focus", { method: "POST" });
@@ -1612,13 +1618,13 @@ describe("POST /api/directory/:name/focus", () => {
     expect(body.ok).toBe(true);
     expect(body.app).toBe("iTerm");
     expect(body.window).toBe("test-project — tmux");
-    expect(calls).toEqual(["tmux", "tmux", "osascript", "osascript"]);
+    expect(calls).toEqual(["tmux", "tmux", "osascript", "osascript", "osascript"]);
   });
 
   it("succeeds with a null window when only app activation is possible", async () => {
     const { runner } = runnerReturning({
       "show-environment": "TERM_PROGRAM=Apple_Terminal\n",
-      raise: new Error("not permitted"),
+      list: new Error("not permitted"),
     });
     const app = createApp({ focusRunner: runner });
     const res = await app.request("/api/directory/test-project/focus", { method: "POST" });

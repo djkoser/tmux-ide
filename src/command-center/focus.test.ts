@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { focusSessionWindow, type FocusRunner } from "./focus.ts";
+import { focusSessionWindow, matchWindowIndex, type FocusRunner } from "./focus.ts";
 
 interface Call {
   cmd: string;
@@ -13,6 +13,8 @@ function scriptedRunner(handlers: {
   /** Global-scope (-g) show-environment answer; defaults to termProgram's. */
   globalTermProgram?: string | Error;
   activate?: string | Error;
+  /** Window-title listing (linefeed-joined). */
+  list?: string | Error;
   raise?: string | Error;
 }): { run: FocusRunner; calls: Call[] } {
   const calls: Call[] = [];
@@ -27,39 +29,71 @@ function scriptedRunner(handlers: {
             ? (handlers.termProgram ?? "TERM_PROGRAM=iTerm.app\n")
             : cmd === "osascript" && args[1]!.includes("to activate")
               ? (handlers.activate ?? "")
-              : (handlers.raise ?? "");
+              : cmd === "osascript" && args[1]!.includes("name of every window")
+                ? (handlers.list ?? "1: my-team — tmux\n")
+                : (handlers.raise ?? "");
     if (result instanceof Error) throw result;
     return result;
   };
   return { run, calls };
 }
 
+describe("matchWindowIndex", () => {
+  it("matches a title carrying the session name", () => {
+    expect(matchWindowIndex(["other", "1: my-team — tmux"], "my-team")).toBe(1);
+  });
+
+  it("rejects titles where the session is a prefix of a longer name", () => {
+    const names = ["team_3 — tmux ◂ bun — 186×56", "team — tmux ◂ bun — 186×56"];
+    expect(matchWindowIndex(names, "team")).toBe(1);
+    expect(matchWindowIndex(names, "team_3")).toBe(0);
+  });
+
+  it("falls back to a plain substring match when no boundary match exists", () => {
+    expect(matchWindowIndex(["tmux:my-teamX"], "my-team")).toBe(0);
+  });
+
+  it("returns -1 when nothing matches", () => {
+    expect(matchWindowIndex(["alpha", "beta"], "my-team")).toBe(-1);
+  });
+
+  it("escapes regex metacharacters in the session name", () => {
+    expect(matchWindowIndex(["a+b — tmux"], "a+b")).toBe(0);
+    expect(matchWindowIndex(["axb — tmux"], "a+b")).toBe(-1);
+  });
+});
+
 describe("focusSessionWindow", () => {
-  it("activates the terminal and raises the matching window", () => {
-    const { run, calls } = scriptedRunner({ raise: "1: my-team — tmux\n" });
+  it("activates the terminal and raises the matching window by index", () => {
+    const { run, calls } = scriptedRunner({
+      list: "scratch\n1: my-team — tmux\n",
+    });
     const result = focusSessionWindow("my-team", run);
 
     expect(result).toEqual({ ok: true, app: "iTerm", window: "1: my-team — tmux" });
-    expect(calls.map((c) => c.cmd)).toEqual(["tmux", "tmux", "osascript", "osascript"]);
+    expect(calls.map((c) => c.cmd)).toEqual(["tmux", "tmux", "osascript", "osascript", "osascript"]);
     expect(calls[2]!.args[1]).toContain('tell application "iTerm" to activate');
-    expect(calls[3]!.args[1]).toContain('name of w contains "my-team"');
+    expect(calls[4]!.args[1]).toContain('perform action "AXRaise" of window 2');
   });
 
-  it("captures the window title before raising (AXRaise reorders windows)", () => {
-    const { run, calls } = scriptedRunner({});
-    focusSessionWindow("my-team", run);
+  it("raises the exact session's window when another session name extends it", () => {
+    const { run, calls } = scriptedRunner({
+      list: "team_3 — tmux ◂ bun — 186×56\nteam — tmux ◂ bun — 186×56\n",
+    });
+    const result = focusSessionWindow("team", run);
 
-    const script = calls[3]!.args[1]!;
-    const captureIdx = script.indexOf("set matchedName to name of w");
-    const raiseIdx = script.indexOf('perform action "AXRaise" of w');
-    const returnIdx = script.indexOf("return matchedName");
-    expect(captureIdx).toBeGreaterThan(-1);
-    expect(raiseIdx).toBeGreaterThan(captureIdx);
-    expect(returnIdx).toBeGreaterThan(raiseIdx);
-    expect(script).not.toContain("return name of w");
+    expect(result.window).toBe("team — tmux ◂ bun — 186×56");
+    expect(calls[4]!.args[1]).toContain('perform action "AXRaise" of window 2');
   });
 
-  it("falls back to app activation when window raising fails", () => {
+  it("falls back to app activation when window listing fails", () => {
+    const { run } = scriptedRunner({ list: new Error("no accessibility permission") });
+    const result = focusSessionWindow("my-team", run);
+    expect(result.ok).toBe(true);
+    expect(result.window).toBeNull();
+  });
+
+  it("falls back to app activation when raising fails", () => {
     const { run } = scriptedRunner({ raise: new Error("no accessibility permission") });
     const result = focusSessionWindow("my-team", run);
     expect(result.ok).toBe(true);
@@ -67,8 +101,11 @@ describe("focusSessionWindow", () => {
   });
 
   it("reports success with a null window when no title matches", () => {
-    const { run } = scriptedRunner({ raise: "\n" });
-    expect(focusSessionWindow("my-team", run).window).toBeNull();
+    const { run, calls } = scriptedRunner({ list: "unrelated window\n" });
+    const result = focusSessionWindow("my-team", run);
+    expect(result.window).toBeNull();
+    // No raise call after a failed match
+    expect(calls.filter((c) => c.cmd === "osascript")).toHaveLength(2);
   });
 
   it("maps Apple_Terminal to the Terminal app", () => {
@@ -140,11 +177,11 @@ describe("focusSessionWindow", () => {
     expect(result.error).toContain("could not activate");
   });
 
-  it("strips quote characters from the session name in the raise script", () => {
-    const { run, calls } = scriptedRunner({});
+  it("never embeds the raw session name in any osascript source", () => {
+    const { run, calls } = scriptedRunner({ list: "no match here\n" });
     focusSessionWindow('evil" -- inject', run);
-    const raiseScript = calls[3]!.args[1]!;
-    expect(raiseScript).not.toContain('evil"');
-    expect(raiseScript).toContain("evil -- inject");
+    for (const call of calls.filter((c) => c.cmd === "osascript")) {
+      expect(call.args[1]).not.toContain('evil"');
+    }
   });
 });
