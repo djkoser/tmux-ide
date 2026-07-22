@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import { focusDirectory } from "@/lib/api";
 import type { SessionOverview } from "@/lib/types";
 import { ProgressBar } from "./ProgressBar";
 
@@ -13,6 +15,17 @@ export function DirectoryRow({ session: s }: DirectoryRowProps) {
     s.stats.totalTasks > 0 ? Math.round((s.stats.doneTasks / s.stats.totalTasks) * 100) : 0;
 
   const missionText = s.mission?.title ?? "—";
+  const [focusState, setFocusState] = useState<"idle" | "busy" | "ok" | "error">("idle");
+
+  async function onFocus(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (focusState === "busy") return;
+    setFocusState("busy");
+    const result = await focusDirectory(s.name);
+    setFocusState(result.ok ? "ok" : "error");
+    setTimeout(() => setFocusState("idle"), 2000);
+  }
 
   return (
     <Link href={`/directory/${encodeURIComponent(s.name)}`}>
@@ -31,6 +44,22 @@ export function DirectoryRow({ session: s }: DirectoryRowProps) {
           {s.name}
         </span>
         <span className="flex-1 text-[var(--dim)] truncate pr-4">{missionText}</span>
+        <span className="w-[14ch] flex justify-end shrink-0">
+          <button
+            onClick={onFocus}
+            disabled={focusState === "busy"}
+            className={`border border-[var(--border)] px-2 leading-4 transition-colors whitespace-nowrap ${
+              focusState === "error"
+                ? "text-[var(--red)]"
+                : focusState === "ok"
+                  ? "text-[var(--green)]"
+                  : "text-[var(--dim)] hover:text-[var(--fg)] hover:border-[var(--fg)]"
+            }`}
+            title="Raise this session's terminal window"
+          >
+            {focusState === "ok" ? "focused ✓" : focusState === "error" ? "failed" : "focus"}
+          </button>
+        </span>
         <span className="w-[16ch] flex justify-end shrink-0">
           <ProgressBar percent={pct} width={8} />
         </span>
