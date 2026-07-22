@@ -227,6 +227,26 @@ export async function stopAndWipeMission(
   }
 }
 
+/** Wipe a workspace's tracker state and stop its tmux session + daemon. */
+export async function resetWorkspace(
+  name: string,
+  confirm: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/api/directory/${encodeURIComponent(name)}/reset`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm, includePlans: true }),
+    });
+    if (res.ok) return { ok: true };
+    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    return { ok: false, error: data?.error ?? `HTTP ${res.status}` };
+  } catch {
+    // The daemon dies with the session — a dropped connection means the stop landed.
+    return { ok: true };
+  }
+}
+
 export async function fetchAssertionIds(name: string): Promise<string[]> {
   const res = await fetch(
     `${API_BASE}/api/directory/${encodeURIComponent(name)}/validation/assertions`,

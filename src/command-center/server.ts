@@ -90,6 +90,7 @@ import {
   insertMilestoneSchema,
   saveContractSchema,
   missionWipeSchema,
+  workspaceResetSchema,
   updateAssertionSchema,
   triggerResearchSchema,
   toggleTodoSchema,
@@ -129,6 +130,9 @@ export interface CreateAppOptions {
   /** Command runner for the focus-window endpoint (tmux + osascript).
    *  Injectable so tests never execute real osascript. */
   focusRunner?: FocusRunner;
+  /** Stop a workspace's tmux session + daemon after a reset (defaults to a
+   *  deferred stopSessionMonitor + killSession). Injectable for tests. */
+  stopWorkspace?: (session: string) => void;
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -168,6 +172,26 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     options.bounceDaemon ??
     (() => {
       setTimeout(() => process.exit(1), 300);
+    });
+
+  // Stop a workspace's tmux session and its daemon/watchdog after a reset.
+  // Deferred so the HTTP response flushes first; when the target session hosts
+  // this server the process dies with it — that is the intended outcome.
+  const stopWorkspace =
+    options.stopWorkspace ??
+    ((session: string) => {
+      setTimeout(() => {
+        try {
+          stopSessionMonitor(session);
+        } catch {
+          // best effort
+        }
+        try {
+          killSession(session);
+        } catch {
+          // best effort
+        }
+      }, 300);
     });
 
   // In-memory per-batch receipt tracker. `/send` seeds a batch and returns its id
@@ -1380,6 +1404,42 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     bounceDaemon();
 
     return c.json({ ok: true, wiped: true, summary });
+  });
+
+  // Workspace kill-switch: wipe the tracker (mission, tasks, milestones,
+  // validation, dispatch queue, plans, claim lock) and stop the directory's
+  // tmux session + daemon. Works with or without an active mission.
+  app.post("/api/directory/:name/reset", zValidator("json", workspaceResetSchema), (c) => {
+    const name = c.req.param("name");
+    const sessions = discoverSessions();
+    const session = sessions.find((s) => s.name === name);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+
+    const { confirm, includePlans } = c.req.valid("json");
+    if (confirm !== name) {
+      // Type-the-name gate: a mismatch is a no-op (nothing wiped, nothing stopped).
+      return c.json({ error: "Confirmation does not match the directory name", reset: false }, 409);
+    }
+
+    const mission = loadMission(session.dir);
+    let summary: ReturnType<typeof wipeMission> | null = null;
+    if (mission) {
+      summary = wipeMission(session.dir, { includePlans: includePlans ?? true });
+      resetClaims(session.dir);
+    }
+
+    appendEvent(session.dir, {
+      timestamp: new Date().toISOString(),
+      type: "override",
+      agent: "operator",
+      message: `operator reset: wiped workspace state${
+        mission ? ` (mission "${mission.title}")` : ""
+      } and stopped session "${name}"`,
+    });
+
+    stopWorkspace(name);
+
+    return c.json({ ok: true, wiped: Boolean(mission), stopped: true, summary });
   });
 
   // --- Metrics endpoints ---

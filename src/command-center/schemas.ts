@@ -55,6 +55,14 @@ export const missionWipeSchema = z.object({
   includePlans: z.boolean().optional(),
 });
 
+// Workspace kill-switch. `confirm` must equal the directory/session name so a
+// stray API call can't wipe state and kill the session.
+export const workspaceResetSchema = z.object({
+  confirm: z.string(),
+  // Also clear the scratch plans/ directory (passed through to wipeMission).
+  includePlans: z.boolean().optional(),
+});
+
 export const sendCommandSchema = z.object({
   target: z.string().min(1, "Target pane is required"),
   message: z.string().min(1, "Message is required"),

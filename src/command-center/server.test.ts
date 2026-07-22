@@ -1655,3 +1655,79 @@ describe("POST /api/directory/:name/focus", () => {
     expect(calls).toEqual([]);
   });
 });
+
+describe("POST /api/directory/:name/reset (workspace kill-switch)", () => {
+  function seedMission(title: string) {
+    saveMission(tmpDir, {
+      title,
+      description: "",
+      status: "active",
+      milestones: [],
+      created: "",
+      updated: "",
+    });
+  }
+
+  it("returns 404 for an unknown session without stopping anything", async () => {
+    const stopped: string[] = [];
+    const app = createApp({ stopWorkspace: (s) => stopped.push(s) });
+    const res = await app.request("/api/directory/nonexistent/reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: "nonexistent" }),
+    });
+    expect(res.status).toBe(404);
+    expect(stopped).toEqual([]);
+  });
+
+  it("no-ops when the confirmation name does not match (409, nothing wiped or stopped)", async () => {
+    seedMission("Real Mission");
+    const stopped: string[] = [];
+    const app = createApp({ stopWorkspace: (s) => stopped.push(s) });
+    const res = await app.request("/api/directory/test-project/reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: "wrong name" }),
+    });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { reset: boolean }).reset).toBe(false);
+    expect(loadMission(tmpDir)?.title).toBe("Real Mission");
+    expect(stopped).toEqual([]);
+    expect(readEvents(tmpDir).filter((e) => e.type === "override").length).toBe(0);
+  });
+
+  it("wipes the tracker, logs the override, and stops the session when a mission exists", async () => {
+    seedMission("Real Mission");
+    saveTask(tmpDir, makeTask({ id: "001" }));
+    const stopped: string[] = [];
+    const app = createApp({ stopWorkspace: (s) => stopped.push(s) });
+    const res = await app.request("/api/directory/test-project/reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: "test-project" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; wiped: boolean; stopped: boolean };
+    expect(body).toMatchObject({ ok: true, wiped: true, stopped: true });
+    expect(loadMission(tmpDir)).toBeNull();
+    expect(loadTask(tmpDir, "001")).toBeNull();
+    expect(stopped).toEqual(["test-project"]);
+    const overrides = readEvents(tmpDir).filter((e) => e.type === "override");
+    expect(overrides.length).toBe(1);
+    expect(overrides[0]!.message).toContain('stopped session "test-project"');
+  });
+
+  it("still stops the session when no mission is set", async () => {
+    const stopped: string[] = [];
+    const app = createApp({ stopWorkspace: (s) => stopped.push(s) });
+    const res = await app.request("/api/directory/test-project/reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: "test-project" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; wiped: boolean; stopped: boolean };
+    expect(body).toMatchObject({ ok: true, wiped: false, stopped: true });
+    expect(stopped).toEqual(["test-project"]);
+  });
+});

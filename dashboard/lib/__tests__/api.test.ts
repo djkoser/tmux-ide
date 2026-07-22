@@ -426,6 +426,48 @@ describe("stopAndWipeMission", () => {
   });
 });
 
+describe("resetWorkspace", () => {
+  beforeEach(() => vi.unstubAllGlobals());
+
+  it("posts the confirm name to the reset route with includePlans", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => ({ ok: true, wiped: true, stopped: true }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const { resetWorkspace } = await import("../api");
+    const r = await resetWorkspace("team-a", "team-a");
+    expect(r.ok).toBe(true);
+    expect(fetchMock.mock.calls[0]![0]).toContain("/api/directory/team-a/reset");
+    const body = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string);
+    expect(body).toEqual({ confirm: "team-a", includePlans: true });
+  });
+
+  it("surfaces the 409 reason on a name mismatch", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 409,
+        json: async () => ({
+          error: "Confirmation does not match the directory name",
+          reset: false,
+        }),
+      }),
+    );
+    const { resetWorkspace } = await import("../api");
+    const r = await resetWorkspace("team-a", "wrong");
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain("does not match");
+  });
+
+  it("treats a dropped connection (session stop) as success in flight", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNRESET")));
+    const { resetWorkspace } = await import("../api");
+    const r = await resetWorkspace("team-a", "team-a");
+    expect(r.ok).toBe(true);
+  });
+});
+
 describe("fetchTodos + toggleTodo (owner action items)", () => {
   beforeEach(() => vi.unstubAllGlobals());
 
