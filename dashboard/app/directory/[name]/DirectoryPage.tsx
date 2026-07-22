@@ -173,9 +173,9 @@ export default function DirectoryPage() {
           <button
             onClick={() => setShowReset(true)}
             className="text-[var(--red)] border border-[var(--border)] hover:border-[var(--red)] px-2 py-0.5 transition-colors whitespace-nowrap shrink-0"
-            title="Wipe workspace state and stop the tmux session"
+            title="Wipe workspace state and terminate the tmux session"
           >
-            reset &amp; stop
+            terminate session
           </button>
         </div>
       </div>

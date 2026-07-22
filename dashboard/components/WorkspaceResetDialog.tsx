@@ -51,7 +51,7 @@ export function WorkspaceResetDialog({ sessionName, onClose, onReset }: Workspac
       <div className="absolute inset-0 bg-[var(--modal-overlay)]" onClick={onClose} />
       <div className="relative bg-[var(--bg)] border border-[var(--red)] w-full max-w-md">
         <div className="flex items-center justify-between px-4 h-8 bg-[var(--surface)] border-b border-[var(--red)]">
-          <span className="text-[var(--red)]">reset workspace &amp; stop session</span>
+          <span className="text-[var(--red)]">terminate session</span>
           <button
             type="button"
             onClick={onClose}
@@ -102,7 +102,7 @@ export function WorkspaceResetDialog({ sessionName, onClose, onReset }: Workspac
               disabled={!matches || busy}
               className="px-3 py-1 text-[var(--bg)] bg-[var(--red)] hover:opacity-90 transition-opacity disabled:opacity-40"
             >
-              {busy ? "resetting…" : "reset & stop"}
+              {busy ? "terminating…" : "terminate session"}
             </button>
           </div>
         </div>
