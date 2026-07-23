@@ -123,6 +123,10 @@ function listPanes(): MonitorPane[] {
 
 let stopOrchestrator: (() => void) | null = null;
 let httpServer: Server | null = null;
+let portFailoverTimer: ReturnType<typeof setInterval> | null = null;
+
+/** How often a deferring daemon retries to acquire the shared console port. */
+const PORT_FAILOVER_INTERVAL_MS = 3000;
 
 // ---------------------------------------------------------------------------
 // Monitor loop
@@ -319,20 +323,53 @@ async function startCommandCenter(): Promise<void> {
 
     const bindRequestedPort = (port: number): Promise<boolean> =>
       new Promise<boolean>((res, rej) => {
-        server.once("error", (err: NodeJS.ErrnoException) => {
+        // Named handler so it can be detached on both outcomes — bindRequestedPort
+        // is retried by the failover loop, and a lingering listener would leak.
+        const onError = (err: NodeJS.ErrnoException) => {
+          server.removeListener("error", onError);
           if (err.code === "EADDRINUSE") {
-            server.removeAllListeners("error");
             res(false);
           } else {
             rej(err);
           }
-        });
+        };
+        server.once("error", onError);
         server.listen(port, "0.0.0.0", () => {
+          server.removeListener("error", onError);
           tmuxSilent("set-option", "-t", session, "@command_center_port", String(port));
           console.log(`[daemon] Command Center on http://0.0.0.0:${port} (session: ${session})`);
           res(true);
         });
       });
+
+    // A daemon that defers to another session's command center keeps contending
+    // for the port, so the console self-heals if that holder later goes away
+    // (crash, kill, or a terminated session). Whoever wins the next bind takes over.
+    let failoverInFlight = false;
+    const startPortFailover = (port: number): void => {
+      if (portFailoverTimer) return;
+      portFailoverTimer = setInterval(() => {
+        if (failoverInFlight) return;
+        failoverInFlight = true;
+        void bindRequestedPort(port)
+          .then((acquired) => {
+            failoverInFlight = false;
+            if (!acquired) return;
+            httpServer = server;
+            if (portFailoverTimer) {
+              clearInterval(portFailoverTimer);
+              portFailoverTimer = null;
+            }
+            console.log(
+              `[daemon] Acquired Command Center port ${port} after the previous holder went away`,
+            );
+          })
+          .catch(() => {
+            failoverInFlight = false;
+          });
+      }, PORT_FAILOVER_INTERVAL_MS);
+      portFailoverTimer.unref?.();
+    };
 
     const commandCenterStarted = await bindRequestedPort(requestedPort);
     if (commandCenterStarted) {
@@ -350,6 +387,7 @@ async function startCommandCenter(): Promise<void> {
           console.log(
             `[daemon] Sharing Command Center on port ${requestedPort} from another session`,
           );
+          startPortFailover(requestedPort);
         } else {
           console.error(
             `[daemon] Port ${requestedPort} is in use by a non-tmux-ide service; no dashboard for this session`,
@@ -431,6 +469,7 @@ tick();
 
 function shutdown(): void {
   clearInterval(monitorInterval);
+  if (portFailoverTimer) clearInterval(portFailoverTimer);
   if (stopOrchestrator) stopOrchestrator();
   if (httpServer) httpServer.close();
   process.exit(0);
