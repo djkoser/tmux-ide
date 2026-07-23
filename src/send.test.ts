@@ -375,11 +375,13 @@ describe("deliverReliably", () => {
 });
 
 describe("deliverToInbox", () => {
-  it("writes the envelope, never pastes, and resolves delivered once the recipient acks", async () => {
+  it("writes the envelope, never pastes, notifies the pane, and resolves delivered once the recipient acks", async () => {
     const pastes: string[] = [];
+    const notes: { paneId: string; text: string }[] = [];
     const deps: DeliveryDeps = {
       paste: (_s, _p, trigger) => pastes.push(trigger),
       receiptStatus: (dir, msgId) => readReceipt(dir, msgId)?.status ?? null,
+      notify: (paneId, text) => notes.push({ paneId, text }),
       sleep: async () => {
         // The recipient's own inbox-watch loop picks the message up out-of-band.
         for (const env of listPendingEnvelopes(tmpDir, "lead")) receiveMessage(tmpDir, env.msgId);
@@ -397,8 +399,31 @@ describe("deliverToInbox", () => {
     expect(res.outcome).toBe("delivered");
     expect(res.attempts).toBe(0);
     expect(pastes).toEqual([]);
+    // Exactly one push, to the recipient pane, carrying a preview of the body.
+    expect(notes).toHaveLength(1);
+    expect(notes[0]!.paneId).toBe("%1");
+    expect(notes[0]!.text).toContain("queued for the lead");
     expect(readEnvelope(tmpDir, res.msgId)!.body).toBe("queued for the lead");
     expect(readEnvelope(tmpDir, res.msgId)!.seq).toBe(res.seq);
+  });
+
+  it("doubles # in the preview so tmux does not treat it as a format escape", async () => {
+    const notes: string[] = [];
+    const deps: DeliveryDeps = {
+      paste: () => {},
+      receiptStatus: () => "delivered",
+      notify: (_p, text) => notes.push(text),
+      sleep: async () => {},
+    };
+    await deliverToInbox(
+      tmpDir,
+      agentPane("%1", "lead"),
+      "deploy #42 now",
+      undefined,
+      FAST_TIMING,
+      deps,
+    );
+    expect(notes[0]).toContain("deploy ##42 now");
   });
 
   it("reports failed after the timeout with zero pastes; the envelope stays pending", async () => {
@@ -406,6 +431,7 @@ describe("deliverToInbox", () => {
     const deps: DeliveryDeps = {
       paste: (_s, _p, trigger) => pastes.push(trigger),
       receiptStatus: () => null,
+      notify: () => {},
       sleep: async () => {},
     };
 
@@ -427,6 +453,7 @@ describe("deliverToInbox", () => {
     const deps: DeliveryDeps = {
       paste: () => {},
       receiptStatus: () => "superseded",
+      notify: () => {},
       sleep: async () => {},
     };
     const res = await deliverToInbox(

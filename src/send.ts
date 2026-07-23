@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { resolve, join } from "node:path";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
@@ -82,6 +83,8 @@ export interface DeliveryDeps {
   paste: (session: string, paneId: string, trigger: string) => void;
   receiptStatus: (dir: string, msgId: string) => ReceiptStatus | null;
   sleep: (ms: number) => Promise<void>;
+  /** Push a transient status-line alert + bell to a pane. Best-effort. */
+  notify: (paneId: string, text: string) => void;
 }
 
 const realDeps: DeliveryDeps = {
@@ -90,6 +93,27 @@ const realDeps: DeliveryDeps = {
   },
   receiptStatus: (dir, msgId) => readReceipt(dir, msgId)?.status ?? null,
   sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+  notify: (paneId, text) => {
+    // Surface a queued inbox message on the recipient's status line without
+    // pasting anything into the pane — a paste would inject into the running
+    // agent, which is exactly what inbox mode avoids. Also flag the window as
+    // urgent so its tab highlights even when it is not the focused window.
+    // Best-effort: the pane may have vanished, or no client may be attached.
+    try {
+      execFileSync("tmux", ["display-message", "-t", paneId, "-d", "5000", text], {
+        stdio: "ignore",
+      });
+    } catch {
+      // no client / pane gone — nothing to notify
+    }
+    try {
+      execFileSync("tmux", ["set-window-option", "-t", paneId, "window-status-activity-style", "reverse"], {
+        stdio: "ignore",
+      });
+    } catch {
+      // styling is a nicety; ignore failures
+    }
+  },
 };
 
 /**
@@ -151,10 +175,12 @@ export async function deliverReliably(
  * Deliver one message to an inbox-mode recipient: envelope only, never a paste.
  *
  * Allocates the seq and writes the envelope exactly like deliverReliably, then
- * polls the receipt for the full timeout — the recipient's own `inbox watch`
- * loop is what surfaces the message, so there is nothing to retry. attempts is
- * 0 (no pastes). A "failed" outcome means "not yet acked": the envelope stays
- * pending in the outbox and is still picked up by the recipient later.
+ * pushes a status-line notification to the pane (so the recipient is alerted
+ * without a paste) and polls the receipt for the full timeout — the
+ * recipient's own `inbox watch` loop is what surfaces the message, so there is
+ * nothing to retry. attempts is 0 (no pastes). A "failed" outcome means "not
+ * yet acked": the envelope stays pending in the outbox and is still picked up
+ * by the recipient later.
  */
 export async function deliverToInbox(
   dir: string,
@@ -167,6 +193,11 @@ export async function deliverToInbox(
   const recipient = pane.name ?? pane.title;
   const seq = allocateSeq(dir, recipient);
   const env = writeEnvelope(dir, { to: recipient, paneId: pane.id, body, seq, batchId });
+
+  // Alert the recipient pane that a message landed. `#` is doubled because tmux
+  // treats it as the format-expansion escape in display-message strings.
+  const preview = body.replace(/\s+/g, " ").slice(0, 60).replace(/#/g, "##");
+  deps.notify(pane.id, `📨 inbox: ${preview} — tmux-ide inbox watch ${recipient}`);
 
   const settled = (outcome: DeliveryOutcome): DeliveryResult => ({
     pane,
